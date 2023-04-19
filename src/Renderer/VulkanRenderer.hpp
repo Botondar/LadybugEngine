@@ -106,9 +106,6 @@ struct vulkan_renderer
 
         VkSampler ShadowSampler;
         VkDescriptorSetLayout ShadowDescriptorSetLayout;
-
-        VkPipelineLayout ShadowPipelineLayout;
-        VkPipeline ShadowPipeline;
     };
 
     VkCommandPool TransferCmdPool;
@@ -141,24 +138,8 @@ struct vulkan_renderer
     //
     pipeline_with_layout Pipelines[Pipeline_Count];
 
-    VkPipelineLayout PipelineLayout;
-    VkPipeline Pipeline;
-    VkPipeline PrepassPipeline;
-
-    VkPipelineLayout SkyPipelineLayout;
-    VkPipeline SkyPipeline;
-
-    VkPipelineLayout UIPipelineLayout;
-    VkPipeline UIPipeline;
-
-    VkPipelineLayout BlitPipelineLayout;
-    VkPipeline BlitPipeline;
-
     bloom_desc Bloom;
     ssao_desc SSAO;
-
-    VkPipelineLayout GizmoPipelineLayout;
-    VkPipeline GizmoPipeline;
 
     VkSampler RenderTargetSampler;    
 
@@ -188,14 +169,7 @@ struct vulkan_renderer
 lbfn VkResult CreateRenderer(vulkan_renderer* Renderer, 
                              memory_arena* Arena, 
                              memory_arena* TempArena);
-#if 0
-lbfn VkResult CreateGraphicsPipeline(memory_arena* Arena,
-                                     const render_pipeline_info* BaseInfo, 
-                                     const render_pass_info* RenderPassInfo,
-                                     const char* ShaderName,
-                                     VkPipelineLayout PipelineLayout,
-                                     VkPipeline* Pipeline);
-#endif
+
 lbfn VkResult ResizeRenderTargets(vulkan_renderer* Renderer);
 
 lbfn geometry_buffer_allocation UploadVertexData(vulkan_renderer* Renderer, 

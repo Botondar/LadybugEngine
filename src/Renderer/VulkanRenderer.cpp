@@ -664,14 +664,7 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
             .pushConstantRangeCount = CountOf(PushConstants),
             .pPushConstantRanges = PushConstants,
         };
-        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Renderer->ShadowPipelineLayout);
-        ReturnOnFailure();
-
-        Result = CreateGraphicsPipeline(TempArena,
-                                        &ShadowRenderPipeline::Info, &ShadowRenderPipeline::RenderPass,
-                                        "build/shadow",
-                                        Renderer->ShadowPipelineLayout,
-                                        &Renderer->ShadowPipeline);
+        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Renderer->Pipelines[Pipeline_Shadow].Layout);
         ReturnOnFailure();
     }
 
@@ -755,25 +748,9 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
             .pPushConstantRanges = PushConstantRanges,
         };
 
-        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, Renderer->Allocator, &Renderer->PipelineLayout);
+        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, Renderer->Allocator, &Renderer->Pipelines[Pipeline_Simple].Layout);
         ReturnOnFailure();
-
-        Result = CreateGraphicsPipeline(
-            TempArena, 
-            &SimpleRenderPipeline::Info, &SimpleRenderPipeline::RenderPassInfo, 
-            "build/shader",
-            Renderer->PipelineLayout, &Renderer->Pipeline);
-        ReturnOnFailure();
-    }
-
-    // Prepass pipeline
-    {
-        Result = CreateGraphicsPipeline(
-            TempArena,
-            &PrepassRenderPipeline::Info, &PrepassRenderPipeline::RenderPass,
-            "build/prepass",
-            Renderer->PipelineLayout, &Renderer->PrepassPipeline);
-        ReturnOnFailure();
+        vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, Renderer->Allocator, &Renderer->Pipelines[Pipeline_Prepass].Layout);
     }
 
     // SSAO pipeline
@@ -993,21 +970,7 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
             .pushConstantRangeCount = 1,
             .pPushConstantRanges = &PushConstants,
         };
-        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Renderer->UIPipelineLayout);
-        ReturnOnFailure();
-
-        render_pass_info RenderPassInfo = 
-        {
-            .ColorAttachmentCount = 1,
-            .ColorAttachments = { Renderer->SurfaceFormat.format },
-            .DepthAttachment = DEPTH_FORMAT,
-            .StencilAttachment = VK_FORMAT_UNDEFINED,
-        };
-        Result = CreateGraphicsPipeline(
-            TempArena,
-            &UIRenderPipeline::Info, &RenderPassInfo, 
-            "build/ui",
-            Renderer->UIPipelineLayout, &Renderer->UIPipeline);
+        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Renderer->Pipelines[Pipeline_UI].Layout);
         ReturnOnFailure();
     }
 
@@ -1023,12 +986,7 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
             .pushConstantRangeCount = 0,
             .pPushConstantRanges = nullptr,
         };
-        Result = vkCreatePipelineLayout(VK.Device, &LayoutInfo, nullptr, &Renderer->SkyPipelineLayout);
-        ReturnOnFailure();
-
-        Result = CreateGraphicsPipeline(TempArena, 
-                                        &SkyRenderPipeline::Info, &SkyRenderPipeline::RenderPassInfo, "build/sky", 
-                                        Renderer->SkyPipelineLayout, &Renderer->SkyPipeline);
+        Result = vkCreatePipelineLayout(VK.Device, &LayoutInfo, nullptr, &Renderer->Pipelines[Pipeline_Sky].Layout);
         ReturnOnFailure();
     }
 
@@ -1216,21 +1174,7 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
             .pPushConstantRanges = &PushConstants,
         };
 
-        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Renderer->GizmoPipelineLayout);
-        ReturnOnFailure();
-
-        render_pass_info RenderPassInfo = 
-        {
-            .ColorAttachmentCount = 1,
-            .ColorAttachments = { Renderer->SurfaceFormat.format },
-            .DepthAttachment = DEPTH_FORMAT,
-            .StencilAttachment = VK_FORMAT_UNDEFINED,
-        };
-        Result = CreateGraphicsPipeline(
-            TempArena,
-            &GizmoRenderPipeline::Info, &RenderPassInfo,
-            "build/gizmo",
-            Renderer->GizmoPipelineLayout, &Renderer->GizmoPipeline);
+        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Renderer->Pipelines[Pipeline_Gizmo].Layout);
         ReturnOnFailure();
     }
 
@@ -1292,21 +1236,7 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
             .pushConstantRangeCount = 0,
             .pPushConstantRanges = nullptr,
         };
-        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Renderer->BlitPipelineLayout);
-        ReturnOnFailure();
-
-        render_pass_info RenderPassInfo = 
-        {
-            .ColorAttachmentCount = 1,
-            .ColorAttachments = { Renderer->SurfaceFormat.format },
-            .DepthAttachment = DEPTH_FORMAT,
-            .StencilAttachment = VK_FORMAT_UNDEFINED,
-        };
-        Result = CreateGraphicsPipeline(
-            TempArena,
-            &BlitRenderPipeline::Info, &RenderPassInfo, 
-            "build/blit",
-            Renderer->BlitPipelineLayout, &Renderer->BlitPipeline);
+        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Renderer->Pipelines[Pipeline_Blit].Layout);
         ReturnOnFailure();
     }
 
@@ -1330,33 +1260,9 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
             // HACK(boti): we're currently piggy backing off the old way of creating pipelines
             switch (PipelineIndex)
             {
-                case Pipeline_Simple:
-                {
-                    Pipeline->Layout = Renderer->PipelineLayout;
-                } break;
                 case Pipeline_Prepass:
                 {
-                    Pipeline->Layout = Renderer->PipelineLayout;
-                } break;
-                case Pipeline_Shadow:
-                {
-                    Pipeline->Layout = Renderer->ShadowPipelineLayout;
-                } break;
-                case Pipeline_Gizmo:
-                {
-                    Pipeline->Layout = Renderer->GizmoPipelineLayout;
-                } break;
-                case Pipeline_Sky:
-                {
-                    Pipeline->Layout = Renderer->SkyPipelineLayout;
-                } break;
-                case Pipeline_UI:
-                {
-                    Pipeline->Layout = Renderer->UIPipelineLayout;
-                } break;
-                case Pipeline_Blit:
-                {
-                    Pipeline->Layout = Renderer->BlitPipelineLayout;
+                    //Pipeline->Layout = Renderer->Pipelines[Pipeline_Simple].Layout;
                 } break;
             }
 
@@ -1764,173 +1670,6 @@ lbfn VkResult ResizeRenderTargets(vulkan_renderer* Renderer)
             }
         }
     }
-    return Result;
-}
-
-lbfn VkResult CreateGraphicsPipeline(memory_arena* Arena,
-                                       const render_pipeline_info* BaseInfo, 
-                                       const render_pass_info* RenderPassInfo,
-                                       const char* ShaderName,
-                                       VkPipelineLayout PipelineLayout,
-                                       VkPipeline* Pipeline)
-{
-    VkResult Result = VK_SUCCESS;
-
-    constexpr size_t PathBufferSize = 256;
-    char PathBuffer[PathBufferSize];
-    char* PathBufferAt = PathBuffer;
-    size_t RemainingPathBufferSize = PathBufferSize;
-    strncpy(PathBufferAt, ShaderName, RemainingPathBufferSize);
-    {
-        size_t Length = strlen(PathBuffer);
-        RemainingPathBufferSize -= Length;
-        PathBufferAt += Length;
-    }
-
-    strncpy(PathBufferAt, ".vs", RemainingPathBufferSize);
-    buffer VSBin = Platform.LoadEntireFile(PathBuffer, Arena);
-    strncpy(PathBufferAt, ".fs", RemainingPathBufferSize);
-    buffer FSBin = Platform.LoadEntireFile(PathBuffer, Arena);
-
-    Assert(VSBin.Data && FSBin.Data);
-
-
-    VkShaderModuleCreateInfo VSInfo = 
-    {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .codeSize = VSBin.Size,
-        .pCode = (uint32_t*)VSBin.Data,
-    };
-    VkShaderModule VS = VK_NULL_HANDLE;
-    Result = vkCreateShaderModule(VK.Device, &VSInfo, nullptr, &VS);
-    ReturnOnFailure();
-
-    VkShaderModuleCreateInfo FSInfo = 
-    {
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .codeSize = FSBin.Size,
-        .pCode = (uint32_t*)FSBin.Data,
-    };
-    VkShaderModule FS = VK_NULL_HANDLE;
-    Result = vkCreateShaderModule(VK.Device, &FSInfo, nullptr, &FS);
-    ReturnOnFailure();
-
-    VkPipelineShaderStageCreateInfo ShaderStages[] = 
-    {
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .stage = VK_SHADER_STAGE_VERTEX_BIT,
-            .module = VS,
-            .pName = "main",
-            .pSpecializationInfo = nullptr,
-        },
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .module = FS,
-            .pName = "main",
-            .pSpecializationInfo = nullptr,
-        },
-    };
-
-    VkViewport Viewport = {};
-    VkRect2D Scissor = {};
-    VkPipelineViewportStateCreateInfo ViewportState = 
-    {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .viewportCount = 1,
-        .pViewports = &Viewport,
-        .scissorCount = 1,
-        .pScissors = &Scissor,
-    };
-
-    VkPipelineMultisampleStateCreateInfo MultisampleState = 
-    {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-        .sampleShadingEnable = VK_FALSE,
-        .minSampleShading = 0.0f,
-        .pSampleMask = nullptr,
-        .alphaToCoverageEnable = VK_FALSE,
-        .alphaToOneEnable = VK_FALSE,
-    };
-
-    VkPipelineColorBlendStateCreateInfo BlendState = 
-    {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .logicOpEnable = VK_FALSE,
-        .logicOp = VK_LOGIC_OP_CLEAR,
-        .attachmentCount = BaseInfo->BlendAttachmentCount,
-        .pAttachments = BaseInfo->BlendAttachments,
-        .blendConstants = { 1.0f, 1.0f, 1.0f, 1.0f },
-    };
-    
-    VkDynamicState DynamicStates[] = 
-    {
-        VK_DYNAMIC_STATE_VIEWPORT,
-        VK_DYNAMIC_STATE_SCISSOR,
-    };
-    VkPipelineDynamicStateCreateInfo DynamicState = 
-    {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .dynamicStateCount = CountOf(DynamicStates),
-        .pDynamicStates = DynamicStates,
-    };
-
-    VkPipelineRenderingCreateInfo DynamicRendering = 
-    {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-        .pNext = nullptr,
-        .viewMask = 0,
-        .colorAttachmentCount = RenderPassInfo->ColorAttachmentCount,
-        .pColorAttachmentFormats = RenderPassInfo->ColorAttachments,
-        .depthAttachmentFormat = RenderPassInfo->DepthAttachment,
-        .stencilAttachmentFormat = RenderPassInfo->StencilAttachment,
-    };
-
-    VkGraphicsPipelineCreateInfo PipelineInfo = 
-    {
-        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .pNext = &DynamicRendering,
-        .flags = 0,
-        .stageCount = CountOf(ShaderStages),
-        .pStages = ShaderStages,
-        .pVertexInputState = &BaseInfo->VertexInputState,
-        .pInputAssemblyState = &BaseInfo->InputAssemblyState,
-        .pTessellationState = nullptr,
-        .pViewportState = &ViewportState,
-        .pRasterizationState = &BaseInfo->RasterizationState,
-        .pMultisampleState = &MultisampleState,
-        .pDepthStencilState = &BaseInfo->DepthStencilState,
-        .pColorBlendState = &BlendState,
-        .pDynamicState = &DynamicState,
-        .layout = PipelineLayout,
-        .renderPass = VK_NULL_HANDLE,
-        .subpass = 0,
-        .basePipelineHandle = VK_NULL_HANDLE,
-        .basePipelineIndex = 0,
-    };
-
-    Result = vkCreateGraphicsPipelines(VK.Device, VK_NULL_HANDLE, 1, &PipelineInfo, nullptr, Pipeline);
-
-    vkDestroyShaderModule(VK.Device, VS, nullptr);
-    vkDestroyShaderModule(VK.Device, FS, nullptr);
     return Result;
 }
 

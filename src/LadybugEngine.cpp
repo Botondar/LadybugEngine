@@ -331,15 +331,16 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         {
             BeginCascade(Frame, Cascade);
 
-            vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->ShadowPipeline);
-            vkCmdPushConstants(Frame->CmdBuffer, Renderer->ShadowPipelineLayout, 
+            pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Shadow];
+            vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+            vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, 
                                VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
                                sizeof(push_constants), sizeof(u32), &Cascade);
             // NOTE(boti): shadow pass only uses the first 3 sets from DescriptorSets[]
-            vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->ShadowPipelineLayout, 
+            vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                     0, 3, DescriptorSets, 0, nullptr);
 #if 1
-            RenderMeshes(Frame->CmdBuffer, Renderer->ShadowPipelineLayout,
+            RenderMeshes(Frame->CmdBuffer, Pipeline.Layout,
                          &Renderer->GeometryBuffer, GameState);
 #endif
 
@@ -501,8 +502,10 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
             u32 IndexOffset = (u32)(ArrowMesh.IndexBlock->ByteOffset / sizeof(vert_index));
             u32 VertexOffset = (u32)(ArrowMesh.VertexBlock->ByteOffset / sizeof(vertex));
 
+            pipeline_with_layout GizmoPipeline = Renderer->Pipelines[Pipeline_Gizmo];
+
             auto RenderGizmo = 
-                [Renderer, 
+                [Renderer, GizmoPipeline,
                 CmdBuffer = Frame->CmdBuffer,
                 IndexCount, IndexOffset, VertexOffset,
                 &Editor = GameState->Editor]
@@ -555,7 +558,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
                 for (u32 i = 0; i < 3; i++)
                 {
                     m4 Transform = BaseTransform * Transforms[i] * Scale;
-                    vkCmdPushConstants(CmdBuffer, Renderer->GizmoPipelineLayout, 
+                    vkCmdPushConstants(CmdBuffer, GizmoPipeline.Layout,
                                        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                        0, sizeof(Transform), &Transform);
                     rgba8 Color = Colors[i];
@@ -566,7 +569,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
                         Color.B = Max(Color.B, (u8)0x80);
                     }
 
-                    vkCmdPushConstants(CmdBuffer, Renderer->GizmoPipelineLayout,
+                    vkCmdPushConstants(CmdBuffer, GizmoPipeline.Layout,
                                        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                        sizeof(Transform), sizeof(Color), &Color);
 
@@ -574,7 +577,6 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
                 }
             };
 
-            pipeline_with_layout GizmoPipeline = Renderer->Pipelines[Pipeline_Gizmo];
             vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
                                     0, 1, &Frame->UniformDescriptorSet, 
