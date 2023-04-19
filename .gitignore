@@ -1,0 +1,7 @@
+build/
+data/
+lib/
+*.10x
+*.rdbg
+*.obj
+*.pdb

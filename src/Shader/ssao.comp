@@ -1,0 +1,88 @@
+#version 460 core
+
+#include "common.glsli"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D StructureBuffer;
+layout(set = 0, binding = 1, r8) uniform writeonly restrict image2D SSAOImage;
+
+layout(set = 1, binding = 0) uniform PerFrameBlock
+{
+    per_frame PerFrame;
+};
+
+// Sample offset table
+const vec2 d[4] = { vec2(0.1, 0.0), vec2(0.0, 0.2), vec2(-0.3, 0.0 ), vec2(0.0, -0.4), };
+
+// NOTE(boti): SinCos 2pi*k / 16 where with k=[0,16) in a random order
+// x = C, y = S
+const vec2 RotationSinCosTable[16] = 
+{
+    vec2(0.382683, 0.923880),
+    vec2(-0.923880, 0.382683),
+    vec2(0.707107, -0.707107),
+    vec2(0.000000, -1.000000),
+    vec2(1.000000, 0.000000),
+    vec2(-0.923880, -0.382683),
+    vec2(0.923880, -0.382683),
+    vec2(-0.000000, 1.000000),
+    vec2(-1.000000, -0.000000),
+    vec2(-0.382683, 0.923880),
+    vec2(-0.382683, -0.923880),
+    vec2(0.382683, -0.923880),
+    vec2(0.707107, 0.707107),
+    vec2(-0.707107, 0.707107),
+    vec2(-0.707107, -0.707107),
+    vec2(0.923880, 0.382683),
+};
+
+void main()
+{
+    // TODO(boti): param, should move to push constants
+    const float Intensity = 5.0;
+    const float InvMaxDistance = 1.0; // 1 / dMax
+    const float TangentTau = 0.03125;
+
+    ivec2 Size = imageSize(SSAOImage);
+    ivec2 P = ivec2(gl_GlobalInvocationID.xy);
+
+    float Aspect = PerFrame.ScreenSize.x / PerFrame.ScreenSize.y;
+    float VectorScale = 2.0 * Aspect / ( PerFrame.FocalLength * PerFrame.ScreenSize.x);
+
+    // Accumulate occlusion per pixel
+    if (P.x < Size.x && P.y < Size.y)
+    {
+        vec2 SampleP = vec2(P);// / PerFrame.ScreenSize;
+        vec3 Structure = StructureDecode(textureLod(StructureBuffer, SampleP, 0));
+
+        float Scale = VectorScale * Structure.z;
+        vec3 N = normalize(vec3(Structure.xy, -Scale));
+        Scale = 1.0 / Scale;
+
+        ivec2 RotationIndex = P & ivec2(3, 3);
+        vec2 Rotation = RotationSinCosTable[RotationIndex.x + RotationIndex.y * 4];
+
+        float Occlusion = 0.0;
+        float Weight = 0.0;
+        for (uint i = 0; i < 4; i++)
+        {
+            vec3 v;
+            v.x = d[i].x * Rotation.x - d[i].y * Rotation.y;
+            v.y = d[i].x * Rotation.y + d[i].y * Rotation.x;
+
+            vec2 Depth2 = textureLod(StructureBuffer, SampleP + v.xy * Scale, 0).zw;
+            v.z = Depth2.x + Depth2.y - Structure.z;
+            
+            float NdotV = dot(N, v);
+            float w = clamp(1.0 - InvMaxDistance * NdotV, 0.0, 1.0);
+            float c = clamp(NdotV * inversesqrt(dot(v, v)) - TangentTau, 0.0, 1.0);
+
+            Occlusion += w - w * sqrt(1.0 - c*c);
+            Weight += w;
+        }
+
+        float Result = 1.0 - Occlusion * Intensity / max(Weight, 0.0001);
+        imageStore(SSAOImage, P, Result.xxxx);
+    }
+}

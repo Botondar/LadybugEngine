@@ -1,0 +1,89 @@
+#version 460 core
+
+#include "common.glsli"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D Input;
+layout(set = 0, binding = 1, r11f_g11f_b10f) uniform restrict writeonly image2D Output;
+
+layout(push_constant) uniform PushConstants
+{
+    bool DoKarisAverage;
+};
+
+vec3 KarisAvg(in vec3 a, in vec3 b, in vec3 c, in vec3 d)
+{
+    float La = GetLuminance(a);
+    float Lb = GetLuminance(b);
+    float Lc = GetLuminance(c);
+    float Ld = GetLuminance(d);
+
+    float Wa = 1.0 / (La + 1.0);
+    float Wb = 1.0 / (Lb + 1.0);
+    float Wc = 1.0 / (Lc + 1.0);
+    float Wd = 1.0 / (Ld + 1.0);
+
+    float OneOverW = 1.0 / (Wa + Wb + Wc + Wd);
+
+    vec3 Result = (Wa * a + Wb * b + Wc * c + Wd * d) * OneOverW;
+    return Result;
+}
+
+void main()
+{
+    ivec2 InputSize = textureSize(Input, 0);
+    ivec2 OutputSize = imageSize(Output);
+
+    vec2 InputTexelSize = vec2(1.0) / InputSize;
+    vec2 OutputTexelSize = vec2(1.0) / OutputSize;
+
+    ivec2 WriteP = ivec2(gl_GlobalInvocationID.xy);
+    vec2 ReadP = vec2(WriteP) * OutputTexelSize;
+    if (WriteP.x < OutputSize.x && WriteP.y < OutputSize.y)
+    {
+        // b00  -  b10  -  b20
+        //  -  a00  -  a10  -
+        // b01  -  b11  -  b21
+        //  -  a01  -  a11  -
+        // b02  -  b12  -  b22
+        vec3 a00 = textureLod(Input, ReadP + InputTexelSize * vec2(-1.0, -1.0), 0).rgb;
+        vec3 a10 = textureLod(Input, ReadP + InputTexelSize * vec2(+1.0, -1.0), 0).rgb;
+        vec3 a11 = textureLod(Input, ReadP + InputTexelSize * vec2(+1.0, +1.0), 0).rgb;
+        vec3 a01 = textureLod(Input, ReadP + InputTexelSize * vec2(-1.0, +1.0), 0).rgb;
+
+        vec3 b00 = textureLod(Input, ReadP + InputTexelSize * vec2(-2.0, -2.0), 0).rgb;
+        vec3 b10 = textureLod(Input, ReadP + InputTexelSize * vec2( 0.0, -2.0), 0).rgb;
+        vec3 b20 = textureLod(Input, ReadP + InputTexelSize * vec2(+2.0, -2.0), 0).rgb;
+        vec3 b01 = textureLod(Input, ReadP + InputTexelSize * vec2(-2.0,  0.0), 0).rgb;
+        vec3 b11 = textureLod(Input, ReadP + InputTexelSize * vec2( 0.0,  0.0), 0).rgb;
+        vec3 b21 = textureLod(Input, ReadP + InputTexelSize * vec2(+2.0,  0.0), 0).rgb;
+        vec3 b02 = textureLod(Input, ReadP + InputTexelSize * vec2(-2.0, +2.0), 0).rgb;
+        vec3 b12 = textureLod(Input, ReadP + InputTexelSize * vec2( 0.0, +2.0), 0).rgb;
+        vec3 b22 = textureLod(Input, ReadP + InputTexelSize * vec2(+2.0, +2.0), 0).rgb;
+        
+        vec3 Accum = vec3(0.0);
+        if (DoKarisAverage)
+        {
+            Accum += KarisAvg(b00, b10, b01, b11);
+            Accum += KarisAvg(b10, b20, b11, b21);
+            Accum += KarisAvg(b01, b11, b02, b12);
+            Accum += KarisAvg(b11, b21, b12, b22);
+            Accum *= 0.125;
+
+            Accum += 0.5 * KarisAvg(a00, a10, a01, a11);
+        }
+        else
+        {
+            Accum += (b00 + b10 + b01 + b11);
+            Accum += (b10 + b20 + b11 + b21);
+            Accum += (b01 + b11 + b02 + b12);
+            Accum += (b11 + b21 + b12 + b22);
+            Accum *= 0.03125;
+            Accum += 0.125 * (a00 + a10 + a01 + a11);
+            
+        }
+        
+        imageStore(Output, WriteP, vec4(Accum, 1.0));
+    }
+}
