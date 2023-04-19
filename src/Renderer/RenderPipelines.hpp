@@ -20,6 +20,14 @@ constexpr u32 MaxVertexInputBindingCount = 16;
 constexpr u32 MaxVertexInputAttribCount = 32;
 constexpr u32 MaxColorAttachmentCount = 8;
 
+struct pipeline_layout_info
+{
+    u32 PushConstantRangeCount;
+    u32 DescriptorSetCount;
+    VkPushConstantRange PushConstantRanges[MaxPushConstantRangeCount];
+    descriptor_set_layout DescriptorSets[MaxDescriptorSetCount];
+};
+
 enum graphics_pipeline_stage : u32
 {
     GfxPipelineStage_None = 0,
@@ -115,6 +123,9 @@ struct blend_attachment
 struct graphics_pipeline_info
 {
     const char* Name;
+
+    pipeline_layout_info Layout;
+
     flags32 EnabledStages;
 
     input_assembler_state InputAssemblerState;
@@ -191,6 +202,9 @@ enum graphics_pipeline_type : u32
     Pipeline_Count,
 };
 
+// TODO(boti): Get the material visible to this portion of the code so we don't have to hard code this !!!!!
+constexpr u32 MaterialStructSize = sizeof(v3) + 2 * sizeof(rgba8) + 3*sizeof(u32);
+
 static const graphics_pipeline_info PipelineInfos[Pipeline_Count] = 
 {
     // None pipeline
@@ -199,6 +213,28 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // Simple
     {
         .Name = "shader",
+        .Layout = 
+        {
+            .PushConstantRangeCount = 1,
+            .DescriptorSetCount = 6,
+            .PushConstantRanges = 
+            {
+                { 
+                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
+                    .offset = 0, 
+                    .size = sizeof(m4) + MaterialStructSize 
+                },
+            },
+            .DescriptorSets = 
+            {
+                SetLayout_DefaultSamplerPS, // Texture sampler
+                SetLayout_BindlessTexturesPS, // Textures
+                SetLayout_PerFrameUniformData,
+                SetLayout_SampledRenderTargetPS, // Occlusion buffer
+                SetLayout_SampledRenderTargetPS, // Structure buffer
+                SetLayout_ShadowPS, // Shadow map
+            },
+        },
         .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
@@ -231,6 +267,25 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // Prepass
     {
         .Name = "prepass",
+        .Layout = 
+        {
+            .PushConstantRangeCount = 1,
+            .DescriptorSetCount = 3,
+            .PushConstantRanges = 
+            {
+                { 
+                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
+                    .offset = 0, 
+                    .size = sizeof(m4) + MaterialStructSize 
+                },
+            },
+            .DescriptorSets = 
+            {
+                SetLayout_DefaultSamplerPS,
+                SetLayout_BindlessTexturesPS,
+                SetLayout_PerFrameUniformData,
+            },
+        },
         .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
@@ -263,6 +318,25 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // Shadow
     {
         .Name = "shadow",
+        .Layout = 
+        {
+            .PushConstantRangeCount = 1,
+            .DescriptorSetCount = 3,
+            .PushConstantRanges = 
+            {
+                { 
+                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
+                    .offset = 0, 
+                    .size = sizeof(m4) + MaterialStructSize + sizeof(u32) 
+                },
+            },
+            .DescriptorSets = 
+            {
+                SetLayout_DefaultSamplerPS,
+                SetLayout_BindlessTexturesPS,
+                SetLayout_PerFrameUniformData,
+            },
+        },
         .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
@@ -295,6 +369,19 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // Gizmo
     {
         .Name = "gizmo",
+        .Layout = 
+        {
+            .PushConstantRangeCount = 1,
+            .DescriptorSetCount = 1,
+            .PushConstantRanges = 
+            {
+                { 
+                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
+                    .offset = 0, 
+                    .size = sizeof(m4) + sizeof(u32) },
+            },
+            .DescriptorSets = { SetLayout_PerFrameUniformData },
+        },
         .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
@@ -319,7 +406,7 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
         .BlendAttachmentCount = 1,
         .BlendAttachments = { { .BlendEnable = false } },
         .ColorAttachmentCount = 1,
-        .ColorAttachments = { HDR_FORMAT },
+        .ColorAttachments = { SWAPCHAIN_FORMAT },
         .DepthAttachment = DEPTH_FORMAT,
         .StencilAttachment = VK_FORMAT_UNDEFINED,
     },
@@ -327,6 +414,13 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // Sky
     {
         .Name = "sky",
+        .Layout = 
+        {
+            .PushConstantRangeCount = 0,
+            .DescriptorSetCount = 1,
+            .PushConstantRanges = {},
+            .DescriptorSets = { SetLayout_PerFrameUniformData },
+        },
         .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
@@ -360,6 +454,20 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // UI
     {
         .Name = "ui",
+        .Layout = 
+        {
+            .PushConstantRangeCount = 1,
+            .DescriptorSetCount = 1,
+            .PushConstantRanges = 
+            { 
+                { 
+                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                    .offset = 0, 
+                    .size = sizeof(m4) 
+                },
+            },
+            .DescriptorSets = { SetLayout_SampledRenderTargetNormalizedPS }, // TODO(boti): probably we should rename this
+        },
         .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
         .InputAssemblerState = 
         {
@@ -428,6 +536,13 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // Blit
     {
         .Name = "blit",
+        .Layout = 
+        {
+            .PushConstantRangeCount = 0,
+            .DescriptorSetCount = 1,
+            .PushConstantRanges = {},
+            .DescriptorSets = { SetLayout_SampledRenderTargetNormalizedPS },
+        },
         .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
         .InputAssemblerState = 
         {

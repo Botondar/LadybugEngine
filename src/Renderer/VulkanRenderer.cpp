@@ -174,110 +174,98 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
         ReturnOnFailure();
     }
 
-    // Frame uniform descriptor
+    // Create samplers
     {
-        VkDescriptorSetLayoutBinding Bindings[] = 
+        Renderer->Samplers[Sampler_None] = VK_NULL_HANDLE;
+        for (u32 Index = 1; Index < Sampler_Count; Index++)
         {
-            {
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_ALL,
-                .pImmutableSamplers = nullptr,
-            },
-        };
-
-        VkDescriptorSetLayoutCreateInfo LayoutInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-            .bindingCount = CountOf(Bindings),
-            .pBindings = Bindings,
-        };
-        Result = vkCreateDescriptorSetLayout(VK.Device, &LayoutInfo, nullptr, &Renderer->FrameUniformDescriptorSetLayout);
-        ReturnOnFailure();
+            Result = vkCreateSampler(VK.Device, SamplerInfos + Index, nullptr, &Renderer->Samplers[Index]);
+            Assert(Result == VK_SUCCESS);
+        }
     }
 
-    // Font
+    // Create descriptor set layouts
     {
-        // Font sampler
+        Renderer->SetLayouts[SetLayout_None] = VK_NULL_HANDLE;
+        for (u32 Index = 1; Index < SetLayout_Count; Index++)
         {
-            VkSamplerCreateInfo SamplerInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .magFilter = VK_FILTER_LINEAR,
-                .minFilter = VK_FILTER_LINEAR,
-                .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-                .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                .mipLodBias = 0.0f,
-                .anisotropyEnable = VK_FALSE,
-                .maxAnisotropy = 1.0f,
-                .compareEnable = VK_FALSE,
-                .compareOp = VK_COMPARE_OP_ALWAYS,
-                .minLod = 0.0f,
-                .maxLod = 0.0f,
-                .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
-                .unnormalizedCoordinates = VK_FALSE,
-            };
-            Result = vkCreateSampler(VK.Device, &SamplerInfo, nullptr, &Renderer->FontSampler);
-            ReturnOnFailure();
-        }
+            const descriptor_set_layout_info* Info = SetLayoutInfos + Index;
 
-        // Font Descriptor
-        {
-            VkDescriptorPoolSize PoolSize = 
+            VkDescriptorSetLayoutBinding Bindings[MaxDescriptorSetLayoutBindingCount] = {};
+            for (u32 Binding = 0; Binding < Info->BindingCount; Binding++)
             {
-                .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = 1,
-            };
-
-            VkDescriptorPoolCreateInfo PoolInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .maxSets = 1,
-                .poolSizeCount = 1,
-                .pPoolSizes = &PoolSize,
-            };
-            Result = vkCreateDescriptorPool(VK.Device, &PoolInfo, nullptr, &Renderer->FontDescriptorPool);
-            ReturnOnFailure();
-
-            VkDescriptorSetLayoutBinding Binding = 
-            {
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .pImmutableSamplers = &Renderer->FontSampler,
-            };
-            VkDescriptorSetLayoutCreateInfo SetLayoutInfo = 
+                Bindings[Binding].binding = Info->Bindings[Binding].Binding;
+                Bindings[Binding].descriptorType = Info->Bindings[Binding].Type;
+                Bindings[Binding].descriptorCount = Info->Bindings[Binding].DescriptorCount;
+                Bindings[Binding].stageFlags = Info->Bindings[Binding].StageFlags;
+                Bindings[Binding].pImmutableSamplers = &Renderer->Samplers[Info->Bindings[Binding].ImmutableSampler];
+            }
+            VkDescriptorSetLayoutCreateInfo CreateInfo = 
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
-                .bindingCount = 1,
-                .pBindings = &Binding,
+                .bindingCount = Info->BindingCount,
+                .pBindings = Bindings,
             };
-            Result = vkCreateDescriptorSetLayout(VK.Device, &SetLayoutInfo, nullptr, &Renderer->FontDescriptorSetLayout);
-            ReturnOnFailure();
 
-            VkDescriptorSetAllocateInfo AllocInfo = 
+            VkDescriptorBindingFlags BindlessFlags = 0;
+            VkDescriptorSetLayoutBindingFlagsCreateInfo BindlessInfo = 
             {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
                 .pNext = nullptr,
-                .descriptorPool = Renderer->FontDescriptorPool,
-                .descriptorSetCount = 1,
-                .pSetLayouts = &Renderer->FontDescriptorSetLayout,
+                .bindingCount = 1,
+                .pBindingFlags = &BindlessFlags,
             };
-            Result = vkAllocateDescriptorSets(VK.Device, &AllocInfo, &Renderer->FontDescriptorSet);
-            ReturnOnFailure();
+
+            if (HasFlag(Info->Flags, SetLayoutFlag_UpdateAfterBind))
+            {
+                CreateInfo.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+                BindlessFlags |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+            }
+
+            if (HasFlag(Info->Flags, SetLayoutFlag_Bindless))
+            {
+                BindlessFlags |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+                Bindings[0].descriptorCount = 1 << 18; // HACK(boti): see texture manager
+                CreateInfo.pNext = &BindlessInfo;
+            }
+
+            Result = vkCreateDescriptorSetLayout(VK.Device, &CreateInfo, nullptr, &Renderer->SetLayouts[Index]);
+            Assert(Result == VK_SUCCESS);
         }
+    }
+
+    // Font
+    {
+        VkDescriptorPoolSize PoolSize = 
+        {
+            .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+        };
+
+        VkDescriptorPoolCreateInfo PoolInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .maxSets = 1,
+            .poolSizeCount = 1,
+            .pPoolSizes = &PoolSize,
+        };
+        Result = vkCreateDescriptorPool(VK.Device, &PoolInfo, nullptr, &Renderer->FontDescriptorPool);
+        ReturnOnFailure();
+
+        VkDescriptorSetAllocateInfo AllocInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .pNext = nullptr,
+            .descriptorPool = Renderer->FontDescriptorPool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &Renderer->SetLayouts[SetLayout_SampledRenderTargetNormalizedPS], // HACK
+        };
+        Result = vkAllocateDescriptorSets(VK.Device, &AllocInfo, &Renderer->FontDescriptorSet);
+        ReturnOnFailure();
     }
 
     // Staging Buffer
@@ -307,6 +295,9 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
     }
 
     // Texture Manager
+    // TODO(boti): remove this
+    Renderer->TextureManager.DescriptorSetLayouts[0] = Renderer->SetLayouts[SetLayout_DefaultSamplerPS];
+    Renderer->TextureManager.DescriptorSetLayouts[1] = Renderer->SetLayouts[SetLayout_BindlessTexturesPS];
     if (!CreateTextureManager(&Renderer->TextureManager, R_TextureMemorySize, VK.GPUMemTypes))
     {
         Result = VK_ERROR_INITIALIZATION_FAILED;
@@ -450,7 +441,7 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
         }
     }
 
-    // Shadow pipeline
+    // Shadow storage
     {
         u32 MemoryTypeIndex = 0;
         {
@@ -590,167 +581,6 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
                 ReturnOnFailure();
             }
         }
-
-        VkSamplerCreateInfo SamplerInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .magFilter = VK_FILTER_LINEAR,
-            .minFilter = VK_FILTER_LINEAR,
-            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-            .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-            .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-            .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-            .mipLodBias = 0.0f,
-            .anisotropyEnable = VK_FALSE,
-            .maxAnisotropy = 0.0f,
-            .compareEnable = VK_TRUE,
-            .compareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
-            .minLod = 0.0f,
-            .maxLod = 0.0f,
-            .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
-            .unnormalizedCoordinates = VK_FALSE,
-        };
-
-        Result = vkCreateSampler(VK.Device, &SamplerInfo, nullptr, &Renderer->ShadowSampler);
-        ReturnOnFailure();
-
-        VkDescriptorSetLayoutBinding Bindings[] = 
-        {
-            {
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_COMPUTE_BIT,
-                .pImmutableSamplers = &Renderer->ShadowSampler,
-            },
-        };
-
-        VkDescriptorSetLayoutCreateInfo SetLayoutInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .bindingCount = CountOf(Bindings),
-            .pBindings = Bindings,
-        };
-        Result = vkCreateDescriptorSetLayout(VK.Device, &SetLayoutInfo, nullptr, &Renderer->ShadowDescriptorSetLayout);
-        ReturnOnFailure();
-
-        VkDescriptorSetLayout SetLayouts[] = 
-        {
-            Renderer->TextureManager.DescriptorSetLayouts[0],
-            Renderer->TextureManager.DescriptorSetLayouts[1],
-            Renderer->FrameUniformDescriptorSetLayout,
-        };
-
-        VkPushConstantRange PushConstants[] = 
-        {
-            {
-                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(push_constants) + sizeof(u32),
-            },
-        };
-
-        VkPipelineLayoutCreateInfo PipelineLayoutInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .setLayoutCount = CountOf(SetLayouts),
-            .pSetLayouts = SetLayouts,
-            .pushConstantRangeCount = CountOf(PushConstants),
-            .pPushConstantRanges = PushConstants,
-        };
-        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Renderer->Pipelines[Pipeline_Shadow].Layout);
-        ReturnOnFailure();
-    }
-
-    // Common sampler for post-processing passes
-    {
-        VkSamplerCreateInfo SamplerInfo =
-        {
-            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .magFilter = VK_FILTER_LINEAR,
-            .minFilter = VK_FILTER_LINEAR,
-            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-            .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            .mipLodBias = 0.0f,
-            .anisotropyEnable = VK_FALSE,
-            .maxAnisotropy = 0.0f,
-            .compareEnable = VK_FALSE,
-            .compareOp = VK_COMPARE_OP_ALWAYS,
-            .minLod = 0.0f,
-            .maxLod = 0.0f,
-            .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
-            .unnormalizedCoordinates = VK_TRUE,
-        };
-        Result = vkCreateSampler(VK.Device, &SamplerInfo, nullptr, &Renderer->RenderTargetSampler);
-    }
-
-    // Simple pipeline
-    {
-        ReturnOnFailure();
-        VkDescriptorSetLayoutBinding Bindings[] = 
-        {
-            {
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .pImmutableSamplers = &Renderer->RenderTargetSampler,
-            },
-        };
-        VkDescriptorSetLayoutCreateInfo SetLayoutInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .bindingCount = CountOf(Bindings),
-            .pBindings = Bindings,
-        };
-        Result = vkCreateDescriptorSetLayout(VK.Device, &SetLayoutInfo, nullptr, &Renderer->GBufferDescriptorSetLayout);
-        ReturnOnFailure();
-
-        VkPushConstantRange PushConstantRanges[] = 
-        {
-            {
-                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                .offset = 0,
-                .size = sizeof(push_constants),
-            },
-        };
-
-        const VkDescriptorSetLayout DescriptorSetLayouts[] = 
-        {
-            Renderer->TextureManager.DescriptorSetLayouts[0],
-            Renderer->TextureManager.DescriptorSetLayouts[1],
-            Renderer->FrameUniformDescriptorSetLayout,
-            Renderer->GBufferDescriptorSetLayout,
-            Renderer->GBufferDescriptorSetLayout,
-            Renderer->ShadowDescriptorSetLayout,
-        };
-
-        VkPipelineLayoutCreateInfo PipelineLayoutInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .setLayoutCount = CountOf(DescriptorSetLayouts),
-            .pSetLayouts = DescriptorSetLayouts,
-            .pushConstantRangeCount = CountOf(PushConstantRanges),
-            .pPushConstantRanges = PushConstantRanges,
-        };
-
-        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, Renderer->Allocator, &Renderer->Pipelines[Pipeline_Simple].Layout);
-        ReturnOnFailure();
-        vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, Renderer->Allocator, &Renderer->Pipelines[Pipeline_Prepass].Layout);
     }
 
     // SSAO pipeline
@@ -764,7 +594,7 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
                     .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                     .descriptorCount = 1,
                     .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-                    .pImmutableSamplers = &Renderer->RenderTargetSampler,
+                    .pImmutableSamplers = &Renderer->Samplers[Sampler_RenderTargetUnnormalized],
                 },
                 {
                     .binding = 1,
@@ -806,7 +636,7 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
         VkDescriptorSetLayout DescriptorSetLayouts[] = 
         {
             Renderer->SSAO.SetLayout,
-            Renderer->FrameUniformDescriptorSetLayout,
+            Renderer->SetLayouts[SetLayout_PerFrameUniformData],
         };
 
         VkPipelineLayoutCreateInfo PipelineLayoutInfo = 
@@ -860,14 +690,14 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
                     .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                     .descriptorCount = 1,
                     .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-                    .pImmutableSamplers = &Renderer->RenderTargetSampler,
+                    .pImmutableSamplers = &Renderer->Samplers[Sampler_RenderTargetUnnormalized],
                 },
                 {
                     .binding = 1, 
                     .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                     .descriptorCount = 1,
                     .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-                    .pImmutableSamplers = &Renderer->RenderTargetSampler,
+                    .pImmutableSamplers = &Renderer->Samplers[Sampler_RenderTargetUnnormalized],
                 },
                 {
                     .binding = 2,
@@ -949,45 +779,6 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
         ReturnOnFailure();
 
         vkDestroyShaderModule(VK.Device, Module, nullptr);
-    }
-
-    // UI Pipeline
-    {
-        VkPushConstantRange PushConstants = 
-        {
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            .offset = 0,
-            .size = sizeof(m4),
-        };
-
-        VkPipelineLayoutCreateInfo PipelineLayoutInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .setLayoutCount = 1,
-            .pSetLayouts = &Renderer->FontDescriptorSetLayout,
-            .pushConstantRangeCount = 1,
-            .pPushConstantRanges = &PushConstants,
-        };
-        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Renderer->Pipelines[Pipeline_UI].Layout);
-        ReturnOnFailure();
-    }
-
-    // Sky pipeline
-    {
-        VkPipelineLayoutCreateInfo LayoutInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .setLayoutCount = 1,
-            .pSetLayouts = &Renderer->FrameUniformDescriptorSetLayout,
-            .pushConstantRangeCount = 0,
-            .pPushConstantRanges = nullptr,
-        };
-        Result = vkCreatePipelineLayout(VK.Device, &LayoutInfo, nullptr, &Renderer->Pipelines[Pipeline_Sky].Layout);
-        ReturnOnFailure();
     }
 
     // Bloom pipeline
@@ -1155,91 +946,6 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
         }
     }
 
-    // Gizmo pipeline
-    {
-        VkPushConstantRange PushConstants = 
-        {
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-            .offset = 0,
-            .size = sizeof(m4) + sizeof(u32),
-        };
-        VkPipelineLayoutCreateInfo PipelineLayoutInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .setLayoutCount = 1,
-            .pSetLayouts = &Renderer->FrameUniformDescriptorSetLayout,
-            .pushConstantRangeCount = 1,
-            .pPushConstantRanges = &PushConstants,
-        };
-
-        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Renderer->Pipelines[Pipeline_Gizmo].Layout);
-        ReturnOnFailure();
-    }
-
-    // Blit pipeline
-    {
-        // Descriptor
-        {
-            VkSamplerCreateInfo SamplerInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .magFilter = VK_FILTER_LINEAR,
-                .minFilter = VK_FILTER_LINEAR,
-                .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-                .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                .mipLodBias = 0.0f,
-                .anisotropyEnable = VK_FALSE,
-                .maxAnisotropy = 1.0f,
-                .compareEnable = VK_FALSE,
-                .compareOp = VK_COMPARE_OP_ALWAYS,
-                .minLod = 0.0f,
-                .maxLod = VK_LOD_CLAMP_NONE,
-                .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
-                .unnormalizedCoordinates = VK_FALSE,
-            };
-            Result = vkCreateSampler(VK.Device, &SamplerInfo, nullptr, &Renderer->BlitSampler);
-            ReturnOnFailure();
-
-            VkDescriptorSetLayoutBinding Binding = 
-            {
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .pImmutableSamplers = &Renderer->BlitSampler,
-            };
-            VkDescriptorSetLayoutCreateInfo LayoutInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-                .bindingCount = 1,
-                .pBindings = &Binding,
-            };
-            Result = vkCreateDescriptorSetLayout(VK.Device, &LayoutInfo, nullptr, &Renderer->BlitDescriptorSetLayout);
-            ReturnOnFailure();
-        }
-
-        VkPipelineLayoutCreateInfo PipelineLayoutInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .setLayoutCount = 1,
-            .pSetLayouts = &Renderer->BlitDescriptorSetLayout,
-            .pushConstantRangeCount = 0,
-            .pPushConstantRanges = nullptr,
-        };
-        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Renderer->Pipelines[Pipeline_Blit].Layout);
-        ReturnOnFailure();
-    }
-
     // Pipelines
     {
         Renderer->Pipelines[Pipeline_None] = { VK_NULL_HANDLE, VK_NULL_HANDLE };
@@ -1257,14 +963,23 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
             pipeline_with_layout* Pipeline = Renderer->Pipelines + PipelineIndex;
             const graphics_pipeline_info* Info = PipelineInfos + PipelineIndex;
 
-            // HACK(boti): we're currently piggy backing off the old way of creating pipelines
-            switch (PipelineIndex)
+            VkDescriptorSetLayout SetLayouts[MaxDescriptorSetCount] = {};
+            for (u32 SetLayoutIndex = 0; SetLayoutIndex < Info->Layout.DescriptorSetCount; SetLayoutIndex++)
             {
-                case Pipeline_Prepass:
-                {
-                    //Pipeline->Layout = Renderer->Pipelines[Pipeline_Simple].Layout;
-                } break;
+                SetLayouts[SetLayoutIndex] = Renderer->SetLayouts[Info->Layout.DescriptorSets[SetLayoutIndex]];
             }
+            VkPipelineLayoutCreateInfo PipelineLayoutInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .setLayoutCount = Info->Layout.DescriptorSetCount,
+                .pSetLayouts = SetLayouts,
+                .pushConstantRangeCount = Info->Layout.PushConstantRangeCount,
+                .pPushConstantRanges = Info->Layout.PushConstantRanges,
+            };
+            Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Pipeline->Layout);
+            Assert(Result == VK_SUCCESS);
 
             u64 NameSize = PathSize;
             CopyZStringToBuffer(Name, Info->Name, &NameSize);
@@ -1928,7 +1643,7 @@ lbfn void CreateDebugFontImage(vulkan_renderer* Renderer, u32 Width, u32 Height,
 
                         VkDescriptorImageInfo ImageDescriptor = 
                         {
-                            .sampler = Renderer->FontSampler,
+                            .sampler = VK_NULL_HANDLE,//Renderer->FontSampler,
                             .imageView = ImageView,
                             .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
                         };
@@ -2214,7 +1929,7 @@ lbfn render_frame* BeginRenderFrame(vulkan_renderer* Renderer)
     Frame->SwapchainImageView = Renderer->SwapchainImageViews[Frame->SwapchainImageIndex];
 
     vkResetDescriptorPool(VK.Device, Frame->DescriptorPool, 0);
-    Frame->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->FrameUniformDescriptorSetLayout);
+    Frame->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrameUniformData]);
 
     Assert(Frame->SwapchainImageIndex != INVALID_INDEX_U32);
     return Frame;

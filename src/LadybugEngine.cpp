@@ -279,21 +279,21 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
 
     VkDescriptorSet OcclusionDescriptorSet = PushImageDescriptor(
         Frame,
-        Renderer->GBufferDescriptorSetLayout,
+        Renderer->SetLayouts[SetLayout_SampledRenderTargetPS],
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         Frame->OcclusionBuffers[1]->View,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL); 
 
     VkDescriptorSet StructureBufferDescriptorSet = PushImageDescriptor(
         Frame,
-        Renderer->GBufferDescriptorSetLayout,
+        Renderer->SetLayouts[SetLayout_SampledRenderTargetPS],
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         Frame->StructureBuffer->View,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL); 
 
     VkDescriptorSet ShadowDescriptorSet = PushImageDescriptor(
         Frame,
-        Renderer->ShadowDescriptorSetLayout,
+        Renderer->SetLayouts[SetLayout_ShadowPS],
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         Frame->ShadowMapView,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -354,7 +354,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Prepass];
             vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
-                                    0, CountOf(DescriptorSets), DescriptorSets,
+                                    0, 3, DescriptorSets,
                                     0, nullptr);
             RenderMeshes(Frame->CmdBuffer, Pipeline.Layout,
                          &Renderer->GeometryBuffer, GameState,
@@ -449,7 +449,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
             .resolveImageView = VK_NULL_HANDLE,
             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-            .clearValue = { .color = { { 0.0f, 0.0f, 0.0f, 0.0f } }  },
+            .clearValue = { .color = { { 0.0f, 0.0f, 0.0f, 0.0f } } },
         };
 
         VkRenderingAttachmentInfo DepthAttachment = 
@@ -484,7 +484,8 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         {
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Blit];
             vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            VkDescriptorSet BlitDescriptorSet = PushImageDescriptor(Frame, Renderer->BlitDescriptorSetLayout,
+            VkDescriptorSet BlitDescriptorSet = PushImageDescriptor(Frame, 
+                                                                    Renderer->SetLayouts[SetLayout_SampledRenderTargetNormalizedPS],
                                                                     VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                                                     Frame->HDRRenderTargets[0]->View,
                                                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);

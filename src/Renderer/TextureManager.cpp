@@ -168,7 +168,7 @@ lbfn bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 Mem
         {
             return false;
         }
-
+#if 0
         VkDescriptorSetLayoutBinding Bindings[] = 
         {
             // Set 0
@@ -227,7 +227,7 @@ lbfn bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 Mem
         {
             return false;
         }
-
+#endif
         VkDescriptorSetAllocateInfo DescriptorInfo = 
         {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,

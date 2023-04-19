@@ -14,13 +14,250 @@ constexpr u32 R_MaxShadowCascadeCount   = 4;
 constexpr u32 R_ShadowResolution        = 2048;
 constexpr u64 R_VertexBufferMaxBlockCount = (1llu << 18);
 
-enum descriptor_set : u32
+// Shader limits
+constexpr u32 MaxDescriptorSetCount = 256;
+constexpr u32 MaxPushConstantRangeCount = 64;
+
+constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
+
+enum sampler : u32
 {
-    DescriptorSet_None = 0,
+    Sampler_None = 0,
 
-    DescriptorSet_PerFrameUniformData,
+    Sampler_Default,
+    Sampler_RenderTargetUnnormalized,
+    Sampler_Shadow,
+    Sampler_RenderTargetNormalized,
 
-    DescriptorSet_Count,
+    Sampler_Count,
+};
+
+static const VkSamplerCreateInfo SamplerInfos[Sampler_Count] = 
+{
+    {},
+
+    // Default
+    {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_TRUE,
+        .maxAnisotropy = 4.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = VK_LOD_CLAMP_NONE,
+        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE,
+        .unnormalizedCoordinates = VK_FALSE,
+    },
+    // RenderTargetUnnormalized
+    {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 0.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = 0.0f,
+        .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+        .unnormalizedCoordinates = VK_TRUE,
+    },
+    // Shadow
+    {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 0.0f,
+        .compareEnable = VK_TRUE,
+        .compareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+        .minLod = 0.0f,
+        .maxLod = VK_LOD_CLAMP_NONE,
+        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+        .unnormalizedCoordinates = VK_FALSE,
+    },
+    // RenderTargetNormalized
+    {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 0.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = VK_LOD_CLAMP_NONE,
+        .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+        .unnormalizedCoordinates = VK_FALSE,
+    },
+};
+
+enum descriptor_set_layout : u32
+{
+    SetLayout_None = 0,
+
+    SetLayout_PerFrameUniformData,
+    SetLayout_BindlessTexturesPS,
+    SetLayout_SampledRenderTargetPS,
+    SetLayout_DefaultSamplerPS,
+    SetLayout_ShadowPS,
+    SetLayout_SampledRenderTargetNormalizedPS,
+
+    SetLayout_Count,
+};
+
+enum descriptor_set_layout_flags : flags32
+{
+    SetLayoutFlag_None = 0,
+
+    SetLayoutFlag_UpdateAfterBind = (1 << 0),
+    SetLayoutFlag_Bindless = (2 << 0),
+};
+
+struct descriptor_set_binding
+{
+    u32 Binding;
+    VkDescriptorType Type;
+    u32 DescriptorCount;
+    flags32 StageFlags;
+    u32 ImmutableSampler; // NOTE(boti): for now we only allow single immutable samplers
+};
+
+struct descriptor_set_layout_info
+{
+    flags32 Flags; // descriptor_set_layout_flags
+    u32 BindingCount;
+    descriptor_set_binding Bindings[MaxDescriptorSetLayoutBindingCount];
+};
+
+static const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] = 
+{
+    {},
+
+    // PerFrameUniformData
+    {
+        .Flags = SetLayoutFlag_UpdateAfterBind,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_ALL,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
+    // BindlessTexturesPS
+    {
+        .Flags = SetLayoutFlag_UpdateAfterBind|SetLayoutFlag_Bindless,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .DescriptorCount = 0, // NOTE(boti): actual count is implied by the descriptor pool size for bindless
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
+
+    // SampledRenderTargetPS
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .ImmutableSampler = Sampler_RenderTargetUnnormalized,
+            },
+        },
+    },
+
+    // DefaultSamplerPS
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .ImmutableSampler = Sampler_Default,
+            },
+        },
+    },
+
+    // ShadowPS
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_VERTEX_BIT,
+                .ImmutableSampler = Sampler_Shadow,
+            },
+        },
+    },
+
+    // SampledRenderTargetNormalizedPS
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .ImmutableSampler = Sampler_RenderTargetNormalized,
+            },
+        },
+    },
 };
 
 #include <vulkan/vulkan.h>
@@ -103,9 +340,6 @@ struct vulkan_renderer
         VkImageView ShadowViews[MaxSwapchainImageCount];
         VkImageView ShadowCascadeViews[MaxSwapchainImageCount][R_MaxShadowCascadeCount];
 #endif
-
-        VkSampler ShadowSampler;
-        VkDescriptorSetLayout ShadowDescriptorSetLayout;
     };
 
     VkCommandPool TransferCmdPool;
@@ -119,7 +353,6 @@ struct vulkan_renderer
 
     static constexpr u32 MaxPerFrameDescriptorSetCount = 1024;
     VkDescriptorPool PerFrameDescriptorPool[2];
-    VkDescriptorSetLayout FrameUniformDescriptorSetLayout;
 
     VkDeviceMemory PerFrameUniformMemory;
     void* PerFrameUniformMappingBase;
@@ -137,16 +370,11 @@ struct vulkan_renderer
     // Pipelines, pipeline layouts and associated descriptor set layouts
     //
     pipeline_with_layout Pipelines[Pipeline_Count];
+    VkDescriptorSetLayout SetLayouts[SetLayout_Count];
+    VkSampler Samplers[Sampler_Count];
 
     bloom_desc Bloom;
     ssao_desc SSAO;
-
-    VkSampler RenderTargetSampler;    
-
-    VkDescriptorSetLayout GBufferDescriptorSetLayout; // NOTE(boti): G-buffers needed for rendering
-
-    VkDescriptorSetLayout BlitDescriptorSetLayout;
-    VkSampler BlitSampler;
 
     //
     // Fonts
@@ -156,10 +384,8 @@ struct vulkan_renderer
     VkDeviceMemory FontImageMemory;
     VkImage FontImage;
     VkImageView FontImageView;
-    VkSampler FontSampler;
     
     VkDescriptorPool FontDescriptorPool;
-    VkDescriptorSetLayout FontDescriptorSetLayout;
     VkDescriptorSet FontDescriptorSet;
 
     u64 CurrentFrameID;
