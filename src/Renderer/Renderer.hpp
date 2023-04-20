@@ -1,3 +1,24 @@
+//
+// Config
+//
+constexpr u64 R_RenderTargetMemorySize  = MiB(320);
+constexpr u64 R_TextureMemorySize       = MiB(1024llu);
+constexpr u64 R_ShadowMapMemorySize     = MiB(256);
+constexpr u32 R_MaxShadowCascadeCount   = 4;
+constexpr u32 R_ShadowResolution        = 2048;
+constexpr u64 R_VertexBufferMaxBlockCount = (1llu << 18);
+
+//
+// Limits
+//
+constexpr u32 MaxVertexInputBindingCount = 16;
+constexpr u32 MaxVertexInputAttribCount = 32;
+constexpr u32 MaxColorAttachmentCount = 8;
+constexpr u32 MaxDescriptorSetCount = 256;
+constexpr u32 MaxPushConstantRangeCount = 64;
+constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
+
+
 union rgba8
 {
     u32 Color;

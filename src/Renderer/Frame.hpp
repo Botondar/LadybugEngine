@@ -1,35 +1,5 @@
 #pragma once
 
-struct ssao_desc
-{
-    static constexpr u32 OutputBinding = 0;
-    static constexpr u32 StructureBufferBinding = 1;
-    static constexpr u32 OcclusionBufferBinding = 2; // Blur only
-    static constexpr u32 GroupWidth = 8;
-    static constexpr u32 GroupHeight = 8;
-
-    VkDescriptorSetLayout SetLayout;
-    VkDescriptorSetLayout BlurSetLayout;
-
-    VkPipelineLayout Layout;
-    VkPipelineLayout BlurLayout;
-
-    VkPipeline Pipeline;
-    VkPipeline BlurPipeline;
-};
-
-struct bloom_desc
-{
-    static constexpr u32 OutputBinding = 0;
-    static constexpr u32 InputBinding = 1;
-
-    VkDescriptorSetLayout SetLayout;
-    VkPipelineLayout Layout;
-    VkPipeline DownsamplePipeline;
-    VkPipeline UpsamplePipeline;
-    VkSampler Sampler;
-};
-
 struct render_frame
 {
     u32 RenderFrameID; // NOTE: FrameID % SwapchainImageCount
@@ -125,8 +95,8 @@ lbfn void BeginForwardPass(render_frame* Frame);
 lbfn void EndForwardPass(render_frame* Frame);
 
 lbfn void RenderBloom(render_frame* Frame, render_target* RT,
-                      VkPipelineLayout PipelineLayout,
+                      VkPipelineLayout DownsamplePipelineLayout,
                       VkPipeline DownsamplePipeline, 
+                      VkPipelineLayout UpsamplePipelineLayout,
                       VkPipeline UpsamplePipeline, 
-                      VkDescriptorSetLayout DescriptorSetLayout,
-                      VkSampler Sampler);
+                      VkDescriptorSetLayout DescriptorSetLayout);

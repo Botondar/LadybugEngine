@@ -4,21 +4,17 @@
 #include "Renderer/Renderer.hpp"
 
 //
-// Config
+// Formats
 //
 
-constexpr u64 R_RenderTargetMemorySize  = MiB(320);
-constexpr u64 R_TextureMemorySize       = MiB(1024llu);
-constexpr u64 R_ShadowMapMemorySize     = MiB(256);
-constexpr u32 R_MaxShadowCascadeCount   = 4;
-constexpr u32 R_ShadowResolution        = 2048;
-constexpr u64 R_VertexBufferMaxBlockCount = (1llu << 18);
-
-// Shader limits
-constexpr u32 MaxDescriptorSetCount = 256;
-constexpr u32 MaxPushConstantRangeCount = 64;
-
-constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
+// TODO(boti): Maybe we should just have an indirected enum for this too?
+constexpr VkFormat DEPTH_FORMAT = VK_FORMAT_D32_SFLOAT;
+constexpr VkFormat HDR_FORMAT = VK_FORMAT_B10G11R11_UFLOAT_PACK32; //VK_FORMAT_R16G16B16A16_SFLOAT;
+constexpr VkFormat STRUCTURE_BUFFER_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
+constexpr VkFormat SSAO_FORMAT = VK_FORMAT_R8_UNORM;
+constexpr VkFormat SHADOW_FORMAT = VK_FORMAT_D16_UNORM; // TODO(boti): is this enough?
+// HACK(boti): The swapchain format is unknown at compile time, so we use this special value to refer to it
+constexpr VkFormat SWAPCHAIN_FORMAT = (VkFormat)0xFFFFFFFF;
 
 enum sampler : u32
 {
@@ -131,7 +127,11 @@ enum descriptor_set_layout : u32
     SetLayout_SampledRenderTargetPS,
     SetLayout_DefaultSamplerPS,
     SetLayout_ShadowPS,
-    SetLayout_SampledRenderTargetNormalizedPS,
+    SetLayout_SampledRenderTargetNormalized_PS_CS,
+    SetLayout_StorageImage_CS,
+    SetLayout_Bloom,
+    SetLayout_SSAO,
+    SetLayout_SSAOBlur,
 
     SetLayout_Count,
 };
@@ -237,7 +237,7 @@ static const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .Binding = 0,
                 .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .DescriptorCount = 1,
-                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_VERTEX_BIT,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_COMPUTE_BIT,
                 .ImmutableSampler = Sampler_Shadow,
             },
         },
@@ -253,8 +253,99 @@ static const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .Binding = 0,
                 .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .DescriptorCount = 1,
-                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_COMPUTE_BIT,
                 .ImmutableSampler = Sampler_RenderTargetNormalized,
+            },
+        },
+    },
+
+    // StorageImage_CS
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
+
+    // Bloom
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 2,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_RenderTargetNormalized,
+            },
+            {
+                .Binding = 1,
+                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
+    // SSAO
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 2,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_RenderTargetUnnormalized,
+            },
+            {
+                .Binding = 1,
+                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
+
+    //SetLayout_SSAOBlur
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 3,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_RenderTargetUnnormalized,
+            },
+            {
+                .Binding = 1,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_RenderTargetUnnormalized,
+            },
+            {
+                .Binding = 2,
+                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_None,
             },
         },
     },
@@ -372,9 +463,6 @@ struct vulkan_renderer
     pipeline_with_layout Pipelines[Pipeline_Count];
     VkDescriptorSetLayout SetLayouts[SetLayout_Count];
     VkSampler Samplers[Sampler_Count];
-
-    bloom_desc Bloom;
-    ssao_desc SSAO;
 
     //
     // Fonts

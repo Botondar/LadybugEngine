@@ -7,19 +7,6 @@ TODO(boti):
       the same render-pass as the gizmos. They should probably be moved to a different render-pass.
 */
 
-// NOTE(boti): these constants probably shouldn't be here
-constexpr VkFormat DEPTH_FORMAT = VK_FORMAT_D32_SFLOAT;
-constexpr VkFormat HDR_FORMAT = VK_FORMAT_B10G11R11_UFLOAT_PACK32; //VK_FORMAT_R16G16B16A16_SFLOAT;
-constexpr VkFormat STRUCTURE_BUFFER_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
-constexpr VkFormat SSAO_FORMAT = VK_FORMAT_R8_UNORM;
-constexpr VkFormat SHADOW_FORMAT = VK_FORMAT_D16_UNORM; // TODO(boti): is this enough?
-// HACK(boti): The swapchain format is unknown at compile time, so we use this special value to refer to it
-constexpr VkFormat SWAPCHAIN_FORMAT = (VkFormat)0xFFFFFFFF;
-
-constexpr u32 MaxVertexInputBindingCount = 16;
-constexpr u32 MaxVertexInputAttribCount = 32;
-constexpr u32 MaxColorAttachmentCount = 8;
-
 struct pipeline_layout_info
 {
     u32 PushConstantRangeCount;
@@ -28,17 +15,19 @@ struct pipeline_layout_info
     descriptor_set_layout DescriptorSets[MaxDescriptorSetCount];
 };
 
-enum graphics_pipeline_stage : u32
+enum pipeline_stage : u32
 {
-    GfxPipelineStage_None = 0,
+    PipelineStage_None = 0,
 
-    GfxPipelineStage_VS = (1 << 0),
-    GfxPipelineStage_PS = (1 << 1),
-    GfxPipelineStage_DS = (1 << 2),
-    GfxPIpelineStage_HS = (1 << 3),
-    GfxPipelineStage_GS = (1 << 4),
+    PipelineStage_VS = (1 << 0),
+    PipelineStage_PS = (1 << 1),
+    PipelineStage_DS = (1 << 2),
+    PipelineStage_HS = (1 << 3),
+    PipelineStage_GS = (1 << 4),
 
-    GfxPipelineStage_Count = 5, // NOTE(boti): This has to be kept up to date!
+    PipelineStage_CS = (1 << 5),
+
+    GfxPipelineStage_Count = 6, // NOTE(boti): This has to be kept up to date!
 };
 typedef u32 pipeline_stages;
 
@@ -120,12 +109,22 @@ struct blend_attachment
     VkBlendOp AlphaOp;
 };
 
+enum pipeline_type : u32
+{
+    PipelineType_Graphics = 0,
+    PipelineType_Compute,
+
+    PipelineType_Count,
+};
+
 struct graphics_pipeline_info
 {
     const char* Name;
+    pipeline_type Type;
 
     pipeline_layout_info Layout;
 
+    // Gfx pipeline specific
     flags32 EnabledStages;
 
     input_assembler_state InputAssemblerState;
@@ -187,7 +186,7 @@ static input_assembler_state InputState_vertex =
     },
 };
 
-enum graphics_pipeline_type : u32
+enum pipeline : u32
 {
     Pipeline_None = 0,
 
@@ -198,6 +197,10 @@ enum graphics_pipeline_type : u32
     Pipeline_Sky,
     Pipeline_UI,
     Pipeline_Blit,
+    Pipeline_BloomDownsample,
+    Pipeline_BloomUpsample,
+    Pipeline_SSAO,
+    Pipeline_SSAOBlur,
 
     Pipeline_Count,
 };
@@ -213,6 +216,7 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // Simple
     {
         .Name = "shader",
+        .Type = PipelineType_Graphics,
         .Layout = 
         {
             .PushConstantRangeCount = 1,
@@ -235,7 +239,7 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
                 SetLayout_ShadowPS, // Shadow map
             },
         },
-        .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
+        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
         {
@@ -267,6 +271,7 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // Prepass
     {
         .Name = "prepass",
+        .Type = PipelineType_Graphics,
         .Layout = 
         {
             .PushConstantRangeCount = 1,
@@ -286,7 +291,7 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
                 SetLayout_PerFrameUniformData,
             },
         },
-        .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
+        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
         {
@@ -318,6 +323,7 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // Shadow
     {
         .Name = "shadow",
+        .Type = PipelineType_Graphics,
         .Layout = 
         {
             .PushConstantRangeCount = 1,
@@ -337,7 +343,7 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
                 SetLayout_PerFrameUniformData,
             },
         },
-        .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
+        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
         {
@@ -369,6 +375,7 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // Gizmo
     {
         .Name = "gizmo",
+        .Type = PipelineType_Graphics,
         .Layout = 
         {
             .PushConstantRangeCount = 1,
@@ -382,7 +389,7 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
             },
             .DescriptorSets = { SetLayout_PerFrameUniformData },
         },
-        .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
+        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
         {
@@ -414,6 +421,7 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // Sky
     {
         .Name = "sky",
+        .Type = PipelineType_Graphics,
         .Layout = 
         {
             .PushConstantRangeCount = 0,
@@ -421,7 +429,7 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = {},
             .DescriptorSets = { SetLayout_PerFrameUniformData },
         },
-        .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
+        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
         {
@@ -454,6 +462,7 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // UI
     {
         .Name = "ui",
+        .Type = PipelineType_Graphics,
         .Layout = 
         {
             .PushConstantRangeCount = 1,
@@ -466,9 +475,9 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
                     .size = sizeof(m4) 
                 },
             },
-            .DescriptorSets = { SetLayout_SampledRenderTargetNormalizedPS }, // TODO(boti): probably we should rename this
+            .DescriptorSets = { SetLayout_SampledRenderTargetNormalized_PS_CS }, // TODO(boti): probably we should rename this
         },
-        .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
+        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = 
         {
             .PrimitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
@@ -536,14 +545,15 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
     // Blit
     {
         .Name = "blit",
+        .Type = PipelineType_Graphics,
         .Layout = 
         {
             .PushConstantRangeCount = 0,
             .DescriptorSetCount = 1,
             .PushConstantRanges = {},
-            .DescriptorSets = { SetLayout_SampledRenderTargetNormalizedPS },
+            .DescriptorSets = { SetLayout_SampledRenderTargetNormalized_PS_CS },
         },
-        .EnabledStages = GfxPipelineStage_VS|GfxPipelineStage_PS,
+        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = 
         {
             .PrimitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
@@ -570,5 +580,67 @@ static const graphics_pipeline_info PipelineInfos[Pipeline_Count] =
         .ColorAttachments = { SWAPCHAIN_FORMAT },
         .DepthAttachment = DEPTH_FORMAT,
         .StencilAttachment = VK_FORMAT_UNDEFINED,
+    },
+
+    // Bloom downsample
+    {
+        .Name = "downsample_bloom",
+        .Type = PipelineType_Compute,
+        .Layout = 
+        {
+            .PushConstantRangeCount = 1,
+            .DescriptorSetCount = 1,
+            .PushConstantRanges = 
+            {
+                {
+                    .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                    .offset = 0,
+                    .size = sizeof(b32),
+                },
+            },
+            .DescriptorSets = { SetLayout_Bloom },
+        },
+    },
+
+    // Pipeline_BloomUpsample
+    {
+        .Name = "upsample_bloom",
+        .Type = PipelineType_Compute,
+        .Layout = 
+        {
+            .PushConstantRangeCount = 0,
+            .DescriptorSetCount = 1,
+            .PushConstantRanges = { },
+            .DescriptorSets = { SetLayout_Bloom },
+        },
+    },
+
+    // Pipeline_SSAO
+    {
+        .Name = "ssao",
+        .Type = PipelineType_Compute,
+        .Layout = 
+        {
+            .PushConstantRangeCount = 0,
+            .DescriptorSetCount = 2,
+            .PushConstantRanges = {},
+            .DescriptorSets = 
+            {
+                SetLayout_SSAO,
+                SetLayout_PerFrameUniformData,
+            },
+        },
+    },
+    // Pipeline_SSAOBlur
+    {
+        .Name = "ssao_blur",
+        .Type = PipelineType_Compute,
+        .Layout =
+        {
+            .PushConstantRangeCount = 0,
+            .DescriptorSetCount = 1,
+            .PushConstantRanges = {},
+            .DescriptorSets = { SetLayout_SSAOBlur },
+        },
     },
 };

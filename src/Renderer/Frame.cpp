@@ -488,8 +488,10 @@ lbfn void RenderSSAO(render_frame* Frame,
 
     // Calculate AO
     {
-        u32 DispatchX = CeilDiv(Frame->RenderExtent.width, 8);
-        u32 DispatchY = CeilDiv(Frame->RenderExtent.height, 8);
+        constexpr u32 GroupSizeX = 8;
+        constexpr u32 GroupSizeY = 8;
+        u32 DispatchX = CeilDiv(Frame->RenderExtent.width, GroupSizeX);
+        u32 DispatchY = CeilDiv(Frame->RenderExtent.height, GroupSizeY);
 
         // Allocate the descriptor set
         VkDescriptorSet SSAODescriptorSet = VK_NULL_HANDLE;
@@ -874,14 +876,12 @@ lbfn void EndForwardPass(render_frame* Frame)
     vkCmdEndRendering(Frame->CmdBuffer);
 }
 
-// TODO(boti): Figure out how to remove Renderer
-//  - Renderer is needed for descriptor set layouts
 lbfn void RenderBloom(render_frame* Frame, render_target* RT,
-                      VkPipelineLayout PipelineLayout,
+                      VkPipelineLayout DownsamplePipelineLayout,
                       VkPipeline DownsamplePipeline, 
+                      VkPipelineLayout UpsamplePipelineLayout,
                       VkPipeline UpsamplePipeline, 
-                      VkDescriptorSetLayout DescriptorSetLayout,
-                      VkSampler Sampler)
+                      VkDescriptorSetLayout DescriptorSetLayout)
 {
     
     VkImageMemoryBarrier2 BeginBarriers[] = 
@@ -982,13 +982,13 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
     {
         VkDescriptorImageInfo SourceImageInfo = 
         {
-            .sampler = Sampler,
+            .sampler = VK_NULL_HANDLE,
             .imageView = RT->MipViews[Mip - 1],
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         };
         VkDescriptorImageInfo DestImageInfo = 
         {
-            .sampler = Sampler,
+            .sampler = VK_NULL_HANDLE,
             .imageView = RT->MipViews[Mip],
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         };
@@ -1018,9 +1018,9 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
 
         vkUpdateDescriptorSets(VK.Device, CountOf(Writes), Writes, 0, nullptr);
         vkCmdBindDescriptorSets(Frame->CmdBuffer, 
-                                VK_PIPELINE_BIND_POINT_COMPUTE, PipelineLayout,
+                                VK_PIPELINE_BIND_POINT_COMPUTE, DownsamplePipelineLayout,
                                 0, 1, DownsampleSets + Mip - 1, 0, nullptr);
-        vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 
+        vkCmdPushConstants(Frame->CmdBuffer, DownsamplePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 
                            0, sizeof(DoKarisAverage), &DoKarisAverage);
 
         u32 DispatchX = CeilDiv(Width, 8);
@@ -1113,13 +1113,13 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
 
         VkDescriptorImageInfo SourceImageInfo = 
         {
-            .sampler = Sampler,
+            .sampler = VK_NULL_HANDLE,
             .imageView = RT->MipViews[Mip + 1],
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         };
         VkDescriptorImageInfo DestImageInfo = 
         {
-            .sampler = Sampler,
+            .sampler = VK_NULL_HANDLE,
             .imageView = RT->MipViews[Mip],
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         };
@@ -1149,7 +1149,7 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
 
         vkUpdateDescriptorSets(VK.Device, CountOf(Writes), Writes, 0, nullptr);
         vkCmdBindDescriptorSets(Frame->CmdBuffer, 
-                                VK_PIPELINE_BIND_POINT_COMPUTE, PipelineLayout,
+                                VK_PIPELINE_BIND_POINT_COMPUTE, UpsamplePipelineLayout,
                                 0, 1, UpsampleSets + Mip, 0, nullptr);
 
         Width = Max(Frame->RenderExtent.width >> Mip, 1u);

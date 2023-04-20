@@ -363,8 +363,12 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         EndPrepass(Frame);
 
         RenderSSAO(Frame,
-                   Renderer->SSAO.Pipeline, Renderer->SSAO.Layout, Renderer->SSAO.SetLayout,
-                   Renderer->SSAO.BlurPipeline, Renderer->SSAO.BlurLayout, Renderer->SSAO.BlurSetLayout);
+                   Renderer->Pipelines[Pipeline_SSAO].Pipeline, 
+                   Renderer->Pipelines[Pipeline_SSAO].Layout, 
+                   Renderer->SetLayouts[SetLayout_SSAO],
+                   Renderer->Pipelines[Pipeline_SSAOBlur].Pipeline, 
+                   Renderer->Pipelines[Pipeline_SSAOBlur].Layout, 
+                   Renderer->SetLayouts[SetLayout_SSAOBlur]);
 
         BeginForwardPass(Frame);
         {
@@ -390,12 +394,12 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         EndForwardPass(Frame);
     }
 
-    RenderBloom(Frame, Frame->HDRRenderTargets[0], 
-                Renderer->Bloom.Layout,
-                Renderer->Bloom.DownsamplePipeline,
-                Renderer->Bloom.UpsamplePipeline,
-                Renderer->Bloom.SetLayout,
-                Renderer->Bloom.Sampler);
+    RenderBloom(Frame, Frame->HDRRenderTargets[0],
+                Renderer->Pipelines[Pipeline_BloomDownsample].Layout,
+                Renderer->Pipelines[Pipeline_BloomDownsample].Pipeline,
+                Renderer->Pipelines[Pipeline_BloomUpsample].Layout,
+                Renderer->Pipelines[Pipeline_BloomUpsample].Pipeline,
+                Renderer->SetLayouts[SetLayout_Bloom]);
 
     // Blit + UI
     {
@@ -485,7 +489,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Blit];
             vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
             VkDescriptorSet BlitDescriptorSet = PushImageDescriptor(Frame, 
-                                                                    Renderer->SetLayouts[SetLayout_SampledRenderTargetNormalizedPS],
+                                                                    Renderer->SetLayouts[SetLayout_SampledRenderTargetNormalized_PS_CS],
                                                                     VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                                                     Frame->HDRRenderTargets[0]->View,
                                                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
