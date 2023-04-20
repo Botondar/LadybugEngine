@@ -9,6 +9,7 @@
 #include "Renderer/TextureManager.cpp"
 #include "Renderer/Shadow.cpp"
 #include "Renderer/Frame.cpp"
+#include "Renderer/Pipelines.cpp"
 
 #include "Debug.cpp"
 #include "Font.cpp"

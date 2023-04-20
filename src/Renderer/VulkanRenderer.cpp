@@ -598,7 +598,7 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
             memory_arena_checkpoint Checkpoint = ArenaCheckpoint(TempArena);
 
             pipeline_with_layout* Pipeline = Renderer->Pipelines + PipelineIndex;
-            const graphics_pipeline_info* Info = PipelineInfos + PipelineIndex;
+            const pipeline_info* Info = PipelineInfos + PipelineIndex;
 
             VkDescriptorSetLayout SetLayouts[MaxDescriptorSetCount] = {};
             for (u32 SetLayoutIndex = 0; SetLayoutIndex < Info->Layout.DescriptorSetCount; SetLayoutIndex++)
@@ -677,7 +677,7 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
                 // Only VS and PS is supported for now
                 if (Info->EnabledStages & ~(PipelineStage_VS|PipelineStage_PS)) UnimplementedCodePath;
 
-                VkPipelineShaderStageCreateInfo StageInfos[GfxPipelineStage_Count] = {};
+                VkPipelineShaderStageCreateInfo StageInfos[PipelineStage_Count] = {};
                 u32 StageCount = 0;
 
                 if (Info->EnabledStages & PipelineStage_VS)

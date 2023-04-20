@@ -1,145 +1,5 @@
-#pragma once
 
-/*
-TODO(boti):
-    - Have our own enums for all Vulkan the enums used here
-    - The UI/Blit pipelines currently use the depth buffer because they get rendered in 
-      the same render-pass as the gizmos. They should probably be moved to a different render-pass.
-*/
-
-struct pipeline_layout_info
-{
-    u32 PushConstantRangeCount;
-    u32 DescriptorSetCount;
-    VkPushConstantRange PushConstantRanges[MaxPushConstantRangeCount];
-    descriptor_set_layout DescriptorSets[MaxDescriptorSetCount];
-};
-
-enum pipeline_stage : u32
-{
-    PipelineStage_None = 0,
-
-    PipelineStage_VS = (1 << 0),
-    PipelineStage_PS = (1 << 1),
-    PipelineStage_DS = (1 << 2),
-    PipelineStage_HS = (1 << 3),
-    PipelineStage_GS = (1 << 4),
-
-    PipelineStage_CS = (1 << 5),
-
-    GfxPipelineStage_Count = 6, // NOTE(boti): This has to be kept up to date!
-};
-typedef u32 pipeline_stages;
-
-// NOTE(boti): binding index is implicit from what index this structure is at in input_assembler_state
-struct vertex_input_binding
-{
-    u32 Stride;
-    b32 IsPerInstance;
-};
-
-struct vertex_input_attrib
-{
-    u32 Index;
-    u32 BindingIndex;
-    VkFormat Format;
-    u32 Offset;
-};
-
-struct input_assembler_state
-{
-    VkPrimitiveTopology PrimitiveTopology;
-    b32 EnablePrimitiveRestart;
-    u32 BindingCount;
-    u32 AttribCount;
-    vertex_input_binding Bindings[MaxVertexInputBindingCount];
-    vertex_input_attrib Attribs[MaxVertexInputAttribCount];
-};
-
-enum rasterizer_flags : flags32
-{
-    RS_Flags_None = 0,
-
-    RS_DepthClampEnable = (1 << 0),
-    RS_DiscardEnable = (1 << 1),
-    RS_DepthBiasEnable = (1 << 2),
-};
-
-struct rasterizer_state
-{
-    flags32 Flags;
-    VkPolygonMode PolygonMode;
-    VkCullModeFlags CullFlags;
-    VkFrontFace FrontFace;
-
-    f32 DepthBiasConstantFactor;
-    f32 DepthBiasClamp;
-    f32 DepthBiasSlopeFactor;
-};
-
-enum depth_stencil_flags : flags32
-{
-    DS_Flags_None = 0,
-
-    DS_DepthTestEnable = (1 << 0),
-    DS_DepthWriteEnable = (1 << 1),
-    DS_DepthBoundsTestEnable = (1 << 2),
-    DS_StencilTestEnable = (1 << 3),
-};
-
-struct depth_stencil_state
-{
-    flags32 Flags;
-
-    VkCompareOp DepthCompareOp;
-    VkStencilOpState StencilFront;
-    VkStencilOpState StencilBack;
-    f32 MinDepthBounds;
-    f32 MaxDepthBounds;
-};
-
-struct blend_attachment
-{
-    b32 BlendEnable;
-    VkBlendFactor SrcColorFactor;
-    VkBlendFactor DstColorFactor;
-    VkBlendOp ColorOp;
-    VkBlendFactor SrcAlphaFactor;
-    VkBlendFactor DstAlphaFactor;
-    VkBlendOp AlphaOp;
-};
-
-enum pipeline_type : u32
-{
-    PipelineType_Graphics = 0,
-    PipelineType_Compute,
-
-    PipelineType_Count,
-};
-
-struct graphics_pipeline_info
-{
-    const char* Name;
-    pipeline_type Type;
-
-    pipeline_layout_info Layout;
-
-    // Gfx pipeline specific
-    flags32 EnabledStages;
-
-    input_assembler_state InputAssemblerState;
-    rasterizer_state RasterizerState;
-    depth_stencil_state DepthStencilState;
-    u32 BlendAttachmentCount;
-    blend_attachment BlendAttachments[MaxColorAttachmentCount];
-
-    u32 ColorAttachmentCount;
-    VkFormat ColorAttachments[MaxColorAttachmentCount];
-    VkFormat DepthAttachment;
-    VkFormat StencilAttachment;
-};
-
-static input_assembler_state InputState_vertex = 
+input_assembler_state InputState_vertex = 
 {
     .PrimitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
     .EnablePrimitiveRestart = false,
@@ -186,29 +46,293 @@ static input_assembler_state InputState_vertex =
     },
 };
 
-enum pipeline : u32
+
+const VkSamplerCreateInfo SamplerInfos[Sampler_Count] = 
 {
-    Pipeline_None = 0,
+    {},
 
-    Pipeline_Simple,
-    Pipeline_Prepass,
-    Pipeline_Shadow,
-    Pipeline_Gizmo,
-    Pipeline_Sky,
-    Pipeline_UI,
-    Pipeline_Blit,
-    Pipeline_BloomDownsample,
-    Pipeline_BloomUpsample,
-    Pipeline_SSAO,
-    Pipeline_SSAOBlur,
+    // Default
+    {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_TRUE,
+        .maxAnisotropy = 4.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = VK_LOD_CLAMP_NONE,
+        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE,
+        .unnormalizedCoordinates = VK_FALSE,
+    },
+    // RenderTargetUnnormalized
+    {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 0.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = 0.0f,
+        .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+        .unnormalizedCoordinates = VK_TRUE,
+    },
+    // Shadow
+    {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 0.0f,
+        .compareEnable = VK_TRUE,
+        .compareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+        .minLod = 0.0f,
+        .maxLod = VK_LOD_CLAMP_NONE,
+        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+        .unnormalizedCoordinates = VK_FALSE,
+    },
+    // RenderTargetNormalized
+    {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 0.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = VK_LOD_CLAMP_NONE,
+        .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+        .unnormalizedCoordinates = VK_FALSE,
+    },
+};
 
-    Pipeline_Count,
+
+const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] = 
+{
+    {},
+
+    // PerFrameUniformData
+    {
+        .Flags = SetLayoutFlag_UpdateAfterBind,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_ALL,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
+    // BindlessTexturesPS
+    {
+        .Flags = SetLayoutFlag_UpdateAfterBind|SetLayoutFlag_Bindless,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .DescriptorCount = 0, // NOTE(boti): actual count is implied by the descriptor pool size for bindless
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
+
+    // SampledRenderTargetPS
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .ImmutableSampler = Sampler_RenderTargetUnnormalized,
+            },
+        },
+    },
+
+    // DefaultSamplerPS
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .ImmutableSampler = Sampler_Default,
+            },
+        },
+    },
+
+    // ShadowPS
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_Shadow,
+            },
+        },
+    },
+
+    // SampledRenderTargetNormalizedPS
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_RenderTargetNormalized,
+            },
+        },
+    },
+
+    // StorageImage_CS
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
+
+    // Bloom
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 2,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_RenderTargetNormalized,
+            },
+            {
+                .Binding = 1,
+                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
+    // SSAO
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 2,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_RenderTargetUnnormalized,
+            },
+            {
+                .Binding = 1,
+                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
+
+    //SetLayout_SSAOBlur
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 3,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_RenderTargetUnnormalized,
+            },
+            {
+                .Binding = 1,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_RenderTargetUnnormalized,
+            },
+            {
+                .Binding = 2,
+                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
 };
 
 // TODO(boti): Get the material visible to this portion of the code so we don't have to hard code this !!!!!
 constexpr u32 MaterialStructSize = sizeof(v3) + 2 * sizeof(rgba8) + 3*sizeof(u32);
 
-static const graphics_pipeline_info PipelineInfos[Pipeline_Count] = 
+const pipeline_info PipelineInfos[Pipeline_Count] = 
 {
     // None pipeline
     {},
