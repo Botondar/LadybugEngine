@@ -492,53 +492,76 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
         ReturnOnFailure();
 
         Renderer->ShadowCascadeCount = R_MaxShadowCascadeCount;
-        for (u32 FrameIndex = 0; FrameIndex < Renderer->SwapchainImageCount; FrameIndex++)
+        VkImageCreateInfo ImageInfo = 
         {
-            VkImageCreateInfo ImageInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .imageType = VK_IMAGE_TYPE_2D,
-                .format = SHADOW_FORMAT,
-                .extent = { R_ShadowResolution, R_ShadowResolution, 1 },
-                .mipLevels = 1,
-                .arrayLayers = R_MaxShadowCascadeCount,
-                .samples = VK_SAMPLE_COUNT_1_BIT,
-                .tiling = VK_IMAGE_TILING_OPTIMAL,
-                .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
-                .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-                .queueFamilyIndexCount = 0,
-                .pQueueFamilyIndices = nullptr,
-                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            };
-
-            Result = vkCreateImage(VK.Device, &ImageInfo, nullptr, &Renderer->ShadowMaps[FrameIndex]);
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = SHADOW_FORMAT,
+            .extent = { R_ShadowResolution, R_ShadowResolution, 1 },
+            .mipLevels = 1,
+            .arrayLayers = R_MaxShadowCascadeCount,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        };
+        
+        Result = vkCreateImage(VK.Device, &ImageInfo, nullptr, &Renderer->ShadowMap);
+        ReturnOnFailure();
+        
+        VkMemoryRequirements MemoryRequirements;
+        vkGetImageMemoryRequirements(VK.Device, Renderer->ShadowMap, &MemoryRequirements);
+        
+        size_t Offset = Align(Renderer->ShadowMemoryOffset, MemoryRequirements.alignment);
+        if (Offset + MemoryRequirements.size <= Renderer->ShadowMemorySize)
+        {
+            Result = vkBindImageMemory(VK.Device, Renderer->ShadowMap, Renderer->ShadowMemory, Offset);
             ReturnOnFailure();
-
-            VkMemoryRequirements MemoryRequirements;
-            vkGetImageMemoryRequirements(VK.Device, Renderer->ShadowMaps[FrameIndex], &MemoryRequirements);
-
-            size_t Offset = Align(Renderer->ShadowMemoryOffset, MemoryRequirements.alignment);
-            if (Offset + MemoryRequirements.size <= Renderer->ShadowMemorySize)
+        
+            Renderer->ShadowMemoryOffset = Offset + MemoryRequirements.size;
+        }
+        else
+        {
+            return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+        }
+        
+        VkImageViewCreateInfo ViewInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .image = Renderer->ShadowMap,
+            .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+            .format = SHADOW_FORMAT,
+            .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
+            .subresourceRange = 
             {
-                Result = vkBindImageMemory(VK.Device, Renderer->ShadowMaps[FrameIndex], Renderer->ShadowMemory, Offset);
-                ReturnOnFailure();
-
-                Renderer->ShadowMemoryOffset = Offset + MemoryRequirements.size;
-            }
-            else
-            {
-                return VK_ERROR_OUT_OF_DEVICE_MEMORY;
-            }
-
-            VkImageViewCreateInfo ViewInfo = 
+                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        };
+        
+        Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr,
+                                   &Renderer->ShadowView);
+        ReturnOnFailure();
+        
+        for (u32 Cascade = 0; Cascade < Renderer->ShadowCascadeCount; Cascade++)
+        {
+            VkImageViewCreateInfo CascadeViewInfo = 
             {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
-                .image = Renderer->ShadowMaps[FrameIndex],
-                .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+                .image = Renderer->ShadowMap,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
                 .format = SHADOW_FORMAT,
                 .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
                 .subresourceRange = 
@@ -546,40 +569,14 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
                     .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
                     .baseMipLevel = 0,
                     .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    .baseArrayLayer = Cascade,
+                    .layerCount = 1,
                 },
             };
-
-            Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr,
-                                       &Renderer->ShadowViews[FrameIndex]);
+        
+            Result = vkCreateImageView(VK.Device, &CascadeViewInfo, nullptr, 
+                                       &Renderer->ShadowCascadeViews[Cascade]);
             ReturnOnFailure();
-
-            for (u32 Cascade = 0; Cascade < Renderer->ShadowCascadeCount; Cascade++)
-            {
-                VkImageViewCreateInfo CascadeViewInfo = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .image = Renderer->ShadowMaps[FrameIndex],
-                    .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                    .format = SHADOW_FORMAT,
-                    .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
-                    .subresourceRange = 
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
-                        .baseArrayLayer = Cascade,
-                        .layerCount = 1,
-                    },
-                };
-
-                Result = vkCreateImageView(VK.Device, &CascadeViewInfo, nullptr, 
-                                           &Renderer->ShadowCascadeViews[FrameIndex][Cascade]);
-                ReturnOnFailure();
-            }
         }
     }
     
@@ -1573,11 +1570,11 @@ lbfn render_frame* BeginRenderFrame(vulkan_renderer* Renderer)
     Frame->DescriptorPool = Renderer->PerFrameDescriptorPool[FrameID];    
 
     Frame->ShadowCascadeCount = Renderer->ShadowCascadeCount;
-    Frame->ShadowMap = Renderer->ShadowMaps[FrameID];
-    Frame->ShadowMapView = Renderer->ShadowViews[FrameID];
+    Frame->ShadowMap = Renderer->ShadowMap;
+    Frame->ShadowMapView = Renderer->ShadowView;
     for (u32 i = 0; i < Frame->ShadowCascadeCount; i++)
     {
-        Frame->ShadowCascadeViews[i] = Renderer->ShadowCascadeViews[FrameID][i];
+        Frame->ShadowCascadeViews[i] = Renderer->ShadowCascadeViews[i];
     }
 
     Frame->PerFrameUniformBuffer = Renderer->PerFrameUniformBuffers[FrameID];

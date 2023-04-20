@@ -243,15 +243,9 @@ struct vulkan_renderer
         size_t ShadowMemoryOffset;
 
         u32 ShadowCascadeCount;
-#if 0
         VkImage ShadowMap;
         VkImageView ShadowView;
         VkImageView ShadowCascadeViews[R_MaxShadowCascadeCount];
-#else
-        VkImage ShadowMaps[MaxSwapchainImageCount];
-        VkImageView ShadowViews[MaxSwapchainImageCount];
-        VkImageView ShadowCascadeViews[MaxSwapchainImageCount][R_MaxShadowCascadeCount];
-#endif
     };
 
     VkCommandPool TransferCmdPool;
