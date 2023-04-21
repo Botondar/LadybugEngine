@@ -876,7 +876,9 @@ lbfn void EndForwardPass(render_frame* Frame)
     vkCmdEndRendering(Frame->CmdBuffer);
 }
 
-lbfn void RenderBloom(render_frame* Frame, render_target* RT,
+lbfn void RenderBloom(render_frame* Frame, 
+                      render_target* SrcRT,
+                      render_target* DstRT,
                       VkPipelineLayout DownsamplePipelineLayout,
                       VkPipeline DownsamplePipeline, 
                       VkPipelineLayout UpsamplePipelineLayout,
@@ -898,7 +900,7 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = RT->Image,
+            .image = SrcRT->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -921,7 +923,7 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
             .newLayout = VK_IMAGE_LAYOUT_GENERAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = RT->Image,
+            .image = SrcRT->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -948,10 +950,10 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
     };
     vkCmdPipelineBarrier2(Frame->CmdBuffer, &BeginDependencyInfo); 
 
-    constexpr u32 MaxBloomMipCount = 64u;//7u;
-    u32 BloomMipCount = Min(RT->MipCount, MaxBloomMipCount);
-    VkDescriptorSetLayout SetLayouts[RT->GlobalMaxMipCount];
-    for (u32 i = 0; i < RT->MipCount; i++)
+    constexpr u32 MaxBloomMipCount = 9u; // 64u
+    u32 BloomMipCount = Min(SrcRT->MipCount, MaxBloomMipCount);
+    VkDescriptorSetLayout SetLayouts[SrcRT->GlobalMaxMipCount];
+    for (u32 i = 0; i < SrcRT->MipCount; i++)
     {
         SetLayouts[i] = DescriptorSetLayout;
     }
@@ -961,15 +963,15 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .pNext = nullptr,
         .descriptorPool = Frame->DescriptorPool,
-        .descriptorSetCount = RT->MipCount,
+        .descriptorSetCount = SrcRT->MipCount,
         .pSetLayouts = SetLayouts,
     };
 
-    VkDescriptorSet DownsampleSets[RT->GlobalMaxMipCount] = {};
+    VkDescriptorSet DownsampleSets[SrcRT->GlobalMaxMipCount] = {};
     VkResult Result = vkAllocateDescriptorSets(VK.Device, &AllocInfo, DownsampleSets);
     Assert(Result == VK_SUCCESS);
 
-    VkDescriptorSet UpsampleSets[RT->GlobalMaxMipCount] = {};
+    VkDescriptorSet UpsampleSets[SrcRT->GlobalMaxMipCount] = {};
     Result = vkAllocateDescriptorSets(VK.Device, &AllocInfo, UpsampleSets);
     Assert(Result == VK_SUCCESS);
 
@@ -979,18 +981,18 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
     // NOTE(boti): Downsampling always goes down to the 1x1 mip, in case someone wants the average luminance of the scene
     b32 DoKarisAverage = 1;
     vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, DownsamplePipeline);
-    for (u32 Mip = 1; Mip < RT->MipCount; Mip++)
+    for (u32 Mip = 1; Mip < SrcRT->MipCount; Mip++)
     {
         VkDescriptorImageInfo SourceImageInfo = 
         {
             .sampler = VK_NULL_HANDLE,
-            .imageView = RT->MipViews[Mip - 1],
+            .imageView = SrcRT->MipViews[Mip - 1],
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         };
         VkDescriptorImageInfo DestImageInfo = 
         {
             .sampler = VK_NULL_HANDLE,
-            .imageView = RT->MipViews[Mip],
+            .imageView = SrcRT->MipViews[Mip],
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         };
         VkWriteDescriptorSet Writes[] = 
@@ -1044,7 +1046,7 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = RT->Image,
+            .image = SrcRT->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1086,7 +1088,7 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
             .newLayout = VK_IMAGE_LAYOUT_GENERAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = RT->Image,
+            .image = SrcRT->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1111,16 +1113,16 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
         };
         vkCmdPipelineBarrier2(Frame->CmdBuffer, &BeginDependency);
 
-        VkDescriptorImageInfo SourceImageInfo = 
+        VkDescriptorImageInfo SrcImageInfo = 
         {
             .sampler = VK_NULL_HANDLE,
-            .imageView = RT->MipViews[Mip + 1],
+            .imageView = SrcRT->MipViews[Mip + 1],
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         };
-        VkDescriptorImageInfo DestImageInfo = 
+        VkDescriptorImageInfo DstImageInfo = 
         {
             .sampler = VK_NULL_HANDLE,
-            .imageView = RT->MipViews[Mip],
+            .imageView = SrcRT->MipViews[Mip],
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         };
         VkWriteDescriptorSet Writes[] = 
@@ -1133,7 +1135,7 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
                 .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .pImageInfo = &SourceImageInfo,
+                .pImageInfo = &SrcImageInfo,
             },
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -1143,7 +1145,7 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
                 .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .pImageInfo = &DestImageInfo,
+                .pImageInfo = &DstImageInfo,
             },
         };
 
@@ -1171,7 +1173,7 @@ lbfn void RenderBloom(render_frame* Frame, render_target* RT,
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = RT->Image,
+            .image = SrcRT->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,

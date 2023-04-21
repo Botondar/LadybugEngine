@@ -44,9 +44,19 @@ layout(location = 0) out vec4 Out0;
 void main()
 {
     vec3 Sample = textureLod(Texture, TexCoord, 0).rgb;
-#if 1
-    float Exposure = 0.25;
+#if 0
+    float Exposure = 0.05;
     Sample = vec3(1.0) - exp(-Sample * Exposure);
+#elif 0
+    Sample = Sample / (vec3(1.0) + Sample);
+#elif 1
+    float a = 2.51f;
+    float b = 0.03f;
+    float c = 2.43f;
+    float d = 0.59f;
+    float e = 0.14f;
+    Sample =  clamp((Sample*(a*Sample+b))/(Sample*(c*Sample+d)+e), vec3(0.0), vec3(1.0));
+    //Sample = Sample*Sample;
 #endif
     Out0 = vec4(Sample, 1.0);
 }

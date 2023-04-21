@@ -427,7 +427,9 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         EndForwardPass(Frame);
     }
 
-    RenderBloom(Frame, Frame->HDRRenderTargets[0],
+    RenderBloom(Frame, 
+                Frame->HDRRenderTargets[0],
+                Frame->HDRRenderTargets[1],
                 Renderer->Pipelines[Pipeline_BloomDownsample].Layout,
                 Renderer->Pipelines[Pipeline_BloomDownsample].Pipeline,
                 Renderer->Pipelines[Pipeline_BloomUpsample].Layout,
@@ -1338,7 +1340,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         UpdateEditor(GameState, GameIO);
 
         game_world* World = GameState->World;
-        World->SunL = 10.0f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
+        World->SunL = 5.0f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
         World->SunV = Normalize(v3{ -8.0f, 2.5f, 6.0f }); // Direction (towards the sun)
 
         camera* Camera = &World->Camera;
