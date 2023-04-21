@@ -45,7 +45,7 @@ void main()
 {
     vec3 Sample = textureLod(Texture, TexCoord, 0).rgb;
 #if 1
-    float Exposure = 0.05;
+    float Exposure = 0.25;
     Sample = vec3(1.0) - exp(-Sample * Exposure);
 #endif
     Out0 = vec4(Sample, 1.0);

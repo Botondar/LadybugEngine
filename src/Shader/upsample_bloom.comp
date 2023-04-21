@@ -8,7 +8,7 @@ layout(set = 0, binding = 1, r11f_g11f_b10f) uniform restrict image2D Output;
 void main()
 {
     const float R = 0.005; // NOTE(boti): filter radius
-    const float Strength = 0.5;
+    const float Strength = 0.4;
 
     ivec2 InputSize = textureSize(Input, 0);
     ivec2 OutputSize = imageSize(Output);
