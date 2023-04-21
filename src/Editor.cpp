@@ -55,15 +55,18 @@ lbfn void InitEditor(game_state* Game, memory_arena* Arena)
     Game->Editor.Gizmo.Type = Gizmo_Translate;
     Game->Editor.Gizmo.Selection = INVALID_INDEX_U32;
 
+    assets* Assets = Game->Assets;
+
     mesh Mesh = CreateArrowMesh(Arena);
     geometry_buffer_allocation Allocation = UploadVertexData(Game->Renderer,
                                                              Mesh.VertexCount, Mesh.VertexData, 
                                                              Mesh.IndexCount, Mesh.IndexData);
-    u32 MeshID = Game->Editor.GizmoMeshID = Game->MeshCount++;
-    Game->Editor.GizmoMeshBox = Mesh.Box;
-    Game->Meshes[MeshID] = Allocation;
-    Game->MeshBoxes[MeshID] = {};
-    Game->MeshMaterialIndices[MeshID] = 0;
+    Assert(Assets->MeshCount < Assets->MaxMeshCount);
+    u32 MeshID = Game->Editor.GizmoMeshID = Assets->MeshCount++;
+    Game->Editor.GizmoMeshBox = Mesh.Box; // TODO(boti): Why is the bounding box stored separately here?
+    Assets->Meshes[MeshID] = Allocation;
+    Assets->MeshBoxes[MeshID] = {};
+    Assets->MeshMaterialIndices[MeshID] = 0;
 }
 
 lbfn void UpdateEditor(game_state* Game, game_io* IO)
@@ -81,10 +84,13 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
         Editor->Gizmo.IsGlobal = !Editor->Gizmo.IsGlobal;
     }
 
+    game_world* World = Game->World;
+    assets* Assets = Game->Assets;
+
     f32 AspectRatio = (f32)Game->Renderer->SurfaceExtent.width / (f32)Game->Renderer->SurfaceExtent.height;
-    f32 g = 1.0f / Tan(0.5f * Game->Camera.FieldOfView);
+    f32 g = 1.0f / Tan(0.5f * World->Camera.FieldOfView);
     // Construct a ray the intersects the pixel where the cursor's at
-    m4 CameraTransform = GetTransform(&Game->Camera);
+    m4 CameraTransform = GetTransform(&World->Camera);
     m4 ViewTransform = AffineOrthonormalInverse(CameraTransform);
     ray Ray;
     {
@@ -97,7 +103,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
 
         v3 V = Normalize(v3{ P.x, P.y, g });
 
-        Ray = { Game->Camera.P, TransformDirection(CameraTransform, V) };
+        Ray = { World->Camera.P, TransformDirection(CameraTransform, V) };
     }
 
     // Intersect the ray with the scene
@@ -106,11 +112,11 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
         u32 SelectedIndex = INVALID_INDEX_U32;
         {
             f32 tMax = 1e7f;
-            for (u32 i = 0; i < Game->InstanceCount; i++)
+            for (u32 i = 0; i < World->InstanceCount; i++)
             {
-                mesh_instance* Instance = Game->Instances + i;
+                mesh_instance* Instance = World->Instances + i;
                 m4 Transform = Instance->Transform;
-                mmbox Box = Game->MeshBoxes[Instance->MeshID];
+                mmbox Box = Assets->MeshBoxes[Instance->MeshID];
                 v3 BoxP = 0.5f * (Box.Min + Box.Max);
                 v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
 
@@ -128,7 +134,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
     // Intersect the ray with gizmos
     if (Editor->SelectedInstanceIndex != INVALID_INDEX_U32)
     {
-        mesh_instance* Instance = Game->Instances + Game->Editor.SelectedInstanceIndex;
+        mesh_instance* Instance = World->Instances + Game->Editor.SelectedInstanceIndex;
         m4 Transform = Instance->Transform;
         v3 InstanceP = Transform.P.xyz;
 

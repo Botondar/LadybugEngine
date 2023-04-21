@@ -39,7 +39,7 @@ void main()
     vec2 OutputTexelSize = vec2(1.0) / OutputSize;
 
     ivec2 WriteP = ivec2(gl_GlobalInvocationID.xy);
-    vec2 ReadP = vec2(WriteP) * OutputTexelSize;
+    vec2 ReadP = (vec2(WriteP) + vec2(0.5, 0.5)) * OutputTexelSize;
     if (WriteP.x < OutputSize.x && WriteP.y < OutputSize.y)
     {
         // b00  -  b10  -  b20

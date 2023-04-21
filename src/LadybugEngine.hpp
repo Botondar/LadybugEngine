@@ -36,6 +36,7 @@
 // snprintf
 #include <cstdio>
 
+// TODO(boti): move material to the renderer, the shaders/pipelines have to know about it...
 struct material
 {
     v3 Emissive;
@@ -50,12 +51,6 @@ struct alignas(4) push_constants
 {
     m4 Transform;
     material Material;
-};
-
-struct frame_context
-{
-    u64 FrameIndex;
-    //render_frame_context Render;
 };
 
 struct frustum
@@ -96,6 +91,37 @@ struct mesh_instance
     m4 Transform;
 };
 
+struct assets
+{
+    texture_id DefaultDiffuseID;
+    texture_id DefaultNormalID;
+    texture_id DefaultMetallicRoughnessID;
+
+    font DefaultFont;
+
+    static constexpr u32 MaxMeshCount = 1u << 16;
+    static constexpr u32 MaxMaterialCount = 1u << 14;
+    u32 MeshCount;
+    u32 MaterialCount;
+
+    geometry_buffer_allocation Meshes[MaxMeshCount];
+    mmbox MeshBoxes[MaxMeshCount];
+    u32 MeshMaterialIndices[MaxMeshCount];
+
+    material Materials[MaxMaterialCount];
+};
+
+struct game_world
+{
+    camera Camera;
+    v3 SunL;
+    v3 SunV;
+
+    static constexpr u32 MaxInstanceCount = 1u << 21;
+    u32 InstanceCount;
+    mesh_instance Instances[MaxInstanceCount];
+};
+
 struct game_state
 {
     memory_arena TotalArena;
@@ -109,29 +135,8 @@ struct game_state
     debug_state Debug;
     editor_state Editor;
 
-    font Font;
-
-    camera Camera;
-    v3 SunL;
-    v3 SunV;
-
-    texture_id DefaultDiffuseID;
-    texture_id DefaultNormalID;
-    texture_id DefaultMetallicRoughnessID;
-
-    static constexpr u32 MaxMeshCount = 65536;
-    u32 MeshCount;
-    geometry_buffer_allocation Meshes[MaxMeshCount];
-    mmbox MeshBoxes[MaxMeshCount];
-    u32 MeshMaterialIndices[MaxMeshCount];
-
-    static constexpr u32 MaxMaterialCount = 16384;
-    u32 MaterialCount;
-    material Materials[MaxMaterialCount];
-
-    static constexpr u32 MaxInstanceCount = (1u << 21);
-    u32 InstanceCount;
-    mesh_instance Instances[MaxInstanceCount];
+    assets* Assets;
+    game_world* World;
 };
 
 // TODO(boti): move this

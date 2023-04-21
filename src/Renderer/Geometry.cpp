@@ -17,8 +17,12 @@ internal bool CreateGeometryMemory(geometry_memory* Memory, geometry_buffer_type
     {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext = nullptr,
+#if VB_DISABLE_SPARSE
+        .flags = 0,
+#else
         .flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT|VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT,
-        .size = geometry_memory::MaxGPUAllocationCount * geometry_memory::GPUBlockSize,
+#endif
+        .size = geometry_memory::GPUBlockSize * geometry_memory::MaxGPUAllocationCount,
         .usage = Usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
@@ -113,6 +117,24 @@ internal bool AllocateGPUBlocks(geometry_memory* Memory, geometry_buffer_block*&
         VkResult AllocResult = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &DeviceMemory);
         if (AllocResult == VK_SUCCESS)
         {
+#if VB_DISABLE_SPARSE
+            if (vkBindBufferMemory(VK.Device, Memory->Buffer, DeviceMemory, 0) == VK_SUCCESS)
+            {
+                geometry_buffer_block* FreeBlock = BlockPool;
+                BlockPool = BlockPool->Next;
+                BlockPool->Prev = FreeBlock->Prev;
+                BlockPool->Prev->Next = BlockPool;
+
+                Memory->FreeBlocks.Next = Memory->FreeBlocks.Prev = FreeBlock;
+                FreeBlock->Prev = FreeBlock->Next = &Memory->FreeBlocks;
+
+                FreeBlock->ByteSize = Memory->GPUBlockSize;
+                FreeBlock->ByteOffset = 0;
+                Memory->MemorySize += Memory->GPUBlockSize;
+
+                Result = true;
+            }
+#else
             VkSparseMemoryBind MemoryBind = 
             {
                 .resourceOffset = Memory->MemorySize,
@@ -183,6 +205,7 @@ internal bool AllocateGPUBlocks(geometry_memory* Memory, geometry_buffer_block*&
             vkQueueWaitIdle(VK.GraphicsQueue);
 
             vkFreeMemory(VK.Device, DeviceMemory, nullptr);
+#endif
         }
         else
         {

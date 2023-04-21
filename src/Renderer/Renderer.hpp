@@ -18,7 +18,9 @@ constexpr u32 MaxDescriptorSetCount = 256;
 constexpr u32 MaxPushConstantRangeCount = 64;
 constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
 
-
+//
+// Utils
+//
 union rgba8
 {
     u32 Color;
@@ -50,6 +52,14 @@ struct ui_vertex
     rgba8 Color;
 };
 
+inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
+inline rgba8 PackRGBA(v4 Color);
+inline u32 GetMaxMipCount(u32 Width, u32 Height);
+inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFFFFFFu);
+
+//
+// Render API
+//
 struct frame_uniform_data
 {
     m4 CameraTransform;
@@ -79,10 +89,8 @@ struct frame_uniform_data
     v2 ScreenSize;
 };
 
-inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
-inline rgba8 PackRGBA(v4 Color);
-inline u32 GetMaxMipCount(u32 Width, u32 Height);
-inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFFFFFFu);
+struct render_frame;
+struct renderer;
 
 //
 // Implementation

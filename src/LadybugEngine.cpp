@@ -63,7 +63,7 @@ internal void LoadDebugFont(game_state* GameState, const char* Path)
     {
         if (FontFile->FileTag == LBFNT_FILE_TAG)
         {
-            font* Font = &GameState->Font;
+            font* Font = &GameState->Assets->DefaultFont;
             Font->RasterHeight = FontFile->FontInfo.RasterHeight;
             Font->Ascent = FontFile->FontInfo.Ascent;
             Font->Descent = FontFile->FontInfo.Descent;
@@ -120,15 +120,18 @@ lbfn void RenderMeshes(VkCommandBuffer CmdBuffer, VkPipelineLayout PipelineLayou
                        geometry_buffer* GeometryBuffer, game_state* GameState,
                        const frustum* Frustum /*= nullptr*/, bool DoCulling /*= false*/)
 {
+    assets* Assets = GameState->Assets;
+    game_world* World = GameState->World;;
+
     VkDeviceSize Offset = 0;
     vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &GeometryBuffer->VertexMemory.Buffer, &Offset);
     vkCmdBindIndexBuffer(CmdBuffer, GeometryBuffer->IndexMemory.Buffer, 0, VK_INDEX_TYPE_UINT32);
-    for (u32 i = 0; i < GameState->InstanceCount; i++)
+    for (u32 i = 0; i < World->InstanceCount; i++)
     {
-        const mesh_instance* Instance = GameState->Instances + i;
-        geometry_buffer_allocation Allocation = GameState->Meshes[Instance->MeshID];
-        mmbox Box = GameState->MeshBoxes[Instance->MeshID];
-        u32 MaterialIndex = GameState->MeshMaterialIndices[Instance->MeshID];
+        const mesh_instance* Instance = World->Instances + i;
+        geometry_buffer_allocation Allocation = Assets->Meshes[Instance->MeshID];
+        mmbox Box = Assets->MeshBoxes[Instance->MeshID];
+        u32 MaterialIndex = Assets->MeshMaterialIndices[Instance->MeshID];
 
         v4 BoxMin = Instance->Transform * v4{ Box.Min.x, Box.Min.y, Box.Min.z, 1.0f };
         v4 BoxMax = Instance->Transform * v4{ Box.Max.x, Box.Max.y, Box.Max.z, 1.0f };
@@ -146,7 +149,7 @@ lbfn void RenderMeshes(VkCommandBuffer CmdBuffer, VkPipelineLayout PipelineLayou
         {
             push_constants PushConstants = {};
             PushConstants.Transform = Instance->Transform;
-            PushConstants.Material = GameState->Materials[MaterialIndex];
+            PushConstants.Material = Assets->Materials[MaterialIndex];
 
             vkCmdPushConstants(CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
                                0, sizeof(PushConstants), &PushConstants);
@@ -172,20 +175,23 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
 {
     vulkan_renderer* Renderer = GameState->Renderer;
     
+    game_world* World = GameState->World;
+    assets* Assets = GameState->Assets;
+
     const f32 AspectRatio = (f32)Frame->RenderExtent.width / (f32)Frame->RenderExtent.height;
 
-    const f32 FocalLength = 1.0f / Tan(0.5f * GameState->Camera.FieldOfView);
+    const f32 FocalLength = 1.0f / Tan(0.5f * World->Camera.FieldOfView);
 
-    m4 CameraTransform = GetTransform(&GameState->Camera);
+    m4 CameraTransform = GetTransform(&World->Camera);
     m4 ViewTransform = AffineOrthonormalInverse(CameraTransform);
-    m4 ProjectionTransform = PerspectiveFov(GameState->Camera.FieldOfView, AspectRatio, GameState->Camera.NearZ, GameState->Camera.FarZ);
+    m4 ProjectionTransform = PerspectiveFov(World->Camera.FieldOfView, AspectRatio, World->Camera.NearZ, World->Camera.FarZ);
 
     frustum PrimaryFrustum = {};
     {
         f32 s = AspectRatio;
         f32 g = FocalLength;
-        f32 n = GameState->Camera.NearZ;
-        f32 f = GameState->Camera.FarZ;
+        f32 n = World->Camera.NearZ;
+        f32 f = World->Camera.FarZ;
 
         f32 g2 = g*g;
         f32 mx = 1.0f / Sqrt(g2 + AspectRatio*AspectRatio);
@@ -202,8 +208,8 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
     //
     // Sun
     // 
-    v3 SunL = GameState->SunL;
-    v3 SunV = GameState->SunV;
+    v3 SunL = World->SunL;
+    v3 SunV = World->SunV;
     
     render_camera RenderCamera = 
     {
@@ -213,8 +219,8 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         .ViewProjectionTransform = ProjectionTransform * ViewTransform,
         .AspectRatio = AspectRatio,
         .FocalLength = FocalLength,
-        .NearZ = GameState->Camera.NearZ,
-        .FarZ = GameState->Camera.FarZ,
+        .NearZ = World->Camera.NearZ,
+        .FarZ = World->Camera.FarZ,
     };
     shadow_cascades Cascades;
     SetupShadowCascades(&Cascades, &RenderCamera, SunV, (f32)R_ShadowResolution);
@@ -244,9 +250,9 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
     Frame->Uniforms.CascadeOffsets[2] = Cascades.Offsets[2];
     Frame->Uniforms.FocalLength = FocalLength;
     Frame->Uniforms.AspectRatio = AspectRatio;
-    Frame->Uniforms.NearZ = GameState->Camera.NearZ;
-    Frame->Uniforms.FarZ = GameState->Camera.FarZ;
-    Frame->Uniforms.CameraP = GameState->Camera.P;
+    Frame->Uniforms.NearZ = World->Camera.NearZ;
+    Frame->Uniforms.FarZ = World->Camera.FarZ;
+    Frame->Uniforms.CameraP = World->Camera.P;
     Frame->Uniforms.SunV = { SunVCamera.x, SunVCamera.y, SunVCamera.z };
     Frame->Uniforms.SunL = SunL;
     Frame->Uniforms.ScreenSize = { (f32)Renderer->SurfaceExtent.width, (f32)Renderer->SurfaceExtent.height };
@@ -337,7 +343,6 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
             vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, 
                                VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
                                sizeof(push_constants), sizeof(u32), &Cascade);
-            // NOTE(boti): shadow pass only uses the first 3 sets from DescriptorSets[]
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                     0, 3, DescriptorSets, 0, nullptr);
 #if 1
@@ -373,6 +378,30 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
 
         BeginForwardPass(Frame);
         {
+            // Bloom testing
+#if 0
+            {
+                f32 PixelSizeX = 1.0f / Frame->RenderExtent.width;
+                f32 PixelSizeY = 1.0f / Frame->RenderExtent.height;
+                pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Quad];
+                struct data
+                {
+                    v2 P;
+                    v2 HalfExtent;
+                    v3 Color;
+                };
+                data Data = 
+                {
+                    .P = { 0.0f, 0.0f }, 
+                    .HalfExtent = { 30.0f * PixelSizeX, 30.0f * PixelSizeY },
+                    .Color = { 100.0f, 100.0f, 100.0f },
+                };
+                vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+                vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_ALL, 0, sizeof(data), &Data);
+                vkCmdDraw(Frame->CmdBuffer, 6, 1, 0, 0);
+            }
+#endif
+
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Simple];
             vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
@@ -384,6 +413,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
                          &PrimaryFrustum, EnablePrimaryCull);
 
             // Render sky
+#if 1
             {
                 pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
                 vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
@@ -391,6 +421,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
                                         0, 1, &Frame->UniformDescriptorSet, 0, nullptr);
                 vkCmdDraw(Frame->CmdBuffer, 3, 1, 0, 0);
             }
+#endif
         }
         EndForwardPass(Frame);
     }
@@ -503,7 +534,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
 
         // Gizmos
         {
-            geometry_buffer_allocation ArrowMesh = GameState->Meshes[GameState->Editor.GizmoMeshID];
+            geometry_buffer_allocation ArrowMesh = Assets->Meshes[GameState->Editor.GizmoMeshID];
             u32 IndexCount = (u32)(ArrowMesh.IndexBlock->ByteSize / sizeof(vert_index));
             u32 IndexOffset = (u32)(ArrowMesh.IndexBlock->ByteOffset / sizeof(vert_index));
             u32 VertexOffset = (u32)(ArrowMesh.VertexBlock->ByteOffset / sizeof(vertex));
@@ -590,13 +621,13 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
 #if 1
             if (GameState->Editor.SelectedInstanceIndex != INVALID_INDEX_U32)
             {
-                mesh_instance* Instance = GameState->Instances + GameState->Editor.SelectedInstanceIndex;
+                mesh_instance* Instance = World->Instances + GameState->Editor.SelectedInstanceIndex;
                 RenderGizmo(Instance->Transform, 0.25f);
             }
 #else
-            for (u32 InstanceIndex = 0; InstanceIndex < GameState->InstanceCount; InstanceIndex++)
+            for (u32 InstanceIndex = 0; InstanceIndex < World->InstanceCount; InstanceIndex++)
             {
-                mesh_instance* Instance = GameState->Instances + InstanceIndex;
+                mesh_instance* Instance = World->Instances + InstanceIndex;
                 RenderGizmo(Instance->Transform, 0.25f);
             }
 #endif
@@ -689,6 +720,8 @@ internal bool AddNodeToScene(game_state* GameState, gltf* GLTF,
 {
     bool Result = true;
 
+    game_world* World = GameState->World;
+
     if (NodeIndex < GLTF->NodeCount)
     {
         gltf_node* Node = GLTF->Nodes + NodeIndex;
@@ -721,8 +754,8 @@ internal bool AddNodeToScene(game_state* GameState, gltf* GLTF,
 
             for (u32 i = 0; i < GLTF->Meshes[Node->MeshIndex].PrimitiveCount; i++)
             {
-                if (GameState->InstanceCount >= GameState->MaxInstanceCount) return false;
-                GameState->Instances[GameState->InstanceCount++] = 
+                if (World->InstanceCount >= World->MaxInstanceCount) return false;
+                World->Instances[World->InstanceCount++] = 
                 {
                     .MeshID = BaseMeshIndex + (MeshOffset + i),
                     .Transform = NodeTransform,
@@ -781,6 +814,9 @@ struct NvttOutputHandler : public nvtt::OutputHandler
 
 internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 BaseTransform)
 {
+    game_world* World = GameState->World;
+    assets* Assets = GameState->Assets;
+
     constexpr u64 PathBuffSize = 256;
     char PathBuff[PathBuffSize];
     u64 PathDirectoryLength = 0;
@@ -828,8 +864,8 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
     memory_arena* Arena = &GameState->TransientArena;
 
     // NOTE(boti): Store the initial indices in the game so that we know what to offset the glTF indices by
-    u32 BaseMeshIndex = GameState->MeshCount;
-    u32 BaseMaterialIndex = GameState->MaterialCount;
+    u32 BaseMeshIndex = Assets->MeshCount;
+    u32 BaseMaterialIndex = Assets->MaterialCount;
 
     buffer* Buffers = PushArray<buffer>(Arena, GLTF.BufferCount, MemPush_Clear);
     for (u32 BufferIndex = 0; BufferIndex < GLTF.BufferCount; BufferIndex++)
@@ -944,7 +980,7 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
                     }
                 }
 
-                Result = PushTexture(GameState->Renderer, 
+                Result = PushTexture(GameState->Renderer,
                                      (u32)Width, (u32)Height, (u32)MipCount, 
                                      Texels, Format);
             }
@@ -972,16 +1008,16 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
 
         if (SrcMaterial->NormalTexCoordScale != 1.0f) UnimplementedCodePath;
 
-        if (GameState->MaterialCount < GameState->MaxMaterialCount)
+        if (Assets->MaterialCount < Assets->MaxMaterialCount)
         {
-            material* Material = GameState->Materials + GameState->MaterialCount++;
+            material* Material = Assets->Materials + Assets->MaterialCount++;
 
             Material->Emissive = SrcMaterial->EmissiveFactor;
             Material->DiffuseColor = PackRGBA(SrcMaterial->BaseColorFactor);
             Material->BaseMaterial = PackRGBA(v4{ 1.0f, SrcMaterial->RoughnessFactor, SrcMaterial->MetallicFactor, 1.0f });
-            Material->DiffuseID = GameState->DefaultDiffuseID;
-            Material->NormalID = GameState->DefaultNormalID;
-            Material->MetallicRoughnessID = GameState->DefaultMetallicRoughnessID;
+            Material->DiffuseID = Assets->DefaultDiffuseID;
+            Material->NormalID = Assets->DefaultNormalID;
+            Material->MetallicRoughnessID = Assets->DefaultMetallicRoughnessID;
 
             if (SrcMaterial->BaseColorTextureIndex != U32_MAX)
             {
@@ -1156,14 +1192,14 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
                 }
             }
 
-            if (GameState->MeshCount < GameState->MaxMeshCount)
+            if (Assets->MeshCount < Assets->MaxMeshCount)
             {
-                u32 MeshID = GameState->MeshCount++;
-                GameState->Meshes[MeshID] = UploadVertexData(GameState->Renderer, 
-                                                             VertexCount, VertexData, 
-                                                             IndexCount, IndexData);
-                GameState->MeshBoxes[MeshID] = Box;
-                GameState->MeshMaterialIndices[MeshID] = Primitive->MaterialIndex + BaseMaterialIndex;
+                u32 MeshID = Assets->MeshCount++;
+                Assets->Meshes[MeshID] = UploadVertexData(GameState->Renderer, 
+                                                          VertexCount, VertexData, 
+                                                          IndexCount, IndexData);
+                Assets->MeshBoxes[MeshID] = Box;
+                Assets->MeshMaterialIndices[MeshID] = Primitive->MaterialIndex + BaseMaterialIndex;
             }
             else
             {
@@ -1214,18 +1250,14 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             GameIO->bQuitRequested = true;
         }
         
-        GameState->Camera.P = { 0.0f, 0.0f, 0.0f };
-        GameState->Camera.FieldOfView = ToRadians(80.0f);
-        GameState->Camera.NearZ = 0.05f;
-        GameState->Camera.FarZ = 50.0f;//1000.0f;
-        GameState->Camera.Yaw = 0.5f * Pi;
-
         GameState->Renderer = PushStruct<vulkan_renderer>(&GameState->TotalArena);
         if (CreateRenderer(GameState->Renderer, &GameState->TotalArena, &GameState->TransientArena) != VK_SUCCESS)
         {
             UnhandledError("Renderer initialization failed");
             GameIO->bQuitRequested = true;
         }
+
+        assets* Assets = GameState->Assets = PushStruct<assets>(&GameState->TotalArena);
 
         LoadDebugFont(GameState, "data/liberation-mono.lbfnt");
 
@@ -1235,16 +1267,24 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 u32 Value = 0xFFFFFFFFu;
                 texture_id Whiteness = PushTexture(GameState->Renderer, 1, 1, 1, &Value, VK_FORMAT_R8G8B8A8_SRGB);
 
-                GameState->DefaultDiffuseID = Whiteness;
-                GameState->DefaultMetallicRoughnessID = Whiteness;
+                Assets->DefaultDiffuseID = Whiteness;
+                Assets->DefaultMetallicRoughnessID = Whiteness;
             }
             {
                 u16 Value = 0x8080u;
-                GameState->DefaultNormalID = PushTexture(GameState->Renderer, 1, 1, 1, &Value, VK_FORMAT_R8G8_UNORM);
+                Assets->DefaultNormalID = PushTexture(GameState->Renderer, 1, 1, 1, &Value, VK_FORMAT_R8G8_UNORM);
             }
         }
 
+        game_world* World = GameState->World = PushStruct<game_world>(&GameState->TotalArena);
+
         InitEditor(GameState, &GameState->TransientArena);
+
+        World->Camera.P = { 0.0f, 0.0f, 0.0f };
+        World->Camera.FieldOfView = ToRadians(80.0f);
+        World->Camera.NearZ = 0.05f;
+        World->Camera.FarZ = 50.0f;//1000.0f;
+        World->Camera.Yaw = 0.5f * Pi;
 
         m4 BaseTransform = M4(1.0f, 0.0f, 0.0f, 0.0f,
                               0.0f, 0.0f, -1.0f, 0.0f,
@@ -1296,11 +1336,11 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
         UpdateEditor(GameState, GameIO);
 
-        camera* Camera = &GameState->Camera;
+        game_world* World = GameState->World;
+        World->SunL = 50.0f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
+        World->SunV = Normalize(v3{ -8.0f, 2.5f, 6.0f }); // Direction (towards the sun)
 
-        GameState->SunL = 50.0f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
-        GameState->SunV = Normalize(v3{ -8.0f, 2.5f, 6.0f }); // Direction (towards the sun)
-
+        camera* Camera = &World->Camera;
         v3 MoveDirection = {};
         if (GameIO->Keys[SC_W].bIsDown) { MoveDirection.z += 1.0f; }
         if (GameIO->Keys[SC_S].bIsDown) { MoveDirection.z -= 1.0f; }

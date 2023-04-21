@@ -52,6 +52,7 @@ enum pipeline : u32
     Pipeline_BloomUpsample,
     Pipeline_SSAO,
     Pipeline_SSAOBlur,
+    Pipeline_Quad,
 
     Pipeline_Count,
 };

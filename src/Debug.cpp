@@ -26,10 +26,12 @@ internal void DEBUGRenderVBUsage(vulkan_renderer* Renderer, v2 P, v2 Size)
 }
 #endif
 
-internal void DoDebugUI(game_state* GameState, game_io* GameIO, render_frame* Frame)
+internal void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
 {
     constexpr size_t BuffSize = 128;
     char Buff[BuffSize];
+
+    font* Font = &Game->Assets->DefaultFont;
 
     rgba8 DefaultForegroundColor = PackRGBA8(0xFF, 0xFF, 0xFF, 0xFF);
     rgba8 DefaultBackgroundColor = PackRGBA8(0x00, 0x00, 0xFF, 0xAA);
@@ -43,31 +45,31 @@ internal void DoDebugUI(game_state* GameState, game_io* GameIO, render_frame* Fr
         f32 FrameTimeSize = 24.0f;
 
         snprintf(Buff, BuffSize, "%.2fms", 1000.0f * GameIO->dt);
-        mmrect2 Rect = GetTextRect(&GameState->Font, Buff, Layout);
+        mmrect2 Rect = GetTextRect(Font, Buff, Layout);
         Rect.Min *= FrameTimeSize;
         Rect.Max *= FrameTimeSize;
         f32 Width = Rect.Max.x - Rect.Min.x;
         v2 P = { (f32)Frame->RenderExtent.width - Width, 0.0f };
-        PushTextWithShadow(Frame, Buff, &GameState->Font, FrameTimeSize, P,  DefaultForegroundColor, Layout);
+        PushTextWithShadow(Frame, Buff, Font, FrameTimeSize, P,  DefaultForegroundColor, Layout);
     }
 
     if (WasPressed(GameIO->Keys[SC_Backtick]))
     {
-        GameState->Debug.IsEnabled = !GameState->Debug.IsEnabled;
+        Game->Debug.IsEnabled = !Game->Debug.IsEnabled;
     }
 
-    if (!GameState->Debug.IsEnabled)
+    if (!Game->Debug.IsEnabled)
     {
         return;
     }
 
     if (WasPressed(GameIO->Keys[SC_F1]))
     {
-        GameState->Debug.SelectedMenuID = 0;
+        Game->Debug.SelectedMenuID = 0;
     }
     else if (WasPressed(GameIO->Keys[SC_F2]))
     {
-        GameState->Debug.SelectedMenuID = 1;
+        Game->Debug.SelectedMenuID = 1;
     }
 
     f32 Margin = 10.0f;
@@ -82,7 +84,7 @@ internal void DoDebugUI(game_state* GameState, game_io* GameIO, render_frame* Fr
     // Menu
     {
         const char* Text = "CPU";
-        mmrect2 Rect = GetTextRect(&GameState->Font, Text, Layout);
+        mmrect2 Rect = GetTextRect(Font, Text, Layout);
         Rect.Min *= TextSize;
         Rect.Max *= TextSize;
         Rect.Min += CurrentP;
@@ -96,21 +98,21 @@ internal void DoDebugUI(game_state* GameState, game_io* GameIO, render_frame* Fr
             CurrentColor = HotBackgroundColor;
             if (WasPressed(GameIO->Keys[SC_MouseLeft]))
             {
-                GameState->Debug.ActiveMenuID = CurrentID;
+                Game->Debug.ActiveMenuID = CurrentID;
             }
         }
 
-        if (GameState->Debug.SelectedMenuID == CurrentID)
+        if (Game->Debug.SelectedMenuID == CurrentID)
         {
             CurrentColor = SelectedBackgroundColor;
         }
-        else if (GameState->Debug.ActiveMenuID == CurrentID)
+        else if (Game->Debug.ActiveMenuID == CurrentID)
         {
             CurrentColor = ActiveBackgroundColor;
         }
         PushRect(Frame, Rect.Min, Rect.Max, { 0.0f, 0.0f, }, { 0.0f, 0.0f }, CurrentColor);
         CurrentP.x += Margin;
-        PushTextWithShadow(Frame, Text, &GameState->Font, 
+        PushTextWithShadow(Frame, Text, Font, 
                            TextSize, CurrentP,
                            DefaultForegroundColor,
                            Layout);
@@ -120,7 +122,7 @@ internal void DoDebugUI(game_state* GameState, game_io* GameIO, render_frame* Fr
 
     {
         const char* Text = "GPU";
-        mmrect2 Rect = GetTextRect(&GameState->Font, Text, Layout);
+        mmrect2 Rect = GetTextRect(Font, Text, Layout);
         Rect.Min *= TextSize;
         Rect.Max *= TextSize;
         Rect.Min += CurrentP;
@@ -134,21 +136,21 @@ internal void DoDebugUI(game_state* GameState, game_io* GameIO, render_frame* Fr
             CurrentColor = HotBackgroundColor;
             if (WasPressed(GameIO->Keys[SC_MouseLeft]))
             {
-                GameState->Debug.ActiveMenuID = CurrentID;
+                Game->Debug.ActiveMenuID = CurrentID;
             }
         }
 
-        if (GameState->Debug.SelectedMenuID == CurrentID)
+        if (Game->Debug.SelectedMenuID == CurrentID)
         {
             CurrentColor = SelectedBackgroundColor;
         }
-        else if (GameState->Debug.ActiveMenuID == CurrentID)
+        else if (Game->Debug.ActiveMenuID == CurrentID)
         {
             CurrentColor = ActiveBackgroundColor;
         }
         PushRect(Frame, Rect.Min, Rect.Max, { 0.0f, 0.0f }, { 0.0f, 0.0f }, CurrentColor);
         CurrentP.x += Margin;
-        PushTextWithShadow(Frame, Text, &GameState->Font,
+        PushTextWithShadow(Frame, Text, Font,
                            TextSize, CurrentP,
                            DefaultForegroundColor,
                            Layout);
@@ -158,70 +160,71 @@ internal void DoDebugUI(game_state* GameState, game_io* GameIO, render_frame* Fr
 
     if (WasReleased(GameIO->Keys[SC_MouseLeft]))
     {
-        if (GameState->Debug.ActiveMenuID != INVALID_INDEX_U32)
+        if (Game->Debug.ActiveMenuID != INVALID_INDEX_U32)
         {
-            if (GameState->Debug.ActiveMenuID == HotID)
+            if (Game->Debug.ActiveMenuID == HotID)
             {
-                GameState->Debug.SelectedMenuID = GameState->Debug.ActiveMenuID;
+                Game->Debug.SelectedMenuID = Game->Debug.ActiveMenuID;
                 
             }
-            GameState->Debug.ActiveMenuID = INVALID_INDEX_U32;
+            Game->Debug.ActiveMenuID = INVALID_INDEX_U32;
         }
     }
     else if (!GameIO->Keys[SC_MouseLeft].bIsDown)
     {
         // NOTE(boti): throw away the active menu item in case we got into an inconsistent state
-        GameState->Debug.ActiveMenuID = INVALID_INDEX_U32;
+        Game->Debug.ActiveMenuID = INVALID_INDEX_U32;
     }
 
     CurrentP.x = 0.0f;
-    CurrentP.y += TextSize * GameState->Font.BaselineDistance; // TODO(boti): this is kind of a hack
+    CurrentP.y += TextSize * Font->BaselineDistance; // TODO(boti): this is kind of a hack
     TextSize = 24.0f;
 
-    switch (GameState->Debug.SelectedMenuID)
+    switch (Game->Debug.SelectedMenuID)
     {
         case 0: // NOTE(boti): CPU
         {
         } break;
         case 1: // NOTE(boti): GPU
         {
+            vulkan_renderer* Renderer = Game->Renderer;
             mmrect2 TextRect = {}; 
 
             snprintf(Buff, BuffSize, "RenderTarget memory: %llu/%llu MB",
-                     GameState->Renderer->RenderTargetHeap.Offset >> 20,
-                     GameState->Renderer->RenderTargetHeap.MemorySize >> 20);
-            TextRect = PushTextWithShadow(Frame, Buff, &GameState->Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
+                     Renderer->RenderTargetHeap.Offset >> 20,
+                     Renderer->RenderTargetHeap.MemorySize >> 20);
+            TextRect = PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
             CurrentP.y = TextRect.Max.y;
 
 #if 1
             snprintf(Buff, BuffSize, "VertexBuffer memory: %llu/%llu MB",
-                     GameState->Renderer->GeometryBuffer.VertexMemory.MemoryInUse >> 20,
-                     GameState->Renderer->GeometryBuffer.VertexMemory.MemorySize >> 20);
-            TextRect = PushTextWithShadow(Frame, Buff, &GameState->Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
+                     Renderer->GeometryBuffer.VertexMemory.MemoryInUse >> 20,
+                     Renderer->GeometryBuffer.VertexMemory.MemorySize >> 20);
+            TextRect = PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
             CurrentP.y = TextRect.Max.y;
 
             snprintf(Buff, BuffSize, "IndexBuffer memory: %llu/%llu MB",
-                     GameState->Renderer->GeometryBuffer.IndexMemory.MemoryInUse >> 20,
-                     GameState->Renderer->GeometryBuffer.IndexMemory.MemorySize >> 20);
-            TextRect = PushTextWithShadow(Frame, Buff, &GameState->Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
+                     Renderer->GeometryBuffer.IndexMemory.MemoryInUse >> 20,
+                     Renderer->GeometryBuffer.IndexMemory.MemorySize >> 20);
+            TextRect = PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
             CurrentP.y = TextRect.Max.y;
 #endif
 
 #if 0
             v2 VBUsageExtent = { 600.0f, 100.0f };
-            DEBUGRenderVBUsage(GameState->Renderer, CurrentP, VBUsageExtent);
+            DEBUGRenderVBUsage(Game->Renderer, CurrentP, VBUsageExtent);
             CurrentP.y += VBUsageExtent.y;
 #endif
             snprintf(Buff, BuffSize, "Texture memory: %llu/%llu MB",
-                     GameState->Renderer->TextureManager.MemoryOffset >> 20,
-                     GameState->Renderer->TextureManager.MemorySize >> 20);
-            TextRect = PushTextWithShadow(Frame, Buff, &GameState->Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
+                     Renderer->TextureManager.MemoryOffset >> 20,
+                     Renderer->TextureManager.MemorySize >> 20);
+            TextRect = PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
             CurrentP.y = TextRect.Max.y;
 
             snprintf(Buff, BuffSize, "Shadow memory: %llu/%llu MB",
-                     GameState->Renderer->ShadowMemoryOffset >> 20,
-                     GameState->Renderer->ShadowMemorySize >> 20);
-            TextRect = PushTextWithShadow(Frame, Buff, &GameState->Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
+                     Renderer->ShadowMemoryOffset >> 20,
+                     Renderer->ShadowMemorySize >> 20);
+            TextRect = PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
 
         } break;
     }

@@ -767,4 +767,52 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSets = { SetLayout_SSAOBlur },
         },
     },
+
+    // Pipeline_Quad
+    {
+        .Name = "quad",
+        .Type = PipelineType_Graphics,
+        .Layout = 
+        {
+            .PushConstantRangeCount = 1,
+            .DescriptorSetCount = 0,
+            .PushConstantRanges = 
+            { 
+                {
+                    .stageFlags = VK_SHADER_STAGE_ALL,
+                    .offset = 0,
+                    .size = 2 * sizeof(v2) + sizeof(v3),
+                },
+            },
+            .DescriptorSets = {},
+        },
+        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
+        .InputAssemblerState = 
+        {
+            .PrimitiveTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            .EnablePrimitiveRestart = false,
+            .BindingCount = 0,
+            .AttribCount = 0,
+        },
+        .RasterizerState = 
+        {
+            .Flags = RS_Flags_None,
+            .PolygonMode = VK_POLYGON_MODE_FILL,
+            .CullFlags = VK_CULL_MODE_NONE,
+            .FrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+        },
+        .DepthStencilState = 
+        {
+            .Flags = DS_Flags_None,
+            .MinDepthBounds = 0.0f,
+            .MaxDepthBounds = 1.0f,
+        },
+        .BlendAttachmentCount = 1,
+        .BlendAttachments = { { .BlendEnable = false } },
+        .ColorAttachmentCount = 1,
+        .ColorAttachments = { HDR_FORMAT },
+        .DepthAttachment = DEPTH_FORMAT,
+        .StencilAttachment = VK_FORMAT_UNDEFINED,
+
+    }
 };

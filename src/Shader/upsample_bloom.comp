@@ -7,25 +7,28 @@ layout(set = 0, binding = 1, r11f_g11f_b10f) uniform restrict image2D Output;
 
 void main()
 {
-    const float R = 0.01; // NOTE(boti): filter radius
-    const float Strength = 0.08;
+    const float R = 0.005; // NOTE(boti): filter radius
+    const float Strength = 0.5;
 
     ivec2 InputSize = textureSize(Input, 0);
     ivec2 OutputSize = imageSize(Output);
 
+    float RX = R * (float(OutputSize.y) / float(OutputSize.x));
+    float RY = R;
+
     ivec2 P = ivec2(gl_GlobalInvocationID.xy);
-    vec2 SampleP = vec2(P) / vec2(OutputSize);
+    vec2 SampleP = (vec2(P) + vec2(0.5, 0.5)) / vec2(OutputSize);
     if (P.x < OutputSize.x && P.y < OutputSize.y)
     {
-        vec3 a = textureLod(Input, SampleP + vec2( -R, -R), 0).rgb;
-        vec3 b = textureLod(Input, SampleP + vec2(0.0, -R), 0).rgb;
-        vec3 c = textureLod(Input, SampleP + vec2( +R, -R), 0).rgb;
-        vec3 d = textureLod(Input, SampleP + vec2( -R, 0.0), 0).rgb;
+        vec3 a = textureLod(Input, SampleP + vec2( -RX, -RY), 0).rgb;
+        vec3 b = textureLod(Input, SampleP + vec2(0.0, -RY), 0).rgb;
+        vec3 c = textureLod(Input, SampleP + vec2( +RX, -RY), 0).rgb;
+        vec3 d = textureLod(Input, SampleP + vec2( -RX, 0.0), 0).rgb;
         vec3 e = textureLod(Input, SampleP + vec2(0.0, 0.0), 0).rgb;
-        vec3 f = textureLod(Input, SampleP + vec2( +R, 0.0), 0).rgb;
-        vec3 g = textureLod(Input, SampleP + vec2( -R, +R), 0).rgb;
-        vec3 h = textureLod(Input, SampleP + vec2(0.0, +R), 0).rgb;
-        vec3 i = textureLod(Input, SampleP + vec2( +R, +R), 0).rgb;
+        vec3 f = textureLod(Input, SampleP + vec2( +RX, 0.0), 0).rgb;
+        vec3 g = textureLod(Input, SampleP + vec2( -RX, +RY), 0).rgb;
+        vec3 h = textureLod(Input, SampleP + vec2(0.0, +RY), 0).rgb;
+        vec3 i = textureLod(Input, SampleP + vec2( +RX, +RY), 0).rgb;
 
         vec3 BlurColor = 
             e * (4.0 / 16.0) +
@@ -33,7 +36,7 @@ void main()
             (a + c + g + i) * (1.0 / 16.0);
 
         vec4 SrcColor = imageLoad(Output, P);
-        vec4 DstColor = mix(SrcColor, vec4(BlurColor, 1.0), Strength);
+        vec4 DstColor = SrcColor + vec4(BlurColor, 1.0) * Strength;
         imageStore(Output, P, DstColor);
     }
 }
