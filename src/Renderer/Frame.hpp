@@ -101,4 +101,5 @@ lbfn void RenderBloom(render_frame* Frame,
                       VkPipeline DownsamplePipeline, 
                       VkPipelineLayout UpsamplePipelineLayout,
                       VkPipeline UpsamplePipeline, 
-                      VkDescriptorSetLayout DescriptorSetLayout);
+                      VkDescriptorSetLayout DownsampleSetLayout,
+                      VkDescriptorSetLayout UpsampleSetLayout);

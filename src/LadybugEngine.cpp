@@ -434,7 +434,8 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
                 Renderer->Pipelines[Pipeline_BloomDownsample].Pipeline,
                 Renderer->Pipelines[Pipeline_BloomUpsample].Layout,
                 Renderer->Pipelines[Pipeline_BloomUpsample].Pipeline,
-                Renderer->SetLayouts[SetLayout_Bloom]);
+                Renderer->SetLayouts[SetLayout_Bloom],
+                Renderer->SetLayouts[SetLayout_BloomUpsample]);
 
     // Blit + UI
     {
@@ -523,11 +524,63 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         {
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Blit];
             vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            VkDescriptorSet BlitDescriptorSet = PushImageDescriptor(Frame, 
+#if 1
+            VkDescriptorSet BlitDescriptorSet = VK_NULL_HANDLE;
+            VkDescriptorSetAllocateInfo BlitSetInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .descriptorPool = Frame->DescriptorPool,
+                .descriptorSetCount = 1,
+                .pSetLayouts = &Renderer->SetLayouts[SetLayout_Blit],
+            };
+            VkResult Result = vkAllocateDescriptorSets(VK.Device, &BlitSetInfo, &BlitDescriptorSet);
+            Assert(Result == VK_SUCCESS);
+
+            VkDescriptorImageInfo ImageInfos[2] = 
+            {
+                {
+                    .sampler = VK_NULL_HANDLE,
+                    .imageView = Frame->HDRRenderTargets[0]->MipViews[0],
+                    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                },
+                {
+                    .sampler = VK_NULL_HANDLE,
+                    .imageView = Frame->HDRRenderTargets[1]->MipViews[0],
+                    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                },
+            };
+            VkWriteDescriptorSet SetWrites[2] = 
+            {
+                {
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = nullptr,
+                    .dstSet = BlitDescriptorSet,
+                    .dstBinding = 0,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .pImageInfo = ImageInfos + 0,
+                },
+                {
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = nullptr,
+                    .dstSet = BlitDescriptorSet,
+                    .dstBinding = 1,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .pImageInfo = ImageInfos + 1,
+                },
+            };
+            vkUpdateDescriptorSets(VK.Device, CountOf(SetWrites), SetWrites, 0, nullptr);
+#else
+            VkDescriptorSet BlitDescriptorSet = PushImageDescriptor(Frame,
                                                                     Renderer->SetLayouts[SetLayout_SampledRenderTargetNormalized_PS_CS],
                                                                     VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                                                     Frame->HDRRenderTargets[0]->View,
                                                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+#endif
 
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
                                     0, 1, &BlitDescriptorSet, 0, nullptr);
@@ -1293,16 +1346,16 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                               0.0f, 0.0f, -1.0f, 0.0f,
                               0.0f, 1.0f, 0.0f, 0.0f,
                               0.0f, 0.0f, 0.0f, 1.0f);
-#if 0
+#if 1
         BaseTransform = BaseTransform * M4(50.0f, 0.0f, 0.0f, 0.0f,
                                            0.0f, 50.0f, 0.0f, 0.0f,
                                            0.0f, 0.0f, 50.0f, 0.0f,
                                            0.0f, 0.0f, 0.0f, 1.0f);
 #endif
         //LoadTestScene(GameState, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
-        LoadTestScene(GameState, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
+        //LoadTestScene(GameState, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
         //LoadTestScene(GameState, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
-        //LoadTestScene(GameState, "data/Scenes/Medieval/scene.gltf", BaseTransform);
+        LoadTestScene(GameState, "data/Scenes/Medieval/scene.gltf", BaseTransform);
     }
 
     VK = GameState->Vulkan;
@@ -1340,7 +1393,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         UpdateEditor(GameState, GameIO);
 
         game_world* World = GameState->World;
-        World->SunL = 5.0f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
+        World->SunL = 2.5f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
         World->SunV = Normalize(v3{ -8.0f, 2.5f, 6.0f }); // Direction (towards the sun)
 
         camera* Camera = &World->Camera;

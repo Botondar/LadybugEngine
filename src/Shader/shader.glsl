@@ -274,7 +274,7 @@ void main()
     vec3 Fresnel = FresnelSchlick(F0, VdotH);
 
     float NdotL = max(dot(PerFrame.SunV, N), 0.0);
-    vec3 Ambient = 5e-3 * GetLuminance(PerFrame.SunL) * Albedo.rgb * ScreenSpaceOcclusion;
+    vec3 Ambient = 3e-1 * Albedo.rgb * ScreenSpaceOcclusion;
     vec3 Diffuse = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb * NdotL;
 
     float NdotH = max(dot(N, H), 0.0);

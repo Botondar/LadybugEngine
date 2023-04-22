@@ -33,6 +33,8 @@ enum descriptor_set_layout : u32
     SetLayout_Bloom,
     SetLayout_SSAO,
     SetLayout_SSAOBlur,
+    SetLayout_Blit,
+    SetLayout_BloomUpsample,
 
     SetLayout_Count,
 };

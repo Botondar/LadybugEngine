@@ -49,7 +49,9 @@ vec3 CIEClearSky(vec3 V, bool DoSun)
 
     float Luminance = Numerator / max(Denominator, 1e-4);
 
-    vec3 SkyColor = vec3(0.2, 0.5, 1.0) * 10.0;
+    float SunLuminance = GetLuminance(PerFrame.SunL);
+
+    vec3 SkyColor = 0.1 * SunLuminance * vec3(0.2, 0.5, 1.0);
     float SunWidth = 0.015;
 
     vec3 Result = max(SkyColor * Luminance, vec3(0.0));

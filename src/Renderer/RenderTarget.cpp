@@ -104,6 +104,9 @@ lbfn bool CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize)
 lbfn render_target* PushRenderTarget(render_target_heap* Heap, VkFormat Format, VkImageUsageFlags Usage, u32 MaxMipCount /*= 1*/)
 {
     render_target* Result = nullptr;
+
+    Usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT; // HACK(boti)
+
     if (Heap->RenderTargetCount < Heap->MaxRenderTargetCount)
     {
         Result = Heap->RenderTargets + Heap->RenderTargetCount++;

@@ -327,6 +327,59 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
             },
         },
     },
+
+    // SetLayout_Blit
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 2,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .ImmutableSampler = Sampler_RenderTargetNormalized,
+            },
+            {
+                .Binding = 1,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .ImmutableSampler = Sampler_RenderTargetNormalized,
+            },
+        },
+    },
+
+    //SetLayout_BloomUpsample
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 3,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_RenderTargetNormalized,
+            },
+            {
+                .Binding = 1,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_RenderTargetNormalized,
+            },
+            {
+                .Binding = 2,
+                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
 };
 
 // TODO(boti): Get the material visible to this portion of the code so we don't have to hard code this !!!!!
@@ -675,7 +728,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRangeCount = 0,
             .DescriptorSetCount = 1,
             .PushConstantRanges = {},
-            .DescriptorSets = { SetLayout_SampledRenderTargetNormalized_PS_CS },
+            .DescriptorSets = { SetLayout_Blit },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = 
@@ -735,7 +788,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRangeCount = 0,
             .DescriptorSetCount = 1,
             .PushConstantRanges = { },
-            .DescriptorSets = { SetLayout_Bloom },
+            .DescriptorSets = { SetLayout_BloomUpsample },
         },
     },
 

@@ -3,7 +3,7 @@
 // NOTE(boti): RenderDoc can't handle sparse buffers, 
 //             so this option is here for debugging.
 //             Note that allocations will fail once you exceed the 256MiB limit.
-#define VB_DISABLE_SPARSE 1
+#define VB_DISABLE_SPARSE 0
 
 struct geometry_buffer_block
 {
