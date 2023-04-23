@@ -794,7 +794,7 @@ lbfn VkResult CreateRenderer(vulkan_renderer* Renderer,
                     .depthBiasEnable = HasFlag(Info->RasterizerState.Flags, RS_DepthBiasEnable),
                     .depthBiasConstantFactor = Info->RasterizerState.DepthBiasConstantFactor,
                     .depthBiasClamp = Info->RasterizerState.DepthBiasClamp,
-                    .depthBiasSlopeFactor = Info->RasterizerState.DepthBiasConstantFactor,
+                    .depthBiasSlopeFactor = Info->RasterizerState.DepthBiasSlopeFactor,
                     .lineWidth = 1.0f,
                 };
 
