@@ -1352,8 +1352,8 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                                            0.0f, 0.0f, 0.0f, 1.0f);
 #endif
         //LoadTestScene(GameState, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
-        //LoadTestScene(GameState, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
-        LoadTestScene(GameState, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
+        LoadTestScene(GameState, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
+        //LoadTestScene(GameState, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
         //LoadTestScene(GameState, "data/Scenes/Medieval/scene.gltf", BaseTransform);
     }
 
