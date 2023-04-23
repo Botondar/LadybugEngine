@@ -530,7 +530,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .FrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
             .DepthBiasConstantFactor = 1.0f / 4096.0f,
             .DepthBiasClamp = 1.0f / 64.0f,
-            .DepthBiasSlopeFactor = 10.0f,
+            .DepthBiasSlopeFactor = 3.0f,
         },
         .DepthStencilState = 
         {
