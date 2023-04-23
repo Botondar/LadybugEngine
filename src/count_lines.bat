@@ -1,1 +1,1 @@
-@cloc --exclude-dir=nvtt,stb *
+@cloc --exclude-dir=nvtt,stb ./*

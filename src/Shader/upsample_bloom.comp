@@ -9,7 +9,7 @@ layout(set = 0, binding = 2, r11f_g11f_b10f) uniform restrict image2D Output;
 void main()
 {
     const float R = 0.005;
-    const float Strength = 0.8;
+    const float Strength = 0.85;
 
     ivec2 InputSize = textureSize(Input, 0);
     ivec2 OutputSize = imageSize(Output);

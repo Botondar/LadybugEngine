@@ -30,28 +30,65 @@ layout(location = 0) in vec2 TexCoord;
 
 layout(location = 0) out vec4 Out0;
 
-void main()
+v3 ACESFilm(v3 S)
 {
-    vec3 Sample = textureLod(Texture, TexCoord, 0).rgb;
-    vec3 SampleBloom = textureLod(BloomTexture, TexCoord, 0).rgb;
-
-    float Exposure = 0.5;
-#if 0
-    Sample = vec3(1.0) - exp(-Sample * Exposure);
-#elif 0
-    Sample = Sample / (vec3(1.0) + Sample);
-#elif 1
-    Sample = Exposure * Sample;
+    
     float a = 2.51f;
     float b = 0.03f;
     float c = 2.43f;
     float d = 0.59f;
     float e = 0.14f;
-    Sample =  clamp((Sample*(a*Sample+b))/(Sample*(c*Sample+d)+e), vec3(0.0), vec3(1.0));
-    //Sample = Sample*Sample;
+
+    v3 Numerator = S * (a * S + b);
+    v3 Denom = S * (c * S + d) + e;
+    v3 Result = clamp(Numerator / Denom, vec3(0.0), vec3(1.0));
+    return(Result);
+}
+
+/*
+    https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
+    MIT License - Copyright MJP and David Neubelt
+*/
+v3 ACESFilm2(v3 S)
+{
+    m3 InM = m3(
+        v3(0.59719, 0.07600, 0.02840),
+        v3(0.35458, 0.90834, 0.01566),
+        v3(0.04823, 0.01566, 0.83777));
+
+    S = InM * S;
+
+    v3 a = S * (S + 0.0245786) - 0.000090537;
+    v3 b = S * (0.983729 + 0.4329510) + 0.238081;
+    S = a / b;
+
+    m3 OutM = m3(
+        v3(1.60475, -0.10208, -0.00327),
+        v3(-0.53108, 1.10813, -0.07276),
+        v3(-0.07367, -0.00605, 1.07602));
+    S = OutM * S;
+    S = clamp(S, v3(0.0), vec3(1.0));
+
+    return(S);
+}
+
+void main()
+{
+    vec3 Sample = textureLod(Texture, TexCoord, 0).rgb;
+    vec3 SampleBloom = textureLod(BloomTexture, TexCoord, 0).rgb;
+
+    float BloomStrength = 0.25;
+    Sample = mix(Sample, SampleBloom, BloomStrength);
+
+    float Exposure = 1.0;
+#if 0
+    Sample = vec3(1.0) - exp(-Sample * Exposure);
+#elif 0
+    Sample = Sample / (vec3(1.0) + Sample);
+#elif 1
+    Sample = ACESFilm2(Exposure * Sample);
 #endif
-    float BloomStrength = 0.2;
-    Out0 = vec4(mix(Sample, SampleBloom, BloomStrength), 1.0);
+    Out0 = vec4(Sample, 1.0);
 }
 
 #endif

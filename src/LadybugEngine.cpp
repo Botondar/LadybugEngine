@@ -394,8 +394,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
                 {
                     .P = { 0.0f, 0.0f }, 
                     .HalfExtent = { 30.0f * PixelSizeX, 30.0f * PixelSizeY },
-                    .Color = { 1000.0f, 1000.0f, 1000.0f },
-                    //.Color = { 1.0f, 100.0f, 1.0f },
+                    .Color = 1000.0f * v3{ 1.0f, 0.0f, 0.0f },
                 };
                 vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
                 vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_ALL, 0, sizeof(data), &Data);
@@ -1346,7 +1345,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                               0.0f, 0.0f, -1.0f, 0.0f,
                               0.0f, 1.0f, 0.0f, 0.0f,
                               0.0f, 0.0f, 0.0f, 1.0f);
-#if 1
+#if 0
         BaseTransform = BaseTransform * M4(50.0f, 0.0f, 0.0f, 0.0f,
                                            0.0f, 50.0f, 0.0f, 0.0f,
                                            0.0f, 0.0f, 50.0f, 0.0f,
@@ -1354,8 +1353,8 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 #endif
         //LoadTestScene(GameState, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
         //LoadTestScene(GameState, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
-        //LoadTestScene(GameState, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
-        LoadTestScene(GameState, "data/Scenes/Medieval/scene.gltf", BaseTransform);
+        LoadTestScene(GameState, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
+        //LoadTestScene(GameState, "data/Scenes/Medieval/scene.gltf", BaseTransform);
     }
 
     VK = GameState->Vulkan;
