@@ -35,6 +35,7 @@
 
 // snprintf
 #include <cstdio>
+#include <cstdarg>
 
 struct frustum
 {

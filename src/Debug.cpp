@@ -1,7 +1,7 @@
 #include "Debug.hpp"
 
 #if 0
-internal void DEBUGRenderVBUsage(vulkan_renderer* Renderer, v2 P, v2 Size)
+lbfn void DEBUGRenderVBUsage(vulkan_renderer* Renderer, v2 P, v2 Size)
 {
     f32 Scale =  Size.x / Renderer->GeometryBuffer.MemorySize;
     for (geometry_buffer_block* Block = Renderer->GeometryBuffer.FreeVertexBlocks.Next; 
@@ -26,11 +26,8 @@ internal void DEBUGRenderVBUsage(vulkan_renderer* Renderer, v2 P, v2 Size)
 }
 #endif
 
-internal void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
+lbfn void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
 {
-    constexpr size_t BuffSize = 128;
-    char Buff[BuffSize];
-
     font* Font = &Game->Assets->DefaultFont;
 
     rgba8 DefaultForegroundColor = PackRGBA8(0xFF, 0xFF, 0xFF, 0xFF);
@@ -43,6 +40,9 @@ internal void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
     {
         font_layout_type Layout = font_layout_type::Top;
         f32 FrameTimeSize = 24.0f;
+
+        constexpr size_t BuffSize = 128;
+        char Buff[BuffSize];
 
         snprintf(Buff, BuffSize, "%.2fms", 1000.0f * GameIO->dt);
         mmrect2 Rect = GetTextRect(Font, Buff, Layout);
@@ -77,9 +77,12 @@ internal void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
     f32 TextSize = 32.0f;
     font_layout_type Layout = font_layout_type::Top;
 
-    v2 CurrentP = { 0.0f, 0.0f };
+    v2 StartP = { 0.0f, 0.0f };
+    v2 CurrentP = StartP;
     u32 CurrentID = 0;
     u32 HotID = INVALID_INDEX_U32;
+
+    auto ResetX = [&]() { CurrentP.x = StartP.x; };
 
     auto DoButton = [&](const char* Text) -> u32
     {
@@ -145,53 +148,91 @@ internal void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
     CurrentP.y += TextSize * Font->BaselineDistance; // TODO(boti): this is kind of a hack
     TextSize = 24.0f;
 
+    auto TextLine = [&](const char* Format, ...)
+    {
+        constexpr size_t BuffSize = 128;
+        char Buff[BuffSize];
+
+        va_list ArgList;
+        va_start(ArgList, Format);
+        vsnprintf(Buff, BuffSize, Format, ArgList);
+        va_end(ArgList);
+
+        mmrect2 TextRect = PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
+        CurrentP.y = TextRect.Max.y;
+    };
+
     if (Game->Debug.SelectedMenuID == CPUMenuID)
     {
+
     }
     else if (Game->Debug.SelectedMenuID == GPUMenuID)
     {
         vulkan_renderer* Renderer = Game->Renderer;
-        mmrect2 TextRect = {}; 
-        
-        snprintf(Buff, BuffSize, "RenderTarget memory: %llu/%llu MB",
-                 Renderer->RenderTargetHeap.Offset >> 20,
-                 Renderer->RenderTargetHeap.MemorySize >> 20);
-        TextRect = PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
-        CurrentP.y = TextRect.Max.y;
-        
-#if 1   
-        snprintf(Buff, BuffSize, "VertexBuffer memory: %llu/%llu MB",
-                 Renderer->GeometryBuffer.VertexMemory.MemoryInUse >> 20,
-                 Renderer->GeometryBuffer.VertexMemory.MemorySize >> 20);
-        TextRect = PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
-        CurrentP.y = TextRect.Max.y;
-        
-        snprintf(Buff, BuffSize, "IndexBuffer memory: %llu/%llu MB",
-                 Renderer->GeometryBuffer.IndexMemory.MemoryInUse >> 20,
-                 Renderer->GeometryBuffer.IndexMemory.MemorySize >> 20);
-        TextRect = PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
-        CurrentP.y = TextRect.Max.y;
-#endif  
-        
-#if 0   
-        v2 VBUsageExtent = { 600.0f, 100.0f };
-        DEBUGRenderVBUsage(Game->Renderer, CurrentP, VBUsageExtent);
-        CurrentP.y += VBUsageExtent.y;
-#endif  
-        snprintf(Buff, BuffSize, "Texture memory: %llu/%llu MB",
-                 Renderer->TextureManager.MemoryOffset >> 20,
-                 Renderer->TextureManager.MemorySize >> 20);
-        TextRect = PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
-        CurrentP.y = TextRect.Max.y;
-        
-        snprintf(Buff, BuffSize, "Shadow memory: %llu/%llu MB",
-                 Renderer->ShadowMemoryOffset >> 20,
-                 Renderer->ShadowMemorySize >> 20);
-        TextRect = PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
 
+        TextLine("RenderTarget memory: %llu/%llu MB",
+                     Renderer->RenderTargetHeap.Offset >> 20,
+                     Renderer->RenderTargetHeap.MemorySize >> 20);
+        TextLine("VertexBuffer memory: %llu/%llu MB",
+                     Renderer->GeometryBuffer.VertexMemory.MemoryInUse >> 20,
+                     Renderer->GeometryBuffer.VertexMemory.MemorySize >> 20);
+        TextLine("IndexBuffer memory: %llu/%llu MB",
+                     Renderer->GeometryBuffer.IndexMemory.MemoryInUse >> 20,
+                     Renderer->GeometryBuffer.IndexMemory.MemorySize >> 20);
+        TextLine("Texture memory: %llu/%llu MB",
+                     Renderer->TextureManager.MemoryOffset >> 20,
+                     Renderer->TextureManager.MemorySize >> 20);
+        TextLine("Shadow memory: %llu/%llu MB",
+                     Renderer->ShadowMemoryOffset >> 20,
+                     Renderer->ShadowMemorySize >> 20);
     }
     else if (Game->Debug.SelectedMenuID == PostProcessMenuID)
     {
+        auto F32Slider = [&](const char* Name, f32* Value, 
+            f32 DefaultValue, f32 MinValue, f32 MaxValue, f32 Step) -> u32
+        {
+            u32 ResetButtonID = DoButton(" ");
+            if (ResetButtonID == HotID && WasPressed(GameIO->Keys[SC_MouseLeft]))
+            {
+                *Value = DefaultValue;
+            }
 
+            constexpr size_t BuffSize = 128;
+            char Buff[BuffSize];
+            snprintf(Buff, BuffSize, "%s = %f", Name, *Value);
+            mmrect2 TextRect = GetTextRect(Font, Buff, Layout);
+            TextRect.Min *= TextSize;
+            TextRect.Max *= TextSize;
+            TextRect.Min += CurrentP;
+            TextRect.Max += CurrentP;
+            rgba8 TextColor = DefaultForegroundColor;
+            if (PointRectOverlap(GameIO->Mouse.P, TextRect))
+            {
+                TextColor = PackRGBA8(0xFF, 0xFF, 0x00, 0xFF);
+                if (GameIO->Keys[SC_MouseLeft].bIsDown)
+                {
+                    *Value += Step * GameIO->Mouse.dP.x;
+                    *Value = Clamp(*Value, MinValue, MaxValue);
+                }
+            }
+
+            PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, TextColor, Layout);
+            CurrentP.y = TextRect.Max.y;
+            ResetX();
+            return(CurrentID++);
+        };
+        F32Slider("Bloom filter radius", &Game->PostProcessParams.Bloom.FilterRadius, 
+                  bloom_params::DefaultFilterRadius, 0.0f, 1.0f, 1e-4f);
+        F32Slider("Bloom internal strength", &Game->PostProcessParams.Bloom.InternalStrength, 
+                  bloom_params::DefaultInternalStrength, 0.0f, 1.0f, 1e-3f);
+        F32Slider("Bloom strength", &Game->PostProcessParams.Bloom.Strength, 
+                  bloom_params::DefaultStrength, 0.0f, 1.0f, 1e-3f);
+
+        F32Slider("SSAO intensity", &Game->PostProcessParams.SSAO.Intensity, 
+                  ssao_params::DefaultIntensity, 0.0f, 10.0f, 1e-2f);
+        F32Slider("SSAO InvMaxDistance", &Game->PostProcessParams.SSAO.InvMaxDistance, 
+                  ssao_params::DefaultInvMaxDistance, 0.0f, 10.0f, 1e-3f);
+        F32Slider("SSAO TangentTau", &Game->PostProcessParams.SSAO.TangentTau, 
+                  ssao_params::DefaultTangentTau, 0.0f, 1.0f, 1e-3f);
     }
 }
