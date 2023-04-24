@@ -118,6 +118,8 @@ struct game_state
     debug_state Debug;
     editor_state Editor;
 
+    post_process_params PostProcessParams;
+
     assets* Assets;
     game_world* World;
 };
