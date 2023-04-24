@@ -1547,7 +1547,7 @@ internal bool BumpBuffer_(vulkan_buffer* Buffer, size_t Size)
     return Result;
 }
 
-lbfn render_frame* BeginRenderFrame(vulkan_renderer* Renderer)
+lbfn render_frame* BeginRenderFrame(vulkan_renderer* Renderer, u32 OutputWidth, u32 OutputHeight)
 {
     u32 FrameID = (u32)(Renderer->CurrentFrameID++ % Renderer->SwapchainImageCount);
     render_frame* Frame = Renderer->Frames + FrameID;
@@ -1590,6 +1590,12 @@ lbfn render_frame* BeginRenderFrame(vulkan_renderer* Renderer)
 
     vkWaitForFences(VK.Device, 1, &Frame->ImageAcquiredFence, VK_TRUE, UINT64_MAX);
     vkResetFences(VK.Device, 1, &Frame->ImageAcquiredFence);
+
+    if (OutputWidth != Renderer->SurfaceExtent.width ||
+        OutputHeight != Renderer->SurfaceExtent.height)
+    {
+        ResizeRenderTargets(Renderer);
+    }
 
     for (;;)
     {

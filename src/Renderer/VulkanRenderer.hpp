@@ -313,4 +313,4 @@ lbfn void CreateDebugFontImage(vulkan_renderer* Renderer, u32 Width, u32 Height,
 //
 
 // NOTE(boti): returns the current swapchain image index
-lbfn render_frame* BeginRenderFrame(vulkan_renderer* Renderer);
+lbfn render_frame* BeginRenderFrame(vulkan_renderer* Renderer, u32 OutputWidth, u32 OutputHeight);

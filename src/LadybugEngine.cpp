@@ -1371,7 +1371,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         return;
     }
 
-    render_frame* RenderFrame = BeginRenderFrame(GameState->Renderer);
+    render_frame* RenderFrame = BeginRenderFrame(GameState->Renderer, GameIO->OutputWidth, GameIO->OutputHeight);
 
     // Update
     {
