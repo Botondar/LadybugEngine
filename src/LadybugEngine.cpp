@@ -1284,6 +1284,11 @@ extern "C"
 void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 {
     Platform = Memory->PlatformAPI;
+    if (GameIO->bQuitRequested)
+    {
+        // NOTE(boti): This is where handling game quit should be happening (saving the game, cleaning up if needed, etc.)
+        return;
+    }
 
     game_state* GameState = Memory->GameState;
     if (!GameState)

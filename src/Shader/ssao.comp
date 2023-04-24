@@ -15,7 +15,7 @@ layout(set = 1, binding = 0) uniform PerFrameBlock
 // Sample offset table
 const vec2 d[4] = { vec2(0.1, 0.0), vec2(0.0, 0.2), vec2(-0.3, 0.0 ), vec2(0.0, -0.4), };
 
-// NOTE(boti): SinCos 2pi*k / 16 where with k=[0,16) in a random order
+// NOTE(boti): SinCos 2pi*k / 16 with k=[0,16) in a random order
 // x = C, y = S
 const vec2 RotationSinCosTable[16] = 
 {

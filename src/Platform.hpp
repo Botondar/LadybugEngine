@@ -200,6 +200,10 @@ struct platform_mouse
 struct game_io
 {
     f32 dt;
+
+    u32 OutputWidth;
+    u32 OutputHeight;
+
     bool bQuitRequested;
     bool bIsMinimized;
     bool bHasDroppedFile;

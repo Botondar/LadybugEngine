@@ -35,19 +35,7 @@ struct win_window_params
     LPVOID Param;
 };
 
-struct win_input_key
-{
-    b32 bIsDown;
-    s64 LastDownTime;
-};
-
-struct win_input_state
-{
-    v2 MouseP;
-    win_input_key Keys[ScanCode_Count];
-};
-
-lbfn u32 Win_ScanCodeToKey(u32 ScanCode, bool bIsExtended);
+internal u32 Win_ScanCodeToKey(u32 ScanCode, bool bIsExtended);
 
 typedef DWORD WINAPI FN_XInputGetState(DWORD UserIndex, XINPUT_STATE* State);
 typedef DWORD WINAPI FN_XInputSetState(DWORD UserIndex, XINPUT_VIBRATION* Vibration);
@@ -62,4 +50,4 @@ struct win_xinput
     FN_XInputGetCapabilities* GetCapabilities;
 };
 
-lbfn bool Win_InitializeXInput(win_xinput* XInput);
+internal bool Win_InitializeXInput(win_xinput* XInput);

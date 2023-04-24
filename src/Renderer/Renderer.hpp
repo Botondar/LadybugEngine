@@ -18,6 +18,34 @@ constexpr u32 MaxDescriptorSetCount = 256;
 constexpr u32 MaxPushConstantRangeCount = 64;
 constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
 
+struct ssao_params
+{
+    f32 Intensity;
+    f32 InvMaxDistance;
+    f32 TangentTau;
+
+    static constexpr f32 DefaultIntensity = 5.0f;
+    static constexpr f32 DefaultInvMaxDistance = 1.0f;
+    static constexpr f32 DefaultTangentTau = 0.03125;
+};
+
+struct bloom_params
+{
+    f32 FilterRadius;
+    f32 InternalStrength;
+    f32 Strength;
+
+    static constexpr f32 DefaultFilterRadius = 0.005f;
+    static constexpr f32 DefaultInternalStrength = 0.85f;
+    static constexpr f32 DefaultStrength = 0.2f;
+};
+
+struct post_process_params
+{
+    ssao_params SSAO;
+    bloom_params Bloom;
+};
+
 //
 // Utils
 //
@@ -67,6 +95,7 @@ struct material
     texture_id MetallicRoughnessID;
 };
 
+// TODO(boti): Rename this. we'd probably want pipeline-specific push constant types
 struct alignas(4) push_constants
 {
     m4 Transform;

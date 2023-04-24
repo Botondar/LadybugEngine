@@ -1,4 +1,7 @@
 #version 460
+
+#include "common.glsli"
+
 #ifdef VS
 
 layout(location = 0) in vec3 aP;

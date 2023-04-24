@@ -104,23 +104,17 @@ internal f32 Win_ElapsedSeconds(counter Start, counter End)
 //
 // Input
 //
-internal void Win_HandleKeyEvent(game_io* GameIO, win_input_state* Keyboard, u32 KeyCode, u32 ScanCode, bool bIsDown, bool bWasDown, s64 MessageTime)
+internal void Win_HandleKeyEvent(game_io* GameIO, u32 KeyCode, u32 ScanCode, bool bIsDown, bool bWasDown, s64 MessageTime)
 {
-    bool bIsTransition = bIsDown != bWasDown;
-
-    win_input_key* WinKey = Keyboard->Keys + ScanCode;
     platform_input_key* Key = GameIO->Keys + ScanCode;
 
-    WinKey->bIsDown = bIsDown;
-    if (bIsTransition)
+    bool IsTransition = bIsDown != bWasDown;
+    Key->bIsDown = bIsDown;
+    if (IsTransition)
     {
         Key->TransitionFlags |= KEYTRANSITION_TRANSITION;
     }
-    if (bIsDown && bIsTransition && ((MessageTime - WinKey->LastDownTime) < 200))
-    {
-        Key->TransitionFlags |= KEYTRANSITION_DOUBLE_PRESS;
-    }
-    WinKey->LastDownTime = MessageTime;
+    // TODO(boti): Double press handling
 }
 
 lbfn u32 Win_ScanCodeToKey(u32 ScanCode, bool bIsExtended)
@@ -229,7 +223,7 @@ internal LRESULT CALLBACK MainWindowProc(HWND Window, UINT Message, WPARAM WPara
         {
             Result = MNC_CLOSE << 16;
         } break;
-        case WM_DESTROY:
+        case WM_CLOSE:
         {
             PostQuitMessage(0);
         } break;
@@ -262,10 +256,14 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
         return (DWORD)-1;
     }
 
+    constexpr int InitialWindowWidth = 1920;
+    constexpr int InitialWindowHeight = 1080;
+    game_io GameIO = {};
+    GameIO.OutputWidth = InitialWindowWidth;
+    GameIO.OutputHeight = InitialWindowHeight;
+
     // Create window
     {
-        constexpr int InitialWindowWidth = 1920;
-        constexpr int InitialWindowHeight = 1080;
         DWORD WindowStyle = WS_OVERLAPPEDWINDOW;
 
         HMONITOR PrimaryMonitor = MonitorFromPoint({ 0, 0 }, MONITOR_DEFAULTTOPRIMARY);
@@ -331,34 +329,22 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
 
     win_xinput XInput = {};
     Win_InitializeXInput(&XInput);
-
-    win_input_state InputState = {};
     {
         POINT P = {};
         GetCursorPos(&P);
         ScreenToClient(WinWindow, &P);
-        InputState.MouseP = { (f32)P.x, (f32)P.y };
+        GameIO.Mouse.P = { (f32)P.x, (f32)P.y };
     }
 
-    f32 DeltaTime = 0.0f;
-    bool bIsMinimized = false;
-    bool bIsRunning = true;
-    while (bIsRunning)
+    for (;;)
     {
         counter FrameStartCounter = Win_GetCounter();
 
+        GameIO.Mouse.dP = { 0.0f, 0.0f };
+        for (u32 Key = 0; Key < ScanCode_Count; Key++)
         {
-            constexpr size_t BuffSize = 64;
-            wchar_t Buff[BuffSize];
-            _snwprintf(Buff, BuffSize, L"%s [%5.1f FPS | %5.2f ms]\n", Win_WindowTitle, 1.0f / DeltaTime, 1000.0f * DeltaTime);
-
-            SetWindowTextW(WinWindow, Buff);
+            GameIO.Keys[Key].TransitionFlags = 0;
         }
-
-        game_io GameIO = {};
-        GameIO.dt = DeltaTime;
-        GameIO.bIsMinimized = bIsMinimized;
-        GameIO.Mouse.P = InputState.MouseP;
 
         MSG Message = {};
         while (PeekMessageW(&Message, nullptr, 0, 0, PM_REMOVE))
@@ -369,11 +355,13 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
                 {
                     if (Message.wParam == SIZE_MINIMIZED)
                     {
-                        GameIO.bIsMinimized = bIsMinimized = true;
+                        GameIO.bIsMinimized = true;
                     }
                     else if (Message.wParam == SIZE_RESTORED || Message.wParam == SIZE_MAXIMIZED)
                     {
-                        GameIO.bIsMinimized = bIsMinimized = false;
+                        GameIO.bIsMinimized = false;
+                        GameIO.OutputWidth = LOWORD(Message.lParam);
+                        GameIO.OutputHeight = HIWORD(Message.lParam);
                     }
                 } break;
 
@@ -386,29 +374,28 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
                     s32 Y = GET_Y_LPARAM(Message.lParam);
 
                     v2 P = { (f32)X, (f32)Y };
-                    GameIO.Mouse.dP += P - InputState.MouseP;
+                    GameIO.Mouse.dP += P - GameIO.Mouse.P;
                     GameIO.Mouse.P = P;
-                    InputState.MouseP = P;
                 } break;
                 case WM_LBUTTONDOWN:
                 {
                     u32 KeyCode = VK_LBUTTON;
                     u32 ScanCode = SC_MouseLeft;
-                    Win_HandleKeyEvent(&GameIO, &InputState, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
+                    Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
                     SendMessageW(ServiceWindow, CAPTURE_MOUSE, 0, (LPARAM)WinWindow);
                 } break;
                 case WM_RBUTTONDOWN:
                 {
                     u32 KeyCode = VK_RBUTTON;
                     u32 ScanCode = SC_MouseRight;
-                    Win_HandleKeyEvent(&GameIO, &InputState, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
+                    Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
                     SendMessageW(ServiceWindow, CAPTURE_MOUSE, 0, (LPARAM)WinWindow);
                 } break;
                 case WM_MBUTTONDOWN:
                 {
                     u32 KeyCode = VK_MBUTTON;
                     u32 ScanCode = SC_MouseMiddle;
-                    Win_HandleKeyEvent(&GameIO, &InputState, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
+                    Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
                     SendMessageW(ServiceWindow, CAPTURE_MOUSE, 0, (LPARAM)WinWindow);
                 } break;
                 case WM_XBUTTONDOWN:
@@ -425,7 +412,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
                         KeyCode = VK_XBUTTON2;
                         ScanCode = SC_MouseX2;
                     }
-                    Win_HandleKeyEvent(&GameIO, &InputState, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
+                    Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
                     SendMessageW(ServiceWindow, CAPTURE_MOUSE, 0, (LPARAM)WinWindow);
                 } break;
 
@@ -433,21 +420,21 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
                 {
                     u32 KeyCode = VK_LBUTTON;
                     u32 ScanCode = SC_MouseLeft;
-                    Win_HandleKeyEvent(&GameIO, &InputState, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
+                    Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
                     SendMessageW(ServiceWindow, RELEASE_MOUSE, 0, 0);
                 } break;
                 case WM_RBUTTONUP:
                 {
                     u32 KeyCode = VK_RBUTTON;
                     u32 ScanCode = SC_MouseRight;
-                    Win_HandleKeyEvent(&GameIO, &InputState, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
+                    Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
                     SendMessageW(ServiceWindow, RELEASE_MOUSE, 0, 0);
                 } break;
                 case WM_MBUTTONUP:
                 {
                     u32 KeyCode = VK_MBUTTON;
                     u32 ScanCode = SC_MouseMiddle;
-                    Win_HandleKeyEvent(&GameIO, &InputState, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
+                    Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
                     SendMessageW(ServiceWindow, RELEASE_MOUSE, 0, 0);
                 } break;
                 case WM_XBUTTONUP:
@@ -464,7 +451,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
                         KeyCode = VK_XBUTTON2;
                         ScanCode = SC_MouseX2;
                     }
-                    Win_HandleKeyEvent(&GameIO, &InputState, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
+                    Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
                     SendMessageW(ServiceWindow, RELEASE_MOUSE, 0, 0);
                 } break;
 
@@ -491,7 +478,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
 
                     ScanCode = Win_ScanCodeToKey(ScanCode, bIsExtended);
 
-                    Win_HandleKeyEvent(&GameIO, &InputState, KeyCode, ScanCode, bIsDown, bWasDown, MessageTime);
+                    Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, bIsDown, bWasDown, MessageTime);
                 } break;
 
                 case WM_DROPFILES:
@@ -513,32 +500,27 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
                 } break;
                 case WM_QUIT:
                 {
-                    bIsRunning = false;
+                    GameIO.bQuitRequested = true;
                 } break;
             }
         }
 
-        for (u32 i = 0; i < 0xFF; i++)
-        {
-            GameIO.Keys[i].bIsDown = InputState.Keys[i].bIsDown;
-        }
-
-        if (!bIsRunning)
-        {
-            break;
-        }
-
         Game_UpdateAndRender(&GameMemory, &GameIO);
-        if (GameIO.bQuitRequested)
-        {
-            PostQuitMessage(0);
-        }
+        if (GameIO.bQuitRequested) break;
 
         counter FrameEndCounter = Win_GetCounter();
-        DeltaTime = Win_ElapsedSeconds(FrameStartCounter, FrameEndCounter);
+        GameIO.dt = Win_ElapsedSeconds(FrameStartCounter, FrameEndCounter);
+
+        {
+            constexpr size_t BuffSize = 64;
+            wchar_t Buff[BuffSize];
+            _snwprintf(Buff, BuffSize, L"%s [%5.1f FPS | %5.2f ms]\n", Win_WindowTitle, 1.0f / GameIO.dt, 1000.0f * GameIO.dt);
+
+            SetWindowTextW(WinWindow, Buff);
+        }
     }
 
-    ExitProcess(0);
+    return(0);
 }
 
 internal DWORD MainThreadID;
@@ -636,13 +618,10 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLi
 
         PostThreadMessageW(MainThreadID, Message.message, Message.wParam, Message.lParam);
 
-        if (Message.message == WM_QUIT)
+        if (WaitForSingleObject(MainThreadHandle, 0) == WAIT_OBJECT_0)
         {
             break;
         }
     }
-
-    // Exit process from this thread if the main thread got hung for some reason
-    WaitForSingleObject(MainThreadHandle, 200000u);
     ExitProcess(0);
 }

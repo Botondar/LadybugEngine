@@ -2,6 +2,7 @@
 
 struct render_frame
 {
+
     u32 RenderFrameID; // NOTE: FrameID % SwapchainImageCount
 
     VkExtent2D RenderExtent;
