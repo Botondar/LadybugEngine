@@ -36,23 +36,6 @@
 // snprintf
 #include <cstdio>
 
-// TODO(boti): move material to the renderer, the shaders/pipelines have to know about it...
-struct material
-{
-    v3 Emissive;
-    rgba8 DiffuseColor;
-    rgba8 BaseMaterial;
-    texture_id DiffuseID;
-    texture_id NormalID;
-    texture_id MetallicRoughnessID;
-};
-
-struct alignas(4) push_constants
-{
-    m4 Transform;
-    material Material;
-};
-
 struct frustum
 {
     union

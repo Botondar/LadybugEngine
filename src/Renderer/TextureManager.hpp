@@ -1,10 +1,5 @@
 #pragma once
 
-struct texture_id
-{
-    u32 ID;
-};
-
 inline bool IsValid(texture_id ID) { return ID.ID != U32_MAX; }
 
 struct texture_byte_rate

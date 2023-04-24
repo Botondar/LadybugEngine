@@ -21,6 +21,11 @@ constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
 //
 // Utils
 //
+struct texture_id
+{
+    u32 ID;
+};
+
 union rgba8
 {
     u32 Color;
@@ -50,6 +55,22 @@ struct ui_vertex
     v2 P;
     v2 TexCoord;
     rgba8 Color;
+};
+
+struct material
+{
+    v3 Emissive;
+    rgba8 DiffuseColor;
+    rgba8 BaseMaterial;
+    texture_id DiffuseID;
+    texture_id NormalID;
+    texture_id MetallicRoughnessID;
+};
+
+struct alignas(4) push_constants
+{
+    m4 Transform;
+    material Material;
 };
 
 inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
