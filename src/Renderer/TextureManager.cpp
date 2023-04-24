@@ -168,66 +168,6 @@ lbfn bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 Mem
         {
             return false;
         }
-#if 0
-        VkDescriptorSetLayoutBinding Bindings[] = 
-        {
-            // Set 0
-            {
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .pImmutableSamplers = &Manager->Sampler,
-            },
-            // Set 1
-            {
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .descriptorCount = Manager->MaxTextureCount,
-                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .pImmutableSamplers = nullptr,
-            },
-        };
-
-        VkDescriptorBindingFlags BindlessFlags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT|VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
-        VkDescriptorSetLayoutBindingFlagsCreateInfo BindlessInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-            .pNext = nullptr,
-            .bindingCount = 1,
-            .pBindingFlags = &BindlessFlags,
-        };
-
-        VkDescriptorSetLayoutCreateInfo LayoutInfos[] = 
-        {
-            // Set 0
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .bindingCount = 1,
-                .pBindings = &Bindings[0],
-            },
-            // Set 1
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .pNext = &BindlessInfo,
-                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-                .bindingCount = 1,
-                .pBindings = &Bindings[1],
-            },
-        };
-        Result = vkCreateDescriptorSetLayout(VK.Device, &LayoutInfos[0], nullptr, &Manager->DescriptorSetLayouts[0]);
-        if (Result != VK_SUCCESS)
-        {
-            return false;
-        }
-        Result = vkCreateDescriptorSetLayout(VK.Device, &LayoutInfos[1], nullptr, &Manager->DescriptorSetLayouts[1]);
-        if (Result != VK_SUCCESS)
-        {
-            return false;
-        }
-#endif
         VkDescriptorSetAllocateInfo DescriptorInfo = 
         {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
