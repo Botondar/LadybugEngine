@@ -1160,11 +1160,12 @@ lbfn void RenderBloom(render_frame* Frame,
             .dstOffset = { 0, 0, 0 },
             .extent = 
             {
-                .width = Frame->RenderExtent.width >> MipIndex,
-                .height = Frame->RenderExtent.height >> MipIndex,
+                .width = Max(Frame->RenderExtent.width >> MipIndex, 1u),
+                .height = Max(Frame->RenderExtent.height >> MipIndex, 1u),
                 .depth = 1,
             },
         };
+
         vkCmdCopyImage(Frame->CmdBuffer, 
                        SrcRT->Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                        DstRT->Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
