@@ -426,7 +426,8 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         EndForwardPass(Frame);
     }
 
-    RenderBloom(Frame, 
+    RenderBloom(Frame,
+                GameState->PostProcessParams.Bloom,
                 Frame->HDRRenderTargets[0],
                 Frame->HDRRenderTargets[1],
                 Renderer->Pipelines[Pipeline_BloomDownsample].Layout,
@@ -523,6 +524,8 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         {
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Blit];
             vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+            vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_FRAGMENT_BIT, 
+                               0, sizeof(f32), &GameState->PostProcessParams.Bloom.Strength);
 #if 1
             VkDescriptorSet BlitDescriptorSet = VK_NULL_HANDLE;
             VkDescriptorSetAllocateInfo BlitSetInfo = 
@@ -1405,7 +1408,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
         game_world* World = GameState->World;
         World->SunL = 2.5f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
-        World->SunV = Normalize(v3{ -8.0f, 2.5f, 6.0f }); // Direction (towards the sun)
+        World->SunV = Normalize(v3{ -4.0f, 2.5f, 6.0f }); // Direction (towards the sun)
 
         camera* Camera = &World->Camera;
         v3 MoveDirection = {};

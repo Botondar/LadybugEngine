@@ -725,9 +725,16 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Graphics,
         .Layout = 
         {
-            .PushConstantRangeCount = 0,
+            .PushConstantRangeCount = 1,
             .DescriptorSetCount = 1,
-            .PushConstantRanges = {},
+            .PushConstantRanges = 
+            {
+                {
+                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                    .offset = 0,
+                    .size = sizeof(f32),
+                },
+            },
             .DescriptorSets = { SetLayout_Blit },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
@@ -785,9 +792,16 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Compute,
         .Layout = 
         {
-            .PushConstantRangeCount = 0,
+            .PushConstantRangeCount = 1,
             .DescriptorSetCount = 1,
-            .PushConstantRanges = { },
+            .PushConstantRanges = 
+            { 
+                {
+                    .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                    .offset = 0,
+                    .size = 2 * sizeof(f32),
+                }
+            },
             .DescriptorSets = { SetLayout_BloomUpsample },
         },
     },

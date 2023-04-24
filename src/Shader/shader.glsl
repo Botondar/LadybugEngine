@@ -179,7 +179,7 @@ vec3 CalculateAtmosphere(vec3 SrcColor)
     vec3 EndP = P * vec3(1.0, 1.0, 0.99);
     vec3 V = normalize(P);
     
-    const float g = 0.9;
+    const float g = 0.8;
     const float g2 = g*g;
     float CosTheta = dot(V, PerFrame.SunV);
 

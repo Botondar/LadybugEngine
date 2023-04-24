@@ -20,22 +20,31 @@ lbfn void SetupShadowCascades(shadow_cascades* Cascades, const render_camera* Ca
     m4 SunView = AffineOrthonormalInverse(SunTransform);
     m4 CameraToSun = SunView * Camera->CameraTransform;
 
-    m4 Cascade0InverseViewProjection;
+    f32 NdTable[R_MaxShadowCascadeCount] = { 0.0f, 2.5f, 10.0f, 20.0f, };
+    f32 FdTable[R_MaxShadowCascadeCount] = { 3.0f, 12.5f, 25.0f, 30.0f, };
+
+#if 0
     for (u32 CascadeIndex = 0; CascadeIndex < MaxCascadeCount; CascadeIndex++)
     {
         f32 StartPercent = Max((CascadeIndex - 0.1f) / MaxCascadeCount, 0.0f);
         f32 EndPercent = (CascadeIndex + 1.0f) / MaxCascadeCount;
-
         f32 NdLinear = Camera->FarZ * StartPercent;
         f32 FdLinear = Camera->FarZ * EndPercent;
 
         constexpr f32 PolyExp = 2.0f;
         f32 NdPoly = Camera->FarZ * Pow(StartPercent, PolyExp);
         f32 FdPoly = Camera->FarZ * Pow(EndPercent, PolyExp);
-
         constexpr f32 PolyFactor = 0.9f;
-        f32 Nd = Lerp(NdLinear, NdPoly, PolyFactor);
-        f32 Fd = Lerp(FdLinear, FdPoly, PolyFactor);
+        NdTable[CascadeIndex] = Lerp(NdLinear, NdPoly, PolyFactor);
+        FdTable[CascadeIndex] = Lerp(FdLinear, FdPoly, PolyFactor);
+    }
+#endif
+
+    m4 Cascade0InverseViewProjection;
+    for (u32 CascadeIndex = 0; CascadeIndex < MaxCascadeCount; CascadeIndex++)
+    {
+        f32 Nd = NdTable[CascadeIndex];
+        f32 Fd = FdTable[CascadeIndex];
 
         f32 CascadeNear = (f32)CascadeIndex / MaxCascadeCount;
 

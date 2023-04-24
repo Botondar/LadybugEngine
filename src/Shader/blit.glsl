@@ -23,6 +23,11 @@ void main()
 
 #elif defined(FS)
 
+layout(push_constant) uniform PushConstants
+{
+    f32 BloomStrength;
+};
+
 layout(set = 0, binding = 0) uniform sampler2D Texture;
 layout(set = 0, binding = 1) uniform sampler2D BloomTexture;
 
@@ -77,7 +82,7 @@ void main()
     vec3 Sample = textureLod(Texture, TexCoord, 0).rgb;
     vec3 SampleBloom = textureLod(BloomTexture, TexCoord, 0).rgb;
 
-    float BloomStrength = 0.25;
+    //float BloomStrength = 0.25;
     Sample = mix(Sample, SampleBloom, BloomStrength);
 
     float Exposure = 0.75;

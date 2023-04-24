@@ -6,10 +6,16 @@ layout(set = 0, binding = 0) uniform sampler2D PrevMip;
 layout(set = 0, binding = 1) uniform sampler2D Input;
 layout(set = 0, binding = 2, r11f_g11f_b10f) uniform restrict image2D Output;
 
+layout(push_constant) uniform PushConstants
+{
+    float R;
+    float Strength;
+};
+
 void main()
 {
-    const float R = 0.005;
-    const float Strength = 0.85;
+    //const float R = 0.005;
+    //const float Strength = 0.85;
 
     ivec2 InputSize = textureSize(Input, 0);
     ivec2 OutputSize = imageSize(Output);

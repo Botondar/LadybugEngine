@@ -95,7 +95,8 @@ lbfn void RenderSSAO(render_frame* Frame,
 lbfn void BeginForwardPass(render_frame* Frame);
 lbfn void EndForwardPass(render_frame* Frame);
 
-lbfn void RenderBloom(render_frame* Frame, 
+lbfn void RenderBloom(render_frame* Frame,
+                      bloom_params Params,
                       render_target* SrcRT,
                       render_target* DstRT,
                       VkPipelineLayout DownsamplePipelineLayout,

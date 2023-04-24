@@ -876,7 +876,8 @@ lbfn void EndForwardPass(render_frame* Frame)
     vkCmdEndRendering(Frame->CmdBuffer);
 }
 
-lbfn void RenderBloom(render_frame* Frame, 
+lbfn void RenderBloom(render_frame* Frame,
+                      bloom_params Params,
                       render_target* SrcRT,
                       render_target* DstRT,
                       VkPipelineLayout DownsamplePipelineLayout,
@@ -1228,6 +1229,8 @@ lbfn void RenderBloom(render_frame* Frame,
     }
 
     vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, UpsamplePipeline);
+    f32 PushConstants[2] = { Params.FilterRadius, Params.InternalStrength };
+    vkCmdPushConstants(Frame->CmdBuffer, UpsamplePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), PushConstants);
     for (u32 Index = 1; Index < BloomMipCount; Index++)
     {
         u32 Mip = BloomMipCount - Index - 1;
