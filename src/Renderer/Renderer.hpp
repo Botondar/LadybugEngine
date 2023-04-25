@@ -21,11 +21,11 @@ constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
 struct ssao_params
 {
     f32 Intensity;
-    f32 InvMaxDistance;
+    f32 MaxDistance;
     f32 TangentTau;
 
     static constexpr f32 DefaultIntensity = 5.0f;
-    static constexpr f32 DefaultInvMaxDistance = 1.0f;
+    static constexpr f32 DefaultMaxDistance = 1.0f;
     static constexpr f32 DefaultTangentTau = 0.03125;
 };
 

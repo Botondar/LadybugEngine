@@ -87,6 +87,7 @@ lbfn void BeginCascade(render_frame* Frame, u32 CascadeIndex);
 lbfn void EndCascade(render_frame* Frame);
 
 lbfn void RenderSSAO(render_frame* Frame,
+                     ssao_params Params,
                      VkPipeline Pipeline, VkPipelineLayout PipelineLayout,
                      VkDescriptorSetLayout SetLayout,
                      VkPipeline BlurPipeline, VkPipelineLayout BlurPipelineLayout,

@@ -417,7 +417,8 @@ lbfn void EndCascade(render_frame* Frame)
     vkCmdEndRendering(Frame->CmdBuffer);
 }
 
-lbfn void RenderSSAO(render_frame* Frame, 
+lbfn void RenderSSAO(render_frame* Frame,
+                     ssao_params Params,
                      VkPipeline Pipeline, VkPipelineLayout PipelineLayout, 
                      VkDescriptorSetLayout SetLayout,
                      VkPipeline BlurPipeline, VkPipelineLayout BlurPipelineLayout,
@@ -580,7 +581,8 @@ lbfn void RenderSSAO(render_frame* Frame,
         vkCmdPipelineBarrier2(Frame->CmdBuffer, &SSAOBeginDependency);
 
         vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline);
-
+        f32 PushConstants[3] = { Params.Intensity, 1.0f / Params.MaxDistance, Params.TangentTau };
+        vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), PushConstants);
         VkDescriptorSet SSAODescriptorSets[] = 
         {
             SSAODescriptorSet,

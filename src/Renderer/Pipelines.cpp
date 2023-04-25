@@ -812,9 +812,16 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Compute,
         .Layout = 
         {
-            .PushConstantRangeCount = 0,
+            .PushConstantRangeCount = 1,
             .DescriptorSetCount = 2,
-            .PushConstantRanges = {},
+            .PushConstantRanges = 
+            {
+                {
+                    .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                    .offset = 0,
+                    .size = 3 * sizeof(f32),
+                },
+            },
             .DescriptorSets = 
             {
                 SetLayout_SSAO,

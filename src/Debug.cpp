@@ -250,10 +250,10 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
                   bloom_params::DefaultStrength, 0.0f, 1.0f, 1e-3f);
 
         F32Slider("SSAO intensity", &Game->PostProcessParams.SSAO.Intensity, 
-                  ssao_params::DefaultIntensity, 0.0f, 10.0f, 1e-2f);
-        F32Slider("SSAO InvMaxDistance", &Game->PostProcessParams.SSAO.InvMaxDistance, 
-                  ssao_params::DefaultInvMaxDistance, 0.0f, 10.0f, 1e-3f);
-        F32Slider("SSAO TangentTau", &Game->PostProcessParams.SSAO.TangentTau, 
+                  ssao_params::DefaultIntensity, 0.0f, 20.0f, 1e-2f);
+        F32Slider("SSAO max distance", &Game->PostProcessParams.SSAO.MaxDistance, 
+                  ssao_params::DefaultMaxDistance, 1e-3f, 10.0f, 1e-3f);
+        F32Slider("SSAO tangent tau", &Game->PostProcessParams.SSAO.TangentTau, 
                   ssao_params::DefaultTangentTau, 0.0f, 1.0f, 1e-3f);
     }
 

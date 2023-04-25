@@ -12,6 +12,13 @@ layout(set = 1, binding = 0) uniform PerFrameBlock
     per_frame PerFrame;
 };
 
+layout(push_constant) uniform PushConstants
+{
+    f32 Intensity;
+    f32 InvMaxDistance;
+    f32 TangentTau;
+};
+
 // Sample offset table
 const vec2 d[4] = { vec2(0.1, 0.0), vec2(0.0, 0.2), vec2(-0.3, 0.0 ), vec2(0.0, -0.4), };
 
@@ -39,10 +46,12 @@ const vec2 RotationSinCosTable[16] =
 
 void main()
 {
+#if 0
     // TODO(boti): param, should move to push constants
     const float Intensity = 5.0;
     const float InvMaxDistance = 1.0; // 1 / dMax
     const float TangentTau = 0.03125;
+#endif
 
     ivec2 Size = imageSize(SSAOImage);
     ivec2 P = ivec2(gl_GlobalInvocationID.xy);

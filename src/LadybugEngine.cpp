@@ -369,6 +369,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         EndPrepass(Frame);
 
         RenderSSAO(Frame,
+                   GameState->PostProcessParams.SSAO,
                    Renderer->Pipelines[Pipeline_SSAO].Pipeline, 
                    Renderer->Pipelines[Pipeline_SSAO].Layout, 
                    Renderer->SetLayouts[SetLayout_SSAO],
@@ -1344,7 +1345,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         InitEditor(GameState, &GameState->TransientArena);
 
         GameState->PostProcessParams.SSAO.Intensity = ssao_params::DefaultIntensity;
-        GameState->PostProcessParams.SSAO.InvMaxDistance = ssao_params::DefaultInvMaxDistance;
+        GameState->PostProcessParams.SSAO.MaxDistance = ssao_params::DefaultMaxDistance;
         GameState->PostProcessParams.SSAO.TangentTau = ssao_params::DefaultTangentTau;
         GameState->PostProcessParams.Bloom.FilterRadius = bloom_params::DefaultFilterRadius;
         GameState->PostProcessParams.Bloom.InternalStrength = bloom_params::DefaultInternalStrength;
