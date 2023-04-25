@@ -26,8 +26,10 @@ lbfn void DEBUGRenderVBUsage(vulkan_renderer* Renderer, v2 P, v2 Size)
 }
 #endif
 
-lbfn void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
+lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
 {
+    b32 MouseInputUsed = false;
+
     font* Font = &Game->Assets->DefaultFont;
 
     rgba8 DefaultForegroundColor = PackRGBA8(0xFF, 0xFF, 0xFF, 0xFF);
@@ -60,7 +62,7 @@ lbfn void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
 
     if (!Game->Debug.IsEnabled)
     {
-        return;
+        return(MouseInputUsed);
     }
 
     if (WasPressed(GameIO->Keys[SC_F1]))
@@ -97,10 +99,15 @@ lbfn void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
         if (IsHot)
         {
             HotID = CurrentID;
-            CurrentColor = HotBackgroundColor;
             if (WasPressed(GameIO->Keys[SC_MouseLeft]))
             {
                 Game->Debug.ActiveMenuID = CurrentID;
+                MouseInputUsed = true;
+            }
+
+            if (Game->Debug.ActiveMenuID == INVALID_INDEX_U32)
+            {
+                CurrentColor = HotBackgroundColor;
             }
         }
 
@@ -111,6 +118,7 @@ lbfn void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
         else if (Game->Debug.ActiveMenuID == CurrentID)
         {
             CurrentColor = ActiveBackgroundColor;
+            MouseInputUsed = true;
         }
         PushRect(Frame, Rect.Min, Rect.Max, { 0.0f, 0.0f, }, { 0.0f, 0.0f }, CurrentColor);
         CurrentP.x += Margin;
@@ -133,7 +141,6 @@ lbfn void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
             if (Game->Debug.ActiveMenuID == HotID)
             {
                 Game->Debug.SelectedMenuID = Game->Debug.ActiveMenuID;
-                
             }
             Game->Debug.ActiveMenuID = INVALID_INDEX_U32;
         }
@@ -195,6 +202,7 @@ lbfn void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
             if (ResetButtonID == HotID && WasPressed(GameIO->Keys[SC_MouseLeft]))
             {
                 *Value = DefaultValue;
+                MouseInputUsed = true;
             }
 
             constexpr size_t BuffSize = 128;
@@ -206,15 +214,28 @@ lbfn void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
             TextRect.Min += CurrentP;
             TextRect.Max += CurrentP;
             rgba8 TextColor = DefaultForegroundColor;
-            if (PointRectOverlap(GameIO->Mouse.P, TextRect))
+
+            b32 IsHot = PointRectOverlap(GameIO->Mouse.P, TextRect);
+            if (IsHot)
             {
-                TextColor = PackRGBA8(0xFF, 0xFF, 0x00, 0xFF);
-                if (GameIO->Keys[SC_MouseLeft].bIsDown)
+                if (WasPressed(GameIO->Keys[SC_MouseLeft]))
                 {
-                    *Value += Step * GameIO->Mouse.dP.x;
-                    *Value = Clamp(*Value, MinValue, MaxValue);
+                    Game->Debug.ActiveMenuID = CurrentID;
                 }
             }
+            if (Game->Debug.ActiveMenuID == CurrentID)
+            {
+                *Value += Step * GameIO->Mouse.dP.x;
+                *Value = Clamp(*Value, MinValue, MaxValue);
+                MouseInputUsed = true;
+            }
+
+            if ((IsHot && (Game->Debug.ActiveMenuID == INVALID_INDEX_U32)) ||
+                Game->Debug.ActiveMenuID == CurrentID)
+            {
+                TextColor = PackRGBA8(0xFF, 0xFF, 0x00, 0xFF);
+            }
+
 
             PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, TextColor, Layout);
             CurrentP.y = TextRect.Max.y;
@@ -235,4 +256,6 @@ lbfn void DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
         F32Slider("SSAO TangentTau", &Game->PostProcessParams.SSAO.TangentTau, 
                   ssao_params::DefaultTangentTau, 0.0f, 1.0f, 1e-3f);
     }
+
+    return(MouseInputUsed);
 }

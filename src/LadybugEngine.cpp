@@ -1395,7 +1395,11 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             LoadTestScene(GameState, GameIO->DroppedFilename, YUpToZUp);
         }
 
-        DoDebugUI(GameState, GameIO, RenderFrame);
+        if (DoDebugUI(GameState, GameIO, RenderFrame))
+        {
+            GameIO->Mouse.dP = { 0.0f, 0.0f };
+            GameIO->Keys[SC_MouseLeft].TransitionFlags = 0;
+        }
 
         f32 dt = GameIO->dt;
 
