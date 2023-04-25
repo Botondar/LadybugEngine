@@ -14,9 +14,6 @@ layout(push_constant) uniform PushConstants
 
 void main()
 {
-    //const float R = 0.005;
-    //const float Strength = 0.85;
-
     ivec2 InputSize = textureSize(Input, 0);
     ivec2 OutputSize = imageSize(Output);
 
