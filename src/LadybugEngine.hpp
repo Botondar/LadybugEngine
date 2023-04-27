@@ -112,7 +112,7 @@ struct game_state
     memory_arena TransientArena;
 
     vulkan Vulkan;
-    vulkan_renderer* Renderer;
+    renderer* Renderer;
 
     u64 FrameID;
 

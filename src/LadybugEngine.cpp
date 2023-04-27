@@ -165,7 +165,7 @@ lbfn void RenderMeshes(VkCommandBuffer CmdBuffer, VkPipelineLayout PipelineLayou
 
 internal void GameRender(game_state* GameState, render_frame* Frame)
 {
-    vulkan_renderer* Renderer = GameState->Renderer;
+    renderer* Renderer = GameState->Renderer;
     
     game_world* World = GameState->World;
     assets* Assets = GameState->Assets;
@@ -250,15 +250,6 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
     Frame->Uniforms.ScreenSize = { (f32)Renderer->SurfaceExtent.width, (f32)Renderer->SurfaceExtent.height };
 
     memcpy(Frame->PerFrameUniformMemory, &Frame->Uniforms, sizeof(Frame->Uniforms));
-
-    VkCommandBufferBeginInfo BeginInfo = 
-    {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .pNext = nullptr,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        .pInheritanceInfo = nullptr,
-    };
-    vkBeginCommandBuffer(Frame->CmdBuffer, &BeginInfo);
 
     {
          VkDescriptorBufferInfo Info = { Frame->PerFrameUniformBuffer, 0, sizeof(Frame->Uniforms) };
@@ -728,39 +719,6 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         .pImageMemoryBarriers = EndBarriers,
     };
     vkCmdPipelineBarrier2(Frame->CmdBuffer, &EndDependencyInfo);
-
-    vkEndCommandBuffer(Frame->CmdBuffer);
-
-    VkPipelineStageFlags WaitDstStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-
-    VkSubmitInfo SubmitInfo = 
-    {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .pNext = nullptr,
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &Frame->ImageAcquiredSemaphore,
-        .pWaitDstStageMask = &WaitDstStage,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &Frame->CmdBuffer,
-        .signalSemaphoreCount = 0,
-        .pSignalSemaphores = nullptr,
-    };
-
-    vkQueueSubmit(VK.GraphicsQueue, 1, &SubmitInfo, Frame->RenderFinishedFence);
-
-    //Assert(!"Present");
-    VkPresentInfoKHR PresentInfo = 
-    {
-        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .pNext = nullptr,
-        .waitSemaphoreCount = 0,
-        .pWaitSemaphores = nullptr,
-        .swapchainCount = 1,
-        .pSwapchains = &Renderer->Swapchain,
-        .pImageIndices = &Frame->SwapchainImageIndex,
-        .pResults = nullptr,
-    };
-    vkQueuePresentKHR(VK.GraphicsQueue, &PresentInfo);
 }
 
 internal bool AddNodeToScene(game_state* GameState, gltf* GLTF, 
@@ -1304,7 +1262,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             GameIO->bQuitRequested = true;
         }
         
-        GameState->Renderer = PushStruct<vulkan_renderer>(&GameState->TotalArena);
+        GameState->Renderer = PushStruct<renderer>(&GameState->TotalArena);
         if (CreateRenderer(GameState->Renderer, &GameState->TotalArena, &GameState->TransientArena) != VK_SUCCESS)
         {
             UnhandledError("Renderer initialization failed");
@@ -1445,6 +1403,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     }
 
     GameRender(GameState, RenderFrame);
+    EndRenderFrame(RenderFrame);
 
     GameState->FrameID++;
 }

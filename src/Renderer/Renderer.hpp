@@ -150,6 +150,9 @@ struct frame_uniform_data
 struct render_frame;
 struct renderer;
 
+render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHeight);
+void EndRenderFrame(render_frame* Frame);
+
 #include "VulkanRenderer.hpp"
 
 //

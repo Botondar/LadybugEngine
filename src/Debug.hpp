@@ -17,7 +17,7 @@ struct debug_state
 
 struct render_frame;
 
-lbfn void DEBUGRenderVBUsage(struct vulkan_renderer* Renderer, v2 P, v2 Size);
+lbfn void DEBUGRenderVBUsage(struct renderer* Renderer, v2 P, v2 Size);
 
 // NOTE(boti): returns whether mouse input was used by the UI
 lbfn b32 DoDebugUI(struct game_state* GameState, struct game_io* GameIO, render_frame* Frame);

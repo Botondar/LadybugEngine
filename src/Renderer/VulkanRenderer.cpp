@@ -2,7 +2,7 @@
 
 #define ReturnOnFailure() if (Result != VK_SUCCESS) return Result
 
-internal VkResult ResizeRenderTargets(vulkan_renderer* Renderer);
+internal VkResult ResizeRenderTargets(renderer* Renderer);
 
 internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTypes, size_t Size, 
                                           VkBuffer* pBuffer, VkDeviceMemory* pMemory)
@@ -62,7 +62,7 @@ internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTy
 
 internal VkResult CreateComputeShader(const char* Path, memory_arena* TempArena, VkPipelineLayout PipelineLayout);
 
-VkResult CreateRenderer(vulkan_renderer* Renderer, 
+VkResult CreateRenderer(renderer* Renderer, 
                              memory_arena* Arena, 
                              memory_arena* TempArena)
 {
@@ -934,7 +934,7 @@ VkResult CreateRenderer(vulkan_renderer* Renderer,
     return Result;
 }
 
-lbfn VkResult ResizeRenderTargets(vulkan_renderer* Renderer)
+lbfn VkResult ResizeRenderTargets(renderer* Renderer)
 {
     VkResult Result = VK_SUCCESS;
 
@@ -1081,7 +1081,7 @@ lbfn VkResult ResizeRenderTargets(vulkan_renderer* Renderer)
     return Result;
 }
 
-geometry_buffer_allocation UploadVertexData(vulkan_renderer* Renderer, 
+geometry_buffer_allocation UploadVertexData(renderer* Renderer, 
                                                      u32 VertexCount, const vertex* VertexData,
                                                      u32 IndexCount, const vert_index* IndexData)
 {
@@ -1160,7 +1160,7 @@ geometry_buffer_allocation UploadVertexData(vulkan_renderer* Renderer,
 
 #undef ReturnOnFailure
 
-void CreateDebugFontImage(vulkan_renderer* Renderer, u32 Width, u32 Height, const void* Texels)
+void CreateDebugFontImage(renderer* Renderer, u32 Width, u32 Height, const void* Texels)
 {
     VkImageCreateInfo ImageInfo = 
     {
@@ -1383,7 +1383,7 @@ void CreateDebugFontImage(vulkan_renderer* Renderer, u32 Width, u32 Height, cons
     }
 }
 
-texture_id PushTexture(vulkan_renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format)
+texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format)
 {
     texture_id Result = { INVALID_INDEX_U32 };
 
@@ -1549,10 +1549,11 @@ internal bool BumpBuffer_(vulkan_buffer* Buffer, size_t Size)
     return Result;
 }
 
-render_frame* BeginRenderFrame(vulkan_renderer* Renderer, u32 OutputWidth, u32 OutputHeight)
+render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHeight)
 {
     u32 FrameID = (u32)(Renderer->CurrentFrameID++ % Renderer->SwapchainImageCount);
     render_frame* Frame = Renderer->Frames + FrameID;
+    Frame->Renderer = Renderer;
 
     Frame->SwapchainImageIndex = INVALID_INDEX_U32;
     Frame->RenderFrameID = FrameID;
@@ -1631,5 +1632,49 @@ render_frame* BeginRenderFrame(vulkan_renderer* Renderer, u32 OutputWidth, u32 O
     Frame->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrameUniformData]);
 
     Assert(Frame->SwapchainImageIndex != INVALID_INDEX_U32);
+
+    VkCommandBufferBeginInfo CmdBufferBegin = 
+    {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = nullptr,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pInheritanceInfo = nullptr,
+    };
+    vkBeginCommandBuffer(Frame->CmdBuffer, &CmdBufferBegin);
+
     return Frame;
+}
+
+void EndRenderFrame(render_frame* Frame)
+{
+    vkEndCommandBuffer(Frame->CmdBuffer);
+
+    VkPipelineStageFlags WaitDstStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    VkSubmitInfo SubmitInfo = 
+    {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pNext = nullptr,
+        .waitSemaphoreCount= 1,
+        .pWaitSemaphores = &Frame->ImageAcquiredSemaphore,
+        .pWaitDstStageMask = &WaitDstStage,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &Frame->CmdBuffer,
+        .signalSemaphoreCount = 0,
+        .pSignalSemaphores = nullptr,
+    };
+
+    vkQueueSubmit(VK.GraphicsQueue, 1, &SubmitInfo, Frame->RenderFinishedFence);
+
+    VkPresentInfoKHR PresentInfo = 
+    {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pNext = nullptr,
+        .waitSemaphoreCount = 0,
+        .pWaitSemaphores = nullptr,
+        .swapchainCount = 1,
+        .pSwapchains = &Frame->Renderer->Swapchain,
+        .pImageIndices = &Frame->SwapchainImageIndex,
+        .pResults = nullptr,
+    };
+    vkQueuePresentKHR(VK.GraphicsQueue, &PresentInfo);
 }

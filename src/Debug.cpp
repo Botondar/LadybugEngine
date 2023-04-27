@@ -1,7 +1,7 @@
 #include "Debug.hpp"
 
 #if 0
-lbfn void DEBUGRenderVBUsage(vulkan_renderer* Renderer, v2 P, v2 Size)
+lbfn void DEBUGRenderVBUsage(renderer* Renderer, v2 P, v2 Size)
 {
     f32 Scale =  Size.x / Renderer->GeometryBuffer.MemorySize;
     for (geometry_buffer_block* Block = Renderer->GeometryBuffer.FreeVertexBlocks.Next; 
@@ -175,7 +175,7 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
     }
     else if (Game->Debug.SelectedMenuID == GPUMenuID)
     {
-        vulkan_renderer* Renderer = Game->Renderer;
+        renderer* Renderer = Game->Renderer;
 
         TextLine("RenderTarget memory: %llu/%llu MB",
                      Renderer->RenderTargetHeap.Offset >> 20,

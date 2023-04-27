@@ -206,7 +206,7 @@ struct pipeline_with_layout
     VkPipelineLayout Layout;
 };
 
-struct vulkan_renderer
+struct renderer
 {
     VkSurfaceFormatKHR SurfaceFormat;
     VkSurfaceKHR Surface;
@@ -292,19 +292,13 @@ struct vulkan_renderer
     render_frame Frames[MaxSwapchainImageCount];
 };
 
-VkResult CreateRenderer(vulkan_renderer* Renderer, 
-                             memory_arena* Arena, 
-                             memory_arena* TempArena);
+VkResult CreateRenderer(renderer* Renderer, 
+                        memory_arena* Arena, 
+                        memory_arena* TempArena);
 
-geometry_buffer_allocation UploadVertexData(vulkan_renderer* Renderer, 
+geometry_buffer_allocation UploadVertexData(renderer* Renderer, 
                                                  u32 VertexCount, const vertex* VertexData,
                                                  u32 IndexCount, const vert_index* IndexData);
-texture_id PushTexture(vulkan_renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format);
+texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format);
 
-void CreateDebugFontImage(vulkan_renderer* Renderer, u32 Width, u32 Height, const void* Texels);
-
-//
-// Render API
-//
-
-render_frame* BeginRenderFrame(vulkan_renderer* Renderer, u32 OutputWidth, u32 OutputHeight);
+void CreateDebugFontImage(renderer* Renderer, u32 Width, u32 Height, const void* Texels);
