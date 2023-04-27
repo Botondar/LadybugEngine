@@ -49,54 +49,53 @@ struct render_frame
     frame_uniform_data Uniforms;
 };
 
-lbfn VkDescriptorSet PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayout Layout);
-lbfn VkDescriptorSet PushBufferDescriptor(render_frame* Frame, 
-                                          VkDescriptorSetLayout Layout,
-                                          VkDescriptorType Type,
-                                          VkBuffer Buffer, u64 Offset, u64 Size);
-lbfn VkDescriptorSet PushImageDescriptor(render_frame* Frame, 
-                                         VkDescriptorSetLayout Layout,
-                                         VkDescriptorType Type,
-                                         VkImageView View, VkImageLayout ImageLayout);
+VkDescriptorSet PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayout Layout);
+VkDescriptorSet PushBufferDescriptor(render_frame* Frame, 
+                                     VkDescriptorSetLayout Layout,
+                                     VkDescriptorType Type,
+                                     VkBuffer Buffer, u64 Offset, u64 Size);
+VkDescriptorSet PushImageDescriptor(render_frame* Frame, 
+                                    VkDescriptorSetLayout Layout,
+                                    VkDescriptorType Type,
+                                    VkImageView View, VkImageLayout ImageLayout);
 
 //
 // Immediate-mode rendering
 //
 
-lbfn void RenderImmediates(render_frame* Frame, 
+void RenderImmediates(render_frame* Frame, 
                            VkPipeline Pipeline, VkPipelineLayout PipelineLayout,
                            VkDescriptorSet DescriptorSet);
 
-lbfn void PushRect(render_frame* Frame, 
+void PushRect(render_frame* Frame, 
                    v2 P1, v2 P2, 
                    v2 UV1, v2 UV2, 
                    rgba8 Color);
-lbfn mmrect2 PushText(render_frame* Frame, const char* Text, const font* Font, 
+mmrect2 PushText(render_frame* Frame, const char* Text, const font* Font, 
              f32 Size, v2 P, rgba8 Color, font_layout_type Layout = font_layout_type::Baseline);
 
-lbfn mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Font,                        f32 Size, v2 P, rgba8 Color, font_layout_type Layout = font_layout_type::Baseline);
+mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Font,                        f32 Size, v2 P, rgba8 Color, font_layout_type Layout = font_layout_type::Baseline);
 
 
 //
 // Rendering
 //
-lbfn void BeginPrepass(render_frame* Frame);
-lbfn void EndPrepass(render_frame* Frame);
+void BeginPrepass(render_frame* Frame);
+void EndPrepass(render_frame* Frame);
 
-lbfn void BeginCascade(render_frame* Frame, u32 CascadeIndex);
-lbfn void EndCascade(render_frame* Frame);
+void BeginCascade(render_frame* Frame, u32 CascadeIndex);
+void EndCascade(render_frame* Frame);
 
-lbfn void RenderSSAO(render_frame* Frame,
+void RenderSSAO(render_frame* Frame,
                      ssao_params Params,
                      VkPipeline Pipeline, VkPipelineLayout PipelineLayout,
                      VkDescriptorSetLayout SetLayout,
                      VkPipeline BlurPipeline, VkPipelineLayout BlurPipelineLayout,
                      VkDescriptorSetLayout BlurSetLayout);
 
-lbfn void BeginForwardPass(render_frame* Frame);
-lbfn void EndForwardPass(render_frame* Frame);
-
-lbfn void RenderBloom(render_frame* Frame,
+void BeginForwardPass(render_frame* Frame);
+void EndForwardPass(render_frame* Frame);
+void RenderBloom(render_frame* Frame,
                       bloom_params Params,
                       render_target* SrcRT,
                       render_target* DstRT,

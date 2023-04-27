@@ -1,4 +1,4 @@
-lbfn void SetupShadowCascades(shadow_cascades* Cascades, const render_camera* Camera, v3 SunV, f32 CascadeResolution)
+void SetupShadowCascades(shadow_cascades* Cascades, const render_camera* Camera, v3 SunV, f32 CascadeResolution)
 {
     v3 SunZ = -SunV;
     v3 SunX, SunY;

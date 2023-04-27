@@ -1,7 +1,7 @@
 #include "LadybugEngine.hpp"
 
 #include "LadybugLib/LBLibBuild.cpp"
-#include "Renderer/Renderer.cpp"
+//#include "Renderer/Renderer.cpp"
 
 #include "Debug.cpp"
 #include "Font.cpp"

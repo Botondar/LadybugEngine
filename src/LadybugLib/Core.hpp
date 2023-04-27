@@ -20,6 +20,17 @@
 #error Unsupported compiler
 #endif
 
+#if defined(__X86_64__) || defined(__x86_64__) || defined(_M_X64)
+#define LB_ARCH_X64 1
+#else 
+#error Unknown target architecture
+#endif
+
+#if !LB_ARCH_X64
+#error Unsupported target architecture
+#endif
+
+
 #include <cstdint>
 #include <cstddef>
 #include <cfloat>

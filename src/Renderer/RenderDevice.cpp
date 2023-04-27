@@ -1,4 +1,4 @@
-lbfn VkResult InitializeVulkan(vulkan* Vulkan)
+VkResult InitializeVulkan(vulkan* Vulkan)
 {
     VkResult Result = VK_SUCCESS;
 

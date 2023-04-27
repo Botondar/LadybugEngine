@@ -1,3 +1,11 @@
+#pragma once
+
+#include <LadybugLib/Core.hpp>
+#include <LadybugLib/Intrinsics.hpp>
+#include <LadybugLib/String.hpp>
+#include "Font.hpp"
+#include "Platform.hpp"
+
 //
 // Config
 //
@@ -141,6 +149,8 @@ struct frame_uniform_data
 
 struct render_frame;
 struct renderer;
+
+#include "VulkanRenderer.hpp"
 
 //
 // Implementation

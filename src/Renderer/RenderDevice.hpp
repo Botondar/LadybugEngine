@@ -36,4 +36,4 @@ struct vulkan
     VkPhysicalDeviceDescriptorIndexingFeatures DescriptorIndexingFeatures;
 };
 
-lbfn VkResult InitializeVulkan(vulkan* Vulkan);
+VkResult InitializeVulkan(vulkan* Vulkan);

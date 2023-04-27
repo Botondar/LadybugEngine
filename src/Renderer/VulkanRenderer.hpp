@@ -1,8 +1,5 @@
 #pragma once
 
-#include "LadybugLib/Core.hpp"
-#include "Renderer/Renderer.hpp"
-
 #include <vulkan/vulkan.h>
 
 //
@@ -295,22 +292,19 @@ struct vulkan_renderer
     render_frame Frames[MaxSwapchainImageCount];
 };
 
-lbfn VkResult CreateRenderer(vulkan_renderer* Renderer, 
+VkResult CreateRenderer(vulkan_renderer* Renderer, 
                              memory_arena* Arena, 
                              memory_arena* TempArena);
 
-lbfn VkResult ResizeRenderTargets(vulkan_renderer* Renderer);
-
-lbfn geometry_buffer_allocation UploadVertexData(vulkan_renderer* Renderer, 
+geometry_buffer_allocation UploadVertexData(vulkan_renderer* Renderer, 
                                                  u32 VertexCount, const vertex* VertexData,
                                                  u32 IndexCount, const vert_index* IndexData);
-lbfn texture_id PushTexture(vulkan_renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format);
+texture_id PushTexture(vulkan_renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format);
 
-lbfn void CreateDebugFontImage(vulkan_renderer* Renderer, u32 Width, u32 Height, const void* Texels);
+void CreateDebugFontImage(vulkan_renderer* Renderer, u32 Width, u32 Height, const void* Texels);
 
 //
 // Render API
 //
 
-// NOTE(boti): returns the current swapchain image index
-lbfn render_frame* BeginRenderFrame(vulkan_renderer* Renderer, u32 OutputWidth, u32 OutputHeight);
+render_frame* BeginRenderFrame(vulkan_renderer* Renderer, u32 OutputWidth, u32 OutputHeight);

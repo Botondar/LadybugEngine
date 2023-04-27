@@ -1,5 +1,5 @@
 
-lbfn VkDescriptorSet PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayout Layout)
+VkDescriptorSet PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayout Layout)
 {
     VkDescriptorSet Set = VK_NULL_HANDLE;
 
@@ -20,7 +20,7 @@ lbfn VkDescriptorSet PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayou
 
     return Set;
 }
-lbfn VkDescriptorSet PushBufferDescriptor(render_frame* Frame, 
+VkDescriptorSet PushBufferDescriptor(render_frame* Frame, 
                                           VkDescriptorSetLayout Layout,
                                           VkDescriptorType Type,
                                           VkBuffer Buffer, u64 Offset, u64 Size)
@@ -49,7 +49,7 @@ lbfn VkDescriptorSet PushBufferDescriptor(render_frame* Frame,
     }
     return Set;
 }
-lbfn VkDescriptorSet PushImageDescriptor(render_frame* Frame, 
+VkDescriptorSet PushImageDescriptor(render_frame* Frame, 
                                          VkDescriptorSetLayout Layout,
                                          VkDescriptorType Type,
                                          VkImageView View, VkImageLayout ImageLayout)
@@ -78,7 +78,7 @@ lbfn VkDescriptorSet PushImageDescriptor(render_frame* Frame,
 }
 
 
-lbfn void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color)
+void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color)
 {
     ui_vertex VertexData[] = 
     {
@@ -112,7 +112,7 @@ lbfn void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Colo
 // Immediate-mode rendering
 //
 
-lbfn void RenderImmediates(render_frame* Frame, 
+void RenderImmediates(render_frame* Frame, 
                            VkPipeline Pipeline, VkPipelineLayout PipelineLayout,
                            VkDescriptorSet DescriptorSet)
 {
@@ -142,7 +142,7 @@ lbfn void RenderImmediates(render_frame* Frame,
     vkCmdDrawIndirect(Frame->CmdBuffer, Frame->DrawBuffer.Buffer, 0, Frame->DrawCount, sizeof(VkDrawIndirectCommand));
 }
 
-lbfn mmrect2 PushText(render_frame* Frame, const char* Text, const font* Font, 
+mmrect2 PushText(render_frame* Frame, const char* Text, const font* Font, 
                       f32 Size, v2 P, rgba8 Color, 
                       font_layout_type Layout /*= font_layout_type::Baseline*/)
 {
@@ -184,7 +184,7 @@ lbfn mmrect2 PushText(render_frame* Frame, const char* Text, const font* Font,
     return Result;
 }
 
-lbfn mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Font, 
+mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Font, 
                                 f32 Size, v2 P, rgba8 Color, 
                                 font_layout_type Layout /*= font_layout_type::Baseline*/)
 {
@@ -197,7 +197,7 @@ lbfn mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const fon
 //
 // Rendering
 //
-lbfn void BeginPrepass(render_frame* Frame)
+void BeginPrepass(render_frame* Frame)
 {
     VkViewport Viewport = 
     {
@@ -321,12 +321,12 @@ lbfn void BeginPrepass(render_frame* Frame)
     vkCmdBeginRendering(Frame->CmdBuffer, &RenderingInfo);
 }
 
-lbfn void EndPrepass(render_frame* Frame)
+void EndPrepass(render_frame* Frame)
 {
     vkCmdEndRendering(Frame->CmdBuffer);
 }
 
-lbfn void BeginCascade(render_frame* Frame, u32 CascadeIndex)
+void BeginCascade(render_frame* Frame, u32 CascadeIndex)
 {
     VkViewport Viewport = 
     {
@@ -412,12 +412,12 @@ lbfn void BeginCascade(render_frame* Frame, u32 CascadeIndex)
     vkCmdBeginRendering(Frame->CmdBuffer, &RenderingInfo);
 }
 
-lbfn void EndCascade(render_frame* Frame)
+void EndCascade(render_frame* Frame)
 {
     vkCmdEndRendering(Frame->CmdBuffer);
 }
 
-lbfn void RenderSSAO(render_frame* Frame,
+void RenderSSAO(render_frame* Frame,
                      ssao_params Params,
                      VkPipeline Pipeline, VkPipelineLayout PipelineLayout, 
                      VkDescriptorSetLayout SetLayout,
@@ -730,7 +730,7 @@ lbfn void RenderSSAO(render_frame* Frame,
     }
 }
 
-lbfn void BeginForwardPass(render_frame* Frame)
+void BeginForwardPass(render_frame* Frame)
 {
     VkViewport Viewport = 
     {
@@ -873,12 +873,12 @@ lbfn void BeginForwardPass(render_frame* Frame)
     vkCmdBeginRendering(Frame->CmdBuffer, &RenderingInfo);
 }
 
-lbfn void EndForwardPass(render_frame* Frame)
+void EndForwardPass(render_frame* Frame)
 {
     vkCmdEndRendering(Frame->CmdBuffer);
 }
 
-lbfn void RenderBloom(render_frame* Frame,
+void RenderBloom(render_frame* Frame,
                       bloom_params Params,
                       render_target* SrcRT,
                       render_target* DstRT,

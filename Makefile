@@ -30,15 +30,17 @@ SHADERS = build/blit.vs build/blit.fs build/shader.vs build/shader.fs build/prep
     build/fx.vs build/fx.fs \
     build/quad.vs build/quad.fs
 
-all: "$(OUT)/Win_LadybugEngine.exe" "$(OUT)/game.dll" $(SHADERS)
+all: "$(OUT)/Win_LadybugEngine.exe" "$(OUT)/game.dll" "$(OUT)/renderer.obj" $(SHADERS)
 
 clean: 
     @del /q build\*.*
 
+"$(OUT)/renderer.obj": $(SRC_LBLIB) $(SRC_RENDERER)
+    @cl $(CXX_FLAGS) -c "src/Renderer/Renderer.cpp" -Fo: "$@" -Fd:"$(OUT)/"
 "$(OUT)/Win_LadybugEngine.exe": $(SRC_ALL)
     @cl $(CXX_FLAGS) "src/Win_LadybugEngine.cpp" -Fe: "$@" -Fo: "$(OUT)/" -Fd: "$(OUT)/" $(LIBS) -link $(LINK_FLAGS)
-"$(OUT)/game.dll": $(SRC_ALL)
-    @cl $(CXX_FLAGS) "src/LadybugEngine.cpp" -Fo: "$(OUT)/" -Fd: "$(OUT)/" $(LIBS) -link -DLL -OUT:$@ $(LINK_FLAGS) $(GAME_EXPORT)
+"$(OUT)/game.dll": $(SRC_ALL) "$(OUT)/renderer.obj"
+    @cl $(CXX_FLAGS) "src/LadybugEngine.cpp" -Fo: "$(OUT)/" -Fd: "$(OUT)/" $(LIBS) "$(OUT)/renderer.obj" -link -DLL -OUT:$@ $(LINK_FLAGS) $(GAME_EXPORT)
 
 {$(SRC)/Shader/}.glsl{$(OUT)/}.vs:
     glslc --target-env=vulkan1.3 -DVS -fshader-stage=vert -o "$(OUT)/$(@B).vs" "$<"

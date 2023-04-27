@@ -2,6 +2,8 @@
 
 #define ReturnOnFailure() if (Result != VK_SUCCESS) return Result
 
+internal VkResult ResizeRenderTargets(vulkan_renderer* Renderer);
+
 internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTypes, size_t Size, 
                                           VkBuffer* pBuffer, VkDeviceMemory* pMemory)
 {
@@ -60,7 +62,7 @@ internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTy
 
 internal VkResult CreateComputeShader(const char* Path, memory_arena* TempArena, VkPipelineLayout PipelineLayout);
 
-lbfn VkResult CreateRenderer(vulkan_renderer* Renderer, 
+VkResult CreateRenderer(vulkan_renderer* Renderer, 
                              memory_arena* Arena, 
                              memory_arena* TempArena)
 {
@@ -1079,7 +1081,7 @@ lbfn VkResult ResizeRenderTargets(vulkan_renderer* Renderer)
     return Result;
 }
 
-lbfn geometry_buffer_allocation UploadVertexData(vulkan_renderer* Renderer, 
+geometry_buffer_allocation UploadVertexData(vulkan_renderer* Renderer, 
                                                      u32 VertexCount, const vertex* VertexData,
                                                      u32 IndexCount, const vert_index* IndexData)
 {
@@ -1158,7 +1160,7 @@ lbfn geometry_buffer_allocation UploadVertexData(vulkan_renderer* Renderer,
 
 #undef ReturnOnFailure
 
-lbfn void CreateDebugFontImage(vulkan_renderer* Renderer, u32 Width, u32 Height, const void* Texels)
+void CreateDebugFontImage(vulkan_renderer* Renderer, u32 Width, u32 Height, const void* Texels)
 {
     VkImageCreateInfo ImageInfo = 
     {
@@ -1381,7 +1383,7 @@ lbfn void CreateDebugFontImage(vulkan_renderer* Renderer, u32 Width, u32 Height,
     }
 }
 
-lbfn texture_id PushTexture(vulkan_renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format)
+texture_id PushTexture(vulkan_renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format)
 {
     texture_id Result = { INVALID_INDEX_U32 };
 
@@ -1547,7 +1549,7 @@ internal bool BumpBuffer_(vulkan_buffer* Buffer, size_t Size)
     return Result;
 }
 
-lbfn render_frame* BeginRenderFrame(vulkan_renderer* Renderer, u32 OutputWidth, u32 OutputHeight)
+render_frame* BeginRenderFrame(vulkan_renderer* Renderer, u32 OutputWidth, u32 OutputHeight)
 {
     u32 FrameID = (u32)(Renderer->CurrentFrameID++ % Renderer->SwapchainImageCount);
     render_frame* Frame = Renderer->Frames + FrameID;

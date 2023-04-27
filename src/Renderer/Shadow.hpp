@@ -24,4 +24,4 @@ struct shadow_cascades
     f32 Fd[MaxCascadeCount];
 };
 
-lbfn void SetupShadowCascades(shadow_cascades* Cascades, const render_camera* Camera, v3 SunV);
+void SetupShadowCascades(shadow_cascades* Cascades, const render_camera* Camera, v3 SunV, f32 CascadeResolution);

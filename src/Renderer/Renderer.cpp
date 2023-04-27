@@ -1,3 +1,5 @@
+#include "Renderer.hpp"
+
 #include "VulkanRenderer.cpp"
 #include "RenderDevice.cpp"
 #include "Frame.cpp"
