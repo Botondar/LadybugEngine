@@ -1392,6 +1392,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 0.0f, 1.0f, 0.0f, 0.0f,
                 0.0f, 0.0f, 0.0f, 1.0f);
             LoadTestScene(GameState, GameIO->DroppedFilename, YUpToZUp);
+            GameIO->bHasDroppedFile = false;
         }
 
         if (DoDebugUI(GameState, GameIO, RenderFrame))
