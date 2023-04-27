@@ -36,8 +36,8 @@ vec3 CIEClearSky(vec3 V, bool DoSun)
     vec3 Up = PerFrame.View[2].xyz;//Viewvec3(0.0, 0.0, 1.0)
 
     vec3 SkyV = dot(V, Up) >= 0.0 ? V : reflect(V, Up);
-    float CosGamma = dot(SkyV, PerFrame.SunV);
-    float CosS = dot(PerFrame.SunV, Up);
+    float CosGamma = dot(V, PerFrame.SunV);
+    float CosS = max(dot(PerFrame.SunV, Up), 0.0);
     float CosTheta = dot(SkyV, Up);
 
     float Gamma = acos(CosGamma);

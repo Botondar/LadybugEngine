@@ -15,6 +15,7 @@ enum sampler : u32
     Sampler_RenderTargetUnnormalized,
     Sampler_Shadow,
     Sampler_RenderTargetNormalized,
+    Sampler_RenderTargetNormalizedClampToEdge,
 
     Sampler_Count,
 };

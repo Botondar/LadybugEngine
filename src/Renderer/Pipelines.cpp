@@ -64,7 +64,7 @@ const VkSamplerCreateInfo SamplerInfos[Sampler_Count] =
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
         .mipLodBias = 0.0f,
         .anisotropyEnable = VK_TRUE,
-        .maxAnisotropy = 4.0f,
+        .maxAnisotropy = 16.0f,
         .compareEnable = VK_FALSE,
         .compareOp = VK_COMPARE_OP_ALWAYS,
         .minLod = 0.0f,
@@ -125,6 +125,28 @@ const VkSamplerCreateInfo SamplerInfos[Sampler_Count] =
         .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,//VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,//VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,//VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 0.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = VK_LOD_CLAMP_NONE,
+        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE,
+    },
+
+    //Sampler_RenderTargetNormalizedClampToEdge
+    {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         .mipLodBias = 0.0f,
         .anisotropyEnable = VK_FALSE,
         .maxAnisotropy = 0.0f,
@@ -253,7 +275,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
-    // Bloom
+    // Bloom downsample
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 2,
@@ -264,7 +286,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .DescriptorCount = 1,
                 .StageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-                .ImmutableSampler = Sampler_RenderTargetNormalized,
+                .ImmutableSampler = Sampler_RenderTargetNormalizedClampToEdge,
             },
             {
                 .Binding = 1,
@@ -339,14 +361,14 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .DescriptorCount = 1,
                 .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .ImmutableSampler = Sampler_RenderTargetNormalized,
+                .ImmutableSampler = Sampler_RenderTargetNormalizedClampToEdge,
             },
             {
                 .Binding = 1,
                 .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .DescriptorCount = 1,
                 .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .ImmutableSampler = Sampler_RenderTargetNormalized,
+                .ImmutableSampler = Sampler_RenderTargetNormalizedClampToEdge,
             },
         },
     },

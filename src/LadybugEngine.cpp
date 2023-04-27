@@ -345,10 +345,8 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
                                sizeof(push_constants), sizeof(u32), &Cascade);
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                     0, 3, DescriptorSets, 0, nullptr);
-#if 1
             RenderMeshes(Frame->CmdBuffer, Pipeline.Layout,
                          &Renderer->GeometryBuffer, GameState);
-#endif
 
             EndCascade(Frame);
         }

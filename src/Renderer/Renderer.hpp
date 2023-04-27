@@ -24,8 +24,8 @@ struct ssao_params
     f32 MaxDistance;
     f32 TangentTau;
 
-    static constexpr f32 DefaultIntensity = 5.0f;
-    static constexpr f32 DefaultMaxDistance = 1.0f;
+    static constexpr f32 DefaultIntensity = 8.0f;
+    static constexpr f32 DefaultMaxDistance = 0.5f;
     static constexpr f32 DefaultTangentTau = 0.03125;
 };
 
@@ -36,8 +36,8 @@ struct bloom_params
     f32 Strength;
 
     static constexpr f32 DefaultFilterRadius = 0.005f;
-    static constexpr f32 DefaultInternalStrength = 0.85f;
-    static constexpr f32 DefaultStrength = 0.2f;
+    static constexpr f32 DefaultInternalStrength = 0.4f;
+    static constexpr f32 DefaultStrength = 0.3f;
 };
 
 struct post_process_params
