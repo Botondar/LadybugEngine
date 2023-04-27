@@ -2,14 +2,6 @@
 
 #include "LadybugLib/LBLibBuild.cpp"
 #include "Renderer/Renderer.cpp"
-#include "Renderer/VulkanRenderer.cpp"
-#include "Renderer/RenderDevice.cpp"
-#include "Renderer/Geometry.cpp"
-#include "Renderer/RenderTarget.cpp"
-#include "Renderer/TextureManager.cpp"
-#include "Renderer/Shadow.cpp"
-#include "Renderer/Frame.cpp"
-#include "Renderer/Pipelines.cpp"
 
 #include "Debug.cpp"
 #include "Font.cpp"
