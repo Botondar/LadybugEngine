@@ -118,16 +118,6 @@ void RenderImmediates(render_frame* Frame,
 {
     vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline);
 
-    VkViewport Viewport = 
-    {
-        0.0f, 0.0f,
-        (f32)Frame->RenderExtent.width, (f32)Frame->RenderExtent.height,
-        0.0f, 0.0f,
-    };
-    VkRect2D Scissor = { { 0, 0 }, Frame->RenderExtent };
-    vkCmdSetViewport(Frame->CmdBuffer, 0, 1, &Viewport);
-    vkCmdSetScissor(Frame->CmdBuffer, 0, 1, &Scissor);
-
     vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PipelineLayout, 0, 1, &DescriptorSet, 0, nullptr);
 
     VkDeviceSize VBOffset = 0;
@@ -199,18 +189,6 @@ mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Fo
 //
 void BeginPrepass(render_frame* Frame)
 {
-    VkViewport Viewport = 
-    {
-        0.0f, 0.0f,
-        (f32)Frame->RenderExtent.width, (f32)Frame->RenderExtent.height,
-        0.0f, 1.0f,
-    };
-
-    VkRect2D Scissor = { { 0, 0 }, Frame->RenderExtent };
-
-    vkCmdSetViewport(Frame->CmdBuffer, 0, 1, &Viewport);
-    vkCmdSetScissor(Frame->CmdBuffer, 0, 1, &Scissor);
-
     VkImageMemoryBarrier2 BeginBarriers[] = 
     {
         // Structure buffer
@@ -328,23 +306,6 @@ void EndPrepass(render_frame* Frame)
 
 void BeginCascade(render_frame* Frame, u32 CascadeIndex)
 {
-    VkViewport Viewport = 
-    {
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = (f32)R_ShadowResolution,
-        .height = (f32)R_ShadowResolution,
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-    };
-    VkRect2D Scissor = 
-    {
-        .offset = { 0, 0 },
-        .extent = { R_ShadowResolution, R_ShadowResolution },
-    };
-    vkCmdSetViewport(Frame->CmdBuffer, 0, 1, &Viewport);
-    vkCmdSetScissor(Frame->CmdBuffer, 0, 1, &Scissor);
-
     VkImageMemoryBarrier2 BeginBarriers[] = 
     {
         {
@@ -732,17 +693,6 @@ void RenderSSAO(render_frame* Frame,
 
 void BeginForwardPass(render_frame* Frame)
 {
-    VkViewport Viewport = 
-    {
-        0.0f, 0.0f,
-        (f32)Frame->RenderExtent.width, (f32)Frame->RenderExtent.height,
-        0.0f, 1.0f,
-    };
-    VkRect2D Scissor = { { 0, 0 }, Frame->RenderExtent };
-
-    vkCmdSetViewport(Frame->CmdBuffer, 0, 1, &Viewport);
-    vkCmdSetScissor(Frame->CmdBuffer, 0, 1, &Scissor);
-
     VkImageMemoryBarrier2 BeginBarriers[] = 
     {
         // HDR RT

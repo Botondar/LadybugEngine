@@ -170,102 +170,21 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
     game_world* World = GameState->World;
     assets* Assets = GameState->Assets;
 
-    const f32 AspectRatio = (f32)Frame->RenderExtent.width / (f32)Frame->RenderExtent.height;
-
-    const f32 FocalLength = 1.0f / Tan(0.5f * World->Camera.FieldOfView);
-
     m4 CameraTransform = GetTransform(&World->Camera);
     m4 ViewTransform = AffineOrthonormalInverse(CameraTransform);
-    m4 ProjectionTransform = PerspectiveFov(World->Camera.FieldOfView, AspectRatio, World->Camera.NearZ, World->Camera.FarZ);
-
-    frustum PrimaryFrustum = {};
-    {
-        f32 s = AspectRatio;
-        f32 g = FocalLength;
-        f32 n = World->Camera.NearZ;
-        f32 f = World->Camera.FarZ;
-
-        f32 g2 = g*g;
-        f32 mx = 1.0f / Sqrt(g2 + AspectRatio*AspectRatio);
-        f32 my = 1.0f / Sqrt(g2 + 1.0f);
-
-        PrimaryFrustum.Left   = v4{ -g * mx, 0.0f, s * mx, 0.0f } * ViewTransform;
-        PrimaryFrustum.Right  = v4{ +g * mx, 0.0f, s * mx, 0.0f } * ViewTransform;
-        PrimaryFrustum.Top    = v4{ 0.0f, -g * my, my, 0.0f } * ViewTransform;
-        PrimaryFrustum.Bottom = v4{ 0.0f, +g * my, my, 0.0f } * ViewTransform;
-        PrimaryFrustum.Near   = v4{ 0.0f, 0.0f, +1.0f, -n } * ViewTransform;
-        PrimaryFrustum.Far    = v4{ 0.0f, 0.0f, -1.0f, +f } * ViewTransform;
-    }
-
-    //
-    // Sun
-    // 
-    v3 SunL = World->SunL;
-    v3 SunV = World->SunV;
-    
-    render_camera RenderCamera = 
+    render_camera Camera = 
     {
         .CameraTransform = CameraTransform,
         .ViewTransform = ViewTransform,
-        .ProjectionTransform = ProjectionTransform,
-        .ViewProjectionTransform = ProjectionTransform * ViewTransform,
-        .AspectRatio = AspectRatio,
-        .FocalLength = FocalLength,
+        .FocalLength = 1.0f / Tan(0.5f * World->Camera.FieldOfView),
         .NearZ = World->Camera.NearZ,
         .FarZ = World->Camera.FarZ,
     };
-    shadow_cascades Cascades;
-    SetupShadowCascades(&Cascades, &RenderCamera, SunV, (f32)R_ShadowResolution);
 
-    //
-    // Frame uniform data
-    //
-    v4 SunVCamera = ViewTransform * v4{ SunV.x, SunV.y, SunV.z, 0.0f };
-    Frame->Uniforms.CameraTransform = CameraTransform;
-    Frame->Uniforms.ViewTransform = ViewTransform;
-    Frame->Uniforms.ProjectionTransform = ProjectionTransform;
-    Frame->Uniforms.ViewProjectionTransform = ProjectionTransform * ViewTransform;
-    Frame->Uniforms.CascadeViewProjection = Cascades.ViewProjection;
-    Frame->Uniforms.CascadeMinDistances[0] = Cascades.Nd[0];
-    Frame->Uniforms.CascadeMinDistances[1] = Cascades.Nd[1];
-    Frame->Uniforms.CascadeMinDistances[2] = Cascades.Nd[2];
-    Frame->Uniforms.CascadeMinDistances[3] = Cascades.Nd[3];
-    Frame->Uniforms.CascadeMaxDistances[0] = Cascades.Fd[0];
-    Frame->Uniforms.CascadeMaxDistances[1] = Cascades.Fd[1];
-    Frame->Uniforms.CascadeMaxDistances[2] = Cascades.Fd[2];
-    Frame->Uniforms.CascadeMaxDistances[3] = Cascades.Fd[3];
-    Frame->Uniforms.CascadeScales[0] = Cascades.Scales[0];
-    Frame->Uniforms.CascadeScales[1] = Cascades.Scales[1];
-    Frame->Uniforms.CascadeScales[2] = Cascades.Scales[2];
-    Frame->Uniforms.CascadeOffsets[0] = Cascades.Offsets[0];
-    Frame->Uniforms.CascadeOffsets[1] = Cascades.Offsets[1];
-    Frame->Uniforms.CascadeOffsets[2] = Cascades.Offsets[2];
-    Frame->Uniforms.FocalLength = FocalLength;
-    Frame->Uniforms.AspectRatio = AspectRatio;
-    Frame->Uniforms.NearZ = World->Camera.NearZ;
-    Frame->Uniforms.FarZ = World->Camera.FarZ;
-    Frame->Uniforms.CameraP = World->Camera.P;
-    Frame->Uniforms.SunV = { SunVCamera.x, SunVCamera.y, SunVCamera.z };
-    Frame->Uniforms.SunL = SunL;
-    Frame->Uniforms.ScreenSize = { (f32)Renderer->SurfaceExtent.width, (f32)Renderer->SurfaceExtent.height };
+    SetRenderCamera(Frame, &Camera);
+    SetLights(Frame, World->SunV, World->SunL);
 
-    memcpy(Frame->PerFrameUniformMemory, &Frame->Uniforms, sizeof(Frame->Uniforms));
-
-    {
-         VkDescriptorBufferInfo Info = { Frame->PerFrameUniformBuffer, 0, sizeof(Frame->Uniforms) };
-         VkWriteDescriptorSet Write = 
-         {
-             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-             .pNext = nullptr,
-             .dstSet = Frame->UniformDescriptorSet,
-             .dstBinding = 0,
-             .dstArrayElement = 0,
-             .descriptorCount = 1 ,
-             .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-             .pBufferInfo = &Info,
-         };
-         vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
-    }
+    BeginSceneRendering(Frame);
 
     VkDescriptorSet OcclusionDescriptorSet = PushImageDescriptor(
         Frame,
@@ -302,8 +221,6 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         .offset = { 0, 0 },
         .extent = Renderer->SurfaceExtent,
     };
-    vkCmdSetViewport(Frame->CmdBuffer, 0, 1, &FrameViewport);
-    vkCmdSetScissor(Frame->CmdBuffer, 0, 1, &FrameScissor);
 
     // 3D render
     {
@@ -317,6 +234,22 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
             ShadowDescriptorSet,
         };
 
+        VkViewport ShadowViewport = 
+        {
+            .x = 0.0f,
+            .y = 0.0f,
+            .width = (f32)R_ShadowResolution,
+            .height = (f32)R_ShadowResolution,
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
+        };
+        VkRect2D ShadowScissor = 
+        {
+            .offset = { 0, 0 },
+            .extent = { R_ShadowResolution, R_ShadowResolution },
+        };
+        vkCmdSetViewport(Frame->CmdBuffer, 0, 1, &ShadowViewport);
+        vkCmdSetScissor(Frame->CmdBuffer, 0, 1, &ShadowScissor);
         for (u32 Cascade = 0; Cascade < R_MaxShadowCascadeCount; Cascade++)
         {
             BeginCascade(Frame, Cascade);
@@ -335,7 +268,8 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         }
 
         bool EnablePrimaryCull = false;
-
+        vkCmdSetViewport(Frame->CmdBuffer, 0, 1, &FrameViewport);
+        vkCmdSetScissor(Frame->CmdBuffer, 0, 1, &FrameScissor);
         BeginPrepass(Frame);
         {
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Prepass];
@@ -345,7 +279,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
                                     0, nullptr);
             RenderMeshes(Frame->CmdBuffer, Pipeline.Layout,
                          &Renderer->GeometryBuffer, GameState,
-                         &PrimaryFrustum, EnablePrimaryCull);
+                         &Frame->CameraFrustum, EnablePrimaryCull);
         }
         EndPrepass(Frame);
 
@@ -392,7 +326,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
 
             RenderMeshes(Frame->CmdBuffer, Pipeline.Layout,
                          &Renderer->GeometryBuffer, GameState,
-                         &PrimaryFrustum, EnablePrimaryCull);
+                         &Frame->CameraFrustum, EnablePrimaryCull);
 
             // Render sky
 #if 1
@@ -407,6 +341,7 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         }
         EndForwardPass(Frame);
     }
+    EndSceneRendering(Frame);
 
     RenderBloom(Frame,
                 GameState->PostProcessParams.Bloom,
@@ -658,19 +593,11 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
                                     0, 1, &Frame->UniformDescriptorSet, 
                                     0, nullptr);
-#if 1
             if (GameState->Editor.SelectedInstanceIndex != INVALID_INDEX_U32)
             {
                 mesh_instance* Instance = World->Instances + GameState->Editor.SelectedInstanceIndex;
                 RenderGizmo(Instance->Transform, 0.25f);
             }
-#else
-            for (u32 InstanceIndex = 0; InstanceIndex < World->InstanceCount; InstanceIndex++)
-            {
-                mesh_instance* Instance = World->Instances + InstanceIndex;
-                RenderGizmo(Instance->Transform, 0.25f);
-            }
-#endif
         }
 
         pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];

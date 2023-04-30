@@ -54,9 +54,31 @@ struct post_process_params
     bloom_params Bloom;
 };
 
-//
-// Utils
-//
+
+union frustum
+{
+    v4 Planes[6];
+    struct
+    {
+        v4 Left;
+        v4 Right;
+        v4 Top;
+        v4 Bottom;
+        v4 Near;
+        v4 Far;
+    };
+};
+
+struct render_camera
+{
+    m4 CameraTransform;
+    m4 ViewTransform; // aka Inverse camera transform
+
+    f32 FocalLength;
+    f32 NearZ;
+    f32 FarZ;
+};
+
 struct texture_id
 {
     u32 ID;
@@ -139,7 +161,7 @@ struct frame_uniform_data
     v3 CameraP;
     f32 Padding0;
 
-    v3 SunV;
+    v3 SunV; // NOTE(boti): view space
     f32 Padding1;
     v3 SunL;
     f32 Padding2;
@@ -152,6 +174,12 @@ struct renderer;
 
 render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHeight);
 void EndRenderFrame(render_frame* Frame);
+
+void SetRenderCamera(render_frame* Frame, const render_camera* Camera);
+void SetLights(render_frame* Frame, v3 SunDirection, v3 SunLuminance);
+
+void BeginSceneRendering(render_frame* Frame);
+void EndSceneRendering(render_frame* Frame);
 
 #include "VulkanRenderer.hpp"
 

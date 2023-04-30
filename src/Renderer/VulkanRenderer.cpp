@@ -1610,6 +1610,7 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
             ImageAcquireResult == VK_TIMEOUT ||
             ImageAcquireResult == VK_NOT_READY)
         {
+            Assert(Frame->SwapchainImageIndex != INVALID_INDEX_U32);
             break;
         }
         else if (ImageAcquireResult == VK_SUBOPTIMAL_KHR ||
@@ -1630,8 +1631,7 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
 
     vkResetDescriptorPool(VK.Device, Frame->DescriptorPool, 0);
     Frame->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrameUniformData]);
-
-    Assert(Frame->SwapchainImageIndex != INVALID_INDEX_U32);
+    Frame->Uniforms.ScreenSize = { (f32)Frame->RenderExtent.width, (f32)Frame->RenderExtent.height };
 
     VkCommandBufferBeginInfo CmdBufferBegin = 
     {
@@ -1677,4 +1677,230 @@ void EndRenderFrame(render_frame* Frame)
         .pResults = nullptr,
     };
     vkQueuePresentKHR(VK.GraphicsQueue, &PresentInfo);
+}
+
+void SetRenderCamera(render_frame* Frame, const render_camera* Camera)
+{
+    f32 AspectRatio = (f32)Frame->RenderExtent.width / (f32)Frame->RenderExtent.height;
+
+    f32 InvZRange = 1.0f / (Camera->FarZ - Camera->NearZ);
+    m4 ProjectionTransform = M4(
+        Camera->FocalLength / AspectRatio, 0.0f, 0.0f, 0.0f,
+        0.0f, Camera->FocalLength, 0.0f, 0.0f,
+        0.0f, 0.0f, Camera->FarZ * InvZRange, -Camera->FarZ*Camera->NearZ * InvZRange,
+        0.0f, 0.0f, 1.0f, 0.0f);
+
+    // Calculate camera frustum
+    {
+        f32 s = AspectRatio;
+        f32 g = Camera->FocalLength;
+        f32 n = Camera->NearZ;
+        f32 f = Camera->FarZ;
+
+        f32 g2 = g*g;
+        f32 mx = 1.0f / Sqrt(g2 + s*s);
+        f32 my = 1.0f / Sqrt(g2 + 1.0f);
+        f32 gmx = g*mx;
+        f32 gmy = g*my;
+        f32 smx = s*mx;
+        Frame->CameraFrustum = 
+        {
+            .Left   = v4{ -gmx, 0.0f, smx, 0.0f } * Camera->ViewTransform,
+            .Right  = v4{ +gmx, 0.0f, smx, 0.0f } * Camera->ViewTransform,
+            .Top    = v4{ 0.0f, -gmy, my, 0.0f } * Camera->ViewTransform,
+            .Bottom = v4{ 0.0f, +gmy, my, 0.0f } * Camera->ViewTransform,
+            .Near   = v4{ 0.0f, 0.0f, +1.0f, -n } * Camera->ViewTransform,
+            .Far    = v4{ 0.0f, 0.0f, -1.0f, +f } * Camera->ViewTransform,
+        };
+    }
+
+    Frame->Uniforms.CameraTransform = Camera->CameraTransform;
+    Frame->Uniforms.ViewTransform = Camera->ViewTransform;
+    Frame->Uniforms.ProjectionTransform = ProjectionTransform;
+    Frame->Uniforms.ViewProjectionTransform = ProjectionTransform * Camera->ViewTransform;
+
+    Frame->Uniforms.FocalLength = Camera->FocalLength;
+    Frame->Uniforms.AspectRatio = AspectRatio;
+    Frame->Uniforms.NearZ = Camera->NearZ;
+    Frame->Uniforms.FarZ = Camera->FarZ;
+
+    Frame->Uniforms.CameraP = Camera->CameraTransform.P.xyz;
+}
+
+void SetLights(render_frame* Frame, v3 SunDirection, v3 SunLuminance)
+{
+    Frame->SunV = SunDirection;
+    Frame->Uniforms.SunV = TransformDirection(Frame->Uniforms.ViewTransform, SunDirection);
+    Frame->Uniforms.SunL = SunLuminance;
+}
+
+void BeginSceneRendering(render_frame* Frame)
+{
+    // Shadow cascade setup
+    {
+        m4 SunTransform;
+        v3 SunX, SunY, SunZ;
+        {
+            SunZ = -Frame->SunV;
+            if (Abs(Dot(SunZ, v3{ 0.0f, 0.0f, 0.0f })) < (1.0f - 1e-3f))
+            {
+                SunY = Normalize(Cross(SunZ, v3{ 1.0f, 0.0f, 0.0f }));
+                SunX = Cross(SunY, SunZ);
+            }
+            else
+            {
+                SunX = Normalize(Cross(SunZ, v3{ 0.0f, 0.0f, -1.0f }));
+                SunY = Cross(SunZ, SunX);
+            }
+
+            SunTransform.X = v4{ SunX.x, SunX.y, SunX.z, 0.0f };
+            SunTransform.Y = v4{ SunY.x, SunY.y, SunY.z, 0.0f };
+            SunTransform.Z = v4{ SunZ.x, SunZ.y, SunZ.z, 0.0f };
+            SunTransform.P = v4{ 0.0f, 0.0f, 0.0f, 1.0f };
+        }
+
+        m4 SunView = AffineOrthonormalInverse(SunTransform);
+        m4 CameraToSun = SunView * Frame->Uniforms.CameraTransform;
+    
+        f32 NdTable[] = { 0.0f, 2.5f, 10.0f, 20.0f, };
+        f32 FdTable[] = { 3.0f, 12.5f, 25.0f, 30.0f, };
+        static_assert(CountOf(NdTable) == R_MaxShadowCascadeCount);
+        static_assert(CountOf(FdTable) == R_MaxShadowCascadeCount);
+#if 0
+        for (u32 CascadeIndex = 0; CascadeIndex < MaxCascadeCount; CascadeIndex++)
+        {
+            f32 StartPercent = Max((CascadeIndex - 0.1f) / MaxCascadeCount, 0.0f);
+            f32 EndPercent = (CascadeIndex + 1.0f) / MaxCascadeCount;
+            f32 NdLinear = Camera->FarZ * StartPercent;
+            f32 FdLinear = Camera->FarZ * EndPercent;
+
+            constexpr f32 PolyExp = 2.0f;
+            f32 NdPoly = Camera->FarZ * Pow(StartPercent, PolyExp);
+            f32 FdPoly = Camera->FarZ * Pow(EndPercent, PolyExp);
+            constexpr f32 PolyFactor = 0.9f;
+            NdTable[CascadeIndex] = Lerp(NdLinear, NdPoly, PolyFactor);
+            FdTable[CascadeIndex] = Lerp(FdLinear, FdPoly, PolyFactor);
+        }
+#endif
+
+        f32 s = Frame->Uniforms.AspectRatio;
+        f32 g = Frame->Uniforms.FocalLength;
+
+        m4 Cascade0InverseViewProjection;
+        for (u32 CascadeIndex = 0; CascadeIndex < R_MaxShadowCascadeCount; CascadeIndex++)
+        {
+            f32 Nd = NdTable[CascadeIndex];
+            f32 Fd = FdTable[CascadeIndex];
+
+            f32 NdOverG = Nd / g;
+            f32 FdOverG = Fd / g;
+
+            v3 CascadeBoxP[8] = 
+            {
+                // Near points in camera space
+                { -NdOverG * s, -NdOverG, Nd },
+                { +NdOverG * s, -NdOverG, Nd },
+                { +NdOverG * s, +NdOverG, Nd },
+                { -NdOverG * s, +NdOverG, Nd },
+
+                // Far points in camera space
+                { -FdOverG * s, -FdOverG, Fd },
+                { +FdOverG * s, -FdOverG, Fd },
+                { +FdOverG * s, +FdOverG, Fd },
+                { -FdOverG * s, +FdOverG, Fd },
+            };
+
+            v3 CascadeBoxMin = { +FLT_MAX, +FLT_MAX, +FLT_MAX };
+            v3 CascadeBoxMax = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+
+            for (u32 i = 0; i < 8; i++)
+            {
+                v3 P = TransformPoint(CameraToSun, CascadeBoxP[i]);
+                CascadeBoxMin = 
+                {
+                    Min(P.x, CascadeBoxMin.x),
+                    Min(P.y, CascadeBoxMin.y),
+                    Min(P.z, CascadeBoxMin.z),
+                };
+                CascadeBoxMax = 
+                {
+                    Max(P.x, CascadeBoxMax.x),
+                    Max(P.y, CascadeBoxMax.y),
+                    Max(P.z, CascadeBoxMax.z),
+                };
+            }
+
+            f32 CascadeScale = Ceil(Max(VectorLength(CascadeBoxP[0] - CascadeBoxP[6]),
+                                        VectorLength(CascadeBoxP[4] - CascadeBoxP[6])));
+            f32 TexelSize = CascadeScale / (f32)R_ShadowResolution;
+
+            v3 CascadeP = 
+            {
+                TexelSize * Floor((CascadeBoxMax.x + CascadeBoxMin.x) / (2.0f * TexelSize)),
+                TexelSize * Floor((CascadeBoxMax.y + CascadeBoxMin.y) / (2.0f * TexelSize)),
+                CascadeBoxMin.z,
+            };
+
+            m4 CascadeView = M4(SunX.x, SunX.y, SunX.z, -CascadeP.x,
+                                SunY.x, SunY.y, SunY.z, -CascadeP.y,
+                                SunZ.x, SunZ.y, SunZ.z, -CascadeP.z,
+                                0.0f, 0.0f, 0.0f, 1.0f);
+            m4 CascadeProjection = M4(2.0f / CascadeScale, 0.0f, 0.0f, 0.0f,
+                                      0.0f, 2.0f / CascadeScale, 0.0f, 0.0f,
+                                      0.0f, 0.0f, 1.0f / (CascadeBoxMax.z - CascadeBoxMin.z), 0.0f,
+                                      0.0f, 0.0f, 0.0f, 1.0f);
+            m4 CascadeViewProjection = CascadeProjection * CascadeView;
+
+            if (CascadeIndex == 0)
+            {
+                m4 InverseProjection = CascadeProjection;
+                for (u32 i = 0; i < 3; i++)
+                {
+                    InverseProjection.E[i][i] = 1.0f / InverseProjection.E[i][i];
+                }
+                Cascade0InverseViewProjection = AffineOrthonormalInverse(CascadeView) * InverseProjection;
+                Frame->Uniforms.CascadeViewProjection = CascadeViewProjection;
+            }
+            else
+            {
+                m4 Cascade0ToI = CascadeViewProjection * Cascade0InverseViewProjection;
+
+                Frame->Uniforms.CascadeScales[CascadeIndex - 1] = 
+                {
+                    Cascade0ToI.E[0][0],
+                    Cascade0ToI.E[1][1],
+                    Cascade0ToI.E[2][2],
+                    0.0f,
+                };
+                Frame->Uniforms.CascadeOffsets[CascadeIndex - 1] = Cascade0ToI.P;
+                Frame->Uniforms.CascadeOffsets[CascadeIndex - 1].w = 0.0f;
+            }
+
+            Frame->Uniforms.CascadeMinDistances[CascadeIndex] = Nd;
+            Frame->Uniforms.CascadeMaxDistances[CascadeIndex] = Fd;
+        }
+    }
+
+    // Upload uniform data
+    memcpy(Frame->PerFrameUniformMemory, &Frame->Uniforms, sizeof(Frame->Uniforms));
+    {
+         VkDescriptorBufferInfo Info = { Frame->PerFrameUniformBuffer, 0, sizeof(Frame->Uniforms) };
+         VkWriteDescriptorSet Write = 
+         {
+             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+             .pNext = nullptr,
+             .dstSet = Frame->UniformDescriptorSet,
+             .dstBinding = 0,
+             .dstArrayElement = 0,
+             .descriptorCount = 1 ,
+             .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+             .pBufferInfo = &Info,
+         };
+         vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
+    }
+}
+
+void EndSceneRendering(render_frame* Frame)
+{
+    
 }

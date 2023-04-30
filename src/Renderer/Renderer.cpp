@@ -5,6 +5,5 @@
 #include "Frame.cpp"
 #include "Geometry.cpp"
 #include "RenderTarget.cpp"
-#include "Shadow.cpp"
 #include "TextureManager.cpp"
 #include "Pipelines.cpp"

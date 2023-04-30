@@ -37,23 +37,6 @@
 #include <cstdio>
 #include <cstdarg>
 
-struct frustum
-{
-    union
-    {
-        struct
-        {
-            v4 Left;
-            v4 Right;
-            v4 Top;
-            v4 Bottom;
-            v4 Near;
-            v4 Far;
-        };
-        v4 Planes[6];
-    };
-};
-
 lbfn frustum FrustumFromCamera(const camera* Camera);
 lbfn bool IntersectFrustum(const frustum* Frustum, const mmbox* Box);
 

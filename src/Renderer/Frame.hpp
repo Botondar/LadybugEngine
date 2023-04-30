@@ -42,6 +42,9 @@ struct render_frame
 
     VkDescriptorPool DescriptorPool;
 
+    frustum CameraFrustum;
+    v3 SunV; // World space
+
     /* Data that will stay the same for the entire duration of the frame
      * Also gets sent to the GPU
      */

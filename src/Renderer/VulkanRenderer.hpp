@@ -190,7 +190,6 @@ struct vulkan_buffer
 #include "Renderer/RenderTarget.hpp"
 #include "Renderer/Geometry.hpp"
 #include "Renderer/TextureManager.hpp"
-#include "Renderer/Shadow.hpp"
 #include "Renderer/Frame.hpp"
 
 extern vulkan VK;
