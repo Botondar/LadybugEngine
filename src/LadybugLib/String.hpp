@@ -12,7 +12,7 @@ struct string
 };
 
 // Checks string with zero-terminated string for equality
-// Only returns if the strings also have equal length
+// Only returns true if the strings also have equal length
 inline bool StringEquals(const string* String, const char* ZString);
 
 struct string_view
