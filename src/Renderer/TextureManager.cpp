@@ -7,23 +7,35 @@ lbfn texture_byte_rate GetByteRate(VkFormat Format)
     {
         case VK_FORMAT_R8G8B8A8_SRGB:
         case VK_FORMAT_R8G8B8A8_UNORM:
+        {
             Result = { 4, 1, false };
-            break;
+        } break;
         case VK_FORMAT_R8G8_UINT:
         case VK_FORMAT_R8G8_SINT:
         case VK_FORMAT_R8G8_SRGB:
         case VK_FORMAT_R8G8_UNORM:
         case VK_FORMAT_R8G8_SNORM:
+        {
             Result = { 2, 1, false };
-            break;
+        } break;
+        
+        case VK_FORMAT_R8_UINT:
+        case VK_FORMAT_R8_SINT:
+        case VK_FORMAT_R8_UNORM:
+        case VK_FORMAT_R8_SNORM:
+        case VK_FORMAT_R8_SRGB:
+        {
+            Result = { 1, 1, false };
+        } break;
         case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
         case VK_FORMAT_BC1_RGB_UNORM_BLOCK:
         case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
         case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:
         case VK_FORMAT_BC4_UNORM_BLOCK:
         case VK_FORMAT_BC4_SNORM_BLOCK:
+        {
             Result = { 1, 2, true };
-            break;
+        } break;
         case VK_FORMAT_BC2_SRGB_BLOCK:
         case VK_FORMAT_BC2_UNORM_BLOCK:
         case VK_FORMAT_BC3_SRGB_BLOCK:
@@ -34,11 +46,13 @@ lbfn texture_byte_rate GetByteRate(VkFormat Format)
         case VK_FORMAT_BC6H_SFLOAT_BLOCK:
         case VK_FORMAT_BC7_SRGB_BLOCK:
         case VK_FORMAT_BC7_UNORM_BLOCK:
+        {
             Result = { 1, 1, true };
-            break;
+        } break;
         default:
+        {
             UnimplementedCodePath;
-            break;
+        } break;
     }
     return Result;
 }
@@ -195,18 +209,34 @@ lbfn bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 Mem
 lbfn VkImage GetImage(texture_manager* Manager, texture_id ID)
 {
     VkImage Result = VK_NULL_HANDLE;
-    if (ID.ID != U32_MAX)
+    if (ID.Value != U32_MAX)
     {
-        Result = Manager->Images[ID.ID];
+        Result = Manager->Images[ID.Value];
     }
     return Result;
 }
 
 lbfn texture_id CreateTexture(texture_manager* Manager, 
-                                  u32 Width, u32 Height, u32 MipCount, 
-                                  VkFormat Format)
+                              u32 Width, u32 Height, u32 MipCount, 
+                              VkFormat Format, swizzle Swizzle)
 {
     texture_id Result = { U32_MAX };
+
+    auto SwizzleToVulkan = [](swizzle_type Type) -> VkComponentSwizzle 
+    {
+        VkComponentSwizzle Result = VK_COMPONENT_SWIZZLE_IDENTITY;
+        switch (Type)
+        {
+            case Swizzle_Identity: Result = VK_COMPONENT_SWIZZLE_IDENTITY; break;
+            case Swizzle_Zero: Result = VK_COMPONENT_SWIZZLE_ZERO; break;
+            case Swizzle_One: Result = VK_COMPONENT_SWIZZLE_ONE; break;
+            case Swizzle_R: Result = VK_COMPONENT_SWIZZLE_R; break;
+            case Swizzle_G: Result = VK_COMPONENT_SWIZZLE_G; break;
+            case Swizzle_B: Result = VK_COMPONENT_SWIZZLE_B; break;
+            case Swizzle_A: Result = VK_COMPONENT_SWIZZLE_A; break;
+        }
+        return(Result);
+    };
 
     if (Manager->TextureCount < Manager->MaxTextureCount)
     {
@@ -250,7 +280,13 @@ lbfn texture_id CreateTexture(texture_manager* Manager,
                         .image = Image,
                         .viewType = VK_IMAGE_VIEW_TYPE_2D,
                         .format = Format,
-                        .components = {},
+                        .components = 
+                        {
+                            SwizzleToVulkan(Swizzle.R),
+                            SwizzleToVulkan(Swizzle.G),
+                            SwizzleToVulkan(Swizzle.B),
+                            SwizzleToVulkan(Swizzle.A),
+                        },
                         .subresourceRange = 
                         {
                             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,

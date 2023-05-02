@@ -53,6 +53,18 @@ internal void LoadDebugFont(game_state* GameState, const char* Path)
 
     if (FontFile)
     {
+        // HACK(boti): When sampling with wrap+linear mode, UV 0,0 pulls in all 4 corner texels,
+        // so we set those to the maximum alpha value here.
+        {
+            auto SetPixel = [&](u32 x, u32 y, u8 Value) { FontFile->Bitmap.Bitmap[x + y*FontFile->Bitmap.Width] = Value; };
+            u32 x = FontFile->Bitmap.Width - 1;
+            u32 y = FontFile->Bitmap.Height - 1;
+            SetPixel(0, 0, 0xFFu);
+            SetPixel(x, 0, 0xFFu);
+            SetPixel(0, y, 0xFFu);
+            SetPixel(x, y, 0xFFu);
+        }
+        
         if (FontFile->FileTag == LBFNT_FILE_TAG)
         {
             font* Font = &GameState->Assets->DefaultFont;
@@ -95,7 +107,15 @@ internal void LoadDebugFont(game_state* GameState, const char* Path)
                 }
             }
 
-            CreateDebugFontImage(GameState->Renderer, FontFile->Bitmap.Width, FontFile->Bitmap.Height, FontFile->Bitmap.Bitmap);
+            GameState->Assets->DefaultFontTextureID =  PushTexture(GameState->Renderer, 
+                FontFile->Bitmap.Width, FontFile->Bitmap.Height, 1, 
+                FontFile->Bitmap.Bitmap, VK_FORMAT_R8_UNORM, 
+                {
+                    .R = Swizzle_One,
+                    .G = Swizzle_One,
+                    .B = Swizzle_One,
+                    .A = Swizzle_R,
+                });
         }
         else
         {
@@ -601,7 +621,10 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
         }
 
         pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
-        RenderImmediates(Frame, UIPipeline.Pipeline, UIPipeline.Layout, Renderer->FontDescriptorSet);
+        VkDescriptorSetLayout SetLayout = Frame->Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS];
+        VkDescriptorSet FontDescriptorSet = PushImageDescriptor(Frame, SetLayout, 
+                                                                Assets->DefaultFontTextureID);
+        RenderImmediates(Frame, UIPipeline.Pipeline, UIPipeline.Layout, FontDescriptorSet);
 
         vkCmdEndRendering(Frame->CmdBuffer);
     }
@@ -916,7 +939,7 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
 
                 Result = PushTexture(GameState->Renderer,
                                      (u32)Width, (u32)Height, (u32)MipCount, 
-                                     Texels, Format);
+                                     Texels, Format, {});
             }
             else
             {
@@ -1198,22 +1221,22 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
         assets* Assets = GameState->Assets = PushStruct<assets>(&GameState->TotalArena);
 
-        LoadDebugFont(GameState, "data/liberation-mono.lbfnt");
-
         // Default textures
         {
             {
                 u32 Value = 0xFFFFFFFFu;
-                texture_id Whiteness = PushTexture(GameState->Renderer, 1, 1, 1, &Value, VK_FORMAT_R8G8B8A8_SRGB);
+                texture_id Whiteness = PushTexture(GameState->Renderer, 1, 1, 1, &Value, VK_FORMAT_R8G8B8A8_SRGB, {});
 
                 Assets->DefaultDiffuseID = Whiteness;
                 Assets->DefaultMetallicRoughnessID = Whiteness;
             }
             {
                 u16 Value = 0x8080u;
-                Assets->DefaultNormalID = PushTexture(GameState->Renderer, 1, 1, 1, &Value, VK_FORMAT_R8G8_UNORM);
+                Assets->DefaultNormalID = PushTexture(GameState->Renderer, 1, 1, 1, &Value, VK_FORMAT_R8G8_UNORM, {});
             }
         }
+
+        LoadDebugFont(GameState, "data/liberation-mono.lbfnt");
 
         game_world* World = GameState->World = PushStruct<game_world>(&GameState->TotalArena);
 

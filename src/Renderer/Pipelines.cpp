@@ -402,6 +402,22 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
             },
         },
     },
+
+    // SetLayout_SingleCombinedTexturePS
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .DescriptorCount = 1,
+                .StageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .ImmutableSampler = Sampler_Default,
+            },
+        },
+    },
 };
 
 // TODO(boti): Get the material visible to this portion of the code so we don't have to hard code this !!!!!
@@ -674,7 +690,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
                     .size = sizeof(m4) 
                 },
             },
-            .DescriptorSets = { SetLayout_SampledRenderTargetNormalized_PS_CS }, // TODO(boti): probably we should rename this
+            .DescriptorSets = { SetLayout_SingleCombinedTexturePS },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = 

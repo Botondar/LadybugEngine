@@ -81,7 +81,23 @@ struct render_camera
 
 struct texture_id
 {
-    u32 ID;
+    u32 Value;
+};
+
+enum swizzle_type : u8
+{
+    Swizzle_Identity = 0,
+    Swizzle_Zero,
+    Swizzle_One,
+    Swizzle_R,
+    Swizzle_G,
+    Swizzle_B,
+    Swizzle_A,
+};
+
+struct swizzle
+{
+    swizzle_type R, G, B, A;
 };
 
 union rgba8

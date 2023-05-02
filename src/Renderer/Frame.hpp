@@ -61,6 +61,7 @@ VkDescriptorSet PushImageDescriptor(render_frame* Frame,
                                     VkDescriptorSetLayout Layout,
                                     VkDescriptorType Type,
                                     VkImageView View, VkImageLayout ImageLayout);
+VkDescriptorSet PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, texture_id ID);
 
 //
 // Immediate-mode rendering

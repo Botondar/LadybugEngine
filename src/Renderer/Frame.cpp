@@ -50,9 +50,9 @@ VkDescriptorSet PushBufferDescriptor(render_frame* Frame,
     return Set;
 }
 VkDescriptorSet PushImageDescriptor(render_frame* Frame, 
-                                         VkDescriptorSetLayout Layout,
-                                         VkDescriptorType Type,
-                                         VkImageView View, VkImageLayout ImageLayout)
+                                    VkDescriptorSetLayout Layout,
+                                    VkDescriptorType Type,
+                                    VkImageView View, VkImageLayout ImageLayout)
 {
     VkDescriptorSet Set = PushDescriptorSet(Frame, Layout);
     if (Set)
@@ -77,6 +77,15 @@ VkDescriptorSet PushImageDescriptor(render_frame* Frame,
     return Set;
 }
 
+VkDescriptorSet PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, texture_id ID)
+{
+    texture_manager* TextureManager = &Frame->Renderer->TextureManager;
+    VkDescriptorSet Set = PushImageDescriptor(Frame, Layout,
+                                              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                              TextureManager->ImageViews[ID.Value],
+                                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    return(Set);
+}
 
 void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color)
 {

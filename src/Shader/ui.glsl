@@ -29,7 +29,8 @@ layout(location = 0) out vec4 Out0;
 
 void main()
 {
-    Out0 = Color * texture(Sampler, TexCoord);
+    vec4 Sample = texture(Sampler, TexCoord);
+    Out0 = Color * Sample;
 }
 
 #endif

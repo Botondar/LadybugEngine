@@ -64,6 +64,7 @@ struct assets
     texture_id DefaultNormalID;
     texture_id DefaultMetallicRoughnessID;
 
+    texture_id DefaultFontTextureID;
     font DefaultFont;
 
     static constexpr u32 MaxMeshCount = 1u << 16;

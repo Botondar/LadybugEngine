@@ -275,18 +275,6 @@ struct renderer
     VkDescriptorSetLayout SetLayouts[SetLayout_Count];
     VkSampler Samplers[Sampler_Count];
 
-    //
-    // Fonts
-    //
-
-    // TODO(boti): remove these once we have texture handling in place
-    VkDeviceMemory FontImageMemory;
-    VkImage FontImage;
-    VkImageView FontImageView;
-    
-    VkDescriptorPool FontDescriptorPool;
-    VkDescriptorSet FontDescriptorSet;
-
     u64 CurrentFrameID;
     render_frame Frames[MaxSwapchainImageCount];
 };
@@ -298,6 +286,4 @@ VkResult CreateRenderer(renderer* Renderer,
 geometry_buffer_allocation UploadVertexData(renderer* Renderer, 
                                                  u32 VertexCount, const vertex* VertexData,
                                                  u32 IndexCount, const vert_index* IndexData);
-texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format);
-
-void CreateDebugFontImage(renderer* Renderer, u32 Width, u32 Height, const void* Texels);
+texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format, swizzle Swizzle);

@@ -1,6 +1,6 @@
 #pragma once
 
-inline bool IsValid(texture_id ID) { return ID.ID != U32_MAX; }
+inline bool IsValid(texture_id ID) { return ID.Value != U32_MAX; }
 
 struct texture_byte_rate
 {
@@ -35,4 +35,4 @@ lbfn bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 Mem
 lbfn VkImage GetImage(texture_manager* Manager, texture_id ID);
 lbfn texture_id CreateTexture(texture_manager* Manager, 
                               u32 Width, u32 Height, u32 MipCount, 
-                              VkFormat Format);
+                              VkFormat Format, swizzle Swizzle);
