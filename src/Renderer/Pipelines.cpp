@@ -49,9 +49,9 @@ input_assembler_state InputState_vertex =
 
 const VkSamplerCreateInfo SamplerInfos[Sampler_Count] = 
 {
-    {},
+    [Sampler_None] = {},
 
-    // Default
+    [Sampler_Default] = 
     {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .pNext = nullptr,
@@ -72,7 +72,7 @@ const VkSamplerCreateInfo SamplerInfos[Sampler_Count] =
         .borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE,
         .unnormalizedCoordinates = VK_FALSE,
     },
-    // RenderTargetUnnormalized
+    [Sampler_RenderTargetUnnormalized] = 
     {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .pNext = nullptr,
@@ -93,7 +93,7 @@ const VkSamplerCreateInfo SamplerInfos[Sampler_Count] =
         .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
         .unnormalizedCoordinates = VK_TRUE,
     },
-    // Shadow
+    [Sampler_Shadow] = 
     {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .pNext = nullptr,
@@ -114,7 +114,7 @@ const VkSamplerCreateInfo SamplerInfos[Sampler_Count] =
         .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
         .unnormalizedCoordinates = VK_FALSE,
     },
-    // RenderTargetNormalized
+    [Sampler_RenderTargetNormalized] = 
     {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .pNext = nullptr,
@@ -136,7 +136,7 @@ const VkSamplerCreateInfo SamplerInfos[Sampler_Count] =
         .unnormalizedCoordinates = VK_FALSE,
     },
 
-    //Sampler_RenderTargetNormalizedClampToEdge
+    [Sampler_RenderTargetNormalizedClampToEdge] = 
     {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .pNext = nullptr,
@@ -162,9 +162,9 @@ const VkSamplerCreateInfo SamplerInfos[Sampler_Count] =
 
 const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] = 
 {
-    {},
+    [SetLayout_None] = {},
 
-    // PerFrameUniformData
+    [SetLayout_PerFrameUniformData] = 
     {
         .Flags = SetLayoutFlag_UpdateAfterBind,
         .BindingCount = 1,
@@ -179,7 +179,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
             },
         },
     },
-    // BindlessTexturesPS
+    [SetLayout_BindlessTexturesPS] = 
     {
         .Flags = SetLayoutFlag_UpdateAfterBind|SetLayoutFlag_Bindless,
         .BindingCount = 1,
@@ -195,7 +195,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
-    // SampledRenderTargetPS
+    [SetLayout_SampledRenderTargetPS] = 
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 1,
@@ -211,7 +211,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
-    // DefaultSamplerPS
+    [SetLayout_DefaultSamplerPS] =
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 1,
@@ -227,7 +227,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
-    // ShadowPS
+    [SetLayout_ShadowPS] = 
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 1,
@@ -243,7 +243,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
-    // SampledRenderTargetNormalizedPS
+    [SetLayout_SampledRenderTargetNormalized_PS_CS] = 
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 1,
@@ -259,7 +259,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
-    // StorageImage_CS
+    [SetLayout_StorageImage_CS] =
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 1,
@@ -275,7 +275,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
-    // Bloom downsample
+    [SetLayout_Bloom] =
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 2,
@@ -297,7 +297,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
             },
         },
     },
-    // SSAO
+    [SetLayout_SSAO] = 
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 2,
@@ -320,7 +320,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
-    //SetLayout_SSAOBlur
+    [SetLayout_SSAOBlur] = 
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 3,
@@ -350,7 +350,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
-    // SetLayout_Blit
+    [SetLayout_Blit] = 
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 2,
@@ -373,7 +373,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
-    //SetLayout_BloomUpsample
+    [SetLayout_BloomUpsample] = 
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 3,
@@ -403,7 +403,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
-    // SetLayout_SingleCombinedTexturePS
+    [SetLayout_SingleCombinedTexturePS] = 
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 1,
@@ -426,9 +426,9 @@ constexpr u32 MaterialStructSize = sizeof(v3) + 2 * sizeof(rgba8) + 3*sizeof(u32
 const pipeline_info PipelineInfos[Pipeline_Count] = 
 {
     // None pipeline
-    {},
+    [Pipeline_None] = {},
 
-    // Simple
+    [Pipeline_Simple] =
     {
         .Name = "shader",
         .Type = PipelineType_Graphics,
@@ -483,7 +483,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .StencilAttachment = VK_FORMAT_UNDEFINED,
     },
 
-    // Prepass
+    [Pipeline_Prepass] =
     {
         .Name = "prepass",
         .Type = PipelineType_Graphics,
@@ -535,7 +535,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .StencilAttachment = VK_FORMAT_UNDEFINED,
     },
 
-    // Shadow
+    [Pipeline_Shadow] = 
     {
         .Name = "shadow",
         .Type = PipelineType_Graphics,
@@ -587,7 +587,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .StencilAttachment = VK_FORMAT_UNDEFINED,
     },
 
-    // Gizmo
+    [Pipeline_Gizmo] =
     {
         .Name = "gizmo",
         .Type = PipelineType_Graphics,
@@ -633,7 +633,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .StencilAttachment = VK_FORMAT_UNDEFINED,
     },
 
-    // Sky
+    [Pipeline_Sky] = 
     {
         .Name = "sky",
         .Type = PipelineType_Graphics,
@@ -674,7 +674,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .StencilAttachment = VK_FORMAT_UNDEFINED,
     },
 
-    // UI
+    [Pipeline_UI] = 
     {
         .Name = "ui",
         .Type = PipelineType_Graphics,
@@ -757,7 +757,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .StencilAttachment = VK_FORMAT_UNDEFINED,
     },
 
-    // Blit
+    [Pipeline_Blit] =
     {
         .Name = "blit",
         .Type = PipelineType_Graphics,
@@ -804,7 +804,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .StencilAttachment = VK_FORMAT_UNDEFINED,
     },
 
-    // Bloom downsample
+    [Pipeline_BloomDownsample] =
     {
         .Name = "downsample_bloom",
         .Type = PipelineType_Compute,
@@ -824,7 +824,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         },
     },
 
-    // Pipeline_BloomUpsample
+    [Pipeline_BloomUpsample] =
     {
         .Name = "upsample_bloom",
         .Type = PipelineType_Compute,
@@ -844,7 +844,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         },
     },
 
-    // Pipeline_SSAO
+    [Pipeline_SSAO] =
     {
         .Name = "ssao",
         .Type = PipelineType_Compute,
@@ -867,7 +867,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             },
         },
     },
-    // Pipeline_SSAOBlur
+    [Pipeline_SSAOBlur] =
     {
         .Name = "ssao_blur",
         .Type = PipelineType_Compute,
@@ -880,7 +880,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         },
     },
 
-    // Pipeline_Quad
+    [Pipeline_Quad] = 
     {
         .Name = "quad",
         .Type = PipelineType_Graphics,

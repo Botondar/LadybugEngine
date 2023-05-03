@@ -2,21 +2,29 @@
 
 #if defined(_MSC_VER) && !defined(__clang__)
 #define LB_COMPILER_MSVC 1
+#define LB_COMPILER_CLANGCL 0
+#define LB_COMPILER_CLANG 0
+#define LB_COMPILER_GCC 0
+#elif defined(_MSC_VER) && defined(__clang__)
+#define LB_COMPILER_MSVC 0
+#define LB_COMPILER_CLANGCL 1
 #define LB_COMPILER_CLANG 0
 #define LB_COMPILER_GCC 0
 #elif defined(__clang__)
 #define LB_COMPILER_MSVC 0
+#define LB_COMPILER_CLANGCL 0
 #define LB_COMPILER_CLANG 1
 #define LB_COMPILER_GCC 0
 #elif defined(__GNUC__)
 #define LB_COMPILER_MSVC 0
+#define LB_COMPILER_CLANGCL 0
 #define LB_COMPILER_CLANG 0
 #define LB_COMPILER_GCC 1
 #else
 #error Unknown compiler
 #endif
 
-#if !LB_COMPILER_MSVC
+#if !LB_COMPILER_CLANGCL
 #error Unsupported compiler
 #endif
 

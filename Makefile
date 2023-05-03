@@ -8,7 +8,9 @@ FLOAT_ENV = -fp:except- -fp:strict
 OPTIMIZATION = -Od -Oi
 INCLUDES = -I$(SRC) -I$(VULKAN_SDK)/Include/
 DEFINES = -DDEVELOPER=1 -DWIN32_LEAN_AND_MEAN -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX
-WARNINGS = -WX -W4 -wd4100 -wd4189 -wd4200 -wd4201 -wd4505
+WARNINGS_MSVC = -WX -W4 -wd4100 -wd4189 -wd4200 -wd4201 -wd4505
+WARNINGS_CLANG = -Wno-unused-function -Wno-unused-variable -Wno-unused-lambda-capture -Wno-unused-value -Wno-missing-field-initializers -Wno-c++11-narrowing -Wno-char-subscripts -Wno-missing-braces -Wno-c99-designator
+WARNINGS = $(WARNINGS_MSVC) $(WARNINGS_CLANG)
 
 CXX_FLAGS = $(COMMON) $(FLOAT_ENV) $(INCLUDES) $(DEFINES) $(WARNINGS)
 
@@ -36,11 +38,11 @@ clean:
     @del /q build\*.*
 
 "$(OUT)/renderer.obj": $(SRC_LBLIB) $(SRC_RENDERER)
-    @cl $(CXX_FLAGS) -c "src/Renderer/Renderer.cpp" -Fo: "$@" -Fd:"$(OUT)/"
+    @clang-cl $(CXX_FLAGS) -c "src/Renderer/Renderer.cpp" -Fo$@ -Fd"$(OUT)/"
 "$(OUT)/Win_LadybugEngine.exe": $(SRC_ALL)
-    @cl $(CXX_FLAGS) "src/Win_LadybugEngine.cpp" -Fe: "$@" -Fo: "$(OUT)/" -Fd: "$(OUT)/" $(LIBS) -link $(LINK_FLAGS)
+    @clang-cl $(CXX_FLAGS) "src/Win_LadybugEngine.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) -link $(LINK_FLAGS)
 "$(OUT)/game.dll": $(SRC_ALL) "$(OUT)/renderer.obj"
-    @cl $(CXX_FLAGS) "src/LadybugEngine.cpp" -Fo: "$(OUT)/" -Fd: "$(OUT)/" $(LIBS) "$(OUT)/renderer.obj" -link -DLL -OUT:$@ $(LINK_FLAGS) $(GAME_EXPORT)
+    @clang-cl $(CXX_FLAGS) "src/LadybugEngine.cpp" -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) "$(OUT)/renderer.obj" -link -DLL -OUT:$@ $(LINK_FLAGS) $(GAME_EXPORT)
 
 {$(SRC)/Shader/}.glsl{$(OUT)/}.vs:
     glslc --target-env=vulkan1.3 -DVS -fshader-stage=vert -o "$(OUT)/$(@B).vs" "$<"

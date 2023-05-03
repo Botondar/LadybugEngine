@@ -1,4 +1,4 @@
-#include "GLTF.hpp"
+#include "glTF.hpp"
 
 lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
 {

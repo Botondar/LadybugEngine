@@ -12,7 +12,7 @@ internal line LineFromPoints(v3 P1, v3 P2)
 internal line LineFromPointAndDirection(v3 Direction, v3 P)
 {
     line Result;
-    LineFromPointAndDirection(P, P + Direction);
+    LineFromPoints(P, P + Direction);
     return(Result);
 }
 
