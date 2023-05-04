@@ -560,6 +560,18 @@ VkResult CreateRenderer(renderer* Renderer,
         CopyZStringToBuffer(Path, "build/", &PathSize);
         char* Name = Path + (MaxPathSize - PathSize);
 
+        auto PipelineStagesToVulkan = [](flags32 Stages) -> VkShaderStageFlags
+        {
+            VkShaderStageFlags Result = 0;
+            if (HasFlag(Stages, PipelineStage_VS)) Result |= VK_SHADER_STAGE_VERTEX_BIT;
+            if (HasFlag(Stages, PipelineStage_PS)) Result |= VK_SHADER_STAGE_FRAGMENT_BIT;
+            if (HasFlag(Stages, PipelineStage_HS)) Result |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+            if (HasFlag(Stages, PipelineStage_DS)) Result |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+            if (HasFlag(Stages, PipelineStage_GS)) Result |= VK_SHADER_STAGE_GEOMETRY_BIT;
+            if (HasFlag(Stages, PipelineStage_CS)) Result |= VK_SHADER_STAGE_COMPUTE_BIT;
+            return(Result);
+        };
+
         for (u32 PipelineIndex = 1; PipelineIndex < Pipeline_Count; PipelineIndex++)
         {
             memory_arena_checkpoint Checkpoint = ArenaCheckpoint(TempArena);
@@ -572,6 +584,19 @@ VkResult CreateRenderer(renderer* Renderer,
             {
                 SetLayouts[SetLayoutIndex] = Renderer->SetLayouts[Info->Layout.DescriptorSets[SetLayoutIndex]];
             }
+
+            VkPushConstantRange PushConstantRanges[MaxPushConstantRangeCount] = {};
+            for (u32 Index = 0; Index < Info->Layout.PushConstantRangeCount; Index++)
+            {
+                const push_constant_range* Range = Info->Layout.PushConstantRanges + Index;
+                PushConstantRanges[Index] = 
+                {
+                    .stageFlags = PipelineStagesToVulkan(Range->Stages),
+                    .offset = Range->Offset,
+                    .size = Range->Size,
+                };
+            }
+
             VkPipelineLayoutCreateInfo PipelineLayoutInfo = 
             {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -580,7 +605,7 @@ VkResult CreateRenderer(renderer* Renderer,
                 .setLayoutCount = Info->Layout.DescriptorSetCount,
                 .pSetLayouts = SetLayouts,
                 .pushConstantRangeCount = Info->Layout.PushConstantRangeCount,
-                .pPushConstantRanges = Info->Layout.PushConstantRanges,
+                .pPushConstantRanges = PushConstantRanges,
             };
             Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Pipeline->Layout);
             Assert(Result == VK_SUCCESS);
@@ -700,14 +725,18 @@ VkResult CreateRenderer(renderer* Renderer,
                     }
                 }
 
-                VkVertexInputBindingDescription VertexBindings[MaxVertexInputBindingCount] = {};
-                VkVertexInputAttributeDescription VertexAttribs[MaxVertexInputAttribCount] = {};
+                VkVertexInputBindingDescription VertexBindings[MaxVertexBindingCount] = {};
+                VkVertexInputAttributeDescription VertexAttribs[MaxVertexAttribCount] = {};
                 for (u32 BindingIndex = 0; BindingIndex < Info->InputAssemblerState.BindingCount; BindingIndex++)
                 {
                     const vertex_input_binding* Binding = Info->InputAssemblerState.Bindings + BindingIndex;
+                    if (Binding->InstanceStepRate > 1)
+                    {
+                        UnimplementedCodePath;
+                    }
                     VertexBindings[BindingIndex].binding = BindingIndex;
                     VertexBindings[BindingIndex].stride = Binding->Stride;
-                    VertexBindings[BindingIndex].inputRate = Binding->IsPerInstance ? VK_VERTEX_INPUT_RATE_INSTANCE : VK_VERTEX_INPUT_RATE_VERTEX;
+                    VertexBindings[BindingIndex].inputRate = Binding->InstanceStepRate == 0 ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE;
                 }
 
                 for (u32 AttribIndex = 0; AttribIndex < Info->InputAssemblerState.AttribCount; AttribIndex++)
@@ -752,15 +781,23 @@ VkResult CreateRenderer(renderer* Renderer,
                     .pScissors = &Scissor,
                 };
 
+                VkPolygonMode PolygonMode;
+                switch (Info->RasterizerState.Fill)
+                {
+                    case Fill_Solid: PolygonMode = VK_POLYGON_MODE_FILL; break;
+                    case Fill_Line: PolygonMode = VK_POLYGON_MODE_LINE; break;
+                    case Fill_Point: PolygonMode = VK_POLYGON_MODE_POINT; break;
+                    InvalidDefaultCase;
+                }
                 VkPipelineRasterizationStateCreateInfo RasterizationState = 
                 {
                     .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
                     .pNext = nullptr,
                     .depthClampEnable = HasFlag(Info->RasterizerState.Flags, RS_DepthClampEnable),
                     .rasterizerDiscardEnable = HasFlag(Info->RasterizerState.Flags, RS_DiscardEnable),
-                    .polygonMode = Info->RasterizerState.PolygonMode,
+                    .polygonMode = PolygonMode,
                     .cullMode = Info->RasterizerState.CullFlags,
-                    .frontFace = Info->RasterizerState.FrontFace,
+                    .frontFace = HasFlag(Info->RasterizerState.Flags, RS_FrontCW) ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE,
                     .depthBiasEnable = HasFlag(Info->RasterizerState.Flags, RS_DepthBiasEnable),
                     .depthBiasConstantFactor = Info->RasterizerState.DepthBiasConstantFactor,
                     .depthBiasClamp = Info->RasterizerState.DepthBiasClamp,
@@ -1128,13 +1165,13 @@ geometry_buffer_allocation UploadVertexData(renderer* Renderer,
 
 #undef ReturnOnFailure
 
-texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format, swizzle Swizzle)
+texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format, texture_swizzle Swizzle)
 {
     texture_id Result = { INVALID_INDEX_U32 };
 
     texture_manager* TextureManager = &Renderer->TextureManager;
 
-    texture_byte_rate ByteRate = GetByteRate(Format);
+    format_byterate ByteRate = GetByteRate(Format);
 
     Result = CreateTexture(TextureManager, Width, Height, MipCount, Format, Swizzle);
     if (IsValid(Result))

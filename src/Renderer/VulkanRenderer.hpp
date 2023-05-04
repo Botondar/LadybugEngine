@@ -43,39 +43,15 @@ struct pipeline_layout_info
 {
     u32 PushConstantRangeCount;
     u32 DescriptorSetCount;
-    VkPushConstantRange PushConstantRanges[MaxPushConstantRangeCount];
+    push_constant_range PushConstantRanges[MaxPushConstantRangeCount];
     u32 DescriptorSets[MaxDescriptorSetCount];
-};
-
-
-enum pipeline_type : u32
-{
-    PipelineType_Graphics = 0,
-    PipelineType_Compute,
-
-    PipelineType_Count,
-};
-
-enum pipeline_stage : flags32
-{
-    PipelineStage_None = 0,
-
-    PipelineStage_VS = (1 << 0),
-    PipelineStage_PS = (1 << 1),
-    PipelineStage_DS = (1 << 2),
-    PipelineStage_HS = (1 << 3),
-    PipelineStage_GS = (1 << 4),
-
-    PipelineStage_CS = (1 << 5),
-
-    PipelineStage_Count = 6, // NOTE(boti): This has to be kept up to date !!!
 };
 
 // NOTE(boti): binding index is implicit from what index this structure is at in input_assembler_state
 struct vertex_input_binding
 {
     u32 Stride;
-    b32 IsPerInstance;
+    u32 InstanceStepRate;
 };
 
 struct vertex_input_attrib
@@ -92,8 +68,8 @@ struct input_assembler_state
     b32 EnablePrimitiveRestart;
     u32 BindingCount;
     u32 AttribCount;
-    vertex_input_binding Bindings[MaxVertexInputBindingCount];
-    vertex_input_attrib Attribs[MaxVertexInputAttribCount];
+    vertex_input_binding Bindings[MaxVertexBindingCount];
+    vertex_input_attrib Attribs[MaxVertexAttribCount];
 };
 
 enum rasterizer_flags : flags32
@@ -103,14 +79,14 @@ enum rasterizer_flags : flags32
     RS_DepthClampEnable = (1 << 0),
     RS_DiscardEnable = (1 << 1),
     RS_DepthBiasEnable = (1 << 2),
+    RS_FrontCW = (1 << 3),
 };
 
 struct rasterizer_state
 {
     flags32 Flags;
-    VkPolygonMode PolygonMode;
-    VkCullModeFlags CullFlags;
-    VkFrontFace FrontFace;
+    fill_mode Fill;
+    cull_flags CullFlags;
 
     f32 DepthBiasConstantFactor;
     f32 DepthBiasClamp;
@@ -286,4 +262,4 @@ VkResult CreateRenderer(renderer* Renderer,
 geometry_buffer_allocation UploadVertexData(renderer* Renderer, 
                                                  u32 VertexCount, const vertex* VertexData,
                                                  u32 IndexCount, const vert_index* IndexData);
-texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format, swizzle Swizzle);
+texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format, texture_swizzle Swizzle);

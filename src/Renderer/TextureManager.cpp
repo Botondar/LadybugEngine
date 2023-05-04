@@ -1,8 +1,8 @@
 #include "TextureManager.hpp"
 
-lbfn texture_byte_rate GetByteRate(VkFormat Format)
+lbfn format_byterate GetByteRate(VkFormat Format)
 {
-    texture_byte_rate Result = { 0, 1, false };
+    format_byterate Result = { 0, 1, false };
     switch (Format)
     {
         case VK_FORMAT_R8G8B8A8_SRGB:
@@ -57,7 +57,7 @@ lbfn texture_byte_rate GetByteRate(VkFormat Format)
     return Result;
 }
 
-lbfn u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, texture_byte_rate ByteRate)
+lbfn u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, format_byterate ByteRate)
 {
     u64 Result = 0;
 
@@ -218,11 +218,11 @@ lbfn VkImage GetImage(texture_manager* Manager, texture_id ID)
 
 lbfn texture_id CreateTexture(texture_manager* Manager, 
                               u32 Width, u32 Height, u32 MipCount, 
-                              VkFormat Format, swizzle Swizzle)
+                              VkFormat Format, texture_swizzle Swizzle)
 {
     texture_id Result = { U32_MAX };
 
-    auto SwizzleToVulkan = [](swizzle_type Type) -> VkComponentSwizzle 
+    auto SwizzleToVulkan = [](texture_swizzle_type Type) -> VkComponentSwizzle 
     {
         VkComponentSwizzle Result = VK_COMPONENT_SWIZZLE_IDENTITY;
         switch (Type)

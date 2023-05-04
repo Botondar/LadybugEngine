@@ -439,9 +439,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = 
             {
                 { 
-                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
-                    .offset = 0, 
-                    .size = sizeof(m4) + MaterialStructSize 
+                    .Stages = PipelineStage_VS|PipelineStage_PS, 
+                    .Size = sizeof(m4) + MaterialStructSize,
+                    .Offset = 0, 
                 },
             },
             .DescriptorSets = 
@@ -459,9 +459,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .RasterizerState = 
         {
             .Flags = RS_Flags_None,
-            .PolygonMode = VK_POLYGON_MODE_FILL,
-            .CullFlags = VK_CULL_MODE_NONE, // TODO
-            .FrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .Fill = Fill_Solid,
+            .CullFlags = Cull_None, // TODO
             .DepthBiasConstantFactor = 0.0f,
             .DepthBiasClamp = 0.0f,
             .DepthBiasSlopeFactor = 0.0f,
@@ -494,9 +493,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = 
             {
                 { 
-                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
-                    .offset = 0, 
-                    .size = sizeof(m4) + MaterialStructSize 
+                    .Stages = PipelineStage_VS|PipelineStage_PS, 
+                    .Size = sizeof(m4) + MaterialStructSize,
+                    .Offset = 0, 
                 },
             },
             .DescriptorSets = 
@@ -511,9 +510,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .RasterizerState = 
         {
             .Flags = RS_Flags_None,
-            .PolygonMode = VK_POLYGON_MODE_FILL,
-            .CullFlags = VK_CULL_MODE_NONE, // TODO
-            .FrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .Fill = Fill_Solid,
+            .CullFlags = Cull_None, // TODO
             .DepthBiasConstantFactor = 0.0f,
             .DepthBiasClamp = 0.0f,
             .DepthBiasSlopeFactor = 0.0f,
@@ -546,9 +544,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = 
             {
                 { 
-                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
-                    .offset = 0, 
-                    .size = sizeof(m4) + MaterialStructSize + sizeof(u32) 
+                    .Stages = PipelineStage_VS|PipelineStage_PS, 
+                    .Size = sizeof(m4) + MaterialStructSize + sizeof(u32),
+                    .Offset = 0, 
                 },
             },
             .DescriptorSets = 
@@ -563,9 +561,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .RasterizerState = 
         {
             .Flags = RS_DepthClampEnable|RS_DepthBiasEnable,
-            .PolygonMode = VK_POLYGON_MODE_FILL,
-            .CullFlags = VK_CULL_MODE_NONE,
-            .FrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .Fill = Fill_Solid,
+            .CullFlags = Cull_None,
             .DepthBiasConstantFactor = 1.0f / 4096.0f,
             .DepthBiasClamp = 1.0f / 64.0f,
             .DepthBiasSlopeFactor = 3.0f,
@@ -598,9 +595,10 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = 
             {
                 { 
-                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
-                    .offset = 0, 
-                    .size = sizeof(m4) + sizeof(u32) },
+                    .Stages = PipelineStage_VS|PipelineStage_PS, 
+                    .Size = sizeof(m4) + sizeof(u32),
+                    .Offset = 0, 
+                },
             },
             .DescriptorSets = { SetLayout_PerFrameUniformData },
         },
@@ -609,9 +607,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .RasterizerState = 
         {
             .Flags = RS_Flags_None,
-            .PolygonMode = VK_POLYGON_MODE_FILL,
-            .CullFlags = VK_CULL_MODE_NONE,
-            .FrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .Fill = Fill_Solid,
+            .CullFlags = Cull_None,
             .DepthBiasConstantFactor = 0.0f,
             .DepthBiasClamp = 0.0f,
             .DepthBiasSlopeFactor = 0.0f,
@@ -649,9 +646,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .RasterizerState = 
         {
             .Flags = RS_Flags_None,
-            .PolygonMode = VK_POLYGON_MODE_FILL,
-            .CullFlags = VK_CULL_MODE_NONE,
-            .FrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .Fill = Fill_Solid,
+            .CullFlags = Cull_None,
             .DepthBiasConstantFactor = 0.0f,
             .DepthBiasClamp = 0.0f,
             .DepthBiasSlopeFactor = 0.0f,
@@ -685,9 +681,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = 
             { 
                 { 
-                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-                    .offset = 0, 
-                    .size = sizeof(m4) 
+                    .Stages = PipelineStage_VS,
+                    .Size = sizeof(m4),
+                    .Offset = 0, 
                 },
             },
             .DescriptorSets = { SetLayout_SingleCombinedTexturePS },
@@ -699,7 +695,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .EnablePrimitiveRestart = false,
             .BindingCount = 1,
             .AttribCount = 3,
-            .Bindings = { { .Stride = sizeof(ui_vertex), .IsPerInstance = false } },
+            .Bindings = { { .Stride = sizeof(ui_vertex), .InstanceStepRate = 0 } },
             .Attribs = 
             {
                 {
@@ -725,9 +721,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .RasterizerState = 
         {
             .Flags = RS_Flags_None,
-            .PolygonMode = VK_POLYGON_MODE_FILL,
-            .CullFlags = VK_CULL_MODE_NONE,
-            .FrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .Fill = Fill_Solid,
+            .CullFlags = Cull_None,
         },
         .DepthStencilState = 
         {
@@ -768,9 +763,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = 
             {
                 {
-                    .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                    .offset = 0,
-                    .size = sizeof(f32),
+                    .Stages = PipelineStage_PS,
+                    .Size = sizeof(f32),
+                    .Offset = 0,
                 },
             },
             .DescriptorSets = { SetLayout_Blit },
@@ -786,9 +781,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .RasterizerState = 
         {
             .Flags = RS_Flags_None,
-            .PolygonMode = VK_POLYGON_MODE_FILL,
-            .CullFlags = VK_CULL_MODE_NONE,
-            .FrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .Fill = Fill_Solid,
+            .CullFlags = Cull_None,
         },
         .DepthStencilState = 
         {
@@ -815,9 +809,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = 
             {
                 {
-                    .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-                    .offset = 0,
-                    .size = sizeof(b32),
+                    .Stages = PipelineStage_CS,
+                    .Size = sizeof(b32),
+                    .Offset = 0,
                 },
             },
             .DescriptorSets = { SetLayout_Bloom },
@@ -835,9 +829,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = 
             { 
                 {
-                    .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-                    .offset = 0,
-                    .size = 2 * sizeof(f32),
+                    .Stages = PipelineStage_CS,
+                    .Size = 2 * sizeof(f32),
+                    .Offset = 0,
                 }
             },
             .DescriptorSets = { SetLayout_BloomUpsample },
@@ -855,9 +849,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = 
             {
                 {
-                    .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-                    .offset = 0,
-                    .size = 3 * sizeof(f32),
+                    .Stages = PipelineStage_CS,
+                    .Size = 3 * sizeof(f32),
+                    .Offset = 0,
                 },
             },
             .DescriptorSets = 
@@ -891,9 +885,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = 
             { 
                 {
-                    .stageFlags = VK_SHADER_STAGE_ALL,
-                    .offset = 0,
-                    .size = 2 * sizeof(v2) + sizeof(v3),
+                    .Stages = PipelineStage_All,
+                    .Size = 2 * sizeof(v2) + sizeof(v3),
+                    .Offset = 0,
                 },
             },
             .DescriptorSets = {},
@@ -909,9 +903,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .RasterizerState = 
         {
             .Flags = RS_Flags_None,
-            .PolygonMode = VK_POLYGON_MODE_FILL,
-            .CullFlags = VK_CULL_MODE_NONE,
-            .FrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .Fill = Fill_Solid,
+            .CullFlags = Cull_None,
         },
         .DepthStencilState = 
         {
@@ -925,6 +918,5 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .ColorAttachments = { HDR_FORMAT },
         .DepthAttachment = DEPTH_FORMAT,
         .StencilAttachment = VK_FORMAT_UNDEFINED,
-
-    }
+    },
 };
