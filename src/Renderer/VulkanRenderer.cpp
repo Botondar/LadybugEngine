@@ -2,6 +2,106 @@
 
 #define ReturnOnFailure() if (Result != VK_SUCCESS) return Result
 
+static VkFormat FormatTable[Format_Count] = 
+{
+    [Format_Undefined]          = VK_FORMAT_UNDEFINED,
+    [Format_R8_UNorm]           = VK_FORMAT_R8_UNORM,
+    [Format_R8_UInt]            = VK_FORMAT_R8_UINT,
+    [Format_R8_SRGB]            = VK_FORMAT_R8_SRGB,
+    [Format_R8G8_UNorm]         = VK_FORMAT_R8G8_UNORM,
+    [Format_R8G8_UInt]          = VK_FORMAT_R8G8_UINT,
+    [Format_R8G8_SRGB]          = VK_FORMAT_R8G8_SRGB,
+    [Format_R8G8B8_UNorm]       = VK_FORMAT_R8G8B8_UNORM,
+    [Format_R8G8B8_UInt]        = VK_FORMAT_R8G8B8_UINT,
+    [Format_R8G8B8_SRGB]        = VK_FORMAT_R8G8B8_SRGB,
+    [Format_R8G8B8A8_UNorm]     = VK_FORMAT_R8G8B8A8_UNORM,
+    [Format_R8G8B8A8_UInt]      = VK_FORMAT_R8G8B8A8_UINT,
+    [Format_R8G8B8A8_SRGB]      = VK_FORMAT_R8G8B8A8_SRGB,
+    [Format_R16_UNorm]          = VK_FORMAT_R16_UNORM,
+    [Format_R16_UInt]           = VK_FORMAT_R16_UINT,
+    [Format_R16_Float]          = VK_FORMAT_R16_SFLOAT,
+    [Format_R16G16_UNorm]       = VK_FORMAT_R16G16_UNORM,
+    [Format_R16G16_UInt]        = VK_FORMAT_R16G16_UINT,
+    [Format_R16G16_Float]       = VK_FORMAT_R16G16_SFLOAT,
+    [Format_R16G16B16_UNorm]    = VK_FORMAT_R16G16B16_UNORM,
+    [Format_R16G16B16_UInt]     = VK_FORMAT_R16G16B16_UINT,
+    [Format_R16G16B16_Float]    = VK_FORMAT_R16G16B16_SFLOAT,
+    [Format_R16G16B16A16_UNorm] = VK_FORMAT_R16G16B16A16_UNORM,
+    [Format_R16G16B16A16_UInt]  = VK_FORMAT_R16G16B16A16_UINT,
+    [Format_R16G16B16A16_Float] = VK_FORMAT_R16G16B16A16_SFLOAT,
+    [Format_R32_UInt]           = VK_FORMAT_R32_UINT,
+    [Format_R32_Float]          = VK_FORMAT_R32_SFLOAT,
+    [Format_R32G32_UInt]        = VK_FORMAT_R32G32_UINT,
+    [Format_R32G32_Float]       = VK_FORMAT_R32G32_SFLOAT,
+    [Format_R32G32B32_UInt]     = VK_FORMAT_R32G32B32_UINT,
+    [Format_R32G32B32_Float]    = VK_FORMAT_R32G32B32_SFLOAT,
+    [Format_R32G32B32A32_UInt]  = VK_FORMAT_R32G32B32A32_UINT,
+    [Format_R32G32B32A32_Float] = VK_FORMAT_R32G32B32A32_SFLOAT,
+    [Format_R11G11B10_Float]    = VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+    [Format_D16]                = VK_FORMAT_D16_UNORM,
+    [Format_D24X8]              = VK_FORMAT_X8_D24_UNORM_PACK32,
+    [Format_D32]                = VK_FORMAT_D32_SFLOAT,
+    [Format_S8]                 = VK_FORMAT_S8_UINT,
+    [Format_D24S8]              = VK_FORMAT_D24_UNORM_S8_UINT,
+    [Format_D32S8]              = VK_FORMAT_D32_SFLOAT_S8_UINT,
+    [Format_BC1_RGB_UNorm]      = VK_FORMAT_BC1_RGB_UNORM_BLOCK,
+    [Format_BC1_RGB_SRGB]       = VK_FORMAT_BC1_RGB_SRGB_BLOCK,
+    [Format_BC1_RGBA_UNorm]     = VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
+    [Format_BC1_RGBA_SRGB]      = VK_FORMAT_BC1_RGBA_SRGB_BLOCK,
+    [Format_BC2_UNorm]          = VK_FORMAT_BC2_UNORM_BLOCK,
+    [Format_BC2_SRGB]           = VK_FORMAT_BC2_SRGB_BLOCK,
+    [Format_BC3_UNorm]          = VK_FORMAT_BC3_UNORM_BLOCK,
+    [Format_BC3_SRGB]           = VK_FORMAT_BC3_SRGB_BLOCK,
+    [Format_BC4_UNorm]          = VK_FORMAT_BC4_UNORM_BLOCK,
+    [Format_BC4_SNorm]          = VK_FORMAT_BC4_SNORM_BLOCK,
+    [Format_BC5_UNorm]          = VK_FORMAT_BC5_UNORM_BLOCK,
+    [Format_BC5_SNorm]          = VK_FORMAT_BC5_SNORM_BLOCK,
+    [Format_BC6_UFloat]         = VK_FORMAT_BC6H_UFLOAT_BLOCK,
+    [Format_BC6_SFloat]         = VK_FORMAT_BC6H_SFLOAT_BLOCK,
+    [Format_BC7_UNorm]          = VK_FORMAT_BC7_UNORM_BLOCK,
+    [Format_BC7_SRGB]           = VK_FORMAT_BC7_SRGB_BLOCK,
+};
+
+static VkPrimitiveTopology TopologyTable[Topology_Count] = 
+{
+    [Topology_Undefined]                = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+
+    [Topology_PointList]                = VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+    [Topology_LineList]                 = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+    [Topology_LineStrip]                = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
+    [Topology_TriangleList]             = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    [Topology_TriangleStrip]            = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+    [Topology_TriangleFan]              = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
+    [Topology_LineListAdjacency]        = VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
+    [Topology_LineStripAdjacency]       = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,
+    [Topology_TriangleListAdjacency]    = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,
+    [Topology_TriangleStripAdjacency]   = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY,
+    [Topology_PatchList]                = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
+};
+
+VkShaderStageFlags PipelineStagesToVulkan(flags32 Stages)
+{
+    VkShaderStageFlags Result = 0;
+    if (Stages == PipelineStage_All)
+    {
+        Result = VK_SHADER_STAGE_ALL;
+    }
+    else if (Stages == PipelineStage_AllGfx)
+    {
+        Result = VK_SHADER_STAGE_ALL_GRAPHICS;
+    }
+    else 
+    {
+        if (HasFlag(Stages, PipelineStage_VS)) Result |= VK_SHADER_STAGE_VERTEX_BIT;
+        if (HasFlag(Stages, PipelineStage_PS)) Result |= VK_SHADER_STAGE_FRAGMENT_BIT;
+        if (HasFlag(Stages, PipelineStage_HS)) Result |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+        if (HasFlag(Stages, PipelineStage_DS)) Result |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+        if (HasFlag(Stages, PipelineStage_GS)) Result |= VK_SHADER_STAGE_GEOMETRY_BIT;
+        if (HasFlag(Stages, PipelineStage_CS)) Result |= VK_SHADER_STAGE_COMPUTE_BIT;
+    }
+    return(Result);
+}
+
 internal VkResult ResizeRenderTargets(renderer* Renderer);
 
 internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTypes, size_t Size, 
@@ -199,7 +299,7 @@ VkResult CreateRenderer(renderer* Renderer,
                 Bindings[Binding].binding = Info->Bindings[Binding].Binding;
                 Bindings[Binding].descriptorType = Info->Bindings[Binding].Type;
                 Bindings[Binding].descriptorCount = Info->Bindings[Binding].DescriptorCount;
-                Bindings[Binding].stageFlags = Info->Bindings[Binding].StageFlags;
+                Bindings[Binding].stageFlags = PipelineStagesToVulkan(Info->Bindings[Binding].Stages);
                 Bindings[Binding].pImmutableSamplers = &Renderer->Samplers[Info->Bindings[Binding].ImmutableSampler];
             }
             VkDescriptorSetLayoutCreateInfo CreateInfo = 
@@ -560,15 +660,17 @@ VkResult CreateRenderer(renderer* Renderer,
         CopyZStringToBuffer(Path, "build/", &PathSize);
         char* Name = Path + (MaxPathSize - PathSize);
 
-        auto PipelineStagesToVulkan = [](flags32 Stages) -> VkShaderStageFlags
+        auto FormatToVulkan = [](format Format) -> VkFormat
         {
-            VkShaderStageFlags Result = 0;
-            if (HasFlag(Stages, PipelineStage_VS)) Result |= VK_SHADER_STAGE_VERTEX_BIT;
-            if (HasFlag(Stages, PipelineStage_PS)) Result |= VK_SHADER_STAGE_FRAGMENT_BIT;
-            if (HasFlag(Stages, PipelineStage_HS)) Result |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-            if (HasFlag(Stages, PipelineStage_DS)) Result |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-            if (HasFlag(Stages, PipelineStage_GS)) Result |= VK_SHADER_STAGE_GEOMETRY_BIT;
-            if (HasFlag(Stages, PipelineStage_CS)) Result |= VK_SHADER_STAGE_COMPUTE_BIT;
+            VkFormat Result = VK_FORMAT_UNDEFINED;
+            if (Format < Format_Count)
+            {
+                Result = FormatTable[Format];
+            }
+            else
+            {
+                InvalidCodePath;
+            }
             return(Result);
         };
 
@@ -729,7 +831,7 @@ VkResult CreateRenderer(renderer* Renderer,
                 VkVertexInputAttributeDescription VertexAttribs[MaxVertexAttribCount] = {};
                 for (u32 BindingIndex = 0; BindingIndex < Info->InputAssemblerState.BindingCount; BindingIndex++)
                 {
-                    const vertex_input_binding* Binding = Info->InputAssemblerState.Bindings + BindingIndex;
+                    const vertex_binding* Binding = Info->InputAssemblerState.Bindings + BindingIndex;
                     if (Binding->InstanceStepRate > 1)
                     {
                         UnimplementedCodePath;
@@ -741,11 +843,11 @@ VkResult CreateRenderer(renderer* Renderer,
 
                 for (u32 AttribIndex = 0; AttribIndex < Info->InputAssemblerState.AttribCount; AttribIndex++)
                 {
-                    const vertex_input_attrib* Attrib = Info->InputAssemblerState.Attribs + AttribIndex;
+                    const vertex_attrib* Attrib = Info->InputAssemblerState.Attribs + AttribIndex;
                     VertexAttribs[AttribIndex].location = Attrib->Index;
-                    VertexAttribs[AttribIndex].binding = Attrib->BindingIndex;
-                    VertexAttribs[AttribIndex].format = Attrib->Format;
-                    VertexAttribs[AttribIndex].offset = Attrib->Offset;
+                    VertexAttribs[AttribIndex].binding = Attrib->Binding;
+                    VertexAttribs[AttribIndex].format = FormatToVulkan(Attrib->Format);
+                    VertexAttribs[AttribIndex].offset = Attrib->ByteOffset;
                 }
 
                 VkPipelineVertexInputStateCreateInfo VertexInputState = 
@@ -764,7 +866,7 @@ VkResult CreateRenderer(renderer* Renderer,
                     .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
                     .pNext = nullptr,
                     .flags = 0,
-                    .topology = Info->InputAssemblerState.PrimitiveTopology,
+                    .topology = TopologyTable[Info->InputAssemblerState.Topology],
                     .primitiveRestartEnable = Info->InputAssemblerState.EnablePrimitiveRestart,
                 };
 

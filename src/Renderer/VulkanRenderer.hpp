@@ -28,7 +28,7 @@ struct descriptor_set_binding
     u32 Binding;
     VkDescriptorType Type;
     u32 DescriptorCount;
-    flags32 StageFlags;
+    flags32 Stages;
     u32 ImmutableSampler; // NOTE(boti): for now we only allow single immutable samplers
 };
 
@@ -135,7 +135,7 @@ struct pipeline_info
     // Gfx pipeline specific
     flags32 EnabledStages;
 
-    input_assembler_state InputAssemblerState;
+    vertex_state InputAssemblerState;
     rasterizer_state RasterizerState;
     depth_stencil_state DepthStencilState;
     u32 BlendAttachmentCount;

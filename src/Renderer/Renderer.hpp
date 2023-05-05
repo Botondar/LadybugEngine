@@ -127,7 +127,7 @@ enum format : u32
     Format_S8,
     Format_D16S8,
     Format_D24S8,
-    Format_D32S8,
+    Format_D32S8, // NOTE(boti): This is padded to 64-bits (D32S8X24)
     
     Format_BC1_RGB_UNorm,
     Format_BC1_RGB_SRGB,
@@ -237,6 +237,7 @@ static format_byterate FormatByterateTable[Format_Count] =
     [Format_R16G16_Float]       = { 2*2, 1, false },
     [Format_R16G16B16_UNorm]    = { 3*2, 1, false },
     [Format_R16G16B16_UInt]     = { 3*2, 1, false },
+    [Format_R16G16B16_Float]    = { 3*2, 1, false },
     [Format_R16G16B16A16_UNorm] = { 4*2, 1, false },
     [Format_R16G16B16A16_UInt]  = { 4*2, 1, false },
     [Format_R16G16B16A16_Float] = { 4*2, 1, false },
@@ -249,13 +250,13 @@ static format_byterate FormatByterateTable[Format_Count] =
     [Format_R32G32B32A32_UInt]  = { 4*4, 1, false },
     [Format_R32G32B32A32_Float] = { 4*4, 1, false },
 
-    [Format_R11G11B10_Float] = { 4, 1, false},
-    [Format_D16]    = { 2, 1, false },
-    [Format_D24X8]  = { 4, 1, false },
-    [Format_D32]    = { 4, 1, false },
-    [Format_S8]     = { 1, 1, false },
-    [Format_D24S8]  = { 4, 1, false },
-    [Format_D32S8]  = { 8, 1, false },
+    [Format_R11G11B10_Float]    = { 4, 1, false},
+    [Format_D16]                = { 2, 1, false },
+    [Format_D24X8]              = { 4, 1, false },
+    [Format_D32]                = { 4, 1, false },
+    [Format_S8]                 = { 1, 1, false },
+    [Format_D24S8]              = { 4, 1, false },
+    [Format_D32S8]              = { 8, 1, false },
 
     [Format_BC1_RGB_UNorm]  = { 1, 2, true },
     [Format_BC1_RGB_SRGB]   = { 1, 2, true },

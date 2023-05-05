@@ -61,7 +61,7 @@ enum pipeline : u32
     Pipeline_Count,
 };
 
-extern input_assembler_state InputState_vertex;
+extern vertex_state InputState_vertex;
 
 extern const VkSamplerCreateInfo SamplerInfos[Sampler_Count];
 extern const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count];
