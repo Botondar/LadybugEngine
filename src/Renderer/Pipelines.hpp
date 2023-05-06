@@ -63,6 +63,6 @@ enum pipeline : u32
 
 extern vertex_state InputState_vertex;
 
-extern const VkSamplerCreateInfo SamplerInfos[Sampler_Count];
+extern const sampler_state SamplerInfos[Sampler_Count];
 extern const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count];
 extern const pipeline_info PipelineInfos[Pipeline_Count];

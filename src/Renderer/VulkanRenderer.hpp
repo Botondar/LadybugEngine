@@ -15,18 +15,10 @@ constexpr VkFormat SHADOW_FORMAT = VK_FORMAT_D16_UNORM; // TODO(boti): is this e
 // HACK(boti): The swapchain format is unknown at compile time, so we use this special value to refer to it
 constexpr VkFormat SWAPCHAIN_FORMAT = (VkFormat)0xFFFFFFFF;
 
-enum descriptor_set_layout_flags : flags32
-{
-    SetLayoutFlag_None = 0,
-
-    SetLayoutFlag_UpdateAfterBind = (1 << 0),
-    SetLayoutFlag_Bindless = (2 << 0),
-};
-
 struct descriptor_set_binding
 {
     u32 Binding;
-    VkDescriptorType Type;
+    descriptor_type Type;
     u32 DescriptorCount;
     flags32 Stages;
     u32 ImmutableSampler; // NOTE(boti): for now we only allow single immutable samplers

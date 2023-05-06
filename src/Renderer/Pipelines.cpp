@@ -47,115 +47,90 @@ vertex_state InputState_vertex =
 };
 
 
-const VkSamplerCreateInfo SamplerInfos[Sampler_Count] = 
+const sampler_state SamplerInfos[Sampler_Count] = 
 {
     [Sampler_None] = {},
 
     [Sampler_Default] = 
     {
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .mipLodBias = 0.0f,
-        .anisotropyEnable = VK_TRUE,
-        .maxAnisotropy = 16.0f,
-        .compareEnable = VK_FALSE,
-        .compareOp = VK_COMPARE_OP_ALWAYS,
-        .minLod = 0.0f,
-        .maxLod = VK_LOD_CLAMP_NONE,
-        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_WHITE,
-        .unnormalizedCoordinates = VK_FALSE,
+        .MagFilter = Filter_Linear,
+        .MinFilter = Filter_Linear,
+        .MipFilter = Filter_Linear,
+        .WrapU = Wrap_Repeat,
+        .WrapV = Wrap_Repeat,
+        .WrapW = Wrap_Repeat,
+        .Anisotropy = Anisotropy_16,
+        .EnableComparison = false,
+        .Comparison = Compare_Always,
+        .MinLOD = 0.0f,
+        .MaxLOD = GlobalMaxLOD,
+        .Border = Border_White,
+        .EnableUnnormalizedCoordinates = false,
     },
     [Sampler_RenderTargetUnnormalized] = 
     {
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .mipLodBias = 0.0f,
-        .anisotropyEnable = VK_FALSE,
-        .maxAnisotropy = 0.0f,
-        .compareEnable = VK_FALSE,
-        .compareOp = VK_COMPARE_OP_ALWAYS,
-        .minLod = 0.0f,
-        .maxLod = 0.0f,
-        .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
-        .unnormalizedCoordinates = VK_TRUE,
+        .MagFilter = Filter_Linear,
+        .MinFilter = Filter_Linear,
+        .MipFilter = Filter_Nearest,
+        .WrapU = Wrap_ClampToEdge,
+        .WrapV = Wrap_ClampToEdge,
+        .WrapW = Wrap_ClampToEdge,
+        .Anisotropy = Anisotropy_None,
+        .EnableComparison = false,
+        .Comparison = Compare_Always,
+        .MinLOD = 0.0f,
+        .MaxLOD = 0.0f,
+        .Border = Border_Black,
+        .EnableUnnormalizedCoordinates = true,
     },
     [Sampler_Shadow] = 
     {
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-        .mipLodBias = 0.0f,
-        .anisotropyEnable = VK_FALSE,
-        .maxAnisotropy = 0.0f,
-        .compareEnable = VK_TRUE,
-        .compareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
-        .minLod = 0.0f,
-        .maxLod = VK_LOD_CLAMP_NONE,
-        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
-        .unnormalizedCoordinates = VK_FALSE,
+        .MagFilter = Filter_Linear,
+        .MinFilter = Filter_Linear,
+        .MipFilter = Filter_Nearest,
+        .WrapU = Wrap_ClampToBorder,
+        .WrapV = Wrap_ClampToBorder,
+        .WrapW = Wrap_ClampToBorder,
+        .Anisotropy = Anisotropy_None,
+        .EnableComparison = true,
+        .Comparison = Compare_LessEqual,
+        .MinLOD = 0.0f,
+        .MaxLOD = 0.0f,
+        .Border = Border_White,
+        .EnableUnnormalizedCoordinates = false,
     },
     [Sampler_RenderTargetNormalized] = 
     {
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,//VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,//VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,//VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .mipLodBias = 0.0f,
-        .anisotropyEnable = VK_FALSE,
-        .maxAnisotropy = 0.0f,
-        .compareEnable = VK_FALSE,
-        .compareOp = VK_COMPARE_OP_ALWAYS,
-        .minLod = 0.0f,
-        .maxLod = VK_LOD_CLAMP_NONE,
-        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
-        .unnormalizedCoordinates = VK_FALSE,
+        .MagFilter = Filter_Linear,
+        .MinFilter = Filter_Linear,
+        .MipFilter = Filter_Nearest,
+        .WrapU = Wrap_ClampToBorder,
+        .WrapV = Wrap_ClampToBorder,
+        .WrapW = Wrap_ClampToBorder,
+        .Anisotropy = Anisotropy_None,
+        .EnableComparison = false,
+        .Comparison = Compare_Always,
+        .MinLOD = 0.0f,
+        .MaxLOD = GlobalMaxLOD,
+        .Border = Border_Black,
+        .EnableUnnormalizedCoordinates = false,
     },
 
     [Sampler_RenderTargetNormalizedClampToEdge] = 
     {
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-        .mipLodBias = 0.0f,
-        .anisotropyEnable = VK_FALSE,
-        .maxAnisotropy = 0.0f,
-        .compareEnable = VK_FALSE,
-        .compareOp = VK_COMPARE_OP_ALWAYS,
-        .minLod = 0.0f,
-        .maxLod = VK_LOD_CLAMP_NONE,
-        .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
-        .unnormalizedCoordinates = VK_FALSE,
+        .MagFilter = Filter_Linear,
+        .MinFilter = Filter_Linear,
+        .MipFilter = Filter_Nearest,
+        .WrapU = Wrap_ClampToEdge,
+        .WrapV = Wrap_ClampToEdge,
+        .WrapW = Wrap_ClampToEdge,
+        .Anisotropy = Anisotropy_None,
+        .EnableComparison = false,
+        .Comparison = Compare_Always,
+        .MinLOD = 0.0f,
+        .MaxLOD = GlobalMaxLOD,
+        .Border = Border_Black,
+        .EnableUnnormalizedCoordinates = false,
     },
 };
 
@@ -172,7 +147,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .Type = Descriptor_UniformBuffer,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_All,
                 .ImmutableSampler = Sampler_None,
@@ -187,7 +162,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .Type = Descriptor_SampledImage,
                 .DescriptorCount = 0, // NOTE(boti): actual count is implied by the descriptor pool size for bindless
                 .Stages = PipelineStage_PS,
                 .ImmutableSampler = Sampler_None,
@@ -203,7 +178,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_PS,
                 .ImmutableSampler = Sampler_RenderTargetUnnormalized,
@@ -219,7 +194,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_SAMPLER,
+                .Type = Descriptor_Sampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_PS,
                 .ImmutableSampler = Sampler_Default,
@@ -235,7 +210,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_PS|PipelineStage_CS,
                 .ImmutableSampler = Sampler_Shadow,
@@ -251,7 +226,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_PS|PipelineStage_CS,
                 .ImmutableSampler = Sampler_RenderTargetNormalized,
@@ -267,7 +242,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .Type = Descriptor_StorageImage,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_CS,
                 .ImmutableSampler = Sampler_None,
@@ -283,14 +258,14 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_CS,
                 .ImmutableSampler = Sampler_RenderTargetNormalizedClampToEdge,
             },
             {
                 .Binding = 1,
-                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .Type = Descriptor_StorageImage,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_CS,
                 .ImmutableSampler = Sampler_None,
@@ -305,14 +280,14 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_CS,
                 .ImmutableSampler = Sampler_RenderTargetUnnormalized,
             },
             {
                 .Binding = 1,
-                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .Type = Descriptor_StorageImage,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_CS,
                 .ImmutableSampler = Sampler_None,
@@ -328,21 +303,21 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_CS,
                 .ImmutableSampler = Sampler_RenderTargetUnnormalized,
             },
             {
                 .Binding = 1,
-                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_CS,
                 .ImmutableSampler = Sampler_RenderTargetUnnormalized,
             },
             {
                 .Binding = 2,
-                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .Type = Descriptor_StorageImage,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_CS,
                 .ImmutableSampler = Sampler_None,
@@ -358,14 +333,14 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_PS,
                 .ImmutableSampler = Sampler_RenderTargetNormalizedClampToEdge,
             },
             {
                 .Binding = 1,
-                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_PS,
                 .ImmutableSampler = Sampler_RenderTargetNormalizedClampToEdge,
@@ -381,21 +356,21 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_CS,
                 .ImmutableSampler = Sampler_RenderTargetNormalized,
             },
             {
                 .Binding = 1,
-                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_CS,
                 .ImmutableSampler = Sampler_RenderTargetNormalized,
             },
             {
                 .Binding = 2,
-                .Type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .Type = Descriptor_StorageImage,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_CS,
                 .ImmutableSampler = Sampler_None,
@@ -411,7 +386,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         {
             {
                 .Binding = 0,
-                .Type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_PS,
                 .ImmutableSampler = Sampler_Default,
@@ -419,9 +394,6 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 };
-
-// TODO(boti): Get the material visible to this portion of the code so we don't have to hard code this !!!!!
-constexpr u32 MaterialStructSize = sizeof(v3) + 2 * sizeof(rgba8) + 3*sizeof(u32);
 
 const pipeline_info PipelineInfos[Pipeline_Count] = 
 {
@@ -440,7 +412,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 { 
                     .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .Size = sizeof(m4) + MaterialStructSize,
+                    .Size = sizeof(m4) + sizeof(material),
                     .Offset = 0, 
                 },
             },
@@ -494,7 +466,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 { 
                     .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .Size = sizeof(m4) + MaterialStructSize,
+                    .Size = sizeof(m4) + sizeof(material),
                     .Offset = 0, 
                 },
             },
@@ -545,7 +517,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 { 
                     .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .Size = sizeof(m4) + MaterialStructSize + sizeof(u32),
+                    .Size = sizeof(m4) + sizeof(material) + sizeof(u32),
                     .Offset = 0, 
                 },
             },

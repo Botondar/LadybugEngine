@@ -79,7 +79,71 @@ static VkPrimitiveTopology TopologyTable[Topology_Count] =
     [Topology_PatchList]                = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
 };
 
-VkShaderStageFlags PipelineStagesToVulkan(flags32 Stages)
+internal VkFilter FilterToVulkan(tex_filter Filter)
+{
+    VkFilter Result = VK_FILTER_NEAREST;
+    switch (Filter)
+    {
+        case Filter_Nearest: Result = VK_FILTER_NEAREST; break;
+        case Filter_Linear: Result = VK_FILTER_LINEAR; break;
+    }
+    return(Result);
+}
+
+internal VkSamplerMipmapMode MipFilterToVulkan(tex_filter Filter)
+{
+    VkSamplerMipmapMode Result = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    switch (Filter)
+    {
+        case Filter_Nearest: Result = VK_SAMPLER_MIPMAP_MODE_NEAREST; break;
+        case Filter_Linear: Result = VK_SAMPLER_MIPMAP_MODE_LINEAR; break;
+    }
+    return(Result);
+}
+
+internal VkSamplerAddressMode WrapToVulkan(tex_wrap Wrap)
+{
+    VkSamplerAddressMode Result = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    switch (Wrap)
+    {
+        case Wrap_Repeat: Result = VK_SAMPLER_ADDRESS_MODE_REPEAT; break;
+        case Wrap_RepeatMirror: Result = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT; break;
+        case Wrap_ClampToEdge: Result = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; break;
+        case Wrap_ClampToBorder: Result = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER; break;
+    }
+    return(Result);
+}
+
+internal VkBorderColor BorderToVulkan(tex_border Border)
+{
+    VkBorderColor Result = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+    switch (Border)
+    {
+        case Border_Black: Result = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK; break;
+        case Border_White: Result = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE; break;
+    }
+    return(Result);
+}
+
+
+internal VkCompareOp ComparisonToVulkan(compare_op Op)
+{
+    VkCompareOp Result = VK_COMPARE_OP_NEVER;
+    switch (Op)
+    {
+        case Compare_Never: Result = VK_COMPARE_OP_NEVER; break;
+        case Compare_Less: Result = VK_COMPARE_OP_LESS; break;
+        case Compare_Equal: Result = VK_COMPARE_OP_EQUAL; break;
+        case Compare_LessEqual: Result = VK_COMPARE_OP_LESS_OR_EQUAL; break;
+        case Compare_Greater: Result = VK_COMPARE_OP_GREATER_OR_EQUAL; break;
+        case Compare_NotEqual: Result = VK_COMPARE_OP_NOT_EQUAL; break;
+        case Compare_GreaterEqual: Result = VK_COMPARE_OP_GREATER_OR_EQUAL; break;
+        case Compare_Always: Result = VK_COMPARE_OP_ALWAYS; break;
+    }
+    return(Result);
+}
+
+internal VkShaderStageFlags PipelineStagesToVulkan(flags32 Stages)
 {
     VkShaderStageFlags Result = 0;
     if (Stages == PipelineStage_All)
@@ -281,7 +345,30 @@ VkResult CreateRenderer(renderer* Renderer,
         Renderer->Samplers[Sampler_None] = VK_NULL_HANDLE;
         for (u32 Index = 1; Index < Sampler_Count; Index++)
         {
-            Result = vkCreateSampler(VK.Device, SamplerInfos + Index, nullptr, &Renderer->Samplers[Index]);
+            const sampler_state* Sampler = SamplerInfos + Index;
+            f32 AnisotropyTable[Anisotropy_Count] = { 1.0f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f };
+            VkSamplerCreateInfo Info = 
+            {
+                .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .magFilter = FilterToVulkan(Sampler->MagFilter),
+                .minFilter = FilterToVulkan(Sampler->MinFilter),
+                .mipmapMode = MipFilterToVulkan(Sampler->MipFilter),
+                .addressModeU = WrapToVulkan(Sampler->WrapU),
+                .addressModeV = WrapToVulkan(Sampler->WrapU),
+                .addressModeW = WrapToVulkan(Sampler->WrapU),
+                .mipLodBias = 0.0f,
+                .anisotropyEnable = (Sampler->Anisotropy != Anisotropy_None),
+                .maxAnisotropy = AnisotropyTable[Sampler->Anisotropy],
+                .compareEnable = Sampler->EnableComparison,
+                .compareOp = ComparisonToVulkan(Sampler->Comparison),
+                .minLod = Sampler->MinLOD,
+                .maxLod = Sampler->MaxLOD,
+                .borderColor = BorderToVulkan(Sampler->Border),
+                .unnormalizedCoordinates = Sampler->EnableUnnormalizedCoordinates,
+            };
+            Result = vkCreateSampler(VK.Device, &Info, nullptr, &Renderer->Samplers[Index]);
             Assert(Result == VK_SUCCESS);
         }
     }
@@ -297,7 +384,7 @@ VkResult CreateRenderer(renderer* Renderer,
             for (u32 Binding = 0; Binding < Info->BindingCount; Binding++)
             {
                 Bindings[Binding].binding = Info->Bindings[Binding].Binding;
-                Bindings[Binding].descriptorType = Info->Bindings[Binding].Type;
+                Bindings[Binding].descriptorType = (VkDescriptorType)Info->Bindings[Binding].Type;
                 Bindings[Binding].descriptorCount = Info->Bindings[Binding].DescriptorCount;
                 Bindings[Binding].stageFlags = PipelineStagesToVulkan(Info->Bindings[Binding].Stages);
                 Bindings[Binding].pImmutableSamplers = &Renderer->Samplers[Info->Bindings[Binding].ImmutableSampler];

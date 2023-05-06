@@ -30,6 +30,98 @@ constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
 //
 // Low-level rendering
 //
+
+constexpr f32 GlobalMaxLOD = 1000.0f;
+
+enum compare_op : u32
+{
+    Compare_Never = 0,
+    Compare_Less,
+    Compare_Equal,
+    Compare_LessEqual,
+    Compare_Greater,
+    Compare_NotEqual,
+    Compare_GreaterEqual,
+    Compare_Always,
+};
+
+enum tex_filter : u32
+{
+    Filter_Nearest = 0,
+    Filter_Linear = 1,
+};
+
+enum tex_wrap : u32
+{
+    Wrap_Repeat = 0,
+    Wrap_RepeatMirror = 1,
+    Wrap_ClampToEdge = 2,
+    Wrap_ClampToBorder = 3,
+};
+
+enum tex_anisotropy : u32
+{
+    Anisotropy_None = 0,
+
+    Anisotropy_1,
+    Anisotropy_2,
+    Anisotropy_4,
+    Anisotropy_8,
+    Anisotropy_16,
+
+    Anisotropy_Count,
+};
+
+enum tex_border : u32
+{
+    Border_Black = 0,
+    Border_White = 1,
+};
+
+struct sampler_state
+{
+    tex_filter MagFilter;
+    tex_filter MinFilter;
+    tex_filter MipFilter;
+    tex_wrap WrapU;
+    tex_wrap WrapV;
+    tex_wrap WrapW;
+    tex_anisotropy Anisotropy;
+    b32 EnableComparison;
+    compare_op Comparison;
+    f32 MinLOD;
+    f32 MaxLOD;
+    tex_border Border;
+    b32 EnableUnnormalizedCoordinates;
+};
+
+// TODO(boti): This is binary compatible with Vulkan for now,
+// but with mutable descriptor types it could be collapsed down to the D3D12 model?
+enum descriptor_type : u32
+{
+    Descriptor_Sampler = 0,
+    Descriptor_ImageSampler = 1,
+    Descriptor_SampledImage = 2,
+    Descriptor_StorageImage = 3,
+    Descriptor_UniformTexelBuffer = 4,
+    Descriptor_StorageTexelBuffer = 5,
+    Descriptor_UniformBuffer = 6,
+    Descriptor_StorageBuffer = 7,
+    Descriptor_DynamicUniformBuffer = 8,
+    Descriptor_DynamicStorageBuffer = 9,
+    //  Descriptor_InputAttachment, 
+    Descriptor_InlineUniformBlock = 11,
+};
+
+enum descriptor_set_layout_flags : flags32
+{
+    SetLayoutFlag_None = 0,
+
+    SetLayoutFlag_UpdateAfterBind = (1 << 0),
+    SetLayoutFlag_Bindless = (2 << 0),
+};
+
+
 enum pipeline_type : u32
 {
     PipelineType_Graphics = 0,
