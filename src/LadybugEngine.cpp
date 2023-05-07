@@ -671,13 +671,11 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
     vkCmdPipelineBarrier2(Frame->CmdBuffer, &EndDependencyInfo);
 }
 
-internal bool AddNodeToScene(game_state* GameState, gltf* GLTF, 
+internal bool AddNodeToScene(game_world* World, gltf* GLTF, 
                              u32 NodeIndex, m4 Transform, 
                              u32 BaseMeshIndex)
 {
     bool Result = true;
-
-    game_world* World = GameState->World;
 
     if (NodeIndex < GLTF->NodeCount)
     {
@@ -722,7 +720,7 @@ internal bool AddNodeToScene(game_state* GameState, gltf* GLTF,
 
         for (u32 i = 0; i < Node->ChildrenCount; i++)
         {
-            Result = AddNodeToScene(GameState, GLTF, Node->Children[i], NodeTransform, BaseMeshIndex);
+            Result = AddNodeToScene(World, GLTF, Node->Children[i], NodeTransform, BaseMeshIndex);
             if (!Result)
             {
                 break;
@@ -769,11 +767,9 @@ struct NvttOutputHandler : public nvtt::OutputHandler
     }
 };
 
-internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 BaseTransform)
+// TODO(boti): remove the renderer from here
+internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* World, renderer* Renderer, const char* ScenePath, m4 BaseTransform)
 {
-    game_world* World = GameState->World;
-    assets* Assets = GameState->Assets;
-
     constexpr u64 PathBuffSize = 256;
     char PathBuff[PathBuffSize];
     u64 PathDirectoryLength = 0;
@@ -792,13 +788,13 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
     gltf GLTF = {};
     // JSON test parsing
     {
-        buffer JSONBuffer = Platform.LoadEntireFile(ScenePath, &GameState->TransientArena);
+        buffer JSONBuffer = Platform.LoadEntireFile(ScenePath, Scratch);
         if (JSONBuffer.Data)
         {
-            json_element* Root = ParseJSON(JSONBuffer.Data, JSONBuffer.Size, &GameState->TransientArena);
+            json_element* Root = ParseJSON(JSONBuffer.Data, JSONBuffer.Size, Scratch);
             if (Root)
             {
-                bool GLTFParseResult = ParseGLTF(&GLTF, Root, &GameState->TransientArena);
+                bool GLTFParseResult = ParseGLTF(&GLTF, Root, Scratch);
                 if (!GLTFParseResult)
                 {
                     UnhandledError("Couldn't parse glTF file");
@@ -818,13 +814,11 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
         }
     }
 
-    memory_arena* Arena = &GameState->TransientArena;
-
     // NOTE(boti): Store the initial indices in the game so that we know what to offset the glTF indices by
     u32 BaseMeshIndex = Assets->MeshCount;
     u32 BaseMaterialIndex = Assets->MaterialCount;
 
-    buffer* Buffers = PushArray<buffer>(Arena, GLTF.BufferCount, MemPush_Clear);
+    buffer* Buffers = PushArray<buffer>(Scratch, GLTF.BufferCount, MemPush_Clear);
     for (u32 BufferIndex = 0; BufferIndex < GLTF.BufferCount; BufferIndex++)
     {
         string URI = GLTF.Buffers[BufferIndex].URI;
@@ -832,7 +826,7 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
         {
             strncpy(Filename, URI.String, URI.Length);
             Filename[URI.Length] = 0;
-            Buffers[BufferIndex] = Platform.LoadEntireFile(PathBuff, Arena);
+            Buffers[BufferIndex] = Platform.LoadEntireFile(PathBuff, Scratch);
             if (!Buffers[BufferIndex].Data)
             {
                 UnhandledError("Couldn't load glTF buffer");
@@ -855,7 +849,7 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
     {
         texture_id Result = { 0 };
 
-        memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Arena);
+        memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
         if (TextureIndex < GLTF.TextureCount)
         {
             gltf_texture* Texture = GLTF.Textures + TextureIndex;
@@ -919,7 +913,7 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
                 CompressionOptions.setQuality(nvtt::Quality_Fastest);
 
                 u64 Size = (u64)Ctx.estimateSize(Surface, MipCount, CompressionOptions);
-                void* Texels = PushSize(Arena, Size, 64);
+                void* Texels = PushSize(Scratch, Size, 64);
                 NvttOutputHandler OutputHandler(Size, Texels);
                 OutputOptions.setOutputHandler(&OutputHandler);
 
@@ -937,9 +931,7 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
                     }
                 }
 
-                Result = PushTexture(GameState->Renderer,
-                                     (u32)Width, (u32)Height, (u32)MipCount, 
-                                     Texels, Format, {});
+                Result = PushTexture(Renderer, (u32)Width, (u32)Height, (u32)MipCount, Texels, Format, {});
             }
             else
             {
@@ -951,9 +943,15 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
             //Assert(!"WARNING: default texture");
         }
 
-        RestoreArena(Arena, Checkpoint);
+        RestoreArena(Scratch, Checkpoint);
         return Result;
     };
+
+    texture_id* TextureTable = PushArray<texture_id>(Scratch, GLTF.TextureCount);
+    for (u32 i = 0; i < GLTF.TextureCount; i++)
+    {
+        TextureTable[i].Value = INVALID_INDEX_U32;
+    }
 
     for (u32 MaterialIndex = 0; MaterialIndex < GLTF.MaterialCount; MaterialIndex++)
     {
@@ -978,15 +976,30 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
 
             if (SrcMaterial->BaseColorTextureIndex != U32_MAX)
             {
-                Material->DiffuseID = LoadAndUploadTexture(SrcMaterial->BaseColorTextureIndex, texture_type::Diffuse, SrcMaterial->AlphaMode);
+                texture_id* Texture = TextureTable + SrcMaterial->BaseColorTextureIndex;
+                if (Texture->Value == INVALID_INDEX_U32)
+                {
+                    *Texture = LoadAndUploadTexture(SrcMaterial->BaseColorTextureIndex, texture_type::Diffuse, SrcMaterial->AlphaMode);
+                }
+                Material->DiffuseID = *Texture;
             }
             if (SrcMaterial->NormalTextureIndex != U32_MAX)
             {
-                Material->NormalID = LoadAndUploadTexture(SrcMaterial->NormalTextureIndex, texture_type::Normal, SrcMaterial->AlphaMode);
+                texture_id* Texture = TextureTable + SrcMaterial->NormalTextureIndex;
+                if (Texture->Value == INVALID_INDEX_U32)
+                {
+                    *Texture = LoadAndUploadTexture(SrcMaterial->NormalTextureIndex, texture_type::Normal, SrcMaterial->AlphaMode);
+                }
+                Material->NormalID = *Texture;
             }
             if (SrcMaterial->MetallicRoughnessTextureIndex != U32_MAX)
             {
-                Material->MetallicRoughnessID = LoadAndUploadTexture(SrcMaterial->MetallicRoughnessTextureIndex, texture_type::Material, SrcMaterial->AlphaMode);
+                texture_id* Texture = TextureTable + SrcMaterial->MetallicRoughnessTextureIndex;
+                if (Texture->Value == INVALID_INDEX_U32)
+                {
+                    *Texture = LoadAndUploadTexture(SrcMaterial->MetallicRoughnessTextureIndex, texture_type::Material, SrcMaterial->AlphaMode);
+                }
+                Material->MetallicRoughnessID = *Texture;
             }
         }
         else
@@ -1000,7 +1013,7 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
         gltf_mesh* Mesh = GLTF.Meshes + MeshIndex;
         for (u32 PrimitiveIndex = 0; PrimitiveIndex < Mesh->PrimitiveCount; PrimitiveIndex++)
         {
-            memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Arena);
+            memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
 
             gltf_mesh_primitive* Primitive = Mesh->Primitives + PrimitiveIndex;
             if (Primitive->Topology != GLTF_TRIANGLES)
@@ -1048,7 +1061,7 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
                 Box.Max.E[i] = PAccessor->Max[i];
             }
 
-            vertex* VertexData = PushArray<vertex>(Arena, VertexCount);
+            vertex* VertexData = PushArray<vertex>(Scratch, VertexCount);
             for (u32 i = 0; i < VertexCount; i++)
             {
                 vertex* V = VertexData + i;
@@ -1068,7 +1081,7 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
 
             u32 IndexCount = (u32)ItIndex.Count;
             if (IndexCount == 0) UnimplementedCodePath;
-            u32* IndexData = PushArray<u32>(Arena, IndexCount);
+            u32* IndexData = PushArray<u32>(Scratch, IndexCount);
             for (u32 i = 0; i < IndexCount; i++)
             {
                 if (IndexAccessor->ComponentType == GLTF_USHORT ||
@@ -1091,8 +1104,8 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
 
             if (ItT.Count == 0)
             {
-                v3* Tangents = PushArray<v3>(Arena, VertexCount, MemPush_Clear);
-                v3* Bitangents = PushArray<v3>(Arena, VertexCount, MemPush_Clear);
+                v3* Tangents = PushArray<v3>(Scratch, VertexCount, MemPush_Clear);
+                v3* Bitangents = PushArray<v3>(Scratch, VertexCount, MemPush_Clear);
                 for (u32 i = 0; i < IndexCount; i += 3)
                 {
                     u32 Index0 = IndexData[i + 0];
@@ -1152,8 +1165,8 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
             if (Assets->MeshCount < Assets->MaxMeshCount)
             {
                 u32 MeshID = Assets->MeshCount++;
-                Assets->Meshes[MeshID] = UploadVertexData(GameState->Renderer, 
-                                                          VertexCount, VertexData, 
+                Assets->Meshes[MeshID] = UploadVertexData(Renderer,
+                                                          VertexCount, VertexData,
                                                           IndexCount, IndexData);
                 Assets->MeshBoxes[MeshID] = Box;
                 Assets->MeshMaterialIndices[MeshID] = Primitive->MaterialIndex + BaseMaterialIndex;
@@ -1163,7 +1176,7 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
                 UnhandledError("Out of mesh pool memory");
             }
 
-            RestoreArena(Arena, Checkpoint);
+            RestoreArena(Scratch, Checkpoint);
         }
     }
 
@@ -1175,7 +1188,7 @@ internal void LoadTestScene(game_state* GameState, const char* ScenePath, m4 Bas
     gltf_scene* Scene = GLTF.Scenes + GLTF.DefaultSceneIndex;
     for (u32 RootNodeIt = 0; RootNodeIt < Scene->RootNodeCount; RootNodeIt++)
     {
-        AddNodeToScene(GameState, &GLTF, Scene->RootNodes[RootNodeIt], BaseTransform, BaseMeshIndex);
+        AddNodeToScene(World, &GLTF, Scene->RootNodes[RootNodeIt], BaseTransform, BaseMeshIndex);
     }
 }
 
@@ -1265,10 +1278,10 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                                            0.0f, 0.0f, 50.0f, 0.0f,
                                            0.0f, 0.0f, 0.0f, 1.0f);
 #endif
-        //LoadTestScene(GameState, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
-        LoadTestScene(GameState, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
-        //LoadTestScene(GameState, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
-        //LoadTestScene(GameState, "data/Scenes/Medieval/scene.gltf", BaseTransform);
+        //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
+        LoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
+        //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
+        //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
     }
 
     VK = GameState->Vulkan;
@@ -1291,7 +1304,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 0.0f, 0.0f, -1.0f, 0.0f,
                 0.0f, 1.0f, 0.0f, 0.0f,
                 0.0f, 0.0f, 0.0f, 1.0f);
-            LoadTestScene(GameState, GameIO->DroppedFilename, YUpToZUp);
+            LoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, GameIO->DroppedFilename, YUpToZUp);
             GameIO->bHasDroppedFile = false;
         }
 
