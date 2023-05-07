@@ -440,9 +440,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .DepthStencilState = 
         {
             .Flags = DS_DepthTestEnable,
-            .DepthCompareOp = VK_COMPARE_OP_EQUAL,
-            .StencilFront = {},
-            .StencilBack = {},
+            .DepthCompareOp = Compare_Equal,
             .MinDepthBounds = 0.0f,
             .MaxDepthBounds = 1.0f,
         },
@@ -451,7 +449,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .ColorAttachmentCount = 1,
         .ColorAttachments = { HDR_FORMAT },
         .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = VK_FORMAT_UNDEFINED,
+        .StencilAttachment = Format_Undefined,
     },
 
     [Pipeline_Prepass] =
@@ -491,9 +489,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .DepthStencilState = 
         {
             .Flags = DS_DepthTestEnable|DS_DepthWriteEnable,
-            .DepthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
-            .StencilFront = {},
-            .StencilBack = {},
+            .DepthCompareOp = Compare_LessEqual,
             .MinDepthBounds = 0.0f,
             .MaxDepthBounds = 1.0f,
         },
@@ -502,7 +498,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .ColorAttachmentCount = 1,
         .ColorAttachments = { STRUCTURE_BUFFER_FORMAT },
         .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = VK_FORMAT_UNDEFINED,
+        .StencilAttachment = Format_Undefined,
     },
 
     [Pipeline_Shadow] = 
@@ -542,9 +538,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .DepthStencilState = 
         {
             .Flags = DS_DepthTestEnable|DS_DepthWriteEnable,
-            .DepthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
-            .StencilFront = {},
-            .StencilBack = {},
+            .DepthCompareOp = Compare_LessEqual,
             .MinDepthBounds = 0.0f,
             .MaxDepthBounds = 1.0f,
         },
@@ -553,7 +547,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .ColorAttachmentCount = 0,
         //.ColorAttachments,
         .DepthAttachment = SHADOW_FORMAT,
-        .StencilAttachment = VK_FORMAT_UNDEFINED,
+        .StencilAttachment = Format_Undefined,
     },
 
     [Pipeline_Gizmo] =
@@ -588,9 +582,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .DepthStencilState = 
         {
             .Flags = DS_DepthTestEnable|DS_DepthWriteEnable,
-            .DepthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
-            .StencilFront = {},
-            .StencilBack = {},
+            .DepthCompareOp = Compare_LessEqual,
             .MinDepthBounds = 0.0f,
             .MaxDepthBounds = 0.0f,
         },
@@ -599,7 +591,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .ColorAttachmentCount = 1,
         .ColorAttachments = { SWAPCHAIN_FORMAT },
         .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = VK_FORMAT_UNDEFINED,
+        .StencilAttachment = Format_Undefined,
     },
 
     [Pipeline_Sky] = 
@@ -627,9 +619,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .DepthStencilState = 
         {
             .Flags = DS_DepthTestEnable,
-            .DepthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
-            .StencilFront = {},
-            .StencilBack = {},
+            .DepthCompareOp = Compare_LessEqual,
             .MinDepthBounds = 0.0f,
             .MaxDepthBounds = 1.0f,
         },
@@ -639,7 +629,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .ColorAttachmentCount = 1,
         .ColorAttachments = { HDR_FORMAT },
         .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = VK_FORMAT_UNDEFINED,
+        .StencilAttachment = Format_Undefined,
     },
 
     [Pipeline_UI] = 
@@ -699,8 +689,6 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .DepthStencilState = 
         {
             .Flags = DS_Flags_None,
-            .StencilFront = {},
-            .StencilBack = {},
             .MinDepthBounds = 0.0f,
             .MaxDepthBounds = 0.0f,
         },
@@ -709,19 +697,19 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         {
             {
                 .BlendEnable = true,
-                .SrcColorFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-                .DstColorFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-                .ColorOp = VK_BLEND_OP_ADD,
-                .SrcAlphaFactor = VK_BLEND_FACTOR_ONE,
-                .DstAlphaFactor = VK_BLEND_FACTOR_ZERO,
-                .AlphaOp = VK_BLEND_OP_ADD,
+                .SrcColor = Blend_SrcAlpha,
+                .DstColor = Blend_InvSrcAlpha,
+                .ColorOp = BlendOp_Add,
+                .SrcAlpha = Blend_One,
+                .DstAlpha = Blend_Zero,
+                .AlphaOp = BlendOp_Add,
             },
         },
 
         .ColorAttachmentCount = 1,
         .ColorAttachments = { SWAPCHAIN_FORMAT },
         .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = VK_FORMAT_UNDEFINED,
+        .StencilAttachment = Format_Undefined,
     },
 
     [Pipeline_Blit] =
@@ -767,7 +755,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .ColorAttachmentCount = 1,
         .ColorAttachments = { SWAPCHAIN_FORMAT },
         .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = VK_FORMAT_UNDEFINED,
+        .StencilAttachment = Format_Undefined,
     },
 
     [Pipeline_BloomDownsample] =
@@ -889,6 +877,6 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .ColorAttachmentCount = 1,
         .ColorAttachments = { HDR_FORMAT },
         .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = VK_FORMAT_UNDEFINED,
+        .StencilAttachment = Format_Undefined,
     },
 };

@@ -79,69 +79,70 @@ static VkPrimitiveTopology TopologyTable[Topology_Count] =
     [Topology_PatchList]                = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
 };
 
-internal VkFilter FilterToVulkan(tex_filter Filter)
+static VkFilter FilterTable[Filter_Count] = 
 {
-    VkFilter Result = VK_FILTER_NEAREST;
-    switch (Filter)
-    {
-        case Filter_Nearest: Result = VK_FILTER_NEAREST; break;
-        case Filter_Linear: Result = VK_FILTER_LINEAR; break;
-    }
-    return(Result);
-}
+    [Filter_Nearest] = VK_FILTER_NEAREST,
+    [Filter_Linear] = VK_FILTER_LINEAR,
+};
 
-internal VkSamplerMipmapMode MipFilterToVulkan(tex_filter Filter)
+static VkSamplerMipmapMode MipFilterTable[Filter_Count] = 
 {
-    VkSamplerMipmapMode Result = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    switch (Filter)
-    {
-        case Filter_Nearest: Result = VK_SAMPLER_MIPMAP_MODE_NEAREST; break;
-        case Filter_Linear: Result = VK_SAMPLER_MIPMAP_MODE_LINEAR; break;
-    }
-    return(Result);
-}
+    [Filter_Nearest] = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+    [Filter_Linear] = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+};
 
-internal VkSamplerAddressMode WrapToVulkan(tex_wrap Wrap)
+static VkSamplerAddressMode WrapTable[Wrap_Count] = 
 {
-    VkSamplerAddressMode Result = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    switch (Wrap)
-    {
-        case Wrap_Repeat: Result = VK_SAMPLER_ADDRESS_MODE_REPEAT; break;
-        case Wrap_RepeatMirror: Result = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT; break;
-        case Wrap_ClampToEdge: Result = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE; break;
-        case Wrap_ClampToBorder: Result = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER; break;
-    }
-    return(Result);
-}
+    [Wrap_Repeat] = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    [Wrap_RepeatMirror] = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+    [Wrap_ClampToEdge] = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    [Wrap_ClampToBorder] = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+};
 
-internal VkBorderColor BorderToVulkan(tex_border Border)
+static VkBorderColor BorderTable[Border_Count] = 
 {
-    VkBorderColor Result = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
-    switch (Border)
-    {
-        case Border_Black: Result = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK; break;
-        case Border_White: Result = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE; break;
-    }
-    return(Result);
-}
+    [Border_Black] = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+    [Border_White] = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+};
 
-
-internal VkCompareOp ComparisonToVulkan(compare_op Op)
+static VkBlendOp BlendOpTable[BlendOp_Count] = 
 {
-    VkCompareOp Result = VK_COMPARE_OP_NEVER;
-    switch (Op)
-    {
-        case Compare_Never: Result = VK_COMPARE_OP_NEVER; break;
-        case Compare_Less: Result = VK_COMPARE_OP_LESS; break;
-        case Compare_Equal: Result = VK_COMPARE_OP_EQUAL; break;
-        case Compare_LessEqual: Result = VK_COMPARE_OP_LESS_OR_EQUAL; break;
-        case Compare_Greater: Result = VK_COMPARE_OP_GREATER_OR_EQUAL; break;
-        case Compare_NotEqual: Result = VK_COMPARE_OP_NOT_EQUAL; break;
-        case Compare_GreaterEqual: Result = VK_COMPARE_OP_GREATER_OR_EQUAL; break;
-        case Compare_Always: Result = VK_COMPARE_OP_ALWAYS; break;
-    }
-    return(Result);
-}
+    [BlendOp_Add] = VK_BLEND_OP_ADD,
+    [BlendOp_Subtract] = VK_BLEND_OP_SUBTRACT,
+    [BlendOp_ReverseSubtract] = VK_BLEND_OP_REVERSE_SUBTRACT,
+    [BlendOp_Min] = VK_BLEND_OP_MIN,
+    [BlendOp_Max] = VK_BLEND_OP_MAX,
+};
+
+static VkBlendFactor BlendFactorTable[Blend_Count] = 
+{
+    [Blend_Zero]                = VK_BLEND_FACTOR_ZERO,
+    [Blend_One]                 = VK_BLEND_FACTOR_ONE,
+    [Blend_SrcColor]            = VK_BLEND_FACTOR_SRC_COLOR,
+    [Blend_InvSrcColor]         = VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,
+    [Blend_DstColor]            = VK_BLEND_FACTOR_DST_COLOR,
+    [Blend_InvDstColor]         = VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR,
+    [Blend_SrcAlpha]            = VK_BLEND_FACTOR_SRC_ALPHA,
+    [Blend_InvSrcAlpha]         = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+    [Blend_DstAlpha]            = VK_BLEND_FACTOR_DST_ALPHA,
+    [Blend_InvDstAlpha]         = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA,
+    [Blend_ConstantColor]       = VK_BLEND_FACTOR_CONSTANT_COLOR,
+    [Blend_InvConstantColor]    = VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,
+    [Blend_ConstantAlpha]       = VK_BLEND_FACTOR_CONSTANT_ALPHA,
+    [Blend_InvConstantAlpha]    = VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA,
+};
+
+static VkCompareOp CompareOpTable[Compare_Count] = 
+{
+    [Compare_Never] = VK_COMPARE_OP_NEVER,
+    [Compare_Always] = VK_COMPARE_OP_ALWAYS,
+    [Compare_Equal] = VK_COMPARE_OP_EQUAL,
+    [Compare_NotEqual] = VK_COMPARE_OP_NOT_EQUAL,
+    [Compare_Less] = VK_COMPARE_OP_LESS,
+    [Compare_LessEqual] = VK_COMPARE_OP_LESS_OR_EQUAL,
+    [Compare_Greater] = VK_COMPARE_OP_GREATER,
+    [Compare_GreaterEqual] = VK_COMPARE_OP_GREATER_OR_EQUAL,
+};
 
 internal VkShaderStageFlags PipelineStagesToVulkan(flags32 Stages)
 {
@@ -352,20 +353,20 @@ VkResult CreateRenderer(renderer* Renderer,
                 .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
-                .magFilter = FilterToVulkan(Sampler->MagFilter),
-                .minFilter = FilterToVulkan(Sampler->MinFilter),
-                .mipmapMode = MipFilterToVulkan(Sampler->MipFilter),
-                .addressModeU = WrapToVulkan(Sampler->WrapU),
-                .addressModeV = WrapToVulkan(Sampler->WrapU),
-                .addressModeW = WrapToVulkan(Sampler->WrapU),
+                .magFilter = FilterTable[Sampler->MagFilter],
+                .minFilter = FilterTable[Sampler->MinFilter],
+                .mipmapMode = MipFilterTable[Sampler->MipFilter],
+                .addressModeU = WrapTable[Sampler->WrapU],
+                .addressModeV = WrapTable[Sampler->WrapU],
+                .addressModeW = WrapTable[Sampler->WrapU],
                 .mipLodBias = 0.0f,
                 .anisotropyEnable = (Sampler->Anisotropy != Anisotropy_None),
                 .maxAnisotropy = AnisotropyTable[Sampler->Anisotropy],
                 .compareEnable = Sampler->EnableComparison,
-                .compareOp = ComparisonToVulkan(Sampler->Comparison),
+                .compareOp = CompareOpTable[Sampler->Comparison],
                 .minLod = Sampler->MinLOD,
                 .maxLod = Sampler->MaxLOD,
-                .borderColor = BorderToVulkan(Sampler->Border),
+                .borderColor = BorderTable[Sampler->Border],
                 .unnormalizedCoordinates = Sampler->EnableUnnormalizedCoordinates,
             };
             Result = vkCreateSampler(VK.Device, &Info, nullptr, &Renderer->Samplers[Index]);
@@ -608,7 +609,7 @@ VkResult CreateRenderer(renderer* Renderer,
                 .pNext = nullptr,
                 .flags = 0,
                 .imageType = VK_IMAGE_TYPE_2D,
-                .format = SHADOW_FORMAT,
+                .format = FormatTable[SHADOW_FORMAT],
                 .extent = { R_ShadowResolution, R_ShadowResolution, 1 },
                 .mipLevels = 1,
                 .arrayLayers = R_MaxShadowCascadeCount,
@@ -655,7 +656,7 @@ VkResult CreateRenderer(renderer* Renderer,
             .pNext = nullptr,
             .flags = 0,
             .imageType = VK_IMAGE_TYPE_2D,
-            .format = SHADOW_FORMAT,
+            .format = FormatTable[SHADOW_FORMAT],
             .extent = { R_ShadowResolution, R_ShadowResolution, 1 },
             .mipLevels = 1,
             .arrayLayers = R_MaxShadowCascadeCount,
@@ -694,7 +695,7 @@ VkResult CreateRenderer(renderer* Renderer,
             .flags = 0,
             .image = Renderer->ShadowMap,
             .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
-            .format = SHADOW_FORMAT,
+            .format = FormatTable[SHADOW_FORMAT],
             .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
             .subresourceRange = 
             {
@@ -719,7 +720,7 @@ VkResult CreateRenderer(renderer* Renderer,
                 .flags = 0,
                 .image = Renderer->ShadowMap,
                 .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .format = SHADOW_FORMAT,
+                .format = FormatTable[SHADOW_FORMAT],
                 .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
                 .subresourceRange = 
                 {
@@ -856,7 +857,14 @@ VkResult CreateRenderer(renderer* Renderer,
             {
                 Assert(!HasFlag(Info->EnabledStages, PipelineStage_CS));
                 // Only VS and PS is supported for now
-                if (Info->EnabledStages & ~(PipelineStage_VS|PipelineStage_PS)) UnimplementedCodePath;
+                if (Info->EnabledStages & ~(PipelineStage_VS|PipelineStage_PS)) 
+                {
+                    UnimplementedCodePath;
+                }
+                if (HasFlag(Info->DepthStencilState.Flags, DS_StencilTestEnable))
+                {
+                    UnimplementedCodePath;
+                }
 
                 VkPipelineShaderStageCreateInfo StageInfos[PipelineStage_Count] = {};
                 u32 StageCount = 0;
@@ -1014,11 +1022,11 @@ VkResult CreateRenderer(renderer* Renderer,
                     .flags = 0,
                     .depthTestEnable = HasFlag(Info->DepthStencilState.Flags, DS_DepthTestEnable),
                     .depthWriteEnable = HasFlag(Info->DepthStencilState.Flags, DS_DepthWriteEnable),
-                    .depthCompareOp = Info->DepthStencilState.DepthCompareOp,
+                    .depthCompareOp = CompareOpTable[Info->DepthStencilState.DepthCompareOp],
                     .depthBoundsTestEnable = HasFlag(Info->DepthStencilState.Flags, DS_DepthBoundsTestEnable),
                     .stencilTestEnable = HasFlag(Info->DepthStencilState.Flags, DS_StencilTestEnable),
-                    .front = Info->DepthStencilState.StencilFront,
-                    .back = Info->DepthStencilState.StencilBack,
+                    .front = {},
+                    .back = {},
                     .minDepthBounds = Info->DepthStencilState.MinDepthBounds,
                     .maxDepthBounds = Info->DepthStencilState.MaxDepthBounds,
                 };
@@ -1030,11 +1038,11 @@ VkResult CreateRenderer(renderer* Renderer,
                     BlendAttachments[BlendAttachmentIndex] = 
                     {
                         .blendEnable = Src->BlendEnable,
-                        .srcColorBlendFactor = Src->SrcColorFactor,
-                        .dstColorBlendFactor = Src->DstColorFactor,
-                        .colorBlendOp = Src->ColorOp,
-                        .srcAlphaBlendFactor = Src->SrcAlphaFactor,
-                        .dstAlphaBlendFactor = Src->DstAlphaFactor,
+                        .srcColorBlendFactor = BlendFactorTable[Src->SrcColor],
+                        .dstColorBlendFactor = BlendFactorTable[Src->DstColor],
+                        .colorBlendOp = BlendOpTable[Src->ColorOp],
+                        .srcAlphaBlendFactor = BlendFactorTable[Src->SrcAlpha],
+                        .dstAlphaBlendFactor = BlendFactorTable[Src->DstAlpha],
                         .colorWriteMask = VK_COLOR_COMPONENT_R_BIT|VK_COLOR_COMPONENT_G_BIT|VK_COLOR_COMPONENT_B_BIT|VK_COLOR_COMPONENT_A_BIT,
                     };
                 }
@@ -1068,9 +1076,15 @@ VkResult CreateRenderer(renderer* Renderer,
                 VkFormat ColorAttachmentFormats[MaxColorAttachmentCount] = {};
                 for (u32 ColorAttachmentIndex = 0; ColorAttachmentIndex < Info->ColorAttachmentCount; ColorAttachmentIndex++)
                 {
-                    VkFormat Format = Info->ColorAttachments[ColorAttachmentIndex];
-                    if (Format == SWAPCHAIN_FORMAT) Format = Renderer->SurfaceFormat.format;
-                    ColorAttachmentFormats[ColorAttachmentIndex] = Format;
+                    format Format = Info->ColorAttachments[ColorAttachmentIndex];
+                    if (Format == SWAPCHAIN_FORMAT) 
+                    {
+                        ColorAttachmentFormats[ColorAttachmentIndex] = Renderer->SurfaceFormat.format;
+                    }
+                    else
+                    {
+                        ColorAttachmentFormats[ColorAttachmentIndex] = FormatTable[Format];
+                    }
                 }
 
                 VkPipelineRenderingCreateInfo DynamicRendering = 
@@ -1080,8 +1094,8 @@ VkResult CreateRenderer(renderer* Renderer,
                     .viewMask = 0,
                     .colorAttachmentCount = Info->ColorAttachmentCount,
                     .pColorAttachmentFormats = ColorAttachmentFormats,
-                    .depthAttachmentFormat = Info->DepthAttachment,
-                    .stencilAttachmentFormat = Info->StencilAttachment
+                    .depthAttachmentFormat = FormatTable[Info->DepthAttachment],
+                    .stencilAttachmentFormat = FormatTable[Info->StencilAttachment],
                 };
 
                 VkGraphicsPipelineCreateInfo PipelineCreateInfo = 
@@ -1170,12 +1184,12 @@ lbfn VkResult ResizeRenderTargets(renderer* Renderer)
 #if 1
                     if (i == 0)
                     {
-                        Frame->DepthBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, DEPTH_FORMAT, DepthStencil|Sampled, 1);
-                        Frame->StructureBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, STRUCTURE_BUFFER_FORMAT, Color|Sampled, 1);
-                        Frame->HDRRenderTargets[0] = PushRenderTarget(&Renderer->RenderTargetHeap, HDR_FORMAT, Color|Sampled|Storage, 0);
-                        Frame->HDRRenderTargets[1] = PushRenderTarget(&Renderer->RenderTargetHeap, HDR_FORMAT, Color|Sampled|Storage, 0);
-                        Frame->OcclusionBuffers[0] = PushRenderTarget(&Renderer->RenderTargetHeap, SSAO_FORMAT, Color|Sampled|Storage, 1);
-                        Frame->OcclusionBuffers[1] = PushRenderTarget(&Renderer->RenderTargetHeap, SSAO_FORMAT, Color|Sampled|Storage, 1);
+                        Frame->DepthBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
+                        Frame->StructureBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[STRUCTURE_BUFFER_FORMAT], Color|Sampled, 1);
+                        Frame->HDRRenderTargets[0] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
+                        Frame->HDRRenderTargets[1] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
+                        Frame->OcclusionBuffers[0] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
+                        Frame->OcclusionBuffers[1] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
                     }
                     else
                     {

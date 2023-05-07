@@ -33,144 +33,6 @@ constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
 
 constexpr f32 GlobalMaxLOD = 1000.0f;
 
-enum compare_op : u32
-{
-    Compare_Never = 0,
-    Compare_Less,
-    Compare_Equal,
-    Compare_LessEqual,
-    Compare_Greater,
-    Compare_NotEqual,
-    Compare_GreaterEqual,
-    Compare_Always,
-};
-
-enum tex_filter : u32
-{
-    Filter_Nearest = 0,
-    Filter_Linear = 1,
-};
-
-enum tex_wrap : u32
-{
-    Wrap_Repeat = 0,
-    Wrap_RepeatMirror = 1,
-    Wrap_ClampToEdge = 2,
-    Wrap_ClampToBorder = 3,
-};
-
-enum tex_anisotropy : u32
-{
-    Anisotropy_None = 0,
-
-    Anisotropy_1,
-    Anisotropy_2,
-    Anisotropy_4,
-    Anisotropy_8,
-    Anisotropy_16,
-
-    Anisotropy_Count,
-};
-
-enum tex_border : u32
-{
-    Border_Black = 0,
-    Border_White = 1,
-};
-
-struct sampler_state
-{
-    tex_filter MagFilter;
-    tex_filter MinFilter;
-    tex_filter MipFilter;
-    tex_wrap WrapU;
-    tex_wrap WrapV;
-    tex_wrap WrapW;
-    tex_anisotropy Anisotropy;
-    b32 EnableComparison;
-    compare_op Comparison;
-    f32 MinLOD;
-    f32 MaxLOD;
-    tex_border Border;
-    b32 EnableUnnormalizedCoordinates;
-};
-
-// TODO(boti): This is binary compatible with Vulkan for now,
-// but with mutable descriptor types it could be collapsed down to the D3D12 model?
-enum descriptor_type : u32
-{
-    Descriptor_Sampler = 0,
-    Descriptor_ImageSampler = 1,
-    Descriptor_SampledImage = 2,
-    Descriptor_StorageImage = 3,
-    Descriptor_UniformTexelBuffer = 4,
-    Descriptor_StorageTexelBuffer = 5,
-    Descriptor_UniformBuffer = 6,
-    Descriptor_StorageBuffer = 7,
-    Descriptor_DynamicUniformBuffer = 8,
-    Descriptor_DynamicStorageBuffer = 9,
-    //  Descriptor_InputAttachment, 
-    Descriptor_InlineUniformBlock = 11,
-};
-
-enum descriptor_set_layout_flags : flags32
-{
-    SetLayoutFlag_None = 0,
-
-    SetLayoutFlag_UpdateAfterBind = (1 << 0),
-    SetLayoutFlag_Bindless = (2 << 0),
-};
-
-
-enum pipeline_type : u32
-{
-    PipelineType_Graphics = 0,
-    PipelineType_Compute,
-
-    PipelineType_Count,
-};
-
-enum pipeline_stage : flags32
-{
-    PipelineStage_None = 0,
-
-    PipelineStage_VS = (1 << 0),
-    PipelineStage_PS = (1 << 1),
-    PipelineStage_HS = (1 << 2),
-    PipelineStage_DS = (1 << 3),
-    PipelineStage_GS = (1 << 4),
-
-    PipelineStage_CS = (1 << 5),
-
-    PipelineStage_Count = 6, // NOTE(boti): This has to be kept up to date !!!
-
-    PipelineStage_AllGfx = PipelineStage_VS|PipelineStage_PS|PipelineStage_DS|PipelineStage_HS|PipelineStage_GS,
-    PipelineStage_All = PipelineStage_AllGfx|PipelineStage_CS,
-};
-
-enum texture_swizzle_type : u8
-{
-    Swizzle_Identity = 0,
-    Swizzle_Zero,
-    Swizzle_One,
-    Swizzle_R,
-    Swizzle_G,
-    Swizzle_B,
-    Swizzle_A,
-};
-
-struct texture_swizzle
-{
-    texture_swizzle_type R, G, B, A;
-};
-
-struct format_byterate
-{
-    u32 Numerator;
-    u32 Denominator;
-    b32 IsBlock;
-};
-
 enum format : u32
 {
     Format_Undefined = 0,
@@ -241,6 +103,160 @@ enum format : u32
     Format_Count,
 };
 
+enum blend_op : u32
+{
+    BlendOp_Add = 0,
+    BlendOp_Subtract,
+    BlendOp_ReverseSubtract,
+    BlendOp_Min,
+    BlendOp_Max,
+
+    BlendOp_Count,
+};
+
+enum blend_factor : u32
+{
+    Blend_Zero = 0,
+    Blend_One,
+    Blend_SrcColor,
+    Blend_InvSrcColor,
+    Blend_DstColor,
+    Blend_InvDstColor,
+    Blend_SrcAlpha,
+    Blend_InvSrcAlpha,
+    Blend_DstAlpha,
+    Blend_InvDstAlpha,
+    Blend_ConstantColor,
+    Blend_InvConstantColor,
+    Blend_ConstantAlpha,
+    Blend_InvConstantAlpha,
+
+    Blend_Count,
+};
+
+enum compare_op : u32
+{
+    Compare_Never = 0,
+    Compare_Always,
+    Compare_Equal,
+    Compare_NotEqual,
+    Compare_Less,
+    Compare_LessEqual,
+    Compare_Greater,
+    Compare_GreaterEqual,
+
+    Compare_Count,
+};
+
+enum tex_filter : u32
+{
+    Filter_Nearest = 0,
+    Filter_Linear,
+
+    Filter_Count,
+};
+
+enum tex_wrap : u32
+{
+    Wrap_Repeat = 0,
+    Wrap_RepeatMirror,
+    Wrap_ClampToEdge,
+    Wrap_ClampToBorder,
+
+    Wrap_Count,
+};
+
+enum tex_anisotropy : u32
+{
+    Anisotropy_None = 0,
+
+    Anisotropy_1,
+    Anisotropy_2,
+    Anisotropy_4,
+    Anisotropy_8,
+    Anisotropy_16,
+
+    Anisotropy_Count,
+};
+
+enum tex_border : u32
+{
+    Border_Black = 0,
+    Border_White = 1,
+
+    Border_Count,
+};
+
+struct sampler_state
+{
+    tex_filter MagFilter;
+    tex_filter MinFilter;
+    tex_filter MipFilter;
+    tex_wrap WrapU;
+    tex_wrap WrapV;
+    tex_wrap WrapW;
+    tex_anisotropy Anisotropy;
+    b32 EnableComparison;
+    compare_op Comparison;
+    f32 MinLOD;
+    f32 MaxLOD;
+    tex_border Border;
+    b32 EnableUnnormalizedCoordinates;
+};
+
+// TODO(boti): This is binary compatible with Vulkan for now,
+// but with mutable descriptor types it could be collapsed down to the D3D12 model?
+enum descriptor_type : u32
+{
+    Descriptor_Sampler = 0,
+    Descriptor_ImageSampler = 1,
+    Descriptor_SampledImage = 2,
+    Descriptor_StorageImage = 3,
+    Descriptor_UniformTexelBuffer = 4,
+    Descriptor_StorageTexelBuffer = 5,
+    Descriptor_UniformBuffer = 6,
+    Descriptor_StorageBuffer = 7,
+    Descriptor_DynamicUniformBuffer = 8,
+    Descriptor_DynamicStorageBuffer = 9,
+    //  Descriptor_InputAttachment, 
+    Descriptor_InlineUniformBlock = 11,
+};
+
+enum descriptor_set_layout_flags : flags32
+{
+    SetLayoutFlag_None = 0,
+
+    SetLayoutFlag_UpdateAfterBind = (1 << 0),
+    SetLayoutFlag_Bindless = (2 << 0),
+};
+
+enum pipeline_type : u32
+{
+    PipelineType_Graphics = 0,
+    PipelineType_Compute,
+
+    PipelineType_Count,
+};
+
+enum pipeline_stage : flags32
+{
+    PipelineStage_None = 0,
+
+    PipelineStage_VS = (1 << 0),
+    PipelineStage_PS = (1 << 1),
+    PipelineStage_HS = (1 << 2),
+    PipelineStage_DS = (1 << 3),
+    PipelineStage_GS = (1 << 4),
+
+    PipelineStage_CS = (1 << 5),
+
+    PipelineStage_Count = 6, // NOTE(boti): This has to be kept up to date !!!
+
+    PipelineStage_AllGfx = PipelineStage_VS|PipelineStage_PS|PipelineStage_DS|PipelineStage_HS|PipelineStage_GS,
+    PipelineStage_All = PipelineStage_AllGfx|PipelineStage_CS,
+};
+
+
 enum topology_type : u32
 {
     Topology_Undefined = 0,
@@ -258,13 +274,6 @@ enum topology_type : u32
     Topology_PatchList,
 
     Topology_Count,
-};
-
-struct push_constant_range
-{
-    flags32 Stages;
-    u32 Size;
-    u32 Offset;
 };
 
 struct vertex_attrib
@@ -303,6 +312,134 @@ enum cull_flags : u32
     Cull_None = 0,
     Cull_Back = (1 << 0),
     Cull_Front = (1 << 1),
+};
+
+struct push_constant_range
+{
+    flags32 Stages;
+    u32 Size;
+    u32 Offset;
+};
+
+struct descriptor_set_binding
+{
+    u32 Binding;
+    descriptor_type Type;
+    u32 DescriptorCount;
+    flags32 Stages;
+    u32 ImmutableSampler; // NOTE(boti): for now we only allow single immutable samplers
+};
+
+struct descriptor_set_layout_info
+{
+    flags32 Flags; // descriptor_set_layout_flags
+    u32 BindingCount;
+    descriptor_set_binding Bindings[MaxDescriptorSetLayoutBindingCount];
+};
+
+struct pipeline_layout_info
+{
+    u32 PushConstantRangeCount;
+    u32 DescriptorSetCount;
+    push_constant_range PushConstantRanges[MaxPushConstantRangeCount];
+    u32 DescriptorSets[MaxDescriptorSetCount];
+};
+
+enum rasterizer_flags : flags32
+{
+    RS_Flags_None = 0,
+
+    RS_DepthClampEnable = (1 << 0),
+    RS_DiscardEnable = (1 << 1),
+    RS_DepthBiasEnable = (1 << 2),
+    RS_FrontCW = (1 << 3),
+};
+
+struct rasterizer_state
+{
+    flags32 Flags;
+    fill_mode Fill;
+    cull_flags CullFlags;
+
+    f32 DepthBiasConstantFactor;
+    f32 DepthBiasClamp;
+    f32 DepthBiasSlopeFactor;
+};
+
+enum depth_stencil_flags : flags32
+{
+    DS_Flags_None = 0,
+
+    DS_DepthTestEnable = (1 << 0),
+    DS_DepthWriteEnable = (1 << 1),
+    DS_DepthBoundsTestEnable = (1 << 2),
+    DS_StencilTestEnable = (1 << 3),
+};
+
+struct depth_stencil_state
+{
+    flags32 Flags;
+
+    compare_op DepthCompareOp;
+    f32 MinDepthBounds;
+    f32 MaxDepthBounds;
+};
+
+struct blend_attachment
+{
+    b32 BlendEnable;
+    blend_factor SrcColor;
+    blend_factor DstColor;
+    blend_op ColorOp;
+    blend_factor SrcAlpha;
+    blend_factor DstAlpha;
+    blend_op AlphaOp;
+};
+
+struct pipeline_info
+{
+    const char* Name;
+    pipeline_type Type;
+
+    pipeline_layout_info Layout;
+
+    // Gfx pipeline specific
+    flags32 EnabledStages;
+
+    vertex_state InputAssemblerState;
+    rasterizer_state RasterizerState;
+    depth_stencil_state DepthStencilState;
+    u32 BlendAttachmentCount;
+    blend_attachment BlendAttachments[MaxColorAttachmentCount];
+
+    u32 ColorAttachmentCount;
+    format ColorAttachments[MaxColorAttachmentCount];
+    format DepthAttachment;
+    format StencilAttachment;
+};
+
+
+enum texture_swizzle_type : u8
+{
+    Swizzle_Identity = 0,
+    Swizzle_Zero,
+    Swizzle_One,
+    Swizzle_R,
+    Swizzle_G,
+    Swizzle_B,
+    Swizzle_A,
+};
+
+struct texture_swizzle
+{
+    texture_swizzle_type R, G, B, A;
+};
+
+struct format_byterate
+{
+    u32 Numerator;
+    u32 Denominator;
+    b32 IsBlock;
 };
 
 static format_byterate FormatByterateTable[Format_Count] = 
@@ -371,6 +508,16 @@ static format_byterate FormatByterateTable[Format_Count] =
 //
 // High-level renderer
 //
+
+// TODO(boti): Maybe we should just have an indirected enum for this too?
+constexpr format DEPTH_FORMAT = Format_D32;
+constexpr format HDR_FORMAT = Format_R11G11B10_Float;
+constexpr format STRUCTURE_BUFFER_FORMAT = Format_R16G16B16A16_Float;
+constexpr format SSAO_FORMAT = Format_R8_UNorm;
+constexpr format SHADOW_FORMAT = Format_D16; // TODO(boti): is this enough?
+// HACK(boti): The swapchain format is unknown at compile time, so we use this special value to refer to it
+constexpr format SWAPCHAIN_FORMAT = (format)0xFFFFFFFF;
+
 
 struct ssao_params
 {
