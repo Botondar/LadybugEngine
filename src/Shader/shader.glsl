@@ -238,7 +238,11 @@ vec3 CalculateAtmosphere(vec3 SrcColor)
 
 void main()
 {
+#if 1
     float Shadow = CalculateShadow(ShadowP, ShadowBlends);
+#else
+    float Shadow = 1.0;
+#endif
 
     vec4 BaseColor = UnpackRGBA8(Material.Diffuse);
     vec4 BaseMetallicRoughness = UnpackRGBA8(Material.MetallicRoughness);
