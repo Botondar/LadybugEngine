@@ -5,7 +5,7 @@ SRC = src
 
 COMMON = -nologo -std:c++20 -Zi -EHsc -MD -arch:AVX2
 FLOAT_ENV = -fp:except- -fp:strict
-OPTIMIZATION = -Od -Oi
+OPTIMIZATION = -O2 -Oi
 INCLUDES = -I$(SRC) -I$(VULKAN_SDK)/Include/
 DEFINES = -DDEVELOPER=1 -DWIN32_LEAN_AND_MEAN -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX
 WARNINGS_MSVC = -WX -W4 -wd4100 -wd4189 -wd4200 -wd4201 -wd4505
@@ -15,6 +15,7 @@ WARNINGS = $(WARNINGS_MSVC) $(WARNINGS_CLANG)
 CXX_FLAGS = $(COMMON) $(FLOAT_ENV) $(INCLUDES) $(DEFINES) $(WARNINGS)
 
 LINK_FLAGS = -LIBPATH:"$(VULKAN_SDK)/Lib/" -LIBPATH:lib/
+SHADER_FLAGS = -O --target-env=vulkan1.3
 
 LIBS = kernel32.lib user32.lib gdi32.lib Shell32.lib advapi32.lib vulkan-1.lib nvtt30106.lib
 
@@ -45,10 +46,10 @@ clean:
     @clang-cl $(CXX_FLAGS) "src/LadybugEngine.cpp" -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) "$(OUT)/renderer.obj" -link -DLL -OUT:$@ $(LINK_FLAGS) $(GAME_EXPORT)
 
 {$(SRC)/Shader/}.glsl{$(OUT)/}.vs:
-    glslc --target-env=vulkan1.3 -DVS -fshader-stage=vert -o "$(OUT)/$(@B).vs" "$<"
+    glslc $(SHADER_FLAGS) -DVS -fshader-stage=vert -o "$(OUT)/$(@B).vs" "$<"
 
 {$(SRC)/Shader/}.glsl{$(OUT)/}.fs:
-    glslc --target-env=vulkan1.3 -DFS -fshader-stage=frag -o "$(OUT)/$(@B).fs" "$<"
+    glslc $(SHADER_FLAGS) -DFS -fshader-stage=frag -o "$(OUT)/$(@B).fs" "$<"
 
 {$(SRC)/Shader/}.comp{$(OUT)/}.cs:
-    glslc --target-env=vulkan1.3 -DCS -fshader-stage=comp -o "$(OUT)/$(@B).cs" "$<"
+    glslc $(SHADER_FLAGS) -DCS -fshader-stage=comp -o "$(OUT)/$(@B).cs" "$<"
