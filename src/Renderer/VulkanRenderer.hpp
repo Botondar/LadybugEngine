@@ -2,8 +2,6 @@
 
 #include <vulkan/vulkan.h>
 
-#include "Renderer/Pipelines.hpp"
-
 //
 // Buffers
 //
@@ -24,11 +22,6 @@ struct vulkan_buffer
 #include "Renderer/Frame.hpp"
 
 extern vulkan VK;
-
-// Forward declarations
-struct font;
-struct render_pipeline_info;
-struct render_pass_info;
 
 struct pipeline_with_layout
 {

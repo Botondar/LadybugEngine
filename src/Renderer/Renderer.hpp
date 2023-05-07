@@ -505,6 +505,11 @@ static format_byterate FormatByterateTable[Format_Count] =
     [Format_BC7_SRGB]       = { 1, 1, true },
 };
 
+struct texture_id
+{
+    u32 Value;
+};
+
 //
 // High-level renderer
 //
@@ -517,7 +522,6 @@ constexpr format SSAO_FORMAT = Format_R8_UNorm;
 constexpr format SHADOW_FORMAT = Format_D16; // TODO(boti): is this enough?
 // HACK(boti): The swapchain format is unknown at compile time, so we use this special value to refer to it
 constexpr format SWAPCHAIN_FORMAT = (format)0xFFFFFFFF;
-
 
 struct ssao_params
 {
@@ -545,11 +549,6 @@ struct post_process_params
 {
     ssao_params SSAO;
     bloom_params Bloom;
-};
-
-struct texture_id
-{
-    u32 Value;
 };
 
 union frustum
@@ -672,6 +671,8 @@ void SetLights(render_frame* Frame, v3 SunDirection, v3 SunLuminance);
 
 void BeginSceneRendering(render_frame* Frame);
 void EndSceneRendering(render_frame* Frame);
+
+#include "Renderer/Pipelines.hpp"
 
 #include "VulkanRenderer.hpp"
 
