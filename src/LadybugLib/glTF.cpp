@@ -7,11 +7,27 @@ enum gltf_elem_flags : flags32
     GLTF_Required = 1 << 0,
 };
 
+internal string ParseString(json_element* Elem, gltf_elem_flags Flags);
 internal b32 ParseB32(json_element* Elem, gltf_elem_flags Flags, b32 DefaultValue = false);
 internal u32 ParseU32(json_element* Elem, gltf_elem_flags Flags, u32 DefaultValue = 0);
 internal f32 ParseF32(json_element* Elem, gltf_elem_flags Flags, f32 DefaultValue = 0.0f);
 internal gltf_type ParseGLTFType(json_element* Elem, gltf_elem_flags Flags, gltf_type DefaultValue = GLTF_SCALAR);
 internal m4 ParseGLTFVector(json_element* Elem, gltf_elem_flags Flags, gltf_type Type, m4 DefaultValue = {});
+
+internal string ParseString(json_element* Elem, gltf_elem_flags Flags)
+{
+    string Result = {};
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::String);
+        Result = Elem->String;
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
 
 internal b32 ParseB32(json_element* Elem, gltf_elem_flags Flags, b32 DefaultValue /*= false*/)
 {
@@ -156,28 +172,9 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
             json_element* Src = Buffers->Array.Elements + i;
             if (Src->Type == json_element_type::Object)
             {
-                json_element* URI = GetElement(&Src->Object, "uri");
-                json_element* ByteLength = GetElement(&Src->Object, "byteLength");
-
-                if (URI)
-                {
-                    Assert(URI->Type == json_element_type::String);
-                    Dst->URI = URI->String;
-                }
-                else
-                {
-                    UnhandledError("Missing GLTF buffer uri");
-                }
-
-                if (ByteLength)
-                {
-                    Assert(ByteLength->Type == json_element_type::Number);
-                    Dst->ByteLength = ByteLength->Number.AsU32();
-                }
-                else
-                {
-                    UnhandledError("Missing GLTF buffer byteLength");
-                }
+                json_object* Obj = &Src->Object;
+                Dst->URI = ParseString(GetElement(Obj, "uri"), GLTF_Required);
+                Dst->ByteLength = ParseU32(GetElement(Obj, "byteLength"), GLTF_Required);
             }
             else
             {
@@ -205,53 +202,14 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
             json_element* Src = BufferViews->Array.Elements + i;
             if (Src->Type == json_element_type::Object)
             {
-                json_element* Buffer = GetElement(&Src->Object, "buffer");
-                json_element* Offset = GetElement(&Src->Object, "byteOffset");
-                json_element* Length = GetElement(&Src->Object, "byteLength");
-                json_element* Stride = GetElement(&Src->Object, "byteStride");
+                json_object* Obj = &Src->Object;
+                Dst->BufferIndex = ParseU32(GetElement(Obj, "buffer"), GLTF_Required);
+                Dst->Offset = ParseU32(GetElement(Obj, "byteOffset"), GLTF_Flags_None, 0);
+                Dst->Size = ParseU32(GetElement(Obj, "byteLength"), GLTF_Required);
+                // TODO(boti): GLTF doesn't require a stride so we should have a
+                //             sensible default value here
+                Dst->Stride = ParseU32(GetElement(Obj, "byteStride"), GLTF_Flags_None, 0);
                 //json_element* Target = GetElement(&Src->Object, "target");
-
-                if (Buffer)
-                {
-                    Assert(Buffer->Type == json_element_type::Number);
-                    Dst->BufferIndex = Buffer->Number.AsU32();
-                }
-                else
-                {
-                    UnhandledError("Missing GLTF buffer index from bufferView");
-                }
-
-                if (Offset)
-                {
-                    Assert(Offset->Type == json_element_type::Number);
-                    Dst->Offset = Offset->Number.AsU32();
-                }
-                else
-                {
-                    Dst->Offset = 0;
-                }
-
-                if (Length)
-                {
-                    Assert(Length->Type == json_element_type::Number);
-                    Dst->Size = Length->Number.AsU32();
-                }
-                else
-                {
-                    UnhandledError("Missing GLTF bufferView size");
-                }
-
-                if (Stride)
-                {
-                    Assert(Stride->Type == json_element_type::Number);
-                    Dst->Stride = Stride->Number.AsU32();
-                }
-                else
-                {
-                    // TODO(boti): GLTF doesn't require a stride so we should have a
-                    //             sensible default value here
-                    Dst->Stride = 0;
-                }
             }
             else
             {
