@@ -276,10 +276,10 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
 
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Shadow];
             vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, 
-                               VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
+            vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout,
+                               VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                sizeof(push_constants), sizeof(u32), &Cascade);
-            vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
+            vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
                                     0, 3, DescriptorSets, 0, nullptr);
             RenderMeshes(Frame->CmdBuffer, Pipeline.Layout,
                          &Renderer->GeometryBuffer, GameState);
@@ -1267,21 +1267,6 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         World->Camera.NearZ = 0.05f;
         World->Camera.FarZ = 50.0f;//1000.0f;
         World->Camera.Yaw = 0.5f * Pi;
-
-        m4 BaseTransform = M4(1.0f, 0.0f, 0.0f, 0.0f,
-                              0.0f, 0.0f, -1.0f, 0.0f,
-                              0.0f, 1.0f, 0.0f, 0.0f,
-                              0.0f, 0.0f, 0.0f, 1.0f);
-#if 0
-        BaseTransform = BaseTransform * M4(50.0f, 0.0f, 0.0f, 0.0f,
-                                           0.0f, 50.0f, 0.0f, 0.0f,
-                                           0.0f, 0.0f, 50.0f, 0.0f,
-                                           0.0f, 0.0f, 0.0f, 1.0f);
-#endif
-        //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
-        LoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
-        //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
-        //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
     }
 
     VK = GameState->Vulkan;
@@ -1306,6 +1291,23 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 0.0f, 0.0f, 0.0f, 1.0f);
             LoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, GameIO->DroppedFilename, YUpToZUp);
             GameIO->bHasDroppedFile = false;
+        }
+        else if (GameState->World->InstanceCount == 0) // NOTE(boti): this is kind of a hack
+        {
+            m4 BaseTransform = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                                  0.0f, 0.0f, -1.0f, 0.0f,
+                                  0.0f, 1.0f, 0.0f, 0.0f,
+                                  0.0f, 0.0f, 0.0f, 1.0f);
+#if 0
+            BaseTransform = BaseTransform * M4(50.0f, 0.0f, 0.0f, 0.0f,
+                                               0.0f, 50.0f, 0.0f, 0.0f,
+                                               0.0f, 0.0f, 50.0f, 0.0f,
+                                               0.0f, 0.0f, 0.0f, 1.0f);
+#endif
+            //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
+            LoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
+            //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
+            //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
         }
 
         if (DoDebugUI(GameState, GameIO, RenderFrame))

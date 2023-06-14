@@ -21,9 +21,9 @@ VkDescriptorSet PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayout Lay
     return Set;
 }
 VkDescriptorSet PushBufferDescriptor(render_frame* Frame, 
-                                          VkDescriptorSetLayout Layout,
-                                          VkDescriptorType Type,
-                                          VkBuffer Buffer, u64 Offset, u64 Size)
+                                    VkDescriptorSetLayout Layout,
+                                    VkDescriptorType Type,
+                                    VkBuffer Buffer, u64 Offset, u64 Size)
 {
     VkDescriptorSet Set = PushDescriptorSet(Frame, Layout);
     if (Set)
@@ -184,8 +184,8 @@ mmrect2 PushText(render_frame* Frame, const char* Text, const font* Font,
 }
 
 mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Font, 
-                                f32 Size, v2 P, rgba8 Color, 
-                                font_layout_type Layout /*= font_layout_type::Baseline*/)
+                           f32 Size, v2 P, rgba8 Color, 
+                           font_layout_type Layout /*= font_layout_type::Baseline*/)
 {
     f32 ShadowOffset = 0.075f;
     PushText(Frame, Text, Font, Size, P + Size * ShadowOffset * v2{ 1.0f, 1.0f }, PackRGBA8(0x00, 0x00, 0x00), Layout);
@@ -196,6 +196,16 @@ mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Fo
 //
 // Rendering
 //
+
+void RenderVertexBlock(render_frame* Frame, render_flags Flags, 
+                       geometry_buffer_allocation* Block, m4 Transform, material* Material)
+{
+    if (HasFlag(Flags, Render_Skinned))
+    {
+        UnimplementedCodePath;
+    }
+}
+
 void BeginPrepass(render_frame* Frame)
 {
     VkImageMemoryBarrier2 BeginBarriers[] = 

@@ -228,8 +228,8 @@ internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTy
 internal VkResult CreateComputeShader(const char* Path, memory_arena* TempArena, VkPipelineLayout PipelineLayout);
 
 VkResult CreateRenderer(renderer* Renderer, 
-                             memory_arena* Arena, 
-                             memory_arena* TempArena)
+                        memory_arena* Arena, 
+                        memory_arena* TempArena)
 {
     VkResult Result = VK_SUCCESS;
 
@@ -1290,8 +1290,8 @@ lbfn VkResult ResizeRenderTargets(renderer* Renderer)
 }
 
 geometry_buffer_allocation UploadVertexData(renderer* Renderer, 
-                                                     u32 VertexCount, const vertex* VertexData,
-                                                     u32 IndexCount, const vert_index* IndexData)
+                                            u32 VertexCount, const vertex* VertexData,
+                                            u32 IndexCount, const vert_index* IndexData)
 {
     geometry_buffer_allocation Allocation = AllocateVertexBuffer(&Renderer->GeometryBuffer, VertexCount, IndexCount);
 
@@ -1337,8 +1337,8 @@ geometry_buffer_allocation UploadVertexData(renderer* Renderer,
                 .size = Allocation.IndexBlock->ByteSize,
             };
 
-            vkCmdCopyBuffer(Renderer->TransferCmdBuffer, 
-                            Renderer->StagingBuffer.Buffer, 
+            vkCmdCopyBuffer(Renderer->TransferCmdBuffer,
+                            Renderer->StagingBuffer.Buffer,
                             Renderer->GeometryBuffer.IndexMemory.Buffer,
                             1, &IndexRegion);
         }
@@ -1515,10 +1515,14 @@ texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, 
     return Result;
 }
 
+void TransferData(renderer* Renderer)
+{
+
+}
+
 //
 // Rendering interface implementation
 //
-
 internal bool BumpBuffer_(vulkan_buffer* Buffer, size_t Size)
 {
     bool Result = false;

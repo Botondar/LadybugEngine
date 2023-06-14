@@ -523,6 +523,19 @@ constexpr format SHADOW_FORMAT = Format_D16; // TODO(boti): is this enough?
 // HACK(boti): The swapchain format is unknown at compile time, so we use this special value to refer to it
 constexpr format SWAPCHAIN_FORMAT = (format)0xFFFFFFFF;
 
+enum render_flags : flags32
+{
+    RenderFlags_None = 0,
+
+    Render_DoubleSided  = (1 << 0),
+    Render_AlphaTest    = (1 << 1),
+    Render_AlphaBlend   = (1 << 2),
+    Render_Skinned      = (1 << 3),
+
+    // NOTE(boti): This is for anything that overlays the main scene, gizmos, 3D UI, etc.
+    Render_PostPresent = 1 << 4, 
+};
+
 struct ssao_params
 {
     f32 Intensity;
