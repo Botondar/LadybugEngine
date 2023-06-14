@@ -1057,8 +1057,8 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
             mmbox Box = {};
             for (u32 i = 0; i < 3; i++)
             {
-                Box.Min.E[i] = PAccessor->Min[i];
-                Box.Max.E[i] = PAccessor->Max[i];
+                Box.Min.E[i] = PAccessor->Min.EE[i];
+                Box.Max.E[i] = PAccessor->Max.EE[i];
             }
 
             vertex* VertexData = PushArray<vertex>(Scratch, VertexCount);

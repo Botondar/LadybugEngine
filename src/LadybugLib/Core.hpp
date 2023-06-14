@@ -320,6 +320,7 @@ union v4
 union m4
 {
     f32 E[4][4];
+    f32 EE[16];
     v4 C[4];
     struct
     {

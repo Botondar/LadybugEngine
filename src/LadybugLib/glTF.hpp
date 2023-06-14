@@ -12,6 +12,8 @@ enum gltf_type : u32
     GLTF_MAT2,
     GLTF_MAT3,
     GLTF_MAT4,
+
+    GLTF_TYPE_COUNT,
 };
 
 enum gltf_component_type : u32
@@ -92,8 +94,8 @@ struct gltf_accessor
     // NOTE(boti): Technically the type of Min/Max is defined by the component type,
     //             but they're used for bounding boxes which means they're going to be floats
     //             most of the time.
-    f32 Max[16]; 
-    f32 Min[16];
+    m4 Max; 
+    m4 Min;
 };
 
 struct gltf_mesh_primitive

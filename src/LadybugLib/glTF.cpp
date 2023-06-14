@@ -1,5 +1,121 @@
 #include "glTF.hpp"
 
+enum gltf_elem_flags : flags32
+{
+    GLTF_Flags_None = 0,
+
+    GLTF_Required = 1 << 0,
+};
+
+internal b32 ParseB32(json_element* Elem, gltf_elem_flags Flags, b32 DefaultValue = false);
+internal u32 ParseU32(json_element* Elem, gltf_elem_flags Flags, u32 DefaultValue = 0);
+internal f32 ParseF32(json_element* Elem, gltf_elem_flags Flags, f32 DefaultValue = 0.0f);
+internal gltf_type ParseGLTFType(json_element* Elem, gltf_elem_flags Flags, gltf_type DefaultValue = GLTF_SCALAR);
+internal m4 ParseGLTFVector(json_element* Elem, gltf_elem_flags Flags, gltf_type Type, m4 DefaultValue = {});
+
+internal b32 ParseB32(json_element* Elem, gltf_elem_flags Flags, b32 DefaultValue /*= false*/)
+{
+    b32 Result = DefaultValue;
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::Boolean);
+        Result = Elem->Boolean;
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal u32 ParseU32(json_element* Elem, gltf_elem_flags Flags, u32 DefaultValue /*= 0*/)
+{
+    u32 Result = DefaultValue;
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::Number);
+        Result = Elem->Number.AsU32();
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal f32 ParseF32(json_element* Elem, gltf_elem_flags Flags, f32 DefaultValue /*= 0.0f*/)
+{
+    u32 Result = DefaultValue;
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::Number);
+        Result = Elem->Number.AsF32();
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal gltf_type ParseGLTFType(json_element* Elem, gltf_elem_flags Flags, gltf_type DefaultValue /*= GLTF_SCALAR*/)
+{
+    gltf_type Result = DefaultValue;
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::String);
+        if      (StringEquals(&Elem->String, "SCALAR")) Result = GLTF_SCALAR;
+        else if (StringEquals(&Elem->String, "VEC2"))   Result = GLTF_VEC2;
+        else if (StringEquals(&Elem->String, "VEC3"))   Result = GLTF_VEC3;
+        else if (StringEquals(&Elem->String, "VEC4"))   Result = GLTF_VEC4;
+        else if (StringEquals(&Elem->String, "MAT2"))   Result = GLTF_MAT2;
+        else if (StringEquals(&Elem->String, "MAT3"))   Result = GLTF_MAT3;
+        else if (StringEquals(&Elem->String, "MAT4"))   Result = GLTF_MAT4;
+        else
+        {
+            UnhandledError("Invalid accessor type");
+        }
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal m4 ParseGLTFVector(json_element* Elem, gltf_elem_flags Flags, gltf_type Type, m4 DefaultValue /*= {}*/)
+{
+    m4 Result = DefaultValue;
+    if (Elem)
+    {
+        constexpr u32 CountTable[GLTF_TYPE_COUNT] = 
+        {
+            [GLTF_SCALAR] = 1,
+            [GLTF_VEC2]   = 2,
+            [GLTF_VEC3]   = 3,
+            [GLTF_VEC4]   = 4,
+            [GLTF_MAT2]   = 4,
+            [GLTF_MAT3]   = 9,
+            [GLTF_MAT4]   = 16,
+        };
+        u32 Count = CountTable[Type];
+
+        Assert(Elem->Type == json_element_type::Array);
+        json_array* Array = &Elem->Array;
+        Assert(Array->ElementCount == Count);
+
+        for (u32 i = 0; i < Count; i++)
+        {
+            Result.EE[i] = ParseF32(Array->Elements + i, GLTF_Required);
+        }
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
 lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
 {
     // TODO(boti): We're not correctly setting the return value when encountering an error !!!
@@ -163,137 +279,20 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
             json_element* Src = Accessors->Array.Elements + i;
             if (Src->Type == json_element_type::Object)
             {
-                json_element* BufferView    = GetElement(&Src->Object, "bufferView");
-                json_element* ByteOffset    = GetElement(&Src->Object, "byteOffset");
-                json_element* ComponentType = GetElement(&Src->Object, "componentType");
-                json_element* IsNormalized  = GetElement(&Src->Object, "normalized");
-                json_element* Count         = GetElement(&Src->Object, "count");
-                json_element* Type          = GetElement(&Src->Object, "type");
-                json_element* Max           = GetElement(&Src->Object, "max");
-                json_element* Min           = GetElement(&Src->Object, "min");
-                json_element* Sparse        = GetElement(&Src->Object, "sparse");
+                json_object* Obj = &Src->Object;
+                Dst->BufferView = ParseU32(GetElement(Obj, "bufferView"), GLTF_Flags_None, U32_MAX);
+                Dst->ByteOffset = ParseU32(GetElement(Obj, "byteOffset"), GLTF_Flags_None, U32_MAX);
+                Dst->ComponentType = (gltf_component_type)ParseU32(GetElement(Obj, "componentType"), GLTF_Required);
+                Dst->IsNormalized = ParseB32(GetElement(Obj, "normalized"), GLTF_Flags_None, false);
+                Dst->Count = ParseU32(GetElement(Obj, "count"), GLTF_Required);
+                Dst->Type = ParseGLTFType(GetElement(Obj, "type"), GLTF_Required);
+                Dst->Max = ParseGLTFVector(GetElement(Obj, "max"), GLTF_Flags_None, Dst->Type, { 0.0f, 0.0f, 0.0f });
+                Dst->Min = ParseGLTFVector(GetElement(Obj, "min"), GLTF_Flags_None, Dst->Type, { 0.0f, 0.0f, 0.0f });
 
-                if (BufferView)
+                if (GetElement(&Src->Object, "sparse"))
                 {
-                    Assert(BufferView->Type == json_element_type::Number);
-                    Dst->BufferView = BufferView->Number.AsU32();
-                }
-                else
-                {
-                    Dst->BufferView = U32_MAX;
-                }
-
-                if (ByteOffset)
-                {
-                    Assert(ByteOffset->Type == json_element_type::Number);
-                    Dst->ByteOffset = ByteOffset->Number.AsU32();
-                }
-                else
-                {
-                    Dst->ByteOffset = 0;
-                }
-
-                if (ComponentType)
-                {
-                    Assert(ComponentType->Type == json_element_type::Number);
-                    Dst->ComponentType = (gltf_component_type)ComponentType->Number.AsU32();
-                }
-                else
-                {
-                    UnhandledError("Missing GLTF accessor componentType");
-                }
-
-                if (IsNormalized)
-                {
-                    Assert(IsNormalized->Type == json_element_type::Boolean);
-                    Dst->IsNormalized = IsNormalized->Boolean;
-                }
-                else
-                {
-                    Dst->IsNormalized = false;
-                }
-
-                if (Count)
-                {
-                    Assert(Count->Type == json_element_type::Number);
-                    Dst->Count = Count->Number.AsU32();
-                }
-                else
-                {
-                    UnhandledError("Missing GLTF accessor count");
-                }
-
-                if (Type)
-                {
-                    if (Type->Type != json_element_type::String) UnhandledError("Invalid glTF accessor type");
-
-                    if      (StringEquals(&Type->String, "SCALAR")) Dst->Type = GLTF_SCALAR;
-                    else if (StringEquals(&Type->String, "VEC2"))   Dst->Type = GLTF_VEC2;
-                    else if (StringEquals(&Type->String, "VEC3"))   Dst->Type = GLTF_VEC3;
-                    else if (StringEquals(&Type->String, "VEC4"))   Dst->Type = GLTF_VEC4;
-                    else if (StringEquals(&Type->String, "MAT2"))   Dst->Type = GLTF_MAT2;
-                    else if (StringEquals(&Type->String, "MAT3"))   Dst->Type = GLTF_MAT3;
-                    else if (StringEquals(&Type->String, "MAT4"))   Dst->Type = GLTF_MAT4;
-                    else
-                    {
-                        UnhandledError("Invalid accessor type");
-                    }
-                }
-                else
-                {
-                    UnhandledError("Missing GLTF accessor type");
-                }
-
-                u32 ElementCount = 0;
-                switch (Dst->Type)
-                {
-                    case GLTF_SCALAR: ElementCount = 1; break;
-                    case GLTF_VEC2:   ElementCount = 2; break;
-                    case GLTF_VEC3:   ElementCount = 3; break;
-                    case GLTF_VEC4:   ElementCount = 4; break;
-                    case GLTF_MAT2:   ElementCount = 4; break;
-                    case GLTF_MAT3:   ElementCount = 9; break;
-                    case GLTF_MAT4:   ElementCount = 16; break;
-                }
-
-                if (Max)
-                {
-                    if (Dst->ComponentType != GLTF_FLOAT) UnimplementedCodePath;
-                    if (Max->Type != json_element_type::Array) UnhandledError("Invalid glTF accessor max type");
-                    
-                    if (Max->Array.ElementCount == ElementCount)
-                    {
-                        for (u32 ElemIndex = 0; ElemIndex < Max->Array.ElementCount; ElemIndex++)
-                        {
-                            json_element* Elem = Max->Array.Elements + ElemIndex;
-                            if (Elem->Type != json_element_type::Number) UnhandledError("Invalid glTF max element type");
-                            Dst->Max[ElemIndex] = Elem->Number.AsF32();
-                        }
-                    }
-                    else
-                    {
-                        UnhandledError("Invalid glTF max element count");
-                    }
-                }
-
-                if (Min)
-                {
-                    if (Dst->ComponentType != GLTF_FLOAT) UnimplementedCodePath;
-                    if (Min->Type != json_element_type::Array) UnhandledError("Invalid glTF accessor min type");
-
-                    if (Min->Array.ElementCount == ElementCount)
-                    {
-                        for (u32 ElemIndex = 0; ElemIndex < Min->Array.ElementCount; ElemIndex++)
-                        {
-                            json_element* Elem = Min->Array.Elements + ElemIndex;
-                            if (Elem->Type != json_element_type::Number) UnhandledError("Invalid glTF min element type");
-                            Dst->Min[ElemIndex] = Elem->Number.AsF32();
-                        }
-                    }
-                    else
-                    {
-                        UnhandledError("Invalid glTF accessor min element count");
-                    }
+                    // TODO(boti)
+                    UnimplementedCodePath;
                 }
             }
             else
@@ -322,50 +321,11 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
             json_element* Src = Samplers->Array.Elements + i;
             if (Src->Type == json_element_type::Object)
             {
-                json_element* MagFilter = GetElement(&Src->Object, "magFilter");
-                json_element* MinFilter = GetElement(&Src->Object, "minFilter");
-                json_element* WrapU = GetElement(&Src->Object, "wrapS");
-                json_element* WrapV = GetElement(&Src->Object, "wrapT");
-
-                if (MagFilter)
-                {
-                    Assert(MagFilter->Type == json_element_type::Number);
-                    Dst->MagFilter = (gltf_filter)MagFilter->Number.AsU32();
-                }
-                else
-                {
-                    Dst->MagFilter = GLTF_FILTER_LINEAR;
-                }
-
-                if (MinFilter)
-                {
-                    Assert(MinFilter->Type == json_element_type::Number);
-                    Dst->MinFilter = (gltf_filter)MinFilter->Number.AsU32();
-                }
-                else
-                {
-                    Dst->MinFilter = GLTF_FILTER_LINEAR_MIPMAP_LINEAR;
-                }
-
-                if (WrapU)
-                {
-                    Assert(WrapU->Type == json_element_type::Number);
-                    Dst->WrapU = (gltf_wrap)WrapU->Number.AsU32();
-                }
-                else
-                {
-                    Dst->WrapU = GLTF_WRAP_REPEAT;
-                }
-
-                if (WrapV)
-                {
-                    Assert(WrapV->Type == json_element_type::Number);
-                    Dst->WrapV = (gltf_wrap)WrapV->Number.AsU32();
-                }
-                else
-                {
-                    Dst->WrapV = GLTF_WRAP_REPEAT;
-                }
+                json_object* Obj = &Src->Object;
+                Dst->MagFilter = (gltf_filter)ParseU32(GetElement(Obj, "magFilter"), GLTF_Flags_None, GLTF_FILTER_LINEAR);
+                Dst->MinFilter = (gltf_filter)ParseU32(GetElement(Obj, "minFilter"), GLTF_Flags_None, GLTF_FILTER_NEAREST);
+                Dst->WrapU = (gltf_wrap)ParseU32(GetElement(Obj, "wrapS"), GLTF_Flags_None, GLTF_WRAP_REPEAT);
+                Dst->WrapV = (gltf_wrap)ParseU32(GetElement(Obj, "wrapT"), GLTF_Flags_None, GLTF_WRAP_REPEAT);
             }
             else
             {
@@ -393,28 +353,9 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
             json_element* Src = Textures->Array.Elements + i;
             if (Src->Type == json_element_type::Object)
             {
-                json_element* Sampler = GetElement(&Src->Object, "sampler");
-                json_element* Source = GetElement(&Src->Object, "source");
-
-                if (Sampler)
-                {
-                    Assert(Sampler->Type == json_element_type::Number);
-                    Dst->SamplerIndex = Sampler->Number.AsU32();
-                }
-                else
-                {
-                    Dst->SamplerIndex = U32_MAX;
-                }
-
-                if (Source)
-                {
-                    Assert(Source->Type == json_element_type::Number);
-                    Dst->ImageIndex = Source->Number.AsU32();
-                }
-                else
-                {
-                    Dst->ImageIndex = U32_MAX;
-                }
+                json_object* Obj = &Src->Object;
+                Dst->SamplerIndex = ParseU32(GetElement(Obj, "sampler"), GLTF_Flags_None, U32_MAX);
+                Dst->ImageIndex = ParseU32(GetElement(Obj, "source"), GLTF_Flags_None, U32_MAX);
             }
             else
             {
