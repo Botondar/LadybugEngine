@@ -957,11 +957,11 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
     {
         gltf_material* SrcMaterial = GLTF.Materials + MaterialIndex;
 
-        if (SrcMaterial->BaseColorTexCoordIndex != 0) UnimplementedCodePath;
-        if (SrcMaterial->NormalTexCoordIndex != 0) UnimplementedCodePath;
-        if (SrcMaterial->MetallicRoughnessTexCoordIndex != 0) UnimplementedCodePath;
+        if (SrcMaterial->BaseColorTexture.TexCoordIndex != 0) UnimplementedCodePath;
+        if (SrcMaterial->NormalTexture.TexCoordIndex != 0) UnimplementedCodePath;
+        if (SrcMaterial->MetallicRoughnessTexture.TexCoordIndex != 0) UnimplementedCodePath;
 
-        if (SrcMaterial->NormalTexCoordScale != 1.0f) UnimplementedCodePath;
+        if (SrcMaterial->NormalTexture.Scale != 1.0f) UnimplementedCodePath;
 
         if (Assets->MaterialCount < Assets->MaxMaterialCount)
         {
@@ -974,30 +974,30 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
             Material->NormalID = Assets->DefaultNormalID;
             Material->MetallicRoughnessID = Assets->DefaultMetallicRoughnessID;
 
-            if (SrcMaterial->BaseColorTextureIndex != U32_MAX)
+            if (SrcMaterial->BaseColorTexture.TextureIndex != U32_MAX)
             {
-                texture_id* Texture = TextureTable + SrcMaterial->BaseColorTextureIndex;
+                texture_id* Texture = TextureTable + SrcMaterial->BaseColorTexture.TextureIndex;
                 if (Texture->Value == INVALID_INDEX_U32)
                 {
-                    *Texture = LoadAndUploadTexture(SrcMaterial->BaseColorTextureIndex, texture_type::Diffuse, SrcMaterial->AlphaMode);
+                    *Texture = LoadAndUploadTexture(SrcMaterial->BaseColorTexture.TextureIndex, texture_type::Diffuse, SrcMaterial->AlphaMode);
                 }
                 Material->DiffuseID = *Texture;
             }
-            if (SrcMaterial->NormalTextureIndex != U32_MAX)
+            if (SrcMaterial->NormalTexture.TextureIndex != U32_MAX)
             {
-                texture_id* Texture = TextureTable + SrcMaterial->NormalTextureIndex;
+                texture_id* Texture = TextureTable + SrcMaterial->NormalTexture.TextureIndex;
                 if (Texture->Value == INVALID_INDEX_U32)
                 {
-                    *Texture = LoadAndUploadTexture(SrcMaterial->NormalTextureIndex, texture_type::Normal, SrcMaterial->AlphaMode);
+                    *Texture = LoadAndUploadTexture(SrcMaterial->NormalTexture.TextureIndex, texture_type::Normal, SrcMaterial->AlphaMode);
                 }
                 Material->NormalID = *Texture;
             }
-            if (SrcMaterial->MetallicRoughnessTextureIndex != U32_MAX)
+            if (SrcMaterial->MetallicRoughnessTexture.TextureIndex != U32_MAX)
             {
-                texture_id* Texture = TextureTable + SrcMaterial->MetallicRoughnessTextureIndex;
+                texture_id* Texture = TextureTable + SrcMaterial->MetallicRoughnessTexture.TextureIndex;
                 if (Texture->Value == INVALID_INDEX_U32)
                 {
-                    *Texture = LoadAndUploadTexture(SrcMaterial->MetallicRoughnessTextureIndex, texture_type::Material, SrcMaterial->AlphaMode);
+                    *Texture = LoadAndUploadTexture(SrcMaterial->MetallicRoughnessTexture.TextureIndex, texture_type::Material, SrcMaterial->AlphaMode);
                 }
                 Material->MetallicRoughnessID = *Texture;
             }

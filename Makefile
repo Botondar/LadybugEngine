@@ -5,11 +5,11 @@ SRC = src
 
 COMMON = -nologo -std:c++20 -Zi -EHsc -MD -arch:AVX2
 FLOAT_ENV = -fp:except- -fp:strict
-OPTIMIZATION = -O2 -Oi
+OPTIMIZATION = -Od -Oi
 INCLUDES = -I$(SRC) -I$(VULKAN_SDK)/Include/
 DEFINES = -DDEVELOPER=1 -DWIN32_LEAN_AND_MEAN -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX
 WARNINGS_MSVC = -WX -W4 -wd4100 -wd4189 -wd4200 -wd4201 -wd4505
-WARNINGS_CLANG = -Wno-unused-function -Wno-unused-variable -Wno-unused-lambda-capture -Wno-unused-value -Wno-missing-field-initializers -Wno-c++11-narrowing -Wno-char-subscripts -Wno-missing-braces -Wno-c99-designator
+WARNINGS_CLANG = -Wno-unused-function -Wno-unused-variable -Wno-unused-lambda-capture -Wno-unused-value -Wno-missing-field-initializers -Wno-char-subscripts -Wno-missing-braces -Wno-c99-designator -Wno-c++11-narrowing
 WARNINGS = $(WARNINGS_MSVC) $(WARNINGS_CLANG)
 
 CXX_FLAGS = $(COMMON) $(FLOAT_ENV) $(INCLUDES) $(DEFINES) $(WARNINGS)

@@ -139,33 +139,29 @@ struct gltf_image
     u32 BufferViewIndex; // NOTE(boti): this is only valid when URI is missing
 };
 
+struct gltf_texture_info
+{
+    u32 TextureIndex;
+    u32 TexCoordIndex;
+    f32 Scale; // NOTE(boti): Scale is only applicable to normal textures, but we do set it to a sensible default value
+};
+
 struct gltf_material
 {
     b32 IsDoubleSided;
     gltf_alpha_mode AlphaMode;
     f32 AlphaCutoff;
     v3 EmissiveFactor;
-
-    v4 BaseColorFactor;
-    u32 BaseColorTextureIndex;
-    u32 BaseColorTexCoordIndex;
-
     f32 MetallicFactor;
     f32 RoughnessFactor;
 
-    u32 MetallicRoughnessTextureIndex;
-    u32 MetallicRoughnessTexCoordIndex;
+    v4 BaseColorFactor;
 
-    u32 NormalTextureIndex;
-    u32 NormalTexCoordIndex;
-    f32 NormalTexCoordScale;
-
-    u32 OcclusionTextureIndex;
-    u32 OcclusionTexCoordIndex;
-    f32 OcclusionStrength;
-
-    u32 EmissiveTextureIndex;
-    u32 EmmisiveTexCoordIndex;
+    gltf_texture_info BaseColorTexture;
+    gltf_texture_info MetallicRoughnessTexture;
+    gltf_texture_info NormalTexture;
+    gltf_texture_info OcclusionTexture;
+    gltf_texture_info EmissiveTexture;
 };
 
 struct gltf_node

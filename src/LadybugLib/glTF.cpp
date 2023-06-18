@@ -11,8 +11,11 @@ internal string ParseString(json_element* Elem, gltf_elem_flags Flags);
 internal b32 ParseB32(json_element* Elem, gltf_elem_flags Flags, b32 DefaultValue = false);
 internal u32 ParseU32(json_element* Elem, gltf_elem_flags Flags, u32 DefaultValue = 0);
 internal f32 ParseF32(json_element* Elem, gltf_elem_flags Flags, f32 DefaultValue = 0.0f);
+
+internal void ParseGLTFVector(float* Dst, json_element* Elem, gltf_elem_flags Flags, gltf_type Type, m4 DefaultValue = {});
+internal gltf_texture_info ParseTextureInfo(json_element* Elem, gltf_elem_flags Flags);
 internal gltf_type ParseGLTFType(json_element* Elem, gltf_elem_flags Flags, gltf_type DefaultValue = GLTF_SCALAR);
-internal m4 ParseGLTFVector(json_element* Elem, gltf_elem_flags Flags, gltf_type Type, m4 DefaultValue = {});
+internal gltf_alpha_mode ParseGLTFAlphaMode(json_element* Elem, gltf_elem_flags Flags, gltf_alpha_mode DefaultValue = GLTF_ALPHA_MODE_OPAQUE);
 
 internal string ParseString(json_element* Elem, gltf_elem_flags Flags)
 {
@@ -61,7 +64,7 @@ internal u32 ParseU32(json_element* Elem, gltf_elem_flags Flags, u32 DefaultValu
 
 internal f32 ParseF32(json_element* Elem, gltf_elem_flags Flags, f32 DefaultValue /*= 0.0f*/)
 {
-    u32 Result = DefaultValue;
+    f32 Result = DefaultValue;
     if (Elem)
     {
         Assert(Elem->Type == json_element_type::Number);
@@ -99,31 +102,75 @@ internal gltf_type ParseGLTFType(json_element* Elem, gltf_elem_flags Flags, gltf
     return(Result);
 }
 
-internal m4 ParseGLTFVector(json_element* Elem, gltf_elem_flags Flags, gltf_type Type, m4 DefaultValue /*= {}*/)
+internal void ParseGLTFVector(float* Dst, json_element* Elem, gltf_elem_flags Flags, gltf_type Type, m4 DefaultValue /*= {}*/)
 {
-    m4 Result = DefaultValue;
+    constexpr u32 CountTable[GLTF_TYPE_COUNT] = 
+    {
+        [GLTF_SCALAR] = 1,
+        [GLTF_VEC2]   = 2,
+        [GLTF_VEC3]   = 3,
+        [GLTF_VEC4]   = 4,
+        [GLTF_MAT2]   = 4,
+        [GLTF_MAT3]   = 9,
+        [GLTF_MAT4]   = 16,
+    };
+    u32 Count = CountTable[Type];
+    for (u32 i = 0; i < Count; i++)
+    {
+        Dst[i] = DefaultValue.EE[i];
+    }
+
     if (Elem)
     {
-        constexpr u32 CountTable[GLTF_TYPE_COUNT] = 
-        {
-            [GLTF_SCALAR] = 1,
-            [GLTF_VEC2]   = 2,
-            [GLTF_VEC3]   = 3,
-            [GLTF_VEC4]   = 4,
-            [GLTF_MAT2]   = 4,
-            [GLTF_MAT3]   = 9,
-            [GLTF_MAT4]   = 16,
-        };
-        u32 Count = CountTable[Type];
-
         Assert(Elem->Type == json_element_type::Array);
         json_array* Array = &Elem->Array;
         Assert(Array->ElementCount == Count);
 
         for (u32 i = 0; i < Count; i++)
         {
-            Result.EE[i] = ParseF32(Array->Elements + i, GLTF_Required);
+            Dst[i] = ParseF32(Array->Elements + i, GLTF_Required);
         }
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+}
+
+internal gltf_alpha_mode ParseGLTFAlphaMode(json_element* Elem, gltf_elem_flags Flags, gltf_alpha_mode DefaultValue /*= GLTF_ALPHA_MODE_OPAQUE*/)
+{
+    gltf_alpha_mode Result = DefaultValue;
+    if (Elem)
+    {
+        if (Elem->Type != json_element_type::String)
+        {
+            UnhandledError("Invalid glTF element type");
+        }
+
+        if      (StringEquals(&Elem->String, "OPAQUE")) Result = GLTF_ALPHA_MODE_OPAQUE;
+        else if (StringEquals(&Elem->String, "MASK"))   Result = GLTF_ALPHA_MODE_MASK;
+        else if (StringEquals(&Elem->String, "BLEND"))  Result = GLTF_ALPHA_MODE_BLEND;
+        else 
+        {
+            UnhandledError("Invalid glTF alpha mode value");
+        }
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal gltf_texture_info ParseTextureInfo(json_element* Elem, gltf_elem_flags Flags)
+{
+    gltf_texture_info Result = { U32_MAX, 0, 1.0f };
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::Object);
+        Result.TextureIndex = ParseU32(GetElement(&Elem->Object, "index"), GLTF_Required);
+        Result.TexCoordIndex = ParseU32(GetElement(&Elem->Object, "texCoord"), GLTF_Flags_None, 0);
+        Result.Scale = ParseF32(GetElement(&Elem->Object, "scale"), GLTF_Flags_None, 1.0f);
     }
     else if (HasFlag(Flags, GLTF_Required))
     {
@@ -244,8 +291,8 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                 Dst->IsNormalized = ParseB32(GetElement(Obj, "normalized"), GLTF_Flags_None, false);
                 Dst->Count = ParseU32(GetElement(Obj, "count"), GLTF_Required);
                 Dst->Type = ParseGLTFType(GetElement(Obj, "type"), GLTF_Required);
-                Dst->Max = ParseGLTFVector(GetElement(Obj, "max"), GLTF_Flags_None, Dst->Type, { 0.0f, 0.0f, 0.0f });
-                Dst->Min = ParseGLTFVector(GetElement(Obj, "min"), GLTF_Flags_None, Dst->Type, { 0.0f, 0.0f, 0.0f });
+                ParseGLTFVector(Dst->Max.EE, GetElement(Obj, "max"), GLTF_Flags_None, Dst->Type, { 0.0f, 0.0f, 0.0f });
+                ParseGLTFVector(Dst->Min.EE, GetElement(Obj, "min"), GLTF_Flags_None, Dst->Type, { 0.0f, 0.0f, 0.0f });
 
                 if (GetElement(&Src->Object, "sparse"))
                 {
@@ -335,30 +382,17 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         {
             gltf_image* Dst = GLTF->Images + i;
             json_element* Src = Images->Array.Elements + i;
+            Assert(Src->Type == json_element_type::Object);
+            json_object* Obj = &Src->Object;
 
-            json_element* URI           = GetElement(&Src->Object, "uri");
-            json_element* MimeType      = GetElement(&Src->Object, "mimeType");
-            json_element* BufferView    = GetElement(&Src->Object, "bufferView");
+            Dst->URI = ParseString(GetElement(Obj, "uri"), GLTF_Flags_None);
+            Dst->MimeType = ParseString(GetElement(Obj, "mimeType"), GLTF_Flags_None);
+            Dst->BufferViewIndex = ParseU32(GetElement(Obj, "bufferView"), GLTF_Flags_None, U32_MAX);
 
-            if (URI)
-            {
-                Assert(URI->Type == json_element_type::String);
-                Dst->URI = URI->String;
-            }
-
-            if (MimeType)
-            {
-                Assert(MimeType->Type == json_element_type::String);
-                Dst->MimeType = MimeType->String;
-            }
-
-            if (BufferView)
+            // TODO(boti)
+            if (Dst->BufferViewIndex != U32_MAX)
             {
                 UnimplementedCodePath;
-            }
-            else
-            {
-                Dst->BufferViewIndex = U32_MAX;
             }
         }
     }
@@ -381,253 +415,31 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                 UnhandledError("Invalid glTF material type");
             }
 
-            json_element* PBR               = GetElement(&Src->Object, "pbrMetallicRoughness");
-            json_element* NormalTexture     = GetElement(&Src->Object, "normalTexture");
-            json_element* OcclusionTexture  = GetElement(&Src->Object, "occlusionTexture");
-            json_element* EmissiveTexture   = GetElement(&Src->Object, "emissiveTexture");
             json_element* EmissiveFactor    = GetElement(&Src->Object, "emissiveFactor");
-            json_element* AlphaMode         = GetElement(&Src->Object, "alphaMode");
-            json_element* AlphaCutoff       = GetElement(&Src->Object, "alphaCutoff");
-            json_element* DoubleSided       = GetElement(&Src->Object, "doubleSided");
 
+            Dst->NormalTexture      = ParseTextureInfo(GetElement(&Src->Object, "normalTexture"), GLTF_Flags_None);
+            Dst->OcclusionTexture   = ParseTextureInfo(GetElement(&Src->Object, "occlusionTexture"), GLTF_Flags_None);
+            Dst->EmissiveTexture    = ParseTextureInfo(GetElement(&Src->Object, "emissiveTexture"), GLTF_Flags_None);
+            Dst->IsDoubleSided      = ParseB32(GetElement(&Src->Object, "doubleSided"), GLTF_Flags_None);
+            Dst->AlphaMode          = ParseGLTFAlphaMode(GetElement(&Src->Object, "alphaMode"), GLTF_Flags_None, GLTF_ALPHA_MODE_OPAQUE);
+            Dst->AlphaCutoff        = ParseF32(GetElement(&Src->Object, "alphaCutOff"), GLTF_Flags_None, 0.5f);
+            ParseGLTFVector(Dst->EmissiveFactor.E, GetElement(&Src->Object, "emissiveFactor"), GLTF_Flags_None, GLTF_VEC3, { 0.0f, 0.0f, 0.0f });
+
+            json_element* PBR = GetElement(&Src->Object, "pbrMetallicRoughness");
             if (PBR) 
             {
                 Assert(PBR->Type == json_element_type::Object);
-                json_element* BaseColorFactor           = GetElement(&PBR->Object, "baseColorFactor");
-                json_element* BaseColorTexture          = GetElement(&PBR->Object, "baseColorTexture");
-                json_element* MetallicFactor            = GetElement(&PBR->Object, "metallicFactor");
-                json_element* RoughnessFactor           = GetElement(&PBR->Object, "roughnessFactor");
-                json_element* MetallicRoughnessTexture  = GetElement(&PBR->Object, "metallicRoughnessTexture");
 
-                if (BaseColorFactor)
-                {
-                    Assert(BaseColorFactor->Type == json_element_type::Array);
-                    Assert(BaseColorFactor->Array.ElementCount == 4);
+                ParseGLTFVector(Dst->BaseColorFactor.E, GetElement(&PBR->Object, "baseColorFactor"), GLTF_Flags_None, GLTF_VEC4, { 1.0f, 1.0f, 1.0f, 1.0f });
+                Dst->MetallicFactor = ParseF32(GetElement(&PBR->Object, "metallicFactor"), GLTF_Flags_None, 1.0f);
+                Dst->RoughnessFactor = ParseF32(GetElement(&PBR->Object, "roughnessFactor"), GLTF_Flags_None, 1.0f);
 
-                    for (u32 ElemIndex = 0; ElemIndex < BaseColorFactor->Array.ElementCount; ElemIndex++)
-                    {
-                        json_element* Elem = BaseColorFactor->Array.Elements + ElemIndex;
-                        Assert(Elem->Type == json_element_type::Number);
-                        Dst->BaseColorFactor.E[ElemIndex] = Elem->Number.AsF32();
-                    }
-                }
-                else
-                {
-                    Dst->BaseColorFactor = { 1.0f, 1.0f, 1.0f, 1.0f };
-                }
-
-                if (BaseColorTexture)
-                {
-                    Assert(BaseColorTexture->Type == json_element_type::Object);
-                    json_element* TexIndex      = GetElement(&BaseColorTexture->Object, "index");
-                    json_element* TexCoordIndex = GetElement(&BaseColorTexture->Object, "texCoord");
-
-                    if (TexIndex)
-                    {
-                        Assert(TexIndex->Type == json_element_type::Number);
-                        Dst->BaseColorTextureIndex = TexIndex->Number.AsU32();
-                    }
-                    else
-                    {
-                        UnhandledError("glTF Missing texture index from baseColorTexture");
-                    }
-
-                    if (TexCoordIndex)
-                    {
-                        Assert(TexCoordIndex->Type == json_element_type::Number);
-                        Dst->BaseColorTexCoordIndex = TexCoordIndex->Number.AsU32();
-                    }
-                    else
-                    {
-                        Dst->BaseColorTexCoordIndex = 0;
-                    }
-                }
-                else
-                {
-                    Dst->BaseColorTextureIndex = U32_MAX;
-                    Dst->BaseColorTexCoordIndex = 0;
-                }
-
-                if (MetallicFactor)
-                {
-                    if (MetallicFactor->Type != json_element_type::Number) UnhandledError("Invalid glTF metallicFactor type");
-                    Dst->MetallicFactor = MetallicFactor->Number.AsF32();
-                }
-                else
-                {
-                    Dst->MetallicFactor = 1.0f;
-                }
-
-                if (RoughnessFactor)
-                {
-                    if (RoughnessFactor->Type != json_element_type::Number) UnhandledError("Invalid glTF roughnessFactor type");
-                    Dst->RoughnessFactor = RoughnessFactor->Number.AsF32();
-                }
-                else
-                {
-                    Dst->RoughnessFactor = 1.0f;
-                }
-
-                if (MetallicRoughnessTexture)
-                {
-                    if (MetallicRoughnessTexture->Type == json_element_type::Object) 
-                    {
-                        json_element* TextureIndex = GetElement(&MetallicRoughnessTexture->Object, "index");
-                        json_element* TexCoordIndex = GetElement(&MetallicRoughnessTexture->Object, "texCoord");
-
-                        if (TextureIndex)
-                        {
-                            if (TextureIndex->Type != json_element_type::Number) UnhandledError("Invalid glTF texture index type");
-                            Dst->MetallicRoughnessTextureIndex = TextureIndex->Number.AsU32();
-                        }
-                        else
-                        {
-                            UnhandledError("Missing glTF metallicRoughnessTexture.index");
-                        }
-
-                        if (TexCoordIndex)
-                        {
-                            if (TexCoordIndex->Type != json_element_type::Number) UnhandledError("Invalid glTF texcoord index type");
-                            Dst->MetallicRoughnessTexCoordIndex = TexCoordIndex->Number.AsU32();
-                        }
-                        else
-                        {
-                            Dst->MetallicRoughnessTexCoordIndex = 0;
-                        }
-                    }
-                    else 
-                    {
-                        UnhandledError("Invalid glTF metallicRoughnessTexture type");
-                    }
-                }
-                else
-                {
-                    Dst->MetallicRoughnessTextureIndex = U32_MAX;
-                    Dst->MetallicRoughnessTexCoordIndex = 0;
-                }
+                Dst->BaseColorTexture = ParseTextureInfo(GetElement(&PBR->Object, "baseColorTexture"), GLTF_Flags_None);
+                Dst->MetallicRoughnessTexture = ParseTextureInfo(GetElement(&PBR->Object, "metallicRoughnessTexture"), GLTF_Flags_None);
             }
             else
             {
                 UnimplementedCodePath;
-            }
-
-            if (NormalTexture)
-            {
-                Assert(NormalTexture->Type == json_element_type::Object);
-                json_element* TexIndex      = GetElement(&NormalTexture->Object, "index");
-                json_element* TexCoordIndex = GetElement(&NormalTexture->Object, "texCoord");
-                json_element* TexCoordScale = GetElement(&NormalTexture->Object, "scale");
-
-                if (TexIndex)
-                {
-                    Assert(TexIndex->Type == json_element_type::Number);
-                    Dst->NormalTextureIndex = TexIndex->Number.AsU32();
-                }
-                else
-                {
-                    UnhandledError("glTF Missing texture index from normalTexture");
-                }
-
-                if (TexCoordIndex)
-                {
-                    Assert(TexCoordIndex->Type == json_element_type::Number);
-                    Dst->NormalTexCoordIndex = TexCoordIndex->Number.AsU32();
-                }
-                else 
-                {
-                    Dst->NormalTexCoordIndex = 0;
-                }
-
-                if (TexCoordScale)
-                {
-                    Assert(TexCoordScale->Type == json_element_type::Number);
-                    Dst->NormalTexCoordScale = TexCoordScale->Number.AsF32();
-                }
-                else
-                {
-                    Dst->NormalTexCoordScale = 1.0f;
-                }
-            }
-            else
-            {
-                Dst->NormalTextureIndex = U32_MAX;
-                Dst->NormalTexCoordIndex = 0;
-                Dst->NormalTexCoordScale = 1.0f;
-            }
-
-            if (OcclusionTexture)
-            {
-                UnimplementedCodePath;
-            }
-            else
-            {
-            }
-
-            if (EmissiveTexture)
-            {
-                UnimplementedCodePath;
-            }
-            else
-            {
-            }
-
-            if (DoubleSided)
-            {
-                Assert(DoubleSided->Type == json_element_type::Boolean);
-                Dst->IsDoubleSided = DoubleSided->Boolean;
-            }
-            else
-            {
-                Dst->IsDoubleSided = false;
-            }
-
-            if (AlphaMode)
-            {
-                Assert(AlphaMode->Type == json_element_type::String);
-                if (StringEquals(&AlphaMode->String, "OPAQUE"))
-                {
-                    Dst->AlphaMode = GLTF_ALPHA_MODE_OPAQUE;
-                }
-                else if (StringEquals(&AlphaMode->String, "MASK"))
-                {
-                    Dst->AlphaMode = GLTF_ALPHA_MODE_MASK;
-                }
-                else if (StringEquals(&AlphaMode->String, "BLEND"))
-                {
-                    Dst->AlphaMode = GLTF_ALPHA_MODE_BLEND;
-                }
-            }
-            else
-            {
-                Dst->AlphaMode = GLTF_ALPHA_MODE_OPAQUE;
-            }
-
-            if (AlphaCutoff)
-            {
-                Assert(AlphaCutoff->Type == json_element_type::Number);
-                Dst->AlphaCutoff = AlphaCutoff->Number.AsF32();
-            }
-            else
-            {
-                Dst->AlphaCutoff = 0.5f;
-            }
-
-            if (EmissiveFactor)
-            {
-                Assert(EmissiveFactor->Type == json_element_type::Array);
-                Assert(EmissiveFactor->Array.ElementCount == 3);
-
-                for (u32 ElemIndex = 0; ElemIndex < EmissiveFactor->Array.ElementCount; ElemIndex++)
-                {
-                    json_element* Elem = EmissiveFactor->Array.Elements + ElemIndex;
-                    Assert(Elem->Type == json_element_type::Number);
-
-                    Dst->EmissiveFactor.E[ElemIndex] = Elem->Number.AsF32();
-                }
-            }
-            else
-            {
-                Dst->EmissiveFactor = { 0.0f, 0.0f, 0.0f };
             }
         }
     }
@@ -673,10 +485,15 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                     }
 
                     json_element* Attributes    = GetElement(&Src->Object, "attributes");
-                    json_element* Indices       = GetElement(&Src->Object, "indices");
-                    json_element* Material      = GetElement(&Src->Object, "material");
-                    json_element* Topology      = GetElement(&Src->Object, "mode");
                     json_element* Targets       = GetElement(&Src->Object, "target");
+
+                    Dst->IndexBufferIndex = ParseU32(GetElement(&Src->Object, "indices"), GLTF_Flags_None, U32_MAX);
+                    Dst->MaterialIndex = ParseU32(GetElement(&Src->Object, "material"), GLTF_Flags_None, U32_MAX);
+                    Dst->Topology = (gltf_topology)ParseU32(GetElement(&Src->Object, "mode"), GLTF_Flags_None, GLTF_TRIANGLES);
+                    if (GetElement(&Src->Object, "target"))
+                    {
+                        UnimplementedCodePath;
+                    }
 
                     if (Attributes)
                     {
@@ -685,108 +502,20 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                             UnhandledError("Invalid glTF primitve attributes type");
                         }
 
-                        Dst->PositionIndex    = U32_MAX;
-                        Dst->NormalIndex      = U32_MAX;
-                        Dst->ColorIndex       = U32_MAX;
-                        Dst->TangentIndex     = U32_MAX;
-                        Dst->TexCoordIndex[0] = U32_MAX;
-                        Dst->TexCoordIndex[1] = U32_MAX;
+                        Dst->PositionIndex      = ParseU32(GetElement(&Attributes->Object, "POSITION"), GLTF_Flags_None, U32_MAX);
+                        Dst->NormalIndex        = ParseU32(GetElement(&Attributes->Object, "NORMAL"), GLTF_Flags_None, U32_MAX);
+                        Dst->TangentIndex       = ParseU32(GetElement(&Attributes->Object, "TANGENT"), GLTF_Flags_None, U32_MAX);
+                        Dst->ColorIndex         = ParseU32(GetElement(&Attributes->Object, "COLOR_0"), GLTF_Flags_None, U32_MAX);
+                        Dst->TexCoordIndex[0]   = ParseU32(GetElement(&Attributes->Object, "TEXCOORD_0"), GLTF_Flags_None, U32_MAX);
+                        Dst->TexCoordIndex[1]   = ParseU32(GetElement(&Attributes->Object, "TEXCOORD_1"), GLTF_Flags_None, U32_MAX);
 
-                        for (u32 i = 0; i < Attributes->Object.ElementCount; i++)
-                        {
-                            string* Key = Attributes->Object.Keys + i;
-                            json_element* Attribute = Attributes->Object.Elements + i;
-
-                            if (Attribute->Type != json_element_type::Number)
-                            {
-                                UnhandledError("Invalid glTF primitive attribute type");
-                            }
-
-                            if (StringEquals(Key, "POSITION"))
-                            {
-                                Dst->PositionIndex = Attribute->Number.AsU32();
-                            }
-                            else if (StringEquals(Key, "NORMAL"))
-                            {
-                                Dst->NormalIndex = Attribute->Number.AsU32();
-                            }
-                            else if (StringEquals(Key, "TANGENT"))
-                            {
-                                Dst->TangentIndex = Attribute->Number.AsU32();
-                            }
-                            else if (StringEquals(Key, "COLOR_0"))
-                            {
-                                Dst->ColorIndex = Attribute->Number.AsU32();
-                            }
-                            else if (StringEquals(Key, "TEXCOORD_0"))
-                            {
-                                Dst->TexCoordIndex[0] = Attribute->Number.AsU32();
-                            }
-                            else if (StringEquals(Key, "TEXCOORD_1"))
-                            {
-                                Dst->TexCoordIndex[1] = Attribute->Number.AsU32();
-                            }
-                            else if (StringEquals(Key, "JOINTS_0"))
-                            {
-                                UnimplementedCodePath;
-                            }
-                            else if (StringEquals(Key, "WEIGHTS_0"))
-                            {
-                                UnimplementedCodePath;
-                            }
-                            else
-                            {
-                                UnhandledError("Invalid glTF primitive attribute");
-                            }
-                        }
+                        // TODO(boti);
+                        if (GetElement(&Attributes->Object, "JOINTS_0")) UnimplementedCodePath;
+                        if (GetElement(&Attributes->Object, "WEIGHTS_0")) UnimplementedCodePath;
                     }
                     else
                     {
                         UnhandledError("Missing glTF primitive attributes");
-                    }
-
-                    if (Indices)
-                    {
-                        if (Indices->Type != json_element_type::Number)
-                        {
-                            UnhandledError("Invalid glTF primitive indices type");
-                        }
-                        Dst->IndexBufferIndex = Indices->Number.AsU32();
-                    }
-                    else
-                    {
-                        Dst->IndexBufferIndex = U32_MAX;
-                    }
-
-                    if (Material)
-                    {
-                        if (Material->Type != json_element_type::Number)
-                        {
-                            UnhandledError("Invalid glTF primitive material type");
-                        }
-                        Dst->MaterialIndex = Material->Number.AsU32();
-                    }
-                    else
-                    {
-                        Dst->MaterialIndex = U32_MAX;
-                    }
-
-                    if (Topology)
-                    {
-                        if (Topology->Type != json_element_type::Number)
-                        {
-                            UnhandledError("Invalid glTF primitive topology type");
-                        }
-                        Dst->Topology = (gltf_topology)Topology->Number.AsU32();
-                    }
-                    else
-                    {
-                        Dst->Topology = GLTF_TRIANGLES;
-                    }
-
-                    if (Targets)
-                    {
-                        UnimplementedCodePath;
                     }
                 }
             }
@@ -822,157 +551,28 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                 json_element* Camera        = GetElement(&Src->Object, "camera");
                 json_element* Children      = GetElement(&Src->Object, "children");
                 json_element* Skin          = GetElement(&Src->Object, "skin");
-                json_element* Matrix        = GetElement(&Src->Object, "matrix");
                 json_element* Mesh          = GetElement(&Src->Object, "mesh");
-                json_element* Rotation      = GetElement(&Src->Object, "rotation");
-                json_element* Scale         = GetElement(&Src->Object, "scale");
-                json_element* Translation   = GetElement(&Src->Object, "translation");
                 json_element* Weights       = GetElement(&Src->Object, "weights");
 
-                if (Matrix)
+                Dst->CameraIndex = ParseU32(GetElement(&Src->Object, "camera"), GLTF_Flags_None, U32_MAX);
+                Dst->SkinIndex = ParseU32(GetElement(&Src->Object, "skin"), GLTF_Flags_None, U32_MAX);
+                Dst->MeshIndex = ParseU32(GetElement(&Src->Object, "mesh"), GLTF_Flags_None, U32_MAX);
+
+                ParseGLTFVector(Dst->Transform.EE, GetElement(&Src->Object, "matrix"), GLTF_Flags_None, GLTF_MAT4,
+                                M4(1.0f, 0.0f, 0.0f, 0.0f,
+                                   0.0f, 1.0f, 0.0f, 0.0f,
+                                   0.0f, 0.0f, 1.0f, 0.0f,
+                                   0.0f, 0.0f, 0.0f, 1.0f));
+
+                json_element* Scale         = GetElement(&Src->Object, "scale");
+                json_element* Rotation      = GetElement(&Src->Object, "rotation");
+                json_element* Translation   = GetElement(&Src->Object, "translation");
+                ParseGLTFVector(Dst->Scale.E, Scale, GLTF_Flags_None, GLTF_VEC3, { 1.0f, 1.0f, 1.0f });
+                ParseGLTFVector(Dst->Rotation.E, Rotation, GLTF_Flags_None, GLTF_VEC4, { 0.0f, 0.0f, 0.0f, 1.0f });
+                ParseGLTFVector(Dst->Translation.E, Translation, GLTF_Flags_None, GLTF_VEC3, { 0.0f, 0.0f, 0.0f });
+                if (Scale || Rotation || Translation)
                 {
-                    if (Matrix->Type != json_element_type::Array)
-                    {
-                        UnhandledError("Invalid glTF matrix type");
-                    }
-
-                    if (Matrix->Array.ElementCount != 16)
-                    {
-                        UnhandledError("Invalid glTF matrix element count");
-                    }
-
-                    for (u32 i = 0; i < 16; i++)
-                    {
-                        json_element* Elem = Matrix->Array.Elements + i;
-                        if (Elem->Type != json_element_type::Number)
-                        {
-                            UnhandledError("Invalid glTF matrix element type");
-                        }
-
-                        Dst->Transform.E[i / 4][i % 4] = Elem->Number.AsF32();
-                    }
-                }
-                else
-                {
-                    Dst->Transform = M4(1.0f, 0.0f, 0.0f, 0.0f,
-                                        0.0f, 1.0f, 0.0f, 0.0f,
-                                        0.0f, 0.0f, 1.0f, 0.0f,
-                                        0.0f, 0.0f, 0.0f, 1.0f);
-                }
-
-                if (Rotation)
-                {
-                    if (Rotation->Type != json_element_type::Array)
-                    {
-                        UnhandledError("Invalid glTF rotation type");
-                    }
-
-                    if (Rotation->Array.ElementCount != 4)
-                    {
-                        UnhandledError("Invalid glTF rotation element count");
-                    }
-
                     Dst->IsTRS = true;
-                    for (u32 i = 0; i < 4; i++)
-                    {
-                        json_element* Elem = Rotation->Array.Elements + i;
-                        if (Elem->Type != json_element_type::Number)
-                        {
-                            UnhandledError("Invalid glTF rotation element type");
-                        }
-
-                        Dst->Rotation.E[i] = Elem->Number.AsF32();
-                    }
-                }
-                else
-                {
-                    Dst->Rotation = { 0.0f, 0.0f, 0.0f, 1.0f };
-                }
-
-                if (Scale)
-                {
-                    if (Scale->Type != json_element_type::Array)
-                    {
-                        UnhandledError("Invalid glTF scale type");
-                    }
-
-                    if (Scale->Array.ElementCount != 3)
-                    {
-                        UnhandledError("Invalid glTF scale element count");
-                    }
-
-                    Dst->IsTRS = true;
-                    for (u32 i = 0; i < 3; i++)
-                    {
-                        json_element* Elem = Scale->Array.Elements + i;
-                        if (Elem->Type != json_element_type::Number)
-                        {
-                            UnhandledError("Invalid glTF scale element type");
-                        }
-
-                        Dst->Scale.E[i] = Elem->Number.AsF32();
-                    }
-                }
-                else
-                {
-                    Dst->Scale = { 1.0f, 1.0f, 1.0f };
-                }
-
-                if (Translation)
-                {
-                    if (Translation->Type != json_element_type::Array)
-                    {
-                        UnhandledError("Invalid glTF translation type");
-                    }
-
-                    if (Translation->Array.ElementCount != 3)
-                    {
-                        UnhandledError("Invalid glTF translation element count");
-                    }
-
-                    Dst->IsTRS = true;
-                    for (u32 i = 0; i < 3; i++)
-                    {
-                        json_element* Elem = Translation->Array.Elements + i;
-                        if (Elem->Type != json_element_type::Number)
-                        {
-                            UnhandledError("Invalid glTF translation element type");
-                        }
-
-                        Dst->Translation.E[i] = Elem->Number.AsF32();
-                    }
-                }
-                else
-                {
-                    Dst->Translation = { 0.0f, 0.0f, 0.0f };
-                }
-
-                if (Skin)
-                {
-                    UnimplementedCodePath;
-                }
-                else
-                {
-                    Dst->SkinIndex = U32_MAX;
-                }
-
-                if (Camera)
-                {
-                    UnimplementedCodePath;
-                }
-                else
-                {
-                    Dst->CameraIndex = U32_MAX;
-                }
-
-                if (Mesh)
-                {
-                    if (Mesh->Type != json_element_type::Number)
-                    {
-                        UnhandledError("Invalid glTF node mesh type");
-                    }
-
-                    Dst->MeshIndex = Mesh->Number.AsU32();
                 }
 
                 if (Children)
@@ -988,12 +588,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                     for (u32 i = 0; i < Dst->ChildrenCount; i++)
                     {
                         json_element* Child = Children->Array.Elements + i;
-                        if (Child->Type != json_element_type::Number)
-                        {
-                            UnhandledError("Invalid glTF node child type");
-                        }
-
-                        Dst->Children[i] = Child->Number.AsU32();
+                        Dst->Children[i] = ParseU32(Child, GLTF_Required);
                     }
                 }
             }
@@ -1041,15 +636,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
             }
         }
 
-        if (Scene)
-        {
-            if (Scene->Type != json_element_type::Number)
-            {
-                UnhandledError("Invalid glTF scene type");
-            }
-
-            GLTF->DefaultSceneIndex = Scene->Number.AsU32();
-        }
+        GLTF->DefaultSceneIndex = ParseU32(Scene, GLTF_Flags_None, 0);
     }
 
     return Result;
