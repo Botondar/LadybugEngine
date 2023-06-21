@@ -62,7 +62,6 @@ enum gltf_alpha_mode : u32
     GLTF_ALPHA_MODE_BLEND,
 };
 
-
 struct gltf_buffer
 {
     string URI;
@@ -105,6 +104,8 @@ struct gltf_mesh_primitive
     u32 ColorIndex;
     u32 TangentIndex;
     u32 TexCoordIndex[2];
+    u32 JointsIndex;
+    u32 WeightsIndex;
 
     u32 IndexBufferIndex;
     u32 MaterialIndex;
@@ -164,6 +165,59 @@ struct gltf_material
     gltf_texture_info EmissiveTexture;
 };
 
+struct gltf_skin
+{
+    u32 InverseBindMatricesIndex;
+    u32 RootNodeIndex;
+    u32 JointCount;
+    u32* JointIndices;
+    string Name;
+};
+
+enum gltf_animation_path : u32
+{
+    
+    GLTF_Scale = 0,
+    GLTF_Rotation,
+    GLTF_Translation,
+    GLTF_Weights,
+};
+
+struct gltf_animation_target
+{
+    u32 NodeIndex;
+    gltf_animation_path Path;
+};
+
+enum gltf_animation_interpolation : u32
+{
+    GLTF_Linear = 0,
+    GLTF_Step,
+    GLTF_CubicSpline,
+};
+
+struct gltf_animation_channel
+{
+    u32 SamplerIndex;
+    gltf_animation_target Target;
+};
+
+struct gltf_animation_sampler
+{
+    u32 InputAccessorIndex;
+    u32 OutputAccessorIndex;
+    gltf_animation_interpolation Interpolation;
+};
+
+struct gltf_animation
+{
+    u32 ChannelCount;
+    gltf_animation_channel* Channels;
+    u32 SamplerCount;
+    gltf_animation_sampler* Samplers;
+    string Name;
+};
+
 struct gltf_node
 {
     b32 IsTRS;
@@ -187,26 +241,30 @@ struct gltf_scene
 
 struct gltf
 {
-    u32 BufferCount;
-    gltf_buffer* Buffers;
-    u32 BufferViewCount;
-    gltf_buffer_view* BufferViews;
-    u32 AccessorCount;
-    gltf_accessor* Accessors;
-    u32 MeshCount;
-    gltf_mesh* Meshes;
-    u32 SamplerCount;
-    gltf_sampler* Samplers;
-    u32 TextureCount;
-    gltf_texture* Textures;
-    u32 ImageCount;
-    gltf_image* Images;
-    u32 MaterialCount;
-    gltf_material* Materials;
-    u32 NodeCount;
-    gltf_node* Nodes;
-    u32 SceneCount;
-    gltf_scene* Scenes;
+    u32                 BufferCount;
+    gltf_buffer*        Buffers;
+    u32                 BufferViewCount;
+    gltf_buffer_view*   BufferViews;
+    u32                 AccessorCount;
+    gltf_accessor*      Accessors;
+    u32                 MeshCount;
+    gltf_mesh*          Meshes;
+    u32                 SamplerCount;
+    gltf_sampler*       Samplers;
+    u32                 TextureCount;
+    gltf_texture*       Textures;
+    u32                 ImageCount;
+    gltf_image*         Images;
+    u32                 MaterialCount;
+    gltf_material*      Materials;
+    u32                 SkinCount;
+    gltf_skin*          Skins;
+    u32                 AnimationCount;
+    gltf_animation*     Animations;
+    u32                 NodeCount;
+    gltf_node*          Nodes;
+    u32                 SceneCount;
+    gltf_scene*         Scenes;
 
     u32 DefaultSceneIndex;
 };

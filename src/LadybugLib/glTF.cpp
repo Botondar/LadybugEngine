@@ -1,9 +1,19 @@
 #include "glTF.hpp"
 
+internal u32 GLTFTypeElementCounts[GLTF_TYPE_COUNT] = 
+{
+    [GLTF_SCALAR] = 1,
+    [GLTF_VEC2]   = 2,
+    [GLTF_VEC3]   = 3,
+    [GLTF_VEC4]   = 4,
+    [GLTF_MAT2]   = 4,
+    [GLTF_MAT3]   = 9,
+    [GLTF_MAT4]   = 16,
+};
+
 enum gltf_elem_flags : flags32
 {
     GLTF_Flags_None = 0,
-
     GLTF_Required = 1 << 0,
 };
 
@@ -16,168 +26,8 @@ internal void ParseGLTFVector(float* Dst, json_element* Elem, gltf_elem_flags Fl
 internal gltf_texture_info ParseTextureInfo(json_element* Elem, gltf_elem_flags Flags);
 internal gltf_type ParseGLTFType(json_element* Elem, gltf_elem_flags Flags, gltf_type DefaultValue = GLTF_SCALAR);
 internal gltf_alpha_mode ParseGLTFAlphaMode(json_element* Elem, gltf_elem_flags Flags, gltf_alpha_mode DefaultValue = GLTF_ALPHA_MODE_OPAQUE);
-
-internal string ParseString(json_element* Elem, gltf_elem_flags Flags)
-{
-    string Result = {};
-    if (Elem)
-    {
-        Assert(Elem->Type == json_element_type::String);
-        Result = Elem->String;
-    }
-    else if (HasFlag(Flags, GLTF_Required))
-    {
-        UnhandledError("Missing required glTF element");
-    }
-    return(Result);
-}
-
-internal b32 ParseB32(json_element* Elem, gltf_elem_flags Flags, b32 DefaultValue /*= false*/)
-{
-    b32 Result = DefaultValue;
-    if (Elem)
-    {
-        Assert(Elem->Type == json_element_type::Boolean);
-        Result = Elem->Boolean;
-    }
-    else if (HasFlag(Flags, GLTF_Required))
-    {
-        UnhandledError("Missing required glTF element");
-    }
-    return(Result);
-}
-
-internal u32 ParseU32(json_element* Elem, gltf_elem_flags Flags, u32 DefaultValue /*= 0*/)
-{
-    u32 Result = DefaultValue;
-    if (Elem)
-    {
-        Assert(Elem->Type == json_element_type::Number);
-        Result = Elem->Number.AsU32();
-    }
-    else if (HasFlag(Flags, GLTF_Required))
-    {
-        UnhandledError("Missing required glTF element");
-    }
-    return(Result);
-}
-
-internal f32 ParseF32(json_element* Elem, gltf_elem_flags Flags, f32 DefaultValue /*= 0.0f*/)
-{
-    f32 Result = DefaultValue;
-    if (Elem)
-    {
-        Assert(Elem->Type == json_element_type::Number);
-        Result = Elem->Number.AsF32();
-    }
-    else if (HasFlag(Flags, GLTF_Required))
-    {
-        UnhandledError("Missing required glTF element");
-    }
-    return(Result);
-}
-
-internal gltf_type ParseGLTFType(json_element* Elem, gltf_elem_flags Flags, gltf_type DefaultValue /*= GLTF_SCALAR*/)
-{
-    gltf_type Result = DefaultValue;
-    if (Elem)
-    {
-        Assert(Elem->Type == json_element_type::String);
-        if      (StringEquals(&Elem->String, "SCALAR")) Result = GLTF_SCALAR;
-        else if (StringEquals(&Elem->String, "VEC2"))   Result = GLTF_VEC2;
-        else if (StringEquals(&Elem->String, "VEC3"))   Result = GLTF_VEC3;
-        else if (StringEquals(&Elem->String, "VEC4"))   Result = GLTF_VEC4;
-        else if (StringEquals(&Elem->String, "MAT2"))   Result = GLTF_MAT2;
-        else if (StringEquals(&Elem->String, "MAT3"))   Result = GLTF_MAT3;
-        else if (StringEquals(&Elem->String, "MAT4"))   Result = GLTF_MAT4;
-        else
-        {
-            UnhandledError("Invalid accessor type");
-        }
-    }
-    else if (HasFlag(Flags, GLTF_Required))
-    {
-        UnhandledError("Missing required glTF element");
-    }
-    return(Result);
-}
-
-internal void ParseGLTFVector(float* Dst, json_element* Elem, gltf_elem_flags Flags, gltf_type Type, m4 DefaultValue /*= {}*/)
-{
-    constexpr u32 CountTable[GLTF_TYPE_COUNT] = 
-    {
-        [GLTF_SCALAR] = 1,
-        [GLTF_VEC2]   = 2,
-        [GLTF_VEC3]   = 3,
-        [GLTF_VEC4]   = 4,
-        [GLTF_MAT2]   = 4,
-        [GLTF_MAT3]   = 9,
-        [GLTF_MAT4]   = 16,
-    };
-    u32 Count = CountTable[Type];
-    for (u32 i = 0; i < Count; i++)
-    {
-        Dst[i] = DefaultValue.EE[i];
-    }
-
-    if (Elem)
-    {
-        Assert(Elem->Type == json_element_type::Array);
-        json_array* Array = &Elem->Array;
-        Assert(Array->ElementCount == Count);
-
-        for (u32 i = 0; i < Count; i++)
-        {
-            Dst[i] = ParseF32(Array->Elements + i, GLTF_Required);
-        }
-    }
-    else if (HasFlag(Flags, GLTF_Required))
-    {
-        UnhandledError("Missing required glTF element");
-    }
-}
-
-internal gltf_alpha_mode ParseGLTFAlphaMode(json_element* Elem, gltf_elem_flags Flags, gltf_alpha_mode DefaultValue /*= GLTF_ALPHA_MODE_OPAQUE*/)
-{
-    gltf_alpha_mode Result = DefaultValue;
-    if (Elem)
-    {
-        if (Elem->Type != json_element_type::String)
-        {
-            UnhandledError("Invalid glTF element type");
-        }
-
-        if      (StringEquals(&Elem->String, "OPAQUE")) Result = GLTF_ALPHA_MODE_OPAQUE;
-        else if (StringEquals(&Elem->String, "MASK"))   Result = GLTF_ALPHA_MODE_MASK;
-        else if (StringEquals(&Elem->String, "BLEND"))  Result = GLTF_ALPHA_MODE_BLEND;
-        else 
-        {
-            UnhandledError("Invalid glTF alpha mode value");
-        }
-    }
-    else if (HasFlag(Flags, GLTF_Required))
-    {
-        UnhandledError("Missing required glTF element");
-    }
-    return(Result);
-}
-
-internal gltf_texture_info ParseTextureInfo(json_element* Elem, gltf_elem_flags Flags)
-{
-    gltf_texture_info Result = { U32_MAX, 0, 1.0f };
-    if (Elem)
-    {
-        Assert(Elem->Type == json_element_type::Object);
-        Result.TextureIndex = ParseU32(GetElement(&Elem->Object, "index"), GLTF_Required);
-        Result.TexCoordIndex = ParseU32(GetElement(&Elem->Object, "texCoord"), GLTF_Flags_None, 0);
-        Result.Scale = ParseF32(GetElement(&Elem->Object, "scale"), GLTF_Flags_None, 1.0f);
-    }
-    else if (HasFlag(Flags, GLTF_Required))
-    {
-        UnhandledError("Missing required glTF element");
-    }
-    return(Result);
-}
+internal gltf_animation_path ParseGLTFAnimationPath(json_element* Elem, gltf_elem_flags Flags, gltf_animation_path DefaultValue = GLTF_Scale);
+internal gltf_animation_interpolation ParseGLTFInterpolation(json_element* Elem, gltf_elem_flags Flags, gltf_animation_interpolation DefaultValue = GLTF_Linear);
 
 lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
 {
@@ -203,6 +53,9 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
     json_element* Nodes       = GetElement(RootObject, "nodes");
     json_element* Scenes      = GetElement(RootObject, "scenes");
     json_element* Scene       = GetElement(RootObject, "scene");
+    json_element* Animations  = GetElement(RootObject, "animations");
+    json_element* Cameras     = GetElement(RootObject, "cameras");
+    json_element* Skins       = GetElement(RootObject, "skins");
 
     if (Buffers)
     {
@@ -508,10 +361,12 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                         Dst->ColorIndex         = ParseU32(GetElement(&Attributes->Object, "COLOR_0"), GLTF_Flags_None, U32_MAX);
                         Dst->TexCoordIndex[0]   = ParseU32(GetElement(&Attributes->Object, "TEXCOORD_0"), GLTF_Flags_None, U32_MAX);
                         Dst->TexCoordIndex[1]   = ParseU32(GetElement(&Attributes->Object, "TEXCOORD_1"), GLTF_Flags_None, U32_MAX);
+                        Dst->JointsIndex        = ParseU32(GetElement(&Attributes->Object, "JOINTS_0"), GLTF_Flags_None, U32_MAX);
+                        Dst->WeightsIndex       = ParseU32(GetElement(&Attributes->Object, "WEIGHTS_0"), GLTF_Flags_None, U32_MAX);
 
                         // TODO(boti);
-                        if (GetElement(&Attributes->Object, "JOINTS_0")) UnimplementedCodePath;
-                        if (GetElement(&Attributes->Object, "WEIGHTS_0")) UnimplementedCodePath;
+                        if (GetElement(&Attributes->Object, "JOINTS_1")) UnimplementedCodePath;
+                        if (GetElement(&Attributes->Object, "WEIGHTS_1")) UnimplementedCodePath;
                     }
                     else
                     {
@@ -527,6 +382,75 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
             if (Weights)
             {
                 UnimplementedCodePath;
+            }
+        }
+
+        if (Animations)
+        {
+            Assert(Animations->Type == json_element_type::Array);
+            GLTF->AnimationCount = Animations->Array.ElementCount;
+            GLTF->Animations = PushArray<gltf_animation>(Arena, GLTF->AnimationCount, MemPush_Clear);
+
+            for (u32 AnimationIndex = 0; AnimationIndex < GLTF->AnimationCount; AnimationIndex++)
+            {
+                gltf_animation* Animation = GLTF->Animations + AnimationIndex;
+                json_element* Elem = Animations->Array.Elements + AnimationIndex;
+                Assert(Elem->Type == json_element_type::Object);
+
+                Animation->Name = ParseString(GetElement(&Elem->Object, "name"), GLTF_Flags_None);
+                
+                json_element* Channels = GetElement(&Elem->Object, "channels");
+                if (Channels)
+                {
+                    Assert((Channels->Type == json_element_type::Array) &&
+                           (Channels->Array.ElementCount > 0));
+
+                    Animation->ChannelCount = Channels->Array.ElementCount;
+                    Animation->Channels = PushArray<gltf_animation_channel>(Arena, Animation->ChannelCount, MemPush_Clear);
+                    
+                    for (u32 ChannelIndex = 0; ChannelIndex < Animation->ChannelCount; ChannelIndex++)
+                    {
+                        json_element* Channel = Channels->Array.Elements + ChannelIndex;
+                        Assert(Channel->Type == json_element_type::Object);
+                        Animation->Channels[ChannelIndex].SamplerIndex = ParseU32(GetElement(&Channel->Object, "sampler"), GLTF_Required);
+                        
+                        json_element* Target = GetElement(&Channel->Object, "target");
+                        Assert(Target && Target->Type == json_element_type::Object);
+
+                        // NOTE(boti): the node is technically not required to be present by the spec, but if it's missing,
+                        // an extension might define it, which we don't currently handle.
+                        Animation->Channels[ChannelIndex].Target.NodeIndex = ParseU32(GetElement(&Target->Object, "node"), GLTF_Required);
+                        Animation->Channels[ChannelIndex].Target.Path = ParseGLTFAnimationPath(GetElement(&Target->Object, "path"), GLTF_Required);
+                    }
+                }
+                else
+                {
+                    UnhandledError("Missing channels from glTF animation");
+                }
+
+                json_element* Samplers = GetElement(&Elem->Object, "samplers");
+                if (Samplers)
+                {
+                    Assert((Samplers->Type == json_element_type::Array) &&
+                           (Samplers->Array.ElementCount > 0));
+
+                    Animation->SamplerCount = Channels->Array.ElementCount;
+                    Animation->Samplers = PushArray<gltf_animation_sampler>(Arena, Animation->ChannelCount, MemPush_Clear);
+
+                    for (u32 SamplerIndex = 0; SamplerIndex < Animation->SamplerCount; SamplerIndex++)
+                    {
+                        json_element* Sampler = Samplers->Array.Elements + SamplerIndex;
+                        Assert(Sampler->Type == json_element_type::Object);
+
+                        Animation->Samplers[SamplerIndex].InputAccessorIndex = ParseU32(GetElement(&Sampler->Object, "input"), GLTF_Required);
+                        Animation->Samplers[SamplerIndex].OutputAccessorIndex = ParseU32(GetElement(&Sampler->Object, "output"), GLTF_Required);
+                        Animation->Samplers[SamplerIndex].Interpolation = ParseGLTFInterpolation(GetElement(&Sampler->Object, "interpolation"), GLTF_Flags_None, GLTF_Linear);
+                    }
+                }
+                else
+                {
+                    UnhandledError("Missing samplers from glTF animation");
+                }
             }
         }
 
@@ -642,6 +566,203 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
     return Result;
 }
 
+
+internal string ParseString(json_element* Elem, gltf_elem_flags Flags)
+{
+    string Result = {};
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::String);
+        Result = Elem->String;
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal b32 ParseB32(json_element* Elem, gltf_elem_flags Flags, b32 DefaultValue /*= false*/)
+{
+    b32 Result = DefaultValue;
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::Boolean);
+        Result = Elem->Boolean;
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal u32 ParseU32(json_element* Elem, gltf_elem_flags Flags, u32 DefaultValue /*= 0*/)
+{
+    u32 Result = DefaultValue;
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::Number);
+        Result = Elem->Number.AsU32();
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal f32 ParseF32(json_element* Elem, gltf_elem_flags Flags, f32 DefaultValue /*= 0.0f*/)
+{
+    f32 Result = DefaultValue;
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::Number);
+        Result = Elem->Number.AsF32();
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal gltf_type ParseGLTFType(json_element* Elem, gltf_elem_flags Flags, gltf_type DefaultValue /*= GLTF_SCALAR*/)
+{
+    gltf_type Result = DefaultValue;
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::String);
+        if      (StringEquals(&Elem->String, "SCALAR")) Result = GLTF_SCALAR;
+        else if (StringEquals(&Elem->String, "VEC2"))   Result = GLTF_VEC2;
+        else if (StringEquals(&Elem->String, "VEC3"))   Result = GLTF_VEC3;
+        else if (StringEquals(&Elem->String, "VEC4"))   Result = GLTF_VEC4;
+        else if (StringEquals(&Elem->String, "MAT2"))   Result = GLTF_MAT2;
+        else if (StringEquals(&Elem->String, "MAT3"))   Result = GLTF_MAT3;
+        else if (StringEquals(&Elem->String, "MAT4"))   Result = GLTF_MAT4;
+        else
+        {
+            UnhandledError("Invalid accessor type");
+        }
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal void ParseGLTFVector(float* Dst, json_element* Elem, gltf_elem_flags Flags, gltf_type Type, m4 DefaultValue /*= {}*/)
+{
+    u32 Count = GLTFTypeElementCounts[Type];
+    for (u32 i = 0; i < Count; i++)
+    {
+        Dst[i] = DefaultValue.EE[i];
+    }
+
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::Array);
+        json_array* Array = &Elem->Array;
+        Assert(Array->ElementCount == Count);
+
+        for (u32 i = 0; i < Count; i++)
+        {
+            Dst[i] = ParseF32(Array->Elements + i, GLTF_Required);
+        }
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+}
+
+internal gltf_alpha_mode ParseGLTFAlphaMode(json_element* Elem, gltf_elem_flags Flags, gltf_alpha_mode DefaultValue /*= GLTF_ALPHA_MODE_OPAQUE*/)
+{
+    gltf_alpha_mode Result = DefaultValue;
+    if (Elem)
+    {
+        if (Elem->Type != json_element_type::String)
+        {
+            UnhandledError("Invalid glTF element type");
+        }
+
+        if      (StringEquals(&Elem->String, "OPAQUE")) Result = GLTF_ALPHA_MODE_OPAQUE;
+        else if (StringEquals(&Elem->String, "MASK"))   Result = GLTF_ALPHA_MODE_MASK;
+        else if (StringEquals(&Elem->String, "BLEND"))  Result = GLTF_ALPHA_MODE_BLEND;
+        else 
+        {
+            UnhandledError("Invalid glTF alpha mode value");
+        }
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal gltf_texture_info ParseTextureInfo(json_element* Elem, gltf_elem_flags Flags)
+{
+    gltf_texture_info Result = { U32_MAX, 0, 1.0f };
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::Object);
+        Result.TextureIndex = ParseU32(GetElement(&Elem->Object, "index"), GLTF_Required);
+        Result.TexCoordIndex = ParseU32(GetElement(&Elem->Object, "texCoord"), GLTF_Flags_None, 0);
+        Result.Scale = ParseF32(GetElement(&Elem->Object, "scale"), GLTF_Flags_None, 1.0f);
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal gltf_animation_path ParseGLTFAnimationPath(json_element* Elem, gltf_elem_flags Flags, gltf_animation_path DefaultValue /*= GLTF_Scale*/)
+{
+    gltf_animation_path Result = DefaultValue;
+
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::String);
+        if      (StringEquals(&Elem->String, "weights"))     Result = GLTF_Weights;
+        else if (StringEquals(&Elem->String, "scale"))       Result = GLTF_Scale;
+        else if (StringEquals(&Elem->String, "rotation"))    Result = GLTF_Rotation;
+        else if (StringEquals(&Elem->String, "translation")) Result = GLTF_Translation;
+        else
+        {
+            UnhandledError("Invalid glTF animation path value");
+        }
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
+internal gltf_animation_interpolation ParseGLTFInterpolation(json_element* Elem, gltf_elem_flags Flags, gltf_animation_interpolation DefaultValue /*= GLTF_Linear*/)
+{
+    gltf_animation_interpolation Result = DefaultValue;
+    if (Elem)
+    {
+        Assert(Elem->Type == json_element_type::String);
+        if      (StringEquals(&Elem->String, "LINEAR")) Result = GLTF_Linear;
+        else if (StringEquals(&Elem->String, "STEP")) Result = GLTF_Step;
+        else if (StringEquals(&Elem->String, "CUBICSPLINE")) Result = GLTF_CubicSpline;
+        else
+        {
+            UnhandledError("Invalid glTF interpolation value");
+        }
+    }
+    else if (HasFlag(Flags, GLTF_Required))
+    {
+        UnhandledError("Missing required glTF element");
+    }
+    return(Result);
+}
+
 internal u64 GLTF_GetElementSize(gltf_component_type ComponentType, gltf_type Type)
 {
     u64 Result = 1;
@@ -649,41 +770,31 @@ internal u64 GLTF_GetElementSize(gltf_component_type ComponentType, gltf_type Ty
     {
         case GLTF_SBYTE:
         case GLTF_UBYTE: 
+        { 
             Result = 1; 
-            break;
+        } break;
         case GLTF_SSHORT:
         case GLTF_USHORT: 
+        {
             Result = 2; 
-            break;
+        } break;
         case GLTF_SINT:
         case GLTF_UINT:
         case GLTF_FLOAT: 
+        {
             Result = 4; 
-            break;
+        } break;
         default:
+        {
             UnhandledError("Invalid glTF accessor component type");
-            break;
+        } break;
     }
 
-    switch (Type)
-    {
-        case GLTF_SCALAR:   Result *= 1; break;
-        case GLTF_VEC2:     Result *= 2; break;
-        case GLTF_VEC3:     Result *= 3; break;
-        case GLTF_VEC4:     Result *= 4; break;
-        case GLTF_MAT2:     Result *= 4; break;
-        case GLTF_MAT3:     Result *= 9; break;
-        case GLTF_MAT4:     Result *= 16; break;
-        default:
-            UnhandledError("Invalid glTF accessor type");
-            break;
-    }
+    Result *= GLTFTypeElementCounts[Type];
     return Result;
 }
 
-lbfn gltf_iterator MakeGLTFAttribIterator(gltf* GLTF, 
-                                              gltf_accessor* Accessor, 
-                                              buffer* Buffers)
+lbfn gltf_iterator MakeGLTFAttribIterator(gltf* GLTF, gltf_accessor* Accessor, buffer* Buffers)
 {
     gltf_iterator It = {};
     It.GLTF = GLTF;

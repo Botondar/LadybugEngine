@@ -1076,35 +1076,48 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
                 ++ItTC;
             }
 
-            gltf_accessor* IndexAccessor = (Primitive->IndexBufferIndex < GLTF.AccessorCount) ? GLTF.Accessors + Primitive->IndexBufferIndex : nullptr;
-            gltf_iterator ItIndex = MakeGLTFAttribIterator(&GLTF, IndexAccessor, Buffers);
-
-            u32 IndexCount = (u32)ItIndex.Count;
-            if (IndexCount == 0) UnimplementedCodePath;
-            u32* IndexData = PushArray<u32>(Scratch, IndexCount);
-            for (u32 i = 0; i < IndexCount; i++)
+            u32 IndexCount = 0;
+            u32* IndexData = nullptr;
+            if (Primitive->IndexBufferIndex == U32_MAX)
             {
-                if (IndexAccessor->ComponentType == GLTF_USHORT ||
-                    IndexAccessor->ComponentType == GLTF_SSHORT)
+                IndexCount = VertexCount;
+                IndexData = PushArray<u32>(Scratch, IndexCount);
+                for (u32 i = 0; i < IndexCount; i++)
                 {
-                    IndexData[i] = ItIndex.Get<u16>();
+                    IndexData[i] = i;
                 }
-                else if (IndexAccessor->ComponentType == GLTF_UINT ||
-                         IndexAccessor->ComponentType == GLTF_SINT)
-                {
-                    IndexData[i] = ItIndex.Get<u32>();
-                }
-                else
-                {
-                    UnhandledError("Invalid glTF index type");
-                }
+            }
+            else
+            {
+                gltf_accessor* IndexAccessor = (Primitive->IndexBufferIndex < GLTF.AccessorCount) ? GLTF.Accessors + Primitive->IndexBufferIndex : nullptr;
+                gltf_iterator ItIndex = MakeGLTFAttribIterator(&GLTF, IndexAccessor, Buffers);
 
-                ++ItIndex;
+                IndexCount = (u32)ItIndex.Count;
+                IndexData = PushArray<u32>(Scratch, IndexCount);
+                for (u32 i = 0; i < IndexCount; i++)
+                {
+                    if (IndexAccessor->ComponentType == GLTF_USHORT ||
+                        IndexAccessor->ComponentType == GLTF_SSHORT)
+                    {
+                        IndexData[i] = ItIndex.Get<u16>();
+                    }
+                    else if (IndexAccessor->ComponentType == GLTF_UINT ||
+                        IndexAccessor->ComponentType == GLTF_SINT)
+                    {
+                        IndexData[i] = ItIndex.Get<u32>();
+                    }
+                    else
+                    {
+                        UnhandledError("Invalid glTF index type");
+                    }
+
+                    ++ItIndex;
+                }
             }
 
             if (ItT.Count == 0)
             {
-                v3* Tangents = PushArray<v3>(Scratch, VertexCount, MemPush_Clear);
+                v3* Tangents   = PushArray<v3>(Scratch, VertexCount, MemPush_Clear);
                 v3* Bitangents = PushArray<v3>(Scratch, VertexCount, MemPush_Clear);
                 for (u32 i = 0; i < IndexCount; i += 3)
                 {
@@ -1117,6 +1130,15 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
 
                     v3 dP1 = V1->P - V0->P;
                     v3 dP2 = V2->P - V0->P;
+                    
+                    // NOTE(boti): Generate the normals here too, if they're not present
+                    if (ItN.Count == 0)
+                    {
+                        v3 N = NOZ(Cross(dP1, dP2));
+                        V0->N += N;
+                        V1->N += N;
+                        V2->N += N;
+                    }
 
                     v2 dT1 = V1->TexCoord - V0->TexCoord;
                     v2 dT2 = V2->TexCoord - V0->TexCoord;
@@ -1149,7 +1171,10 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
                 for (u32 i = 0; i < VertexCount; i++)
                 {
                     vertex* V = VertexData + i;
-                    
+
+                    // NOTE(boti): This is only actually needed in case we had to generate the normals ourselves
+                    V->N = NOZ(V->N);
+
                     v3 T = Tangents[i] - (V->N * Dot(V->N, Tangents[i]));
                     if (Dot(T, T) > 1e-7f)
                     {
@@ -1303,11 +1328,17 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                                                0.0f, 50.0f, 0.0f, 0.0f,
                                                0.0f, 0.0f, 50.0f, 0.0f,
                                                0.0f, 0.0f, 0.0f, 1.0f);
+#elif 1
+            BaseTransform = BaseTransform * M4(1e-2f, 0.0f, 0.0f, 0.0f,
+                                               0.0f, 1e-2f, 0.0f, 0.0f,
+                                               0.0f, 0.0f, 1e-2f, 0.0f,
+                                               0.0f, 0.0f, 0.0f, 1.0f);
 #endif
             //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
-            LoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
+            //LoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
             //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
             //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
+            LoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Fox/Fox.gltf", BaseTransform);
         }
 
         if (DoDebugUI(GameState, GameIO, RenderFrame))
