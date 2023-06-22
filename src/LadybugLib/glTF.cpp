@@ -53,9 +53,9 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
     json_element* Nodes       = GetElement(RootObject, "nodes");
     json_element* Scenes      = GetElement(RootObject, "scenes");
     json_element* Scene       = GetElement(RootObject, "scene");
+    json_element* Skins       = GetElement(RootObject, "skins");
     json_element* Animations  = GetElement(RootObject, "animations");
     json_element* Cameras     = GetElement(RootObject, "cameras");
-    json_element* Skins       = GetElement(RootObject, "skins");
 
     if (Buffers)
     {
@@ -384,184 +384,185 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                 UnimplementedCodePath;
             }
         }
-
-        if (Animations)
-        {
-            Assert(Animations->Type == json_element_type::Array);
-            GLTF->AnimationCount = Animations->Array.ElementCount;
-            GLTF->Animations = PushArray<gltf_animation>(Arena, GLTF->AnimationCount, MemPush_Clear);
-
-            for (u32 AnimationIndex = 0; AnimationIndex < GLTF->AnimationCount; AnimationIndex++)
-            {
-                gltf_animation* Animation = GLTF->Animations + AnimationIndex;
-                json_element* Elem = Animations->Array.Elements + AnimationIndex;
-                Assert(Elem->Type == json_element_type::Object);
-
-                Animation->Name = ParseString(GetElement(&Elem->Object, "name"), GLTF_Flags_None);
-                
-                json_element* Channels = GetElement(&Elem->Object, "channels");
-                if (Channels)
-                {
-                    Assert((Channels->Type == json_element_type::Array) &&
-                           (Channels->Array.ElementCount > 0));
-
-                    Animation->ChannelCount = Channels->Array.ElementCount;
-                    Animation->Channels = PushArray<gltf_animation_channel>(Arena, Animation->ChannelCount, MemPush_Clear);
-                    
-                    for (u32 ChannelIndex = 0; ChannelIndex < Animation->ChannelCount; ChannelIndex++)
-                    {
-                        json_element* Channel = Channels->Array.Elements + ChannelIndex;
-                        Assert(Channel->Type == json_element_type::Object);
-                        Animation->Channels[ChannelIndex].SamplerIndex = ParseU32(GetElement(&Channel->Object, "sampler"), GLTF_Required);
-                        
-                        json_element* Target = GetElement(&Channel->Object, "target");
-                        Assert(Target && Target->Type == json_element_type::Object);
-
-                        // NOTE(boti): the node is technically not required to be present by the spec, but if it's missing,
-                        // an extension might define it, which we don't currently handle.
-                        Animation->Channels[ChannelIndex].Target.NodeIndex = ParseU32(GetElement(&Target->Object, "node"), GLTF_Required);
-                        Animation->Channels[ChannelIndex].Target.Path = ParseGLTFAnimationPath(GetElement(&Target->Object, "path"), GLTF_Required);
-                    }
-                }
-                else
-                {
-                    UnhandledError("Missing channels from glTF animation");
-                }
-
-                json_element* Samplers = GetElement(&Elem->Object, "samplers");
-                if (Samplers)
-                {
-                    Assert((Samplers->Type == json_element_type::Array) &&
-                           (Samplers->Array.ElementCount > 0));
-
-                    Animation->SamplerCount = Channels->Array.ElementCount;
-                    Animation->Samplers = PushArray<gltf_animation_sampler>(Arena, Animation->ChannelCount, MemPush_Clear);
-
-                    for (u32 SamplerIndex = 0; SamplerIndex < Animation->SamplerCount; SamplerIndex++)
-                    {
-                        json_element* Sampler = Samplers->Array.Elements + SamplerIndex;
-                        Assert(Sampler->Type == json_element_type::Object);
-
-                        Animation->Samplers[SamplerIndex].InputAccessorIndex = ParseU32(GetElement(&Sampler->Object, "input"), GLTF_Required);
-                        Animation->Samplers[SamplerIndex].OutputAccessorIndex = ParseU32(GetElement(&Sampler->Object, "output"), GLTF_Required);
-                        Animation->Samplers[SamplerIndex].Interpolation = ParseGLTFInterpolation(GetElement(&Sampler->Object, "interpolation"), GLTF_Flags_None, GLTF_Linear);
-                    }
-                }
-                else
-                {
-                    UnhandledError("Missing samplers from glTF animation");
-                }
-            }
-        }
-
-        if (Nodes)
-        {
-            if (Nodes->Type != json_element_type::Array)
-            {
-                UnhandledError("Invalid glTF \"nodes\" type");
-            }
-
-            GLTF->NodeCount = (u32)Nodes->Array.ElementCount;
-            GLTF->Nodes = PushArray<gltf_node>(Arena, GLTF->NodeCount, MemPush_Clear);
-            for (u32 NodeIndex = 0; NodeIndex < GLTF->NodeCount; NodeIndex++)
-            {
-                gltf_node* Dst = GLTF->Nodes + NodeIndex;
-                json_element* Src = Nodes->Array.Elements + NodeIndex;
-                if (Src->Type != json_element_type::Object)
-                {
-                    UnhandledError("Invalid glTF node type");
-                }
-
-                json_element* Camera        = GetElement(&Src->Object, "camera");
-                json_element* Children      = GetElement(&Src->Object, "children");
-                json_element* Skin          = GetElement(&Src->Object, "skin");
-                json_element* Mesh          = GetElement(&Src->Object, "mesh");
-                json_element* Weights       = GetElement(&Src->Object, "weights");
-
-                Dst->CameraIndex = ParseU32(GetElement(&Src->Object, "camera"), GLTF_Flags_None, U32_MAX);
-                Dst->SkinIndex = ParseU32(GetElement(&Src->Object, "skin"), GLTF_Flags_None, U32_MAX);
-                Dst->MeshIndex = ParseU32(GetElement(&Src->Object, "mesh"), GLTF_Flags_None, U32_MAX);
-
-                ParseGLTFVector(Dst->Transform.EE, GetElement(&Src->Object, "matrix"), GLTF_Flags_None, GLTF_MAT4,
-                                M4(1.0f, 0.0f, 0.0f, 0.0f,
-                                   0.0f, 1.0f, 0.0f, 0.0f,
-                                   0.0f, 0.0f, 1.0f, 0.0f,
-                                   0.0f, 0.0f, 0.0f, 1.0f));
-
-                json_element* Scale         = GetElement(&Src->Object, "scale");
-                json_element* Rotation      = GetElement(&Src->Object, "rotation");
-                json_element* Translation   = GetElement(&Src->Object, "translation");
-                ParseGLTFVector(Dst->Scale.E, Scale, GLTF_Flags_None, GLTF_VEC3, { 1.0f, 1.0f, 1.0f });
-                ParseGLTFVector(Dst->Rotation.E, Rotation, GLTF_Flags_None, GLTF_VEC4, { 0.0f, 0.0f, 0.0f, 1.0f });
-                ParseGLTFVector(Dst->Translation.E, Translation, GLTF_Flags_None, GLTF_VEC3, { 0.0f, 0.0f, 0.0f });
-                if (Scale || Rotation || Translation)
-                {
-                    Dst->IsTRS = true;
-                }
-
-                if (Children)
-                {
-                    if (Children->Type != json_element_type::Array)
-                    {
-                        UnhandledError("Invalid glTF node children type");
-                    }
-
-                    Dst->ChildrenCount = (u32)Children->Array.ElementCount;
-                    Dst->Children = PushArray<u32>(Arena, Dst->ChildrenCount, MemPush_Clear);
-
-                    for (u32 i = 0; i < Dst->ChildrenCount; i++)
-                    {
-                        json_element* Child = Children->Array.Elements + i;
-                        Dst->Children[i] = ParseU32(Child, GLTF_Required);
-                    }
-                }
-            }
-        }
-
-        if (Scenes)
-        {
-            if (Scenes->Type != json_element_type::Array)
-            {
-                UnhandledError("Invalid glTF \"scenes\" type");
-            }
-
-            GLTF->SceneCount = (u32)Scenes->Array.ElementCount;
-            GLTF->Scenes = PushArray<gltf_scene>(Arena, GLTF->SceneCount, MemPush_Clear);
-            for (u32 SceneIndex = 0; SceneIndex < GLTF->SceneCount; SceneIndex++)
-            {
-                gltf_scene* Dst = GLTF->Scenes + SceneIndex;
-                json_element* Src = Scenes->Array.Elements + SceneIndex;
-                if (Src->Type != json_element_type::Object)
-                {
-                    UnhandledError("Invalid glTF scene type");
-                }
-
-                json_element* SceneNodes = GetElement(&Src->Object, "nodes");
-                if (SceneNodes)
-                {
-                    if (SceneNodes->Type != json_element_type::Array)
-                    {
-                        UnhandledError("Invalid glTF scene nodes type");
-                    }
-
-                    Dst->RootNodeCount = (u32)SceneNodes->Array.ElementCount;
-                    Dst->RootNodes = PushArray<u32>(Arena, Dst->RootNodeCount, MemPush_Clear);
-                    for (u32 i = 0; i < Dst->RootNodeCount; i++)
-                    {
-                        json_element* Node = SceneNodes->Array.Elements + i;
-                        if (Node->Type != json_element_type::Number)
-                        {
-                            UnhandledError("Invalid glTF scene node type");
-                        }
-
-                        Dst->RootNodes[i] = Node->Number.AsU32();
-                    }
-                }
-            }
-        }
-
-        GLTF->DefaultSceneIndex = ParseU32(Scene, GLTF_Flags_None, 0);
     }
+
+    
+    if (Animations)
+    {
+        Assert(Animations->Type == json_element_type::Array);
+        GLTF->AnimationCount = Animations->Array.ElementCount;
+        GLTF->Animations = PushArray<gltf_animation>(Arena, GLTF->AnimationCount, MemPush_Clear);
+
+        for (u32 AnimationIndex = 0; AnimationIndex < GLTF->AnimationCount; AnimationIndex++)
+        {
+            gltf_animation* Animation = GLTF->Animations + AnimationIndex;
+            json_element* Elem = Animations->Array.Elements + AnimationIndex;
+            Assert(Elem->Type == json_element_type::Object);
+
+            Animation->Name = ParseString(GetElement(&Elem->Object, "name"), GLTF_Flags_None);
+                
+            json_element* Channels = GetElement(&Elem->Object, "channels");
+            if (Channels)
+            {
+                Assert((Channels->Type == json_element_type::Array) &&
+                       (Channels->Array.ElementCount > 0));
+
+                Animation->ChannelCount = Channels->Array.ElementCount;
+                Animation->Channels = PushArray<gltf_animation_channel>(Arena, Animation->ChannelCount, MemPush_Clear);
+                    
+                for (u32 ChannelIndex = 0; ChannelIndex < Animation->ChannelCount; ChannelIndex++)
+                {
+                    json_element* Channel = Channels->Array.Elements + ChannelIndex;
+                    Assert(Channel->Type == json_element_type::Object);
+                    Animation->Channels[ChannelIndex].SamplerIndex = ParseU32(GetElement(&Channel->Object, "sampler"), GLTF_Required);
+                        
+                    json_element* Target = GetElement(&Channel->Object, "target");
+                    Assert(Target && Target->Type == json_element_type::Object);
+
+                    // NOTE(boti): the node is technically not required to be present by the spec, but if it's missing,
+                    // an extension might define it, which we don't currently handle.
+                    Animation->Channels[ChannelIndex].Target.NodeIndex = ParseU32(GetElement(&Target->Object, "node"), GLTF_Required);
+                    Animation->Channels[ChannelIndex].Target.Path = ParseGLTFAnimationPath(GetElement(&Target->Object, "path"), GLTF_Required);
+                }
+            }
+            else
+            {
+                UnhandledError("Missing channels from glTF animation");
+            }
+
+            json_element* Samplers = GetElement(&Elem->Object, "samplers");
+            if (Samplers)
+            {
+                Assert((Samplers->Type == json_element_type::Array) &&
+                       (Samplers->Array.ElementCount > 0));
+
+                Animation->SamplerCount = Channels->Array.ElementCount;
+                Animation->Samplers = PushArray<gltf_animation_sampler>(Arena, Animation->ChannelCount, MemPush_Clear);
+
+                for (u32 SamplerIndex = 0; SamplerIndex < Animation->SamplerCount; SamplerIndex++)
+                {
+                    json_element* Sampler = Samplers->Array.Elements + SamplerIndex;
+                    Assert(Sampler->Type == json_element_type::Object);
+
+                    Animation->Samplers[SamplerIndex].InputAccessorIndex = ParseU32(GetElement(&Sampler->Object, "input"), GLTF_Required);
+                    Animation->Samplers[SamplerIndex].OutputAccessorIndex = ParseU32(GetElement(&Sampler->Object, "output"), GLTF_Required);
+                    Animation->Samplers[SamplerIndex].Interpolation = ParseGLTFInterpolation(GetElement(&Sampler->Object, "interpolation"), GLTF_Flags_None, GLTF_Linear);
+                }
+            }
+            else
+            {
+                UnhandledError("Missing samplers from glTF animation");
+            }
+        }
+    }
+
+    if (Nodes)
+    {
+        if (Nodes->Type != json_element_type::Array)
+        {
+            UnhandledError("Invalid glTF \"nodes\" type");
+        }
+
+        GLTF->NodeCount = (u32)Nodes->Array.ElementCount;
+        GLTF->Nodes = PushArray<gltf_node>(Arena, GLTF->NodeCount, MemPush_Clear);
+        for (u32 NodeIndex = 0; NodeIndex < GLTF->NodeCount; NodeIndex++)
+        {
+            gltf_node* Dst = GLTF->Nodes + NodeIndex;
+            json_element* Src = Nodes->Array.Elements + NodeIndex;
+            if (Src->Type != json_element_type::Object)
+            {
+                UnhandledError("Invalid glTF node type");
+            }
+
+            json_element* Camera        = GetElement(&Src->Object, "camera");
+            json_element* Children      = GetElement(&Src->Object, "children");
+            json_element* Skin          = GetElement(&Src->Object, "skin");
+            json_element* Mesh          = GetElement(&Src->Object, "mesh");
+            json_element* Weights       = GetElement(&Src->Object, "weights");
+
+            Dst->CameraIndex = ParseU32(GetElement(&Src->Object, "camera"), GLTF_Flags_None, U32_MAX);
+            Dst->SkinIndex = ParseU32(GetElement(&Src->Object, "skin"), GLTF_Flags_None, U32_MAX);
+            Dst->MeshIndex = ParseU32(GetElement(&Src->Object, "mesh"), GLTF_Flags_None, U32_MAX);
+
+            ParseGLTFVector(Dst->Transform.EE, GetElement(&Src->Object, "matrix"), GLTF_Flags_None, GLTF_MAT4,
+                            M4(1.0f, 0.0f, 0.0f, 0.0f,
+                               0.0f, 1.0f, 0.0f, 0.0f,
+                               0.0f, 0.0f, 1.0f, 0.0f,
+                               0.0f, 0.0f, 0.0f, 1.0f));
+
+            json_element* Scale         = GetElement(&Src->Object, "scale");
+            json_element* Rotation      = GetElement(&Src->Object, "rotation");
+            json_element* Translation   = GetElement(&Src->Object, "translation");
+            ParseGLTFVector(Dst->Scale.E, Scale, GLTF_Flags_None, GLTF_VEC3, { 1.0f, 1.0f, 1.0f });
+            ParseGLTFVector(Dst->Rotation.E, Rotation, GLTF_Flags_None, GLTF_VEC4, { 0.0f, 0.0f, 0.0f, 1.0f });
+            ParseGLTFVector(Dst->Translation.E, Translation, GLTF_Flags_None, GLTF_VEC3, { 0.0f, 0.0f, 0.0f });
+            if (Scale || Rotation || Translation)
+            {
+                Dst->IsTRS = true;
+            }
+
+            if (Children)
+            {
+                if (Children->Type != json_element_type::Array)
+                {
+                    UnhandledError("Invalid glTF node children type");
+                }
+
+                Dst->ChildrenCount = (u32)Children->Array.ElementCount;
+                Dst->Children = PushArray<u32>(Arena, Dst->ChildrenCount, MemPush_Clear);
+
+                for (u32 i = 0; i < Dst->ChildrenCount; i++)
+                {
+                    json_element* Child = Children->Array.Elements + i;
+                    Dst->Children[i] = ParseU32(Child, GLTF_Required);
+                }
+            }
+        }
+    }
+
+    if (Scenes)
+    {
+        if (Scenes->Type != json_element_type::Array)
+        {
+            UnhandledError("Invalid glTF \"scenes\" type");
+        }
+
+        GLTF->SceneCount = (u32)Scenes->Array.ElementCount;
+        GLTF->Scenes = PushArray<gltf_scene>(Arena, GLTF->SceneCount, MemPush_Clear);
+        for (u32 SceneIndex = 0; SceneIndex < GLTF->SceneCount; SceneIndex++)
+        {
+            gltf_scene* Dst = GLTF->Scenes + SceneIndex;
+            json_element* Src = Scenes->Array.Elements + SceneIndex;
+            if (Src->Type != json_element_type::Object)
+            {
+                UnhandledError("Invalid glTF scene type");
+            }
+
+            json_element* SceneNodes = GetElement(&Src->Object, "nodes");
+            if (SceneNodes)
+            {
+                if (SceneNodes->Type != json_element_type::Array)
+                {
+                    UnhandledError("Invalid glTF scene nodes type");
+                }
+
+                Dst->RootNodeCount = (u32)SceneNodes->Array.ElementCount;
+                Dst->RootNodes = PushArray<u32>(Arena, Dst->RootNodeCount, MemPush_Clear);
+                for (u32 i = 0; i < Dst->RootNodeCount; i++)
+                {
+                    json_element* Node = SceneNodes->Array.Elements + i;
+                    if (Node->Type != json_element_type::Number)
+                    {
+                        UnhandledError("Invalid glTF scene node type");
+                    }
+
+                    Dst->RootNodes[i] = Node->Number.AsU32();
+                }
+            }
+        }
+    }
+
+    GLTF->DefaultSceneIndex = ParseU32(Scene, GLTF_Flags_None, 0);
 
     return Result;
 }

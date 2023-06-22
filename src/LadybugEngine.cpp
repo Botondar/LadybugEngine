@@ -1089,28 +1089,27 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
             }
             else
             {
-                gltf_accessor* IndexAccessor = (Primitive->IndexBufferIndex < GLTF.AccessorCount) ? GLTF.Accessors + Primitive->IndexBufferIndex : nullptr;
+                gltf_accessor* IndexAccessor = GLTF.Accessors + Primitive->IndexBufferIndex;
                 gltf_iterator ItIndex = MakeGLTFAttribIterator(&GLTF, IndexAccessor, Buffers);
 
                 IndexCount = (u32)ItIndex.Count;
                 IndexData = PushArray<u32>(Scratch, IndexCount);
                 for (u32 i = 0; i < IndexCount; i++)
                 {
-                    if (IndexAccessor->ComponentType == GLTF_USHORT ||
-                        IndexAccessor->ComponentType == GLTF_SSHORT)
+                    switch (IndexAccessor->ComponentType)
                     {
-                        IndexData[i] = ItIndex.Get<u16>();
+                        case GLTF_USHORT:
+                        case GLTF_SSHORT:
+                        {
+                            IndexData[i] = ItIndex.Get<u16>();
+                        } break;
+                        case GLTF_UINT:
+                        case GLTF_SINT:
+                        {
+                            IndexData[i] = ItIndex.Get<u32>();
+                        } break;
+                        InvalidDefaultCase;
                     }
-                    else if (IndexAccessor->ComponentType == GLTF_UINT ||
-                        IndexAccessor->ComponentType == GLTF_SINT)
-                    {
-                        IndexData[i] = ItIndex.Get<u32>();
-                    }
-                    else
-                    {
-                        UnhandledError("Invalid glTF index type");
-                    }
-
                     ++ItIndex;
                 }
             }
