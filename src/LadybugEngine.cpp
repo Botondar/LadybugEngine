@@ -380,16 +380,16 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                         }
                     }
 
-                    u32 KeyFrameIndex;
-                    for (KeyFrameIndex = 0; KeyFrameIndex < Animation->KeyFrameCount; KeyFrameIndex++)
+                    u32 NextKeyFrameIndex;
+                    for (NextKeyFrameIndex = 0; NextKeyFrameIndex < Animation->KeyFrameCount; NextKeyFrameIndex++)
                     {
-                        if (Instance->AnimationCounter <= Animation->KeyFrameTimestamps[KeyFrameIndex])
+                        if (Instance->AnimationCounter < Animation->KeyFrameTimestamps[NextKeyFrameIndex])
                         {
                             break;
                         }
                     }
 
-                    u32 NextKeyFrameIndex = (KeyFrameIndex + 1 == Animation->KeyFrameCount) ? KeyFrameIndex : KeyFrameIndex + 1;
+                    u32 KeyFrameIndex = NextKeyFrameIndex - 1;
                     f32 KeyFrameDelta = Animation->KeyFrameTimestamps[NextKeyFrameIndex] - Animation->KeyFrameTimestamps[KeyFrameIndex];
                     f32 BlendStart = Instance->AnimationCounter - Animation->KeyFrameTimestamps[KeyFrameIndex];
                     f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
