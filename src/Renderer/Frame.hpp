@@ -40,6 +40,11 @@ struct render_frame
     VkBuffer PerFrameUniformBuffer;
     void* PerFrameUniformMemory;
 
+    static constexpr u32 MaxJointCount = 1 << 17;
+    u32 JointCount;
+    VkBuffer JointBuffer;
+    m4* JointMapping;
+
     VkDescriptorPool DescriptorPool;
 
     frustum CameraFrustum;

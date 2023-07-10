@@ -9,10 +9,19 @@
 
 #define LB_INLINE __forceinline
 
+LB_INLINE u32 FindLeastSignificantSetBit(u32 Value);
+
 LB_INLINE u8 BitScanForward(u32* Result, u32 Value);
 LB_INLINE u8 BitScanReverse(u32* Result, u32 Value);
 LB_INLINE u8 BitScanForward(u32* Result, u64 Value);
 LB_INLINE u8 BitScanReverse(u32* Result, u64 Value);
+
+LB_INLINE u32 FindLeastSignificantSetBit(u32 Value)
+{
+    u32 Result = __lzcnt(Value);
+    Result = (Result == 0) ? 32 : Result - 1;
+    return(Result);
+}
 
 LB_INLINE u8 BitScanForward(u32* Result, u32 Value)
 {

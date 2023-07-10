@@ -46,6 +46,60 @@ vertex_state InputState_vertex =
     },
 };
 
+vertex_state InputState_skinned =
+{
+    .Topology = Topology_TriangleList,
+    .EnablePrimitiveRestart = false,
+    .BindingCount = 1,
+    .AttribCount = 7,
+    .Bindings = { { sizeof(vertex), 0 } },
+    .Attribs = 
+    {
+        {
+            .Index = 0,
+            .Binding = 0,
+            .Format = Format_R32G32B32_Float,
+            .ByteOffset = OffsetOf(vertex, P),
+        },
+        {
+            .Index = 1,
+            .Binding = 0,
+            .Format = Format_R32G32B32_Float,
+            .ByteOffset = OffsetOf(vertex, N),
+        },
+        {
+            .Index = 2,
+            .Binding = 0,
+            .Format = Format_R32G32B32A32_Float,
+            .ByteOffset = OffsetOf(vertex, T),
+        },
+        {
+            .Index = 4,
+            .Binding = 0,
+            .Format = Format_R32G32_Float,
+            .ByteOffset = OffsetOf(vertex, TexCoord),
+        },
+        {
+            .Index = 5,
+            .Binding = 0,
+            .Format = Format_R8G8B8A8_UNorm,
+            .ByteOffset = OffsetOf(vertex, Color),
+        },
+        {
+            .Index = 6,
+            .Binding = 0,
+            .Format = Format_R32G32B32A32_Float,
+            .ByteOffset = OffsetOf(vertex, Weights),
+        },
+        {
+            .Index = 7,
+            .Binding = 0,
+            .Format = Format_R8G8B8A8_UInt,
+            .ByteOffset = OffsetOf(vertex, Joints),
+        },
+    },
+};
+
 
 const sampler_state SamplerInfos[Sampler_Count] = 
 {
@@ -390,6 +444,22 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_PS,
                 .ImmutableSampler = Sampler_Default,
+            },
+        },
+    },
+
+    [SetLayout_Skinned] = 
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = Descriptor_DynamicUniformBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+                .ImmutableSampler = Sampler_None,
             },
         },
     },
@@ -874,6 +944,55 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         },
         .BlendAttachmentCount = 1,
         .BlendAttachments = { { .BlendEnable = false } },
+        .ColorAttachmentCount = 1,
+        .ColorAttachments = { HDR_FORMAT },
+        .DepthAttachment = DEPTH_FORMAT,
+        .StencilAttachment = Format_Undefined,
+    },
+
+    [Pipeline_Skinned] = 
+    {
+        .Name = "skinned",
+        .Type = PipelineType_Graphics,
+        .Layout = 
+        {
+            .PushConstantRangeCount = 1,
+            .DescriptorSetCount = 2,
+            .PushConstantRanges = 
+            {
+                {
+                    .Stages = PipelineStage_All,
+                    .Size = sizeof(m4) + sizeof(material),
+                    .Offset = 0,
+                },
+            },
+            .DescriptorSets = 
+            { 
+                SetLayout_PerFrameUniformData,
+                SetLayout_Skinned,
+            },
+        },
+
+        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
+        .InputAssemblerState = InputState_skinned,
+        .RasterizerState = 
+        {
+            .Flags = RS_Flags_None,
+            .Fill = Fill_Solid,
+            .CullFlags = Cull_None,
+            .DepthBiasConstantFactor = 0.0f,
+            .DepthBiasClamp = 0.0f,
+            .DepthBiasSlopeFactor = 0.0f,
+        },
+        .DepthStencilState = 
+        {
+            .Flags = DS_DepthTestEnable|DS_DepthWriteEnable,
+            .DepthCompareOp = Compare_LessEqual,
+            .MinDepthBounds = 0.0f,
+            .MaxDepthBounds = 1.0f,
+        },
+        .BlendAttachmentCount = 1,
+        .BlendAttachments = { { .BlendEnable = false }, },
         .ColorAttachmentCount = 1,
         .ColorAttachments = { HDR_FORMAT },
         .DepthAttachment = DEPTH_FORMAT,

@@ -1,0 +1,51 @@
+#version 460 core
+
+#include "common.glsli"
+
+#extension GL_EXT_shader_8bit_storage : require
+#extension GL_EXT_shader_16bit_storage : require
+
+struct vertex
+{
+    v3 P;
+    v3 N;
+    v4 T;
+    v2 TC;
+};
+
+struct vertex_skin
+{
+    v4 Weights;
+    u8vec4 Joints;
+};
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+//layout(push_constant) uniform PushConstants
+//{
+//};
+
+layout(set = 0, binding = 0, std140) writeonly buffer DstVBSSBO
+{
+    vertex Data[];
+} DstVB;
+
+layout(set = 0, binding = 1, std140) readonly buffer SrcVBSSBO
+{
+    vertex Data[];
+} SrcVB;
+
+layout(set = 0, binding = 2, std140) readonly buffer SrcSkinSSBO
+{
+    vertex_skin Data[];
+} SrcSkin;
+
+
+void main()
+{
+    uint Index = gl_GlobalInvocationID.x;
+    vertex V = SrcVB.Data[Index];
+    v4 Weights = SrcSkin.Data[Index].Weights;
+    uvec4 Joints = uvec4(SrcSkin.Data[Index].Joints);
+    DstVB.Data[Index] = V;
+}

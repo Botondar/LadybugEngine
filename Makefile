@@ -9,7 +9,7 @@ OPTIMIZATION = -Od -Oi
 INCLUDES = -I$(SRC) -I$(VULKAN_SDK)/Include/
 DEFINES = -DDEVELOPER=1 -DWIN32_LEAN_AND_MEAN -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX
 WARNINGS_MSVC = -WX -W4 -wd4100 -wd4189 -wd4200 -wd4201 -wd4505
-WARNINGS_CLANG = -Wno-unused-function -Wno-unused-variable -Wno-unused-lambda-capture -Wno-unused-value -Wno-missing-field-initializers -Wno-char-subscripts -Wno-missing-braces -Wno-c99-designator -Wno-c++11-narrowing
+WARNINGS_CLANG = -Wno-unused-function -Wno-unused-variable -Wno-unused-lambda-capture -Wno-unused-value -Wno-missing-field-initializers -Wno-char-subscripts -Wno-missing-braces -Wno-c99-designator
 WARNINGS = $(WARNINGS_MSVC) $(WARNINGS_CLANG)
 
 CXX_FLAGS = $(COMMON) $(FLOAT_ENV) $(INCLUDES) $(DEFINES) $(WARNINGS)
@@ -31,7 +31,9 @@ SHADERS = build/blit.vs build/blit.fs build/shader.vs build/shader.fs build/prep
     build/gizmo.vs build/gizmo.fs \
     build/downsample_bloom.cs build/upsample_bloom.cs build/ssao.cs build/ssao_blur.cs \
     build/fx.vs build/fx.fs \
-    build/quad.vs build/quad.fs
+    build/quad.vs build/quad.fs \
+    build/skin.cs \
+    build/skinned.vs build/skinned.fs
 
 all: "$(OUT)/Win_LadybugEngine.exe" "$(OUT)/game.dll" "$(OUT)/renderer.obj" $(SHADERS)
 

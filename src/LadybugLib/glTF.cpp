@@ -144,8 +144,8 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                 Dst->IsNormalized = ParseB32(GetElement(Obj, "normalized"), GLTF_Flags_None, false);
                 Dst->Count = ParseU32(GetElement(Obj, "count"), GLTF_Required);
                 Dst->Type = ParseGLTFType(GetElement(Obj, "type"), GLTF_Required);
-                ParseGLTFVector(Dst->Max.EE, GetElement(Obj, "max"), GLTF_Flags_None, Dst->Type, { 0.0f, 0.0f, 0.0f });
-                ParseGLTFVector(Dst->Min.EE, GetElement(Obj, "min"), GLTF_Flags_None, Dst->Type, { 0.0f, 0.0f, 0.0f });
+                ParseGLTFVector(Dst->Max.EE, GetElement(Obj, "max"), GLTF_Flags_None, Dst->Type, { 0.0f });
+                ParseGLTFVector(Dst->Min.EE, GetElement(Obj, "min"), GLTF_Flags_None, Dst->Type, { 0.0f });
 
                 if (GetElement(&Src->Object, "sparse"))
                 {
@@ -386,10 +386,40 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         }
     }
 
-    
+    if (Skins)
+    {
+        Assert(Skins->Type == json_element_type::Array);
+
+        GLTF->SkinCount = Skins->Array.ElementCount;
+        GLTF->Skins = PushArray<gltf_skin>(Arena, GLTF->SkinCount, MemPush_Clear);
+
+        for (u32 SkinIndex = 0; SkinIndex < GLTF->SkinCount; SkinIndex++)
+        {
+            gltf_skin* Skin = GLTF->Skins + SkinIndex;
+            json_element* Elem = Skins->Array.Elements + SkinIndex;
+            Verify(Elem->Type == json_element_type::Object);
+
+            Skin->Name = ParseString(GetElement(&Elem->Object, "name"), GLTF_Flags_None);
+            Skin->InverseBindMatricesAccessorIndex = ParseU32(GetElement(&Elem->Object, "inverseBindMatrices"), GLTF_Flags_None, U32_MAX);
+            Skin->RootNodeIndex = ParseU32(GetElement(&Elem->Object, "skeleton"), GLTF_Flags_None, U32_MAX);
+
+            json_element* JointArray = GetElement(&Elem->Object, "joints");
+            Verify(JointArray);
+            Verify(JointArray->Type == json_element_type::Array);
+
+            Skin->JointCount = JointArray->Array.ElementCount;
+            Verify(Skin->JointCount > 0);
+            Skin->JointIndices = PushArray<u32>(Arena, Skin->JointCount);
+            for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+            {
+                Skin->JointIndices[JointIndex] = ParseU32(JointArray->Array.Elements + JointIndex, GLTF_Required);
+            }
+        }
+    }
+
     if (Animations)
     {
-        Assert(Animations->Type == json_element_type::Array);
+        Verify(Animations->Type == json_element_type::Array);
         GLTF->AnimationCount = Animations->Array.ElementCount;
         GLTF->Animations = PushArray<gltf_animation>(Arena, GLTF->AnimationCount, MemPush_Clear);
 
@@ -404,7 +434,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
             json_element* Channels = GetElement(&Elem->Object, "channels");
             if (Channels)
             {
-                Assert((Channels->Type == json_element_type::Array) &&
+                Verify((Channels->Type == json_element_type::Array) &&
                        (Channels->Array.ElementCount > 0));
 
                 Animation->ChannelCount = Channels->Array.ElementCount;
@@ -474,12 +504,6 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                 UnhandledError("Invalid glTF node type");
             }
 
-            json_element* Camera        = GetElement(&Src->Object, "camera");
-            json_element* Children      = GetElement(&Src->Object, "children");
-            json_element* Skin          = GetElement(&Src->Object, "skin");
-            json_element* Mesh          = GetElement(&Src->Object, "mesh");
-            json_element* Weights       = GetElement(&Src->Object, "weights");
-
             Dst->CameraIndex = ParseU32(GetElement(&Src->Object, "camera"), GLTF_Flags_None, U32_MAX);
             Dst->SkinIndex = ParseU32(GetElement(&Src->Object, "skin"), GLTF_Flags_None, U32_MAX);
             Dst->MeshIndex = ParseU32(GetElement(&Src->Object, "mesh"), GLTF_Flags_None, U32_MAX);
@@ -501,6 +525,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                 Dst->IsTRS = true;
             }
 
+            json_element* Children = GetElement(&Src->Object, "children");
             if (Children)
             {
                 if (Children->Type != json_element_type::Array)
@@ -516,6 +541,12 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                     json_element* Child = Children->Array.Elements + i;
                     Dst->Children[i] = ParseU32(Child, GLTF_Required);
                 }
+            }
+
+            json_element* Weights = GetElement(&Src->Object, "weights");
+            if (Weights)
+            {
+                UnimplementedCodePath;
             }
         }
     }

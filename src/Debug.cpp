@@ -84,6 +84,50 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
     u32 CurrentID = 0;
     u32 HotID = INVALID_INDEX_U32;
 
+    if (Game->World->SkinnedInstanceCount)
+    {
+        u32 PlaybackID = CurrentID++;
+
+        v2 ScreenExtent = { (f32)Frame->RenderExtent.width, (f32)Frame->RenderExtent.height };
+        f32 OutlineSize = 1.0f;
+        f32 MinX = 0.1f * ScreenExtent.x;
+        f32 MaxX = 0.9f * ScreenExtent.x;
+        f32 MaxY = ScreenExtent.y - 60.0f;
+        f32 MinY = ScreenExtent.y - 140.0f;
+        PushRect(Frame, { MinX, MinY - OutlineSize }, { MaxX, MinY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+        PushRect(Frame, { MinX, MaxY - OutlineSize }, { MaxX, MaxY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+        PushRect(Frame, { MinX - OutlineSize, MinY}, { MinX + OutlineSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+        PushRect(Frame, { MaxX - OutlineSize, MinY}, { MaxX + OutlineSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+
+        skinned_mesh_instance* Instance = Game->World->SkinnedInstances + 0;
+        animation* Animation = Game->Assets->Animations + Instance->CurrentAnimationID;
+        f32 MaxTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
+        f32 ExtentX = (MaxX - MinX);
+        f32 PlayX = MinX + ExtentX * Instance->AnimationCounter / MaxTimestamp;
+        f32 IndicatorSize = 5.0f;
+        PushRect(Frame, { PlayX - IndicatorSize, MinY }, { PlayX + IndicatorSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+
+        if (PointRectOverlap(GameIO->Mouse.P, { { MinX, MinY}, { MaxX, MaxY } }))
+        {
+            HotID = PlaybackID;
+            if (WasPressed(GameIO->Keys[SC_MouseLeft]))
+            {
+                Game->Debug.ActiveMenuID = PlaybackID;
+            }
+        }
+
+        if (Game->Debug.ActiveMenuID == PlaybackID)
+        {
+            Instance->AnimationCounter = Clamp(MaxTimestamp * (GameIO->Mouse.P.x - MinX) / ExtentX, 0.0f, MaxTimestamp);
+            MouseInputUsed = true;
+
+            if (GameIO->Keys[SC_MouseLeft].bIsDown == false)
+            {
+                Game->Debug.ActiveMenuID = INVALID_INDEX_U32;
+            }
+        }
+    }
+
     auto ResetX = [&]() { CurrentP.x = StartP.x; };
 
     auto DoButton = [&](const char* Text) -> u32

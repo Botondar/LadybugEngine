@@ -85,6 +85,11 @@ struct renderer
     VkBuffer PerFrameUniformBuffers[MaxSwapchainImageCount];
     void* PerFrameUniformBufferMappings[MaxSwapchainImageCount];
 
+    VkDeviceMemory PerFrameJointMemory;
+    void* PerFrameJointMemoryMapping;
+    VkBuffer PerFrameJointBuffers[MaxSwapchainImageCount];
+    void* PerFrameJointBufferMappings[MaxSwapchainImageCount];
+
     VkSemaphore ImageAcquiredSemaphores[MaxSwapchainImageCount];
     VkFence ImageAcquiredFences[MaxSwapchainImageCount];
     VkFence RenderFinishedFences[MaxSwapchainImageCount];

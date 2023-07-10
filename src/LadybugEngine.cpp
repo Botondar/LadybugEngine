@@ -183,7 +183,7 @@ lbfn void RenderMeshes(VkCommandBuffer CmdBuffer, VkPipelineLayout PipelineLayou
     }
 }
 
-internal void GameRender(game_state* GameState, render_frame* Frame)
+internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame)
 {
     renderer* Renderer = GameState->Renderer;
     
@@ -347,6 +347,104 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
             RenderMeshes(Frame->CmdBuffer, Pipeline.Layout,
                          &Renderer->GeometryBuffer, GameState,
                          &Frame->CameraFrustum, EnablePrimaryCull);
+
+            // Skinned mesh rendering
+            {
+                VkDescriptorSet JointDescriptorSet = 
+                    PushBufferDescriptor(Frame, 
+                        Renderer->SetLayouts[SetLayout_Skinned], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 
+                        Frame->JointBuffer, 0, 1 << 16); // TODO(boti): The size here should be the UBO size from the device
+
+                pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Skinned];
+                vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+                vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
+                                        0, 1, &Frame->UniformDescriptorSet,
+                                        0, nullptr);
+
+                u32 JointOffset = 0;
+                for (u32 Index = 0; Index < World->SkinnedInstanceCount; Index++)
+                {
+                    skinned_mesh_instance* Instance = World->SkinnedInstances + Index;
+                    m4 Transform = Instance->Transform;
+                    skin* Skin = Assets->Skins + Instance->SkinID;
+
+                    animation* Animation = Assets->Animations + Instance->CurrentAnimationID;
+
+                    if (Instance->DoAnimation)
+                    {
+                        f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
+                        Instance->AnimationCounter += IO->dt;
+                        while (Instance->AnimationCounter >= LastKeyFrameTimestamp)
+                        {
+                            Instance->AnimationCounter -= LastKeyFrameTimestamp;
+                        }
+                    }
+
+                    u32 KeyFrameIndex;
+                    for (KeyFrameIndex = 0; KeyFrameIndex < Animation->KeyFrameCount; KeyFrameIndex++)
+                    {
+                        if (Instance->AnimationCounter <= Animation->KeyFrameTimestamps[KeyFrameIndex])
+                        {
+                            break;
+                        }
+                    }
+
+                    u32 NextKeyFrameIndex = (KeyFrameIndex + 1 == Animation->KeyFrameCount) ? KeyFrameIndex : KeyFrameIndex + 1;
+                    f32 KeyFrameDelta = Animation->KeyFrameTimestamps[NextKeyFrameIndex] - Animation->KeyFrameTimestamps[KeyFrameIndex];
+                    f32 BlendStart = Instance->AnimationCounter - Animation->KeyFrameTimestamps[KeyFrameIndex];
+                    f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
+
+                    animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
+                    animation_key_frame* NextFrame = Animation->KeyFrames + NextKeyFrameIndex;
+
+                    m4 Pose[skin::MaxJointCount] = {};
+                    for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                    {
+                        animation_transform* CurrentTransform = CurrentFrame->JointTransforms + JointIndex;
+                        animation_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
+                        animation_transform Transform;
+                        Transform.Rotation = Normalize(Lerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor));
+                        Transform.Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor);
+                        Transform.Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor);
+
+                        m4 JointPose = TransformToM4(Transform);
+                        if (Skin->JointParents[JointIndex] != U32_MAX)
+                        {
+                            Pose[JointIndex] = Pose[Skin->JointParents[JointIndex]] * JointPose;
+                        }
+                        else
+                        {
+                            Pose[JointIndex] = JointPose;
+                        }
+                    }
+
+                    for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                    {
+                        Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
+                    }
+                    memcpy(Frame->JointMapping + JointOffset, Pose, Skin->JointCount * sizeof(m4));
+                    u32 JointBufferOffset = JointOffset * sizeof(m4);
+                    JointOffset += Skin->JointCount;
+
+                    geometry_buffer_allocation* Mesh = Assets->Meshes + Instance->MeshID;
+                    u32 IndexCount = Mesh->IndexBlock->ByteSize / sizeof(u32);
+                    u32 IndexOffset = Mesh->IndexBlock->ByteOffset / sizeof(u32);
+                    u32 VertexOffset = Mesh->VertexBlock->ByteOffset / sizeof(vertex);
+
+                    vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
+                                            1, 1, &JointDescriptorSet,
+                                            1, &JointBufferOffset);
+
+                    u32 MaterialIndex = Assets->MeshMaterialIndices[Instance->MeshID];
+                    material Material = Assets->Materials[MaterialIndex];
+
+                    vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_ALL, 0, sizeof(Transform), &Transform);
+                    vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_ALL, sizeof(Transform), sizeof(Material), &Material);
+
+                    Assert(IndexCount > 0);
+                    vkCmdDrawIndexed(Frame->CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
+                }
+            }
 
             // Render sky
 #if 1
@@ -523,7 +621,6 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
 
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
                                     0, 1, &BlitDescriptorSet, 0, nullptr);
-
             vkCmdDraw(Frame->CmdBuffer, 3, 1, 0, 0);
         }
 
@@ -618,6 +715,33 @@ internal void GameRender(game_state* GameState, render_frame* Frame)
                 mesh_instance* Instance = World->Instances + GameState->Editor.SelectedInstanceIndex;
                 RenderGizmo(Instance->Transform, 0.25f);
             }
+
+            // Render debug joints
+            for (u32 InstanceIndex = 0; InstanceIndex < World->SkinnedInstanceCount; InstanceIndex++)
+            {
+                skinned_mesh_instance* Instance = World->SkinnedInstances + InstanceIndex;
+                skin* Skin = Assets->Skins + Instance->SkinID;
+                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                {
+                    m4 BindMatrix = AffineInverse(Skin->InverseBindMatrices[JointIndex]);
+                    f32 JointScale = 5.0f;
+                    m4 JointScaleTransform = M4(
+                        JointScale, 0.0f, 0.0f, 0.0f,
+                        0.0f, JointScale, 0.0f, 0.0f,
+                        0.0f, 0.0f, JointScale, 0.0f,
+                        0.0f, 0.0f, 0.0f, 1.0f);
+                    m4 Transform = Instance->Transform * BindMatrix * JointScaleTransform;
+
+                    vkCmdPushConstants(Frame->CmdBuffer, GizmoPipeline.Layout,
+                                       VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                                       0, sizeof(Transform), &Transform);
+                    rgba8 Color = PackRGBA8(0x10, 0x10, 0x10);
+                    vkCmdPushConstants(Frame->CmdBuffer, GizmoPipeline.Layout,
+                                       VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                                       sizeof(Transform), sizeof(Color), &Color);
+                    vkCmdDrawIndexed(Frame->CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
+                }
+            }
         }
 
         pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
@@ -700,21 +824,45 @@ internal bool AddNodeToScene(game_world* World, gltf* GLTF,
         if (Node->MeshIndex != U32_MAX)
         {
             if (Node->MeshIndex >= GLTF->MeshCount) return false;
+            gltf_mesh* Mesh = GLTF->Meshes + Node->MeshIndex;
 
+            // NOTE(boti): Count up the mesh index in _our_ terminology (where each primitive is considered a mesh of its own)
             u32 MeshOffset = 0;
             for (u32 i = 0; i < Node->MeshIndex; i++)
             {
                 MeshOffset += GLTF->Meshes[i].PrimitiveCount;
             }
 
-            for (u32 i = 0; i < GLTF->Meshes[Node->MeshIndex].PrimitiveCount; i++)
+            if (Node->SkinIndex == U32_MAX)
             {
-                if (World->InstanceCount >= World->MaxInstanceCount) return false;
-                World->Instances[World->InstanceCount++] = 
+                for (u32 i = 0; i < Mesh->PrimitiveCount; i++)
                 {
-                    .MeshID = BaseMeshIndex + (MeshOffset + i),
-                    .Transform = NodeTransform,
-                };
+                    if (World->InstanceCount >= World->MaxInstanceCount) return false;
+                    World->Instances[World->InstanceCount++] = 
+                    {
+                        .MeshID = BaseMeshIndex + (MeshOffset + i),
+                        .Transform = NodeTransform,
+                    };
+                }
+            }
+            else
+            {
+                if (Mesh->PrimitiveCount != 1)
+                {
+                    UnimplementedCodePath;
+                }
+
+                if (World->SkinnedInstanceCount < World->MaxInstanceCount)
+                {
+                    skinned_mesh_instance* Instance = World->SkinnedInstances + World->SkinnedInstanceCount++;
+                    Instance->MeshID = BaseMeshIndex + MeshOffset;
+                    Instance->SkinID = Node->SkinIndex;
+                    Instance->Transform = NodeTransform;
+                }
+                else
+                {
+                    return false;
+                }
             }
         }
 
@@ -888,6 +1036,7 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
                 switch (Type)
                 {
                     case texture_type::Diffuse:
+                    {
                         if (AlphaMode == GLTF_ALPHA_MODE_OPAQUE)
                         {
                             Format = VK_FORMAT_BC1_RGB_SRGB_BLOCK;
@@ -898,15 +1047,17 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
                             Format = VK_FORMAT_BC3_SRGB_BLOCK; 
                             CompressFormat = nvtt::Format_BC3;
                         }
-                        break;
+                    } break;
                     case texture_type::Normal:
+                    {
                         Format = VK_FORMAT_BC5_UNORM_BLOCK; 
                         CompressFormat = nvtt::Format_BC5;
-                        break;
+                    } break;
                     case texture_type::Material:
+                    {
                         Format = VK_FORMAT_BC3_UNORM_BLOCK; 
                         CompressFormat = nvtt::Format_BC3;
-                        break;
+                    } break;
                 }
 
                 CompressionOptions.setFormat(CompressFormat);
@@ -1025,6 +1176,8 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
             gltf_accessor* NAccessor = (Primitive->NormalIndex < GLTF.AccessorCount)  ? GLTF.Accessors + Primitive->NormalIndex : nullptr;
             gltf_accessor* TAccessor = (Primitive->TangentIndex < GLTF.AccessorCount) ? GLTF.Accessors + Primitive->TangentIndex : nullptr;
             gltf_accessor* TCAccessor = (Primitive->TexCoordIndex[0] < GLTF.AccessorCount) ? GLTF.Accessors + Primitive->TexCoordIndex[0] : nullptr;
+            gltf_accessor* JointsAccessor = (Primitive->JointsIndex < GLTF.AccessorCount) ? GLTF.Accessors + Primitive->JointsIndex : nullptr;
+            gltf_accessor* WeightsAccessor = (Primitive->WeightsIndex < GLTF.AccessorCount) ? GLTF.Accessors + Primitive->WeightsIndex : nullptr;
 
             gltf_iterator ItP   = MakeGLTFAttribIterator(&GLTF, PAccessor, Buffers);
             gltf_iterator ItN   = MakeGLTFAttribIterator(&GLTF, NAccessor, Buffers);
@@ -1074,6 +1227,69 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
                 ++ItN;
                 ++ItT;
                 ++ItTC;
+            }
+
+            if (JointsAccessor || WeightsAccessor)
+            {
+
+                Verify(JointsAccessor && WeightsAccessor);
+                Verify(JointsAccessor->Type == GLTF_VEC4 && WeightsAccessor->Type == GLTF_VEC4);
+
+                Verify(JointsAccessor->BufferView < GLTF.BufferViewCount);
+                gltf_buffer_view* JointsView = GLTF.BufferViews + JointsAccessor->BufferView;
+                Verify(JointsView->BufferIndex < GLTF.BufferCount);
+                buffer* JointsBuffer = Buffers + JointsView->BufferIndex;
+                Verify(JointsAccessor->ByteOffset + JointsView->Offset + VertexCount * JointsView->Stride <= JointsBuffer->Size);
+                void* JointsAt = OffsetPtr(JointsBuffer->Data, JointsView->Offset + JointsAccessor->ByteOffset);
+
+                Verify(WeightsAccessor->BufferView < GLTF.BufferViewCount);
+                gltf_buffer_view* WeightsView = GLTF.BufferViews + WeightsAccessor->BufferView;
+                Verify(WeightsView->BufferIndex < GLTF.BufferCount);
+                buffer* WeightsBuffer = Buffers + WeightsView->BufferIndex;
+                Verify(WeightsAccessor->ByteOffset + WeightsView->Offset + VertexCount * WeightsView->Stride <= WeightsBuffer->Size);
+                void* WeightsAt = OffsetPtr(WeightsBuffer->Data, WeightsView->Offset + WeightsAccessor->ByteOffset);
+
+                if (WeightsAccessor->ComponentType != GLTF_FLOAT)
+                {
+                    UnimplementedCodePath;
+                }
+
+                for (u32 i = 0; i < VertexCount; i++)
+                {
+                    vertex* Vertex = VertexData + i;
+                    for (u32 JointIndex = 0; JointIndex < 4; JointIndex++)
+                    {
+                        switch (JointsAccessor->ComponentType)
+                        {
+                            case GLTF_UBYTE:
+                            {
+                                u8 Joint = ((u8*)JointsAt)[JointIndex];
+                                Vertex->Joints[JointIndex] = Joint;
+                            } break;
+                            case GLTF_USHORT:
+                            {
+                                u16 Joint = ((u16*)JointsAt)[JointIndex];
+                                if (Joint > 0xFF) UnimplementedCodePath;
+                                Vertex->Joints[JointIndex] = (u8)Joint;
+                            } break;
+                            case GLTF_UINT:
+                            {
+                                u32 Joint = ((u32*)JointsAt)[JointIndex];
+                                if (Joint > 0xFF) UnimplementedCodePath;
+                                Vertex->Joints[JointIndex] = (u8)Joint;
+                            } break;
+                            default:
+                            {
+                                UnimplementedCodePath;
+                            } break;
+                        }
+                    }
+
+                    Vertex->Weights = *(v4*)WeightsAt;
+
+                    JointsAt = OffsetPtr(JointsAt, JointsView->Stride);
+                    WeightsAt = OffsetPtr(WeightsAt, WeightsView->Stride);
+                }
             }
 
             u32 IndexCount = 0;
@@ -1204,6 +1420,355 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
         }
     }
 
+    u32 BaseSkinIndex = Assets->SkinCount;
+    for (u32 SkinIndex = 0; SkinIndex < GLTF.SkinCount; SkinIndex++)
+    {
+        gltf_skin* Skin = GLTF.Skins + SkinIndex;
+        Verify(Skin->InverseBindMatricesAccessorIndex < GLTF.AccessorCount);
+        gltf_accessor* Accessor = GLTF.Accessors + Skin->InverseBindMatricesAccessorIndex;
+        gltf_buffer_view* View  = GLTF.BufferViews + Accessor->BufferView;
+        buffer* Buffer          = Buffers + View->BufferIndex;
+
+        Verify(Accessor->IsSparse == false);
+        Verify(Accessor->ComponentType == GLTF_FLOAT);
+        Verify(Accessor->Type == GLTF_MAT4);
+
+        if (Assets->SkinCount < Assets->MaxSkinCount)
+        {
+            skin* SkinAsset = Assets->Skins + Assets->SkinCount++;
+            if (Skin->JointCount <= skin::MaxJointCount)
+            {
+                SkinAsset->JointCount = Skin->JointCount;
+                u32 Stride = View->Stride ? View->Stride : sizeof(m4);
+
+                {
+                    u8* SrcAt = (u8*)Buffer->Data + View->Offset + Accessor->ByteOffset;
+                    m4* DstAt = SkinAsset->InverseBindMatrices;
+                    u32 Count = SkinAsset->JointCount;
+                    while (Count--)
+                    {
+                        *DstAt++ = *(m4*)SrcAt;
+                        SrcAt += Stride;
+                    }
+                }
+
+                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                {
+                    u32 NodeIndex = Skin->JointIndices[JointIndex];
+                    if (NodeIndex < GLTF.NodeCount)
+                    {
+                        gltf_node* Node = GLTF.Nodes + NodeIndex;
+                        if (Node->IsTRS)
+                        {
+                            SkinAsset->BindPose[JointIndex] = 
+                            {
+                                .Rotation = Node->Rotation,
+                                .Position = Node->Translation,
+                                .Scale = Node->Scale,
+                            };
+                        }
+                        else
+                        {
+                            // TODO(boti): Decompose the matrix here?
+                            SkinAsset->BindPose[JointIndex] = 
+                            {
+                                .Rotation = { 0.0f, 0.0f, 0.0f, 1.0f },
+                                .Position = { 0.0f, 0.0f, 0.0f },
+                                .Scale = { 1.0f, 1.0f, 1.0f },
+                            };
+                        }
+                    }
+                    else
+                    {
+                        UnhandledError("Invalid joint node index in glTF skin");
+                    }
+                }
+
+                // NOTE(boti): We clear the joints here to later verify that the joint node has a single parent
+                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                {
+                    SkinAsset->JointParents[JointIndex] = U32_MAX;
+                }
+
+                // Build the joint hierarchy
+                // TODO(boti): We need to handle the case where the joints don't form a closed hierarchy 
+                // (i.e. bones are parented to nodes not part of the skeleton)
+                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                {
+                    u32 NodeIndex = Skin->JointIndices[JointIndex];
+                    gltf_node* Node = GLTF.Nodes + NodeIndex;
+                    for (u32 ChildIt = 0; ChildIt < Node->ChildrenCount; ChildIt++)
+                    {
+                        u32 ChildIndex = Node->Children[ChildIt];
+                        for (u32 JointIt = 0; JointIt < Skin->JointCount; JointIt++)
+                        {
+                            if (Skin->JointIndices[JointIt] == ChildIndex)
+                            {
+                                Verify(SkinAsset->JointParents[JointIt] == U32_MAX);
+                                SkinAsset->JointParents[JointIt] = JointIndex;
+
+                                // NOTE(boti): It makes thing easier if the joints are in order,
+                                // so we currently only handle that case
+                                Assert(JointIndex < JointIt);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                UnhandledError("Too many joints in skin");
+            }
+        }
+        else
+        {
+            UnhandledError("Out of skin pool memory");
+        }
+    }
+
+    for (u32 AnimationIndex = 0; AnimationIndex < GLTF.AnimationCount; AnimationIndex++)
+    {
+        gltf_animation* Animation = GLTF.Animations + AnimationIndex;
+        if (Animation->ChannelCount == 0)
+        {
+            continue;
+        }
+
+        // NOTE(boti): We only import animations that are tied to a specific skin
+        u32 SkinIndex = U32_MAX;
+        {
+            u32 NodeIndex = Animation->Channels[0].Target.NodeIndex;
+            for (u32 SkinIt = 0; SkinIt < GLTF.SkinCount; SkinIt++)
+            {
+                gltf_skin* Skin = GLTF.Skins + SkinIt;
+                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                {
+                    if (NodeIndex == Skin->JointIndices[JointIndex])
+                    {
+                        SkinIndex = SkinIt;
+                    }
+
+                    if (SkinIndex != U32_MAX) break;
+                }
+
+                if (SkinIndex != U32_MAX) break;
+            }
+        }
+        // Skip the current animation if it doesn't belong to any skin
+        if (SkinIndex == U32_MAX) continue;
+        gltf_skin* Skin = GLTF.Skins + SkinIndex;
+
+        // NOTE(boti): We start the count at 1 because even if the animation doesn't have an explicit 0t
+        // key frame, we'll want to add that
+        u32 MaxKeyFrameCount = 1;
+        for (u32 SamplerIndex = 0; SamplerIndex < Animation->SamplerCount; SamplerIndex++)
+        {
+            gltf_animation_sampler* Sampler = Animation->Samplers + SamplerIndex;
+            Verify(Sampler->InputAccessorIndex < GLTF.AccessorCount);
+
+            gltf_accessor* TimestampAccessor = GLTF.Accessors + Sampler->InputAccessorIndex;
+
+            Verify((TimestampAccessor->ComponentType == GLTF_FLOAT) &&
+                   (TimestampAccessor->Type == GLTF_SCALAR));
+
+            MaxKeyFrameCount += TimestampAccessor->Count;
+        }
+
+        f32* KeyFrameTimestamps = PushArray<f32>(Scratch, MaxKeyFrameCount);
+        u32 KeyFrameCount = 1;
+        KeyFrameTimestamps[0] = 0.0f;
+        for (u32 SamplerIndex = 0; SamplerIndex < Animation->SamplerCount; SamplerIndex++)
+        {
+            gltf_animation_sampler* Sampler = Animation->Samplers + SamplerIndex;
+            gltf_accessor* TimestampAccessor = GLTF.Accessors + Sampler->InputAccessorIndex;
+            gltf_buffer_view* View = GLTF.BufferViews + TimestampAccessor->BufferView;
+            buffer* Buffer = Buffers + View->BufferIndex;
+
+            void* At = OffsetPtr(Buffer->Data, View->Offset + TimestampAccessor->ByteOffset);
+            u32 Count = TimestampAccessor->Count;
+            while (Count--)
+            {
+                f32 Timestamp = *(f32*)At;
+                Assert(Timestamp >= 0.0f);
+                At = OffsetPtr(At, View->Stride);
+                
+                b32 AlreadyExists = false;
+                for (u32 KeyFrameIndex = 0; KeyFrameIndex < KeyFrameCount; KeyFrameIndex++)
+                {
+                    if (Timestamp == KeyFrameTimestamps[KeyFrameIndex])
+                    {
+                        AlreadyExists = true;
+                        break;
+                    }
+                    else if (Timestamp < KeyFrameTimestamps[KeyFrameIndex])
+                    {
+                        for (u32 It = KeyFrameCount; It > KeyFrameIndex; It--)
+                        {
+                            KeyFrameTimestamps[It] = KeyFrameTimestamps[It - 1];
+                        }
+                        KeyFrameTimestamps[KeyFrameIndex] = Timestamp;
+                        KeyFrameCount++;
+                    }
+                }
+
+                if (!AlreadyExists)
+                {
+                    KeyFrameTimestamps[KeyFrameCount++] = Timestamp;
+                }
+            }
+        }
+
+        if (Assets->AnimationCount < Assets->MaxAnimationCount)
+        {
+            animation* AnimationAsset = Assets->Animations + Assets->AnimationCount++;
+            AnimationAsset->SkinID = BaseSkinIndex + SkinIndex;
+            AnimationAsset->KeyFrameCount = KeyFrameCount;
+            AnimationAsset->KeyFrameTimestamps = PushArray<f32>(Assets->Arena, KeyFrameCount);
+            AnimationAsset->KeyFrames = PushArray<animation_key_frame>(Assets->Arena, KeyFrameCount);
+            memcpy(AnimationAsset->KeyFrameTimestamps, KeyFrameTimestamps, KeyFrameCount * sizeof(f32));
+
+            skin* SkinAsset = Assets->Skins + AnimationAsset->SkinID;
+            for (u32 KeyFrameIndex = 0; KeyFrameIndex < KeyFrameCount; KeyFrameIndex++)
+            {
+                animation_key_frame* KeyFrame = AnimationAsset->KeyFrames + KeyFrameIndex;
+                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                {
+                    KeyFrame->JointTransforms[JointIndex] = SkinAsset->BindPose[JointIndex];
+                }
+            }
+
+            for (u32 ChannelIndex = 0; ChannelIndex < Animation->ChannelCount; ChannelIndex++)
+            {
+                gltf_animation_channel* Channel = Animation->Channels + ChannelIndex;
+                u32 NodeIndex = Channel->Target.NodeIndex;
+                if (NodeIndex == U32_MAX) continue;
+            
+                u32 JointIndex = U32_MAX;
+                for (u32 JointIt = 0; JointIt < Skin->JointCount; JointIt++)
+                {
+                    if (NodeIndex == Skin->JointIndices[JointIt])
+                    {
+                        JointIndex = JointIt;
+                        break;
+                    }
+                }
+            
+                if (JointIndex != U32_MAX)
+                {
+                    gltf_animation_sampler* Sampler = Animation->Samplers + Channel->SamplerIndex;
+                    gltf_accessor* TimestampAccessor = GLTF.Accessors + Sampler->InputAccessorIndex;
+                    gltf_accessor* TransformAccessor = GLTF.Accessors + Sampler->OutputAccessorIndex;
+                    Verify(TransformAccessor->ComponentType == GLTF_FLOAT);
+                    AnimationAsset->MinTimestamp = TimestampAccessor->Min.EE[0];
+                    AnimationAsset->MaxTimestamp = TimestampAccessor->Max.EE[0];
+
+                    gltf_buffer_view* TimestampView = GLTF.BufferViews + TimestampAccessor->BufferView;
+                    buffer* TimestampBuffer = Buffers + TimestampView->BufferIndex;
+                    void* SamplerTimestampAt = OffsetPtr(TimestampBuffer->Data, TimestampView->Offset + TimestampAccessor->ByteOffset);
+
+                    gltf_buffer_view* TransformView = GLTF.BufferViews + TransformAccessor->BufferView;
+                    buffer* TransformBuffer = Buffers + TransformView->BufferIndex;
+                    void* SamplerTransformAt = OffsetPtr(TransformBuffer->Data, TransformView->Offset + TransformAccessor->ByteOffset);
+                    
+                    // NOTE(boti): Set the inital transform to the first t value if t=0 doesn't exist
+                    if (AnimationAsset->MinTimestamp != 0.0f)
+                    {
+                        animation_transform* Transform = AnimationAsset->KeyFrames[0].JointTransforms + JointIndex;
+                        switch (Channel->Target.Path)
+                        {
+                            case GLTF_Rotation: Transform->Rotation = *(v4*)SamplerTransformAt; break;
+                            case GLTF_Translation: Transform->Position = *(v3*)SamplerTransformAt; break;
+                            case GLTF_Scale: Transform->Scale = *(v3*)SamplerTransformAt; break;
+                            default:
+                            {
+                                UnimplementedCodePath;
+                            } break;
+                        }
+                    }
+
+                    u32 CurrentKeyFrameIndex = 0;
+                    Verify(TimestampAccessor->Count == TransformAccessor->Count);
+                    u32 Count = TimestampAccessor->Count;
+
+                    while (Count--)
+                    {
+                        f32 Timestamp = *(f32*)SamplerTimestampAt;
+
+                        animation_key_frame* KeyFrame = AnimationAsset->KeyFrames + CurrentKeyFrameIndex;
+                        if (Sampler->Interpolation == GLTF_Linear)
+                        {
+                            switch (Channel->Target.Path)
+                            {
+                                case GLTF_Rotation:
+                                {
+                                    Verify(TransformAccessor->Type == GLTF_VEC4);
+                                    v4 Rotation = *(v4*)SamplerTransformAt;
+                                    if (Timestamp == AnimationAsset->KeyFrameTimestamps[CurrentKeyFrameIndex])
+                                    {
+                                        KeyFrame->JointTransforms[JointIndex].Rotation = Rotation;
+                                        CurrentKeyFrameIndex++;
+                                    }
+                                    else
+                                    {
+                                        UnimplementedCodePath;
+                                    }
+                                } break;
+                                case GLTF_Translation:
+                                {
+                                    Verify(TransformAccessor->Type == GLTF_VEC3);
+                                    v3 Translation = *(v3*)SamplerTransformAt;
+                                    if (Timestamp == AnimationAsset->KeyFrameTimestamps[CurrentKeyFrameIndex])
+                                    {
+                                        KeyFrame->JointTransforms[JointIndex].Position = Translation;
+                                        CurrentKeyFrameIndex++;
+                                    }
+                                    else
+                                    {
+                                        UnimplementedCodePath;
+                                    }
+                                } break;
+                                case GLTF_Scale:
+                                {
+                                    Verify(TransformAccessor->Type == GLTF_VEC3);
+                                    v3 Scale = *(v3*)SamplerTransformAt;
+                                    if (Timestamp == AnimationAsset->KeyFrameTimestamps[CurrentKeyFrameIndex])
+                                    {
+                                        KeyFrame->JointTransforms[JointIndex].Scale = Scale;
+                                        CurrentKeyFrameIndex++;
+                                    }
+                                    else
+                                    {
+                                        UnimplementedCodePath;
+                                    }
+                                } break;
+                                case GLTF_Weights:
+                                {
+                                    UnimplementedCodePath;
+                                } break;
+                            }
+                        }
+                        else
+                        {
+                            UnimplementedCodePath;
+                        }
+
+                        SamplerTimestampAt = OffsetPtr(SamplerTimestampAt, TimestampView->Stride);
+                        SamplerTransformAt = OffsetPtr(SamplerTransformAt, TransformView->Stride);
+                    }
+                }
+                else
+                {
+                    UnhandledError("glTF animation contains targets that don't belong to a single skin");
+                }
+            }
+        }
+        else
+        {
+            UnhandledError("Out of animation pool");
+        }
+    }
+
     if (GLTF.DefaultSceneIndex >= GLTF.SceneCount)
     {
         UnhandledError("glTF default scene index out of bounds");
@@ -1214,6 +1779,8 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
     {
         AddNodeToScene(World, &GLTF, Scene->RootNodes[RootNodeIt], BaseTransform, BaseMeshIndex);
     }
+
+    World->IsLoaded = true;
 }
 
 vulkan VK;
@@ -1257,6 +1824,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         }
 
         assets* Assets = GameState->Assets = PushStruct<assets>(&GameState->TotalArena);
+        Assets->Arena = &GameState->TotalArena;
 
         // Default textures
         {
@@ -1316,7 +1884,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             LoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, GameIO->DroppedFilename, YUpToZUp);
             GameIO->bHasDroppedFile = false;
         }
-        else if (GameState->World->InstanceCount == 0) // NOTE(boti): this is kind of a hack
+        else if (!GameState->World->IsLoaded)
         {
             m4 BaseTransform = M4(1.0f, 0.0f, 0.0f, 0.0f,
                                   0.0f, 0.0f, -1.0f, 0.0f,
@@ -1359,6 +1927,34 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         World->SunL = 2.5f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
         World->SunV = Normalize(v3{ -4.0f, 2.5f, 6.0f }); // Direction (towards the sun)
 
+        if (GameState->Assets->AnimationCount && 
+            World->SkinnedInstanceCount)
+        {
+            skinned_mesh_instance* Instance = World->SkinnedInstances + 0;
+            if (WasPressed(GameIO->Keys[SC_P]))
+            {
+                Instance->DoAnimation = !Instance->DoAnimation;
+            }
+
+            if (WasPressed(GameIO->Keys[SC_0]))
+            {
+                Instance->CurrentAnimationID = 0;
+                Instance->AnimationCounter = 0.0f;
+            }
+            for (u32 Scancode = SC_1; Scancode <= SC_9; Scancode++)
+            {
+                if (WasPressed(GameIO->Keys[Scancode]))
+                {
+                    u32 Index = Scancode - SC_1 + 1;
+                    if (Index < GameState->Assets->AnimationCount)
+                    {
+                        Instance->CurrentAnimationID = Index;
+                        Instance->AnimationCounter = 0.0f;
+                    }
+                }
+            }
+        }
+
         camera* Camera = &World->Camera;
         v3 MoveDirection = {};
         if (GameIO->Keys[SC_W].bIsDown) { MoveDirection.z += 1.0f; }
@@ -1397,7 +1993,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         if (GameIO->Keys[SC_LeftControl].bIsDown) { Camera->P.z -= SpeedMul * MoveSpeed * dt; }
     }
 
-    GameRender(GameState, RenderFrame);
+    GameRender(GameState, GameIO, RenderFrame);
     EndRenderFrame(RenderFrame);
 
     GameState->FrameID++;

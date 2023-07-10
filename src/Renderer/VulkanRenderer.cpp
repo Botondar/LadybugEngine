@@ -82,21 +82,21 @@ static VkPrimitiveTopology TopologyTable[Topology_Count] =
 static VkFilter FilterTable[Filter_Count] = 
 {
     [Filter_Nearest] = VK_FILTER_NEAREST,
-    [Filter_Linear] = VK_FILTER_LINEAR,
+    [Filter_Linear]  = VK_FILTER_LINEAR,
 };
 
 static VkSamplerMipmapMode MipFilterTable[Filter_Count] = 
 {
     [Filter_Nearest] = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-    [Filter_Linear] = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+    [Filter_Linear]  = VK_SAMPLER_MIPMAP_MODE_LINEAR,
 };
 
 static VkSamplerAddressMode WrapTable[Wrap_Count] = 
 {
-    [Wrap_Repeat] = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-    [Wrap_RepeatMirror] = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
-    [Wrap_ClampToEdge] = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    [Wrap_ClampToBorder] = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+    [Wrap_Repeat]           = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+    [Wrap_RepeatMirror]     = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+    [Wrap_ClampToEdge]      = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+    [Wrap_ClampToBorder]    = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
 };
 
 static VkBorderColor BorderTable[Border_Count] = 
@@ -134,14 +134,14 @@ static VkBlendFactor BlendFactorTable[Blend_Count] =
 
 static VkCompareOp CompareOpTable[Compare_Count] = 
 {
-    [Compare_Never] = VK_COMPARE_OP_NEVER,
-    [Compare_Always] = VK_COMPARE_OP_ALWAYS,
-    [Compare_Equal] = VK_COMPARE_OP_EQUAL,
-    [Compare_NotEqual] = VK_COMPARE_OP_NOT_EQUAL,
-    [Compare_Less] = VK_COMPARE_OP_LESS,
-    [Compare_LessEqual] = VK_COMPARE_OP_LESS_OR_EQUAL,
-    [Compare_Greater] = VK_COMPARE_OP_GREATER,
-    [Compare_GreaterEqual] = VK_COMPARE_OP_GREATER_OR_EQUAL,
+    [Compare_Never]         = VK_COMPARE_OP_NEVER,
+    [Compare_Always]        = VK_COMPARE_OP_ALWAYS,
+    [Compare_Equal]         = VK_COMPARE_OP_EQUAL,
+    [Compare_NotEqual]      = VK_COMPARE_OP_NOT_EQUAL,
+    [Compare_Less]          = VK_COMPARE_OP_LESS,
+    [Compare_LessEqual]     = VK_COMPARE_OP_LESS_OR_EQUAL,
+    [Compare_Greater]       = VK_COMPARE_OP_GREATER,
+    [Compare_GreaterEqual]  = VK_COMPARE_OP_GREATER_OR_EQUAL,
 };
 
 internal VkShaderStageFlags PipelineStagesToVulkan(flags32 Stages)
@@ -557,6 +557,92 @@ VkResult CreateRenderer(renderer* Renderer,
                     ReturnOnFailure();
 
                     Renderer->PerFrameUniformBufferMappings[i] = (void*)((u8*)Renderer->PerFrameUniformMappingBase + Offset);
+                }
+            }
+            else
+            {
+                UnhandledError("No memory type for uniform buffers");
+            }
+        }
+
+        // Joint buffers
+        {
+            u32 MemoryTypeIndex = 0;
+            if (BitScanForward(&MemoryTypeIndex, VK.BARMemTypes))
+            {
+                u64 BufferSizePerFrame = render_frame::MaxJointCount * sizeof(m4);
+                VkMemoryAllocateInfo AllocInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                    .pNext = nullptr,
+                    .allocationSize = Renderer->SwapchainImageCount * BufferSizePerFrame,
+                    .memoryTypeIndex = MemoryTypeIndex,
+                };
+
+                VkDeviceMemory Memory = VK_NULL_HANDLE;
+                Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Memory);
+                ReturnOnFailure();
+
+                void* Mapping = nullptr;
+                Result = vkMapMemory(VK.Device, Memory, 0, VK_WHOLE_SIZE, 0, &Mapping);
+                if (Result == VK_SUCCESS)
+                {
+                    VkBuffer Buffers[Renderer->MaxSwapchainImageCount] = { VK_NULL_HANDLE };
+                    void* BufferMappings[Renderer->MaxSwapchainImageCount] = { nullptr };
+
+                    bool BufferCreationFailed = false;
+                    for (u32 Index = 0; Index < Renderer->SwapchainImageCount; Index++)
+                    {
+                        VkBufferCreateInfo BufferInfo = 
+                        {
+                            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                            .pNext = nullptr,
+                            .flags = 0,
+                            .size = BufferSizePerFrame,
+                            .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                            .queueFamilyIndexCount = 0,
+                            .pQueueFamilyIndices = nullptr,
+                        };
+                        Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, Buffers + Index);
+                        if (Result == VK_SUCCESS)
+                        {
+                            Result = vkBindBufferMemory(VK.Device, Buffers[Index], Memory, Index * BufferSizePerFrame);
+                            if (Result == VK_SUCCESS)
+                            {
+                                BufferMappings[Index] = OffsetPtr(Mapping, Index * BufferSizePerFrame);
+                            }
+                            else
+                            {
+                                BufferCreationFailed = true;
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            BufferCreationFailed = true;
+                            break;
+                        }
+                    }
+
+                    if (!BufferCreationFailed)
+                    {
+                        Renderer->PerFrameJointMemory = Memory;
+                        Renderer->PerFrameJointMemoryMapping = Mapping;
+                        for (u32 Index = 0; Index < Renderer->SwapchainImageCount; Index++)
+                        {
+                            Renderer->PerFrameJointBuffers[Index] = Buffers[Index];
+                            Renderer->PerFrameJointBufferMappings[Index] = BufferMappings[Index];
+                        }
+                    }
+                    else
+                    {
+                        return(Result);
+                    }
+                }
+                else
+                {
+                    return(Result);
                 }
             }
             else
@@ -1579,6 +1665,10 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
     Frame->Commands = (VkDrawIndirectCommand*)Frame->DrawBuffer.Mapping;
     Frame->VertexCount = 0;
     Frame->Vertices = (ui_vertex*)Frame->VertexStack.Mapping;
+
+    Frame->JointCount = 0;
+    Frame->JointBuffer = Renderer->PerFrameJointBuffers[FrameID];
+    Frame->JointMapping = (m4*)Renderer->PerFrameJointBufferMappings[FrameID];
 
     vkWaitForFences(VK.Device, 1, &Frame->ImageAcquiredFence, VK_TRUE, UINT64_MAX);
     vkResetFences(VK.Device, 1, &Frame->ImageAcquiredFence);

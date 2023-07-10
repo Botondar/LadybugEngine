@@ -48,6 +48,18 @@ struct material
 // Common
 //
 
+v3 TransformPoint(m4 M, v3 P)
+{
+    v3 Result = fma(P.xxx, M[0].xyz, fma(P.yyy, M[1].xyz, fma(P.zzz, M[2].xyz, M[3].xyz)));
+    return(Result);
+}
+
+v3 TransformDirection(m4 M, v3 V)
+{
+    v3 Result = fma(V.xxx, M[0].xyz, fma(V.yyy, M[1].xyz, V.z * M[2].xyz));
+    return(Result);
+}
+
 vec4 UnpackRGBA8(in uint Color) 
 {
     vec4 Result = vec4(

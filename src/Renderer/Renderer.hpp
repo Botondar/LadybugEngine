@@ -609,6 +609,8 @@ struct vertex
     v3 N;
     v4 T;
     v2 TexCoord;
+    v4 Weights;
+    u8 Joints[4];
     rgba8 Color;
 };
 

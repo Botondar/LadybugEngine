@@ -37,6 +37,7 @@ enum descriptor_set_layout : u32
     SetLayout_Blit,
     SetLayout_BloomUpsample,
     SetLayout_SingleCombinedTexturePS,
+    SetLayout_Skinned,
 
     SetLayout_Count,
 };
@@ -57,6 +58,7 @@ enum pipeline : u32
     Pipeline_SSAO,
     Pipeline_SSAOBlur,
     Pipeline_Quad,
+    Pipeline_Skinned,
 
     Pipeline_Count,
 };

@@ -82,7 +82,11 @@ constexpr ret CountOf(const type (&)[N])
     return((ret)N);
 }
 
+#if 1
+#define OffsetOf(s, m) offsetof(s, m)
+#else
 #define OffsetOf(s, m) ((umm)(&((s*)0)->m))
+#endif
 
 #define KiB(x) 1024*(x)
 #define MiB(x) 1024*KiB(x)
@@ -94,9 +98,11 @@ constexpr ret CountOf(const type (&)[N])
 #define InvalidDefaultCase default: InvalidCodePath; break
 
 #if DEVELOPER
+#define Verify(...) assert(__VA_ARGS__)
 #define UnhandledError(msg) Assert(!msg)
 #define UnimplementedCodePath Assert(!"Unimplemented code path")
 #else
+#define Verify(...) #error "Verify in non-developer build"
 #define UnhandledError(...) #error "Unhandled error"
 #define UnimplementedCodePath #error "Unimplemented code path"
 #endif
@@ -252,6 +258,7 @@ struct mmbox;
 constexpr f32 Pi = 3.14159265359f;
 constexpr f32 EulerNumber = 2.71828182846f;
 constexpr f32 Log2_10 = 3.32192809488736234787f;
+constexpr f32 NOZ_Threshold = 1e-6f;
 
 inline constexpr u32 CeilDiv(u32 x, u32 y);
 
@@ -269,6 +276,8 @@ inline f32 Tan(f32 x) { return tanf(x); }
 
 inline f32 Ln(f32 x) { return logf(x); }
 inline f32 Pow(f32 a, f32 b) { return powf(a, b); }
+inline f32 Ratio0(f32 Numerator, f32 Denominator);
+
 
 template<typename T> inline constexpr 
 T Min(T a, T b);
@@ -365,6 +374,7 @@ inline v4 operator+(v4 a, v4 b);
 inline v4 operator-(v4 a, v4 b);
 
 inline f32 Dot(v4 a, v4 b);
+inline v4 Normalize(v4 V);
 
 inline m4 M4(
     f32 m00, f32 m01, f32 m02, f32 m03,
@@ -572,7 +582,12 @@ inline T* DListRemove(T* Elem)
 //
 // Math
 //
-constexpr f32 NOZ_Threshold = 1e-6f;
+
+inline f32 Ratio0(f32 Numerator, f32 Denominator)
+{
+    f32 Result = (Denominator == 0.0f) ? 0.0f : Numerator / Denominator;
+    return(Result);
+}
 
 inline constexpr u32 CeilDiv(u32 x, u32 y)
 {
@@ -839,6 +854,14 @@ inline f32 Dot(v4 a, v4 b)
     return Result;
 }
 
+inline v4 Normalize(v4 V)
+{
+    v4 Result;
+    f32 InvLength = 1.0f / Sqrt(Dot(V, V));
+    Result = V * InvLength;
+    return(Result);
+}
+
 inline m4 M4(
     f32 m00, f32 m01, f32 m02, f32 m03,
     f32 m10, f32 m11, f32 m12, f32 m13,
@@ -902,6 +925,24 @@ inline m4 AffineOrthonormalInverse(const m4& M)
         M.Z.x, M.Z.y, M.Z.z, -Dot(M.Z.xyz, M.P.xyz),
         0.0f, 0.0f, 0.0f, 1.0f);
     return Result;
+}
+
+inline m4 AffineInverse(const m4& M)
+{
+    v3 X = M.X.xyz;
+    v3 Y = M.Y.xyz;
+    v3 Z = M.Z.xyz;
+    v3 P = M.P.xyz;
+    X = X * (1.0f / Dot(X, X));
+    Y = Y * (1.0f / Dot(Y, Y));
+    Z = Z * (1.0f / Dot(Z, Z));
+
+    m4 Result = M4(
+        X.x, X.y, X.z, -Dot(X, P),
+        Y.x, Y.y, Y.z, -Dot(Y, P),
+        Z.x, Z.y, Z.z, -Dot(Z, P),
+        0.0f, 0.0f, 0.0f, 1.0f);
+    return(Result);
 }
 
 inline m4 PerspectiveFov(f32 Fov, f32 AspectRatio, f32 NearZ, f32 FarZ)

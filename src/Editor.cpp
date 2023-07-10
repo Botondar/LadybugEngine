@@ -255,14 +255,14 @@ internal mesh CreateArrowMesh(memory_arena* Arena)
         v3 N = { 0.0f, 0.0f, -1.0f };
         v4 T = { 1.0f, 0.0f, 0.0f, 1.0f };
         // Origin
-        *VertexAt++ = { { 0.0f, 0.0f, 0.0f }, N, T, {}, White };
+        *VertexAt++ = { { 0.0f, 0.0f, 0.0f }, N, T, {}, {}, {}, White };
         u32 BaseIndex = 1;
 
         for (u32 i = 0; i < RadiusDivisionCount; i++)
         {
             f32 Angle = (2.0f * Pi * i) / RadiusDivisionCount;
             v3 P = { Radius * Cos(Angle), Radius * Sin(Angle), 0.0f };
-            *VertexAt++ = { P, N, T, {}, White };
+            *VertexAt++ = { P, N, T, {}, {}, {}, White };
 
             *IndexAt++ = 0;
             *IndexAt++ = ((i + 1) % RadiusDivisionCount) + BaseIndex;
@@ -283,8 +283,8 @@ internal mesh CreateArrowMesh(memory_arena* Arena)
             v3 N = { CosA, SinA, 0.0f };
             v4 T = { -SinA, CosA, 0.0f, 1.0f };
 
-            *VertexAt++ = { P, N, T, {}, White };
-            *VertexAt++ = { P + v3{ 0.0f, 0.0f, Height }, N, T, {}, White };
+            *VertexAt++ = { P, N, T, {}, {}, {}, White };
+            *VertexAt++ = { P + v3{ 0.0f, 0.0f, Height }, N, T, {}, {}, {}, White };
 
             u32 i00 = 2*i + 0 + BaseIndex;
             u32 i01 = 2*i + 1 + BaseIndex;
@@ -315,8 +315,8 @@ internal mesh CreateArrowMesh(memory_arena* Arena)
 
             v3 N = { 0.0f, 0.0f, -1.0f };
             v4 T = { 1.0f, 0.0f, 0.0f, 1.0f };
-            *VertexAt++ = { P1, N, T, {}, White };
-            *VertexAt++ = { P2, N, T, {}, White };
+            *VertexAt++ = { P1, N, T, {}, {}, {}, White };
+            *VertexAt++ = { P2, N, T, {}, {}, {}, White };
 
             u32 i00 = 2*i + 0 + BaseIndex;
             u32 i01 = 2*i + 1 + BaseIndex;
@@ -351,8 +351,8 @@ internal mesh CreateArrowMesh(memory_arena* Arena)
 
             v4 T = { -SinA, CosA, 0.0f, 1.0f };
 
-            *VertexAt++ = { P, N, T, {}, White };
-            *VertexAt++ = { TipP, TipN, T, {}, White };
+            *VertexAt++ = { P, N, T, {}, {}, {}, White };
+            *VertexAt++ = { TipP, TipN, T, {}, {}, {}, White };
 
             *IndexAt++ = 2 * i + 0 + BaseIndex;
             *IndexAt++ = (2 * ((i + 1) % RadiusDivisionCount)) + 0 + BaseIndex;

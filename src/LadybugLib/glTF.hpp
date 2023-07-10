@@ -167,7 +167,7 @@ struct gltf_material
 
 struct gltf_skin
 {
-    u32 InverseBindMatricesIndex;
+    u32 InverseBindMatricesAccessorIndex;
     u32 RootNodeIndex;
     u32 JointCount;
     u32* JointIndices;
