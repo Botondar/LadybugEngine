@@ -715,33 +715,6 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 mesh_instance* Instance = World->Instances + GameState->Editor.SelectedInstanceIndex;
                 RenderGizmo(Instance->Transform, 0.25f);
             }
-
-            // Render debug joints
-            for (u32 InstanceIndex = 0; InstanceIndex < World->SkinnedInstanceCount; InstanceIndex++)
-            {
-                skinned_mesh_instance* Instance = World->SkinnedInstances + InstanceIndex;
-                skin* Skin = Assets->Skins + Instance->SkinID;
-                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
-                {
-                    m4 BindMatrix = AffineInverse(Skin->InverseBindMatrices[JointIndex]);
-                    f32 JointScale = 5.0f;
-                    m4 JointScaleTransform = M4(
-                        JointScale, 0.0f, 0.0f, 0.0f,
-                        0.0f, JointScale, 0.0f, 0.0f,
-                        0.0f, 0.0f, JointScale, 0.0f,
-                        0.0f, 0.0f, 0.0f, 1.0f);
-                    m4 Transform = Instance->Transform * BindMatrix * JointScaleTransform;
-
-                    vkCmdPushConstants(Frame->CmdBuffer, GizmoPipeline.Layout,
-                                       VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                                       0, sizeof(Transform), &Transform);
-                    rgba8 Color = PackRGBA8(0x10, 0x10, 0x10);
-                    vkCmdPushConstants(Frame->CmdBuffer, GizmoPipeline.Layout,
-                                       VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                                       sizeof(Transform), sizeof(Color), &Color);
-                    vkCmdDrawIndexed(Frame->CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
-                }
-            }
         }
 
         pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
