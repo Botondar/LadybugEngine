@@ -81,8 +81,8 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
 
     v2 StartP = { 0.0f, 0.0f };
     v2 CurrentP = StartP;
-    u32 CurrentID = 0;
-    u32 HotID = INVALID_INDEX_U32;
+    u32 CurrentID = 1;
+    u32 HotID = 0;
 
     if (Game->World->SkinnedInstanceCount)
     {
@@ -123,7 +123,7 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
 
             if (GameIO->Keys[SC_MouseLeft].bIsDown == false)
             {
-                Game->Debug.ActiveMenuID = INVALID_INDEX_U32;
+                Game->Debug.ActiveMenuID = 0;
             }
         }
     }
@@ -149,7 +149,7 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
                 MouseInputUsed = true;
             }
 
-            if (Game->Debug.ActiveMenuID == INVALID_INDEX_U32)
+            if (Game->Debug.ActiveMenuID == 0)
             {
                 CurrentColor = HotBackgroundColor;
             }
@@ -180,19 +180,19 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
 
     if (WasReleased(GameIO->Keys[SC_MouseLeft]))
     {
-        if (Game->Debug.ActiveMenuID != INVALID_INDEX_U32)
+        if (Game->Debug.ActiveMenuID != 0)
         {
             if (Game->Debug.ActiveMenuID == HotID)
             {
                 Game->Debug.SelectedMenuID = Game->Debug.ActiveMenuID;
             }
-            Game->Debug.ActiveMenuID = INVALID_INDEX_U32;
+            Game->Debug.ActiveMenuID = 0;
         }
     }
     else if (!GameIO->Keys[SC_MouseLeft].bIsDown)
     {
         // NOTE(boti): throw away the active menu item in case we got into an inconsistent state
-        Game->Debug.ActiveMenuID = INVALID_INDEX_U32;
+        Game->Debug.ActiveMenuID = 0;
     }
 
     CurrentP.x = 0.0f;
