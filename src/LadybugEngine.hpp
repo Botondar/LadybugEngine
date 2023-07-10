@@ -29,8 +29,8 @@
 #include "Debug.hpp"
 #include "Editor.hpp"
 #include "Renderer/Renderer.hpp"
+#include "Asset.hpp"
 
-#include <nvtt/nvtt.h>
 #include <stb/stb_image.h>
 
 // snprintf
@@ -40,29 +40,10 @@
 lbfn frustum FrustumFromCamera(const camera* Camera);
 lbfn bool IntersectFrustum(const frustum* Frustum, const mmbox* Box);
 
-//
-// Mesh
-//
-struct mesh
-{
-    u32 VertexCount;
-    u32 IndexCount;
-    vertex* VertexData;
-    vert_index* IndexData;
-    mmbox Box;
-};
-
 struct mesh_instance
 {
     u32 MeshID;
     m4 Transform;
-};
-
-struct animation_transform
-{
-    v4 Rotation;
-    v3 Position;
-    v3 Scale;
 };
 
 struct skinned_mesh_instance
@@ -73,61 +54,6 @@ struct skinned_mesh_instance
     b32 DoAnimation;
     f32 AnimationCounter;
     m4 Transform;
-};
-
-struct skin
-{
-    static constexpr u32 MaxJointCount = 256;
-    u32 JointCount;
-    m4 InverseBindMatrices[MaxJointCount];
-    animation_transform BindPose[MaxJointCount];
-    u32 JointParents[MaxJointCount];
-};
-
-struct animation_key_frame
-{
-    animation_transform JointTransforms[skin::MaxJointCount];
-};
-
-struct animation
-{
-    u32 SkinID;
-    u32 KeyFrameCount;
-    f32 MinTimestamp;
-    f32 MaxTimestamp;
-    f32* KeyFrameTimestamps;
-    animation_key_frame* KeyFrames;
-};
-
-struct assets
-{
-    memory_arena* Arena;
-
-    texture_id DefaultDiffuseID;
-    texture_id DefaultNormalID;
-    texture_id DefaultMetallicRoughnessID;
-
-    texture_id DefaultFontTextureID;
-    font DefaultFont;
-
-    static constexpr u32 MaxMeshCount = 1u << 16;
-    static constexpr u32 MaxMaterialCount = 1u << 14;
-    static constexpr u32 MaxSkinCount = 1u << 14;
-    static constexpr u32 MaxAnimationCount = 1u << 16;
-    u32 MeshCount;
-    u32 MaterialCount;
-    u32 SkinCount;
-    u32 AnimationCount;
-
-    geometry_buffer_allocation Meshes[MaxMeshCount];
-    mmbox MeshBoxes[MaxMeshCount];
-    u32 MeshMaterialIndices[MaxMeshCount];
-
-    material Materials[MaxMaterialCount];
-
-    skin Skins[MaxSkinCount];
-
-    animation Animations[MaxAnimationCount];
 };
 
 struct game_world
@@ -163,10 +89,6 @@ struct game_state
     game_world* World;
 };
 
-// TODO(boti): move this
-
-static m4 TransformToM4(animation_transform Transform);
-
 struct ray
 {
     v3 P;
@@ -174,24 +96,6 @@ struct ray
 };
 
 static bool IntersectRayBox(ray Ray, v3 P, v3 HalfExtent, m4 Transform, f32 tMax, f32* tOut);
-
-static m4 TransformToM4(animation_transform Transform)
-{
-    m4 Result;
-
-    m4 S = M4(Transform.Scale.x, 0.0f, 0.0f, 0.0f,
-              0.0f, Transform.Scale.y, 0.0f, 0.0f,
-              0.0f, 0.0f, Transform.Scale.z, 0.0f,
-              0.0f, 0.0f, 0.0f, 1.0f);
-    m4 R = QuaternionToM4(Transform.Rotation);
-    m4 T = M4(1.0f, 0.0f, 0.0f, Transform.Position.x,
-              0.0f, 1.0f, 0.0f, Transform.Position.y,
-              0.0f, 0.0f, 1.0f, Transform.Position.z,
-              0.0f, 0.0f, 0.0f, 1.0f);
-
-    Result = T * R * S;
-    return(Result);
-}
 
 static bool IntersectRayBox(ray Ray, v3 P, v3 HalfExtent, m4 Transform, f32 tMax, f32* tOut)
 {
