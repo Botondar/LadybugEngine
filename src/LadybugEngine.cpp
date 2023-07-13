@@ -268,10 +268,16 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
             // Skinned mesh rendering
             {
+                // TODO(boti): The sizes here should be dynamically read from the device
+                constexpr u32 MaxUBOSize = 1 << 16;
+                constexpr u32 UBOAlignment = 0x100;
+
+                u32 JointBufferAlignment = UBOAlignment / sizeof(m4); // Alignment in # of joints
+
                 VkDescriptorSet JointDescriptorSet = 
                     PushBufferDescriptor(Frame, 
                         Renderer->SetLayouts[SetLayout_Skinned], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 
-                        Frame->JointBuffer, 0, 1 << 16); // TODO(boti): The size here should be the UBO size from the device
+                        Frame->JointBuffer, 0, MaxUBOSize); 
 
                 pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Skinned];
                 vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
@@ -342,7 +348,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                     }
                     memcpy(Frame->JointMapping + JointOffset, Pose, Skin->JointCount * sizeof(m4));
                     u32 JointBufferOffset = JointOffset * sizeof(m4);
-                    JointOffset += Skin->JointCount;
+                    JointOffset = Align(JointOffset + Skin->JointCount, JointBufferAlignment);
 
                     geometry_buffer_allocation* Mesh = Assets->Meshes + Instance->MeshID;
                     u32 IndexCount = Mesh->IndexBlock->ByteSize / sizeof(u32);
@@ -785,7 +791,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 0.0f, 0.0f, -1.0f, 0.0f,
                 0.0f, 1.0f, 0.0f, 0.0f,
                 0.0f, 0.0f, 0.0f, 1.0f);
-            LoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, GameIO->DroppedFilename, YUpToZUp);
+            DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, GameIO->DroppedFilename, YUpToZUp);
             GameIO->bHasDroppedFile = false;
         }
         else if (!GameState->World->IsLoaded)
@@ -805,11 +811,11 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                                                0.0f, 0.0f, 1e-2f, 0.0f,
                                                0.0f, 0.0f, 0.0f, 1.0f);
 #endif
-            //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
-            //LoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
-            //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
-            //LoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
-            //LoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Fox/Fox.gltf", BaseTransform);
+            //DEBUGLoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
+            //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
+            //DEBUGLoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
+            //DEBUGLoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
+            //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Fox/Fox.gltf", BaseTransform);
             GameState->World->IsLoaded = true;
         }
 

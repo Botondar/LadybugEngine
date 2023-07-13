@@ -210,7 +210,7 @@ internal bool AddNodeToScene(game_world* World, gltf* GLTF,
 }
 
 // TODO(boti): remove the renderer from here
-internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* World, renderer* Renderer, const char* ScenePath, m4 BaseTransform)
+internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_world* World, renderer* Renderer, const char* ScenePath, m4 BaseTransform)
 {
     constexpr u64 PathBuffSize = 256;
     char PathBuff[PathBuffSize];
