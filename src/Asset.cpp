@@ -127,11 +127,6 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Rendere
 
 internal bool AddNodeToScene(game_world* World, gltf* GLTF, 
                              u32 NodeIndex, m4 Transform, 
-                             u32 BaseMeshIndex);
-
-
-internal bool AddNodeToScene(game_world* World, gltf* GLTF, 
-                             u32 NodeIndex, m4 Transform, 
                              u32 BaseMeshIndex)
 {
     bool Result = true;
@@ -970,8 +965,28 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
                     buffer* TransformBuffer = Buffers + TransformView->BufferIndex;
                     void* SamplerTransformAt = OffsetPtr(TransformBuffer->Data, TransformView->Offset + TransformAccessor->ByteOffset);
                     
-                    // NOTE(boti): Set the inital transform to the first t value if t=0 doesn't exist
-                    if (AnimationAsset->MinTimestamp != 0.0f)
+                    Verify(TimestampAccessor->Count > 0);
+                    Verify(TimestampAccessor->Count == TransformAccessor->Count);
+                    switch (Channel->Target.Path)
+                    {
+                        case GLTF_Rotation:
+                        {
+                            Verify(TransformAccessor->Type == GLTF_VEC4);
+                        } break;
+                        case GLTF_Scale:
+                        case GLTF_Translation:
+                        {
+                            Verify(TransformAccessor->Type == GLTF_VEC3);
+                        } break;
+                        default:
+                        {
+                            UnimplementedCodePath;
+                        } break;
+                    }
+
+                    // NOTE(boti): The initial transform of a joint is _always_ going to be the first element in the accessor,
+                    // _regardless_ of whether the t=0 keyframe exists or not, because the transform is required
+                    // to be clamped to the first one available by the glTF spec
                     {
                         trs_transform* Transform = AnimationAsset->KeyFrames[0].JointTransforms + JointIndex;
                         switch (Channel->Target.Path)
@@ -986,74 +1001,64 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
                         }
                     }
 
-                    u32 CurrentKeyFrameIndex = 0;
-                    Verify(TimestampAccessor->Count == TransformAccessor->Count);
-                    u32 Count = TimestampAccessor->Count;
-
-                    while (Count--)
+                    for (u32 KeyFrameIndex = 1; KeyFrameIndex < KeyFrameCount; KeyFrameIndex++)
                     {
                         f32 Timestamp = *(f32*)SamplerTimestampAt;
+                        f32 CurrentTime = AnimationAsset->KeyFrameTimestamps[KeyFrameIndex];
+                        while (Timestamp < CurrentTime)
+                        {
+                            SamplerTimestampAt = OffsetPtr(SamplerTimestampAt, TimestampView->Stride);
+                            SamplerTransformAt = OffsetPtr(SamplerTransformAt, TransformView->Stride);
+                            Timestamp = *(f32*)SamplerTimestampAt;
+                        }
 
-                        animation_key_frame* KeyFrame = AnimationAsset->KeyFrames + CurrentKeyFrameIndex;
-                        if (Sampler->Interpolation == GLTF_Linear)
+                        trs_transform* Transform = AnimationAsset->KeyFrames[KeyFrameIndex].JointTransforms + JointIndex;
+                        if (CurrentTime < Timestamp)
+                        {
+                            f32 PrevTime = AnimationAsset->KeyFrameTimestamps[KeyFrameIndex - 1];
+                            f32 DeltaTime = Timestamp - PrevTime;
+                            f32 BlendFactor = (CurrentTime - PrevTime) / DeltaTime;
+
+                            trs_transform* PrevTransform = AnimationAsset->KeyFrames[KeyFrameIndex - 1].JointTransforms + JointIndex;
+                            switch (Channel->Target.Path)
+                            {
+                                case GLTF_Rotation:
+                                {
+                                    v4 Rotation = *(v4*)SamplerTransformAt;
+                                    Transform->Rotation = Normalize(Lerp(PrevTransform->Rotation, Rotation, BlendFactor));
+                                } break;
+                                case GLTF_Translation:
+                                {
+                                    v3 Translation = *(v3*)SamplerTransformAt;
+                                    Transform->Position = Lerp(PrevTransform->Position, Translation, BlendFactor);
+                                } break;
+                                case GLTF_Scale:
+                                {
+                                    v3 Scale = *(v3*)SamplerTransformAt;
+                                    Transform->Scale = Lerp(PrevTransform->Scale, Scale, BlendFactor);
+                                } break;
+                                InvalidDefaultCase;
+                            }
+                        }
+                        else
                         {
                             switch (Channel->Target.Path)
                             {
                                 case GLTF_Rotation:
                                 {
-                                    Verify(TransformAccessor->Type == GLTF_VEC4);
-                                    v4 Rotation = *(v4*)SamplerTransformAt;
-                                    if (Timestamp == AnimationAsset->KeyFrameTimestamps[CurrentKeyFrameIndex])
-                                    {
-                                        KeyFrame->JointTransforms[JointIndex].Rotation = Rotation;
-                                        CurrentKeyFrameIndex++;
-                                    }
-                                    else
-                                    {
-                                        UnimplementedCodePath;
-                                    }
+                                    Transform->Rotation = *(v4*)SamplerTransformAt;
                                 } break;
                                 case GLTF_Translation:
                                 {
-                                    Verify(TransformAccessor->Type == GLTF_VEC3);
-                                    v3 Translation = *(v3*)SamplerTransformAt;
-                                    if (Timestamp == AnimationAsset->KeyFrameTimestamps[CurrentKeyFrameIndex])
-                                    {
-                                        KeyFrame->JointTransforms[JointIndex].Position = Translation;
-                                        CurrentKeyFrameIndex++;
-                                    }
-                                    else
-                                    {
-                                        UnimplementedCodePath;
-                                    }
+                                    Transform->Position = *(v3*)SamplerTransformAt;
                                 } break;
                                 case GLTF_Scale:
                                 {
-                                    Verify(TransformAccessor->Type == GLTF_VEC3);
-                                    v3 Scale = *(v3*)SamplerTransformAt;
-                                    if (Timestamp == AnimationAsset->KeyFrameTimestamps[CurrentKeyFrameIndex])
-                                    {
-                                        KeyFrame->JointTransforms[JointIndex].Scale = Scale;
-                                        CurrentKeyFrameIndex++;
-                                    }
-                                    else
-                                    {
-                                        UnimplementedCodePath;
-                                    }
+                                    Transform->Scale = *(v3*)SamplerTransformAt;
                                 } break;
-                                case GLTF_Weights:
-                                {
-                                    UnimplementedCodePath;
-                                } break;
+                                InvalidDefaultCase;
                             }
                         }
-                        else
-                        {
-                            UnimplementedCodePath;
-                        }
-
-                        SamplerTimestampAt = OffsetPtr(SamplerTimestampAt, TimestampView->Stride);
-                        SamplerTransformAt = OffsetPtr(SamplerTransformAt, TransformView->Stride);
                     }
                 }
                 else
@@ -1078,6 +1083,4 @@ internal void LoadTestScene(memory_arena* Scratch, assets* Assets, game_world* W
     {
         AddNodeToScene(World, &GLTF, Scene->RootNodes[RootNodeIt], BaseTransform, BaseMeshIndex);
     }
-
-    World->IsLoaded = true;
 }

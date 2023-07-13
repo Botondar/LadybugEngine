@@ -139,7 +139,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
             {
                 json_object* Obj = &Src->Object;
                 Dst->BufferView = ParseU32(GetElement(Obj, "bufferView"), GLTF_Flags_None, U32_MAX);
-                Dst->ByteOffset = ParseU32(GetElement(Obj, "byteOffset"), GLTF_Flags_None, U32_MAX);
+                Dst->ByteOffset = ParseU32(GetElement(Obj, "byteOffset"), GLTF_Flags_None, 0);
                 Dst->ComponentType = (gltf_component_type)ParseU32(GetElement(Obj, "componentType"), GLTF_Required);
                 Dst->IsNormalized = ParseB32(GetElement(Obj, "normalized"), GLTF_Flags_None, false);
                 Dst->Count = ParseU32(GetElement(Obj, "count"), GLTF_Required);
