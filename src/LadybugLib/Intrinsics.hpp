@@ -18,7 +18,7 @@ LB_INLINE u8 BitScanReverse(u32* Result, u64 Value);
 
 LB_INLINE u32 FindLeastSignificantSetBit(u32 Value)
 {
-    u32 Result = __lzcnt(Value);
+    u32 Result = (u32)_mm_tzcnt_32(Value);
     Result = (Result == 0) ? 32 : Result - 1;
     return(Result);
 }

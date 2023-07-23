@@ -50,6 +50,9 @@ struct render_frame
     frustum CameraFrustum;
     v3 SunV; // World space
 
+    u32 SkinningBufferOffset;
+    VkBuffer SkinningBuffer;
+
     /* Data that will stay the same for the entire duration of the frame
      * Also gets sent to the GPU
      */

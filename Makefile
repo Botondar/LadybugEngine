@@ -14,8 +14,8 @@ WARNINGS = $(WARNINGS_MSVC) $(WARNINGS_CLANG)
 
 CXX_FLAGS = $(COMMON) $(FLOAT_ENV) $(INCLUDES) $(DEFINES) $(WARNINGS)
 
-LINK_FLAGS = -LIBPATH:"$(VULKAN_SDK)/Lib/" -LIBPATH:lib/
-SHADER_FLAGS = -O --target-env=vulkan1.3
+LINK_FLAGS = -INCREMENTAL:NO -LIBPATH:"$(VULKAN_SDK)/Lib/" -LIBPATH:lib/
+SHADER_FLAGS = -g -O --target-env=vulkan1.3 -fhlsl-offsets
 
 LIBS = kernel32.lib user32.lib gdi32.lib Shell32.lib advapi32.lib vulkan-1.lib nvtt30106.lib
 

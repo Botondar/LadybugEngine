@@ -15,8 +15,16 @@
 #include "stb/stb_image.h"
 #pragma warning(pop)
 
-lbfn void RenderMeshes(VkCommandBuffer CmdBuffer, VkPipelineLayout PipelineLayout, 
-                       geometry_buffer* GeometryBuffer, game_state* GameState,
+struct skinned_cmd
+{
+    VkDrawIndexedIndirectCommand Indirect;
+    m4 Transform;
+    material Material;
+};
+
+lbfn void RenderMeshes(render_frame* Frame, game_state* GameState,
+                       VkPipelineLayout PipelineLayout,
+                       u32 SkinnedCommandCount, skinned_cmd* SkinnedCommands,
                        const frustum* Frustum = nullptr, bool DoCulling = false);
 
 lbfn bool IntersectFrustum(const frustum* Frustum, const mmbox* Box)
@@ -46,16 +54,17 @@ lbfn bool IntersectFrustum(const frustum* Frustum, const mmbox* Box)
     return Result;
 }
 
-lbfn void RenderMeshes(VkCommandBuffer CmdBuffer, VkPipelineLayout PipelineLayout, 
-                       geometry_buffer* GeometryBuffer, game_state* GameState,
+lbfn void RenderMeshes(render_frame* Frame, game_state* GameState,
+                       VkPipelineLayout PipelineLayout,
+                       u32 SkinnedCommandCount, skinned_cmd* SkinnedCommands,
                        const frustum* Frustum /*= nullptr*/, bool DoCulling /*= false*/)
 {
     assets* Assets = GameState->Assets;
-    game_world* World = GameState->World;;
+    game_world* World = GameState->World;
 
-    VkDeviceSize Offset = 0;
-    vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &GeometryBuffer->VertexMemory.Buffer, &Offset);
-    vkCmdBindIndexBuffer(CmdBuffer, GeometryBuffer->IndexMemory.Buffer, 0, VK_INDEX_TYPE_UINT32);
+    const VkDeviceSize ZeroOffset = 0;
+    vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Frame->Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
+    vkCmdBindIndexBuffer(Frame->CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, 0, VK_INDEX_TYPE_UINT32);
     for (u32 i = 0; i < World->InstanceCount; i++)
     {
         const mesh_instance* Instance = World->Instances + i;
@@ -81,7 +90,7 @@ lbfn void RenderMeshes(VkCommandBuffer CmdBuffer, VkPipelineLayout PipelineLayou
             PushConstants.Transform = Instance->Transform;
             PushConstants.Material = Assets->Materials[MaterialIndex];
 
-            vkCmdPushConstants(CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
+            vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
                                0, sizeof(PushConstants), &PushConstants);
 
             if (Allocation.IndexBlock)
@@ -89,15 +98,29 @@ lbfn void RenderMeshes(VkCommandBuffer CmdBuffer, VkPipelineLayout PipelineLayou
                 u32 IndexCount = (u32)(Allocation.IndexBlock->ByteSize / sizeof(vert_index));
                 u32 IndexOffset = (u32)(Allocation.IndexBlock->ByteOffset / sizeof(vert_index));
                 u32 VertexOffset = (u32)(Allocation.VertexBlock->ByteOffset / sizeof(vertex));
-                vkCmdDrawIndexed(CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
+                vkCmdDrawIndexed(Frame->CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
             }
             else
             {
                 u32 VertexCount = (u32)(Allocation.VertexBlock->ByteSize / sizeof(vertex));
                 u32 VertexOffset = (u32)(Allocation.VertexBlock->ByteOffset / sizeof(vertex));
-                vkCmdDraw(CmdBuffer, VertexCount, 1, VertexOffset, 0);
+                vkCmdDraw(Frame->CmdBuffer, VertexCount, 1, VertexOffset, 0);
             }
         }
+    }
+
+    vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Frame->SkinningBuffer, &ZeroOffset);
+    for (u32 i = 0; i < SkinnedCommandCount; i++)
+    {
+        skinned_cmd* Cmd = SkinnedCommands + i;
+        push_constants PushConstants = 
+        {
+            .Transform = Cmd->Transform,
+            .Material = Cmd->Material,
+        };
+        vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(PushConstants), &PushConstants);
+        vkCmdDrawIndexed(Frame->CmdBuffer, Cmd->Indirect.indexCount, 1, Cmd->Indirect.firstIndex, Cmd->Indirect.vertexOffset, 0);
     }
 }
 
@@ -107,6 +130,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
     
     game_world* World = GameState->World;
     assets* Assets = GameState->Assets;
+    memory_arena* FrameArena = &GameState->TransientArena;
 
     m4 CameraTransform = GetTransform(&World->Camera);
     m4 ViewTransform = AffineOrthonormalInverse(CameraTransform);
@@ -160,6 +184,239 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         .extent = Renderer->SurfaceExtent,
     };
 
+    // Animation + Skinning
+    u32 SkinnedCmdCount = 0;
+    skinned_cmd* SkinnedCmdList = PushArray<skinned_cmd>(FrameArena, World->SkinnedInstanceCount);
+#if 1
+    {
+        // TODO(boti): The sizes here should be dynamically read from the device
+        constexpr u32 MaxUBOSize = 1 << 16;
+        constexpr u32 UBOAlignment = 0x100;
+        constexpr u32 SSBOAlignment = 0x10;
+        u32 JointBufferAlignment = UBOAlignment / sizeof(m4); // Alignment in # of joints
+
+        VkDescriptorSet JointDescriptorSet = 
+            PushBufferDescriptor(Frame, 
+                                 Renderer->SetLayouts[SetLayout_Skinned], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 
+                                 Frame->JointBuffer, 0, MaxUBOSize); 
+
+        VkDescriptorSet SkinningBuffersDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_Skinning]);
+
+        VkDescriptorBufferInfo DescriptorBufferInfos[] = 
+        {
+            {
+                .buffer = Frame->Renderer->GeometryBuffer.VertexMemory.Buffer,
+                .offset = 0,
+                .range = VK_WHOLE_SIZE,
+            },
+            {
+                .buffer = Frame->SkinningBuffer,
+                .offset = 0,
+                .range = VK_WHOLE_SIZE,
+            },
+        };
+        VkWriteDescriptorSet DescriptorWrites[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = SkinningBuffersDescriptorSet,
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = DescriptorBufferInfos + 0,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = SkinningBuffersDescriptorSet,
+                .dstBinding = 1,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = DescriptorBufferInfos + 1,
+            },
+        };
+        vkUpdateDescriptorSets(VK.Device, CountOf(DescriptorWrites), DescriptorWrites, 0, nullptr);
+
+        pipeline_with_layout SkinningPipeline = Renderer->Pipelines[Pipeline_Skinning];
+        vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Pipeline);
+        vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
+                                0, 1, &SkinningBuffersDescriptorSet,
+                                0, nullptr);
+
+        VkBufferMemoryBarrier2 BeginBarriers[] =
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                .srcAccessMask = VK_ACCESS_2_NONE,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = Frame->SkinningBuffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE,
+            },
+        };
+
+        VkDependencyInfo BeginDependencies = 
+        {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .bufferMemoryBarrierCount = CountOf(BeginBarriers),
+            .pBufferMemoryBarriers = BeginBarriers,
+        };
+        vkCmdPipelineBarrier2(Frame->CmdBuffer, &BeginDependencies);
+
+        u32 JointOffset = 0;
+        for (u32 InstanceIndex = 0; InstanceIndex < World->SkinnedInstanceCount; InstanceIndex++)
+        {
+            skinned_mesh_instance* Instance = World->SkinnedInstances + InstanceIndex;
+            if (Instance->CurrentAnimationID == U32_MAX) continue;
+
+            m4 Transform = Instance->Transform;
+
+            skin* Skin = Assets->Skins + Instance->SkinID;
+            animation* Animation = Assets->Animations + Instance->CurrentAnimationID;
+            Assert(Animation->SkinID == Instance->SkinID);
+
+            if (Instance->DoAnimation)
+            {
+                f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
+                Instance->AnimationCounter += IO->dt;
+                // TODO(boti): modulo
+                while (Instance->AnimationCounter >= LastKeyFrameTimestamp)
+                {
+                    Instance->AnimationCounter -= LastKeyFrameTimestamp;
+                }
+            }
+            
+            u32 NextKeyFrameIndex;
+            for (NextKeyFrameIndex = 0; NextKeyFrameIndex < Animation->KeyFrameCount; NextKeyFrameIndex++)
+            {
+                if (Instance->AnimationCounter < Animation->KeyFrameTimestamps[NextKeyFrameIndex])
+                {
+                    break;
+                }
+            }
+
+            u32 KeyFrameIndex = NextKeyFrameIndex - 1;
+            f32 KeyFrameDelta = Animation->KeyFrameTimestamps[NextKeyFrameIndex] - Animation->KeyFrameTimestamps[KeyFrameIndex];
+            f32 BlendStart = Instance->AnimationCounter - Animation->KeyFrameTimestamps[KeyFrameIndex];
+            f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
+
+            animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
+            animation_key_frame* NextFrame = Animation->KeyFrames + NextKeyFrameIndex;
+
+            m4 Pose[skin::MaxJointCount] = {};
+            for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+            {
+                trs_transform* CurrentTransform = CurrentFrame->JointTransforms + JointIndex;
+                trs_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
+                trs_transform Transform;
+                Transform.Rotation = Normalize(Lerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor));
+                Transform.Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor);
+                Transform.Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor);
+
+                m4 JointTransform = TRSToM4(Transform);
+                u32 ParentIndex = Skin->JointParents[JointIndex];
+                if (ParentIndex != U32_MAX)
+                {
+                    Pose[JointIndex] = Pose[ParentIndex] * JointTransform;
+                }
+                else
+                {
+                    Pose[JointIndex] = JointTransform;
+                }
+            }
+
+            // NOTE(boti): This _cannot_ be folded into the above loop, because the parent transforms must not contain
+            // the inverse bind transform when propagating the transforms down the hierarchy
+            for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+            {
+                Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
+            }
+            memcpy(Frame->JointMapping + JointOffset, Pose, Skin->JointCount * sizeof(m4));
+            u32 JointBufferOffset = JointOffset * sizeof(m4);
+            JointOffset = Align(JointOffset + Skin->JointCount, JointBufferAlignment);
+
+            geometry_buffer_allocation* Mesh = Assets->Meshes + Instance->MeshID;
+            u32 IndexCount = TruncateU64ToU32(Mesh->IndexBlock->ByteSize / sizeof(vert_index));
+            u32 IndexOffset = TruncateU64ToU32(Mesh->IndexBlock->ByteOffset / sizeof(vert_index));
+            u32 VertexOffset = TruncateU64ToU32(Mesh->VertexBlock->ByteOffset / sizeof(vertex));
+            u32 VertexCount = TruncateU64ToU32(Mesh->VertexBlock->ByteSize / sizeof(vertex));
+            u32 SkinningVertexOffset = Frame->SkinningBufferOffset;
+            
+
+            vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
+                                    1, 1, &JointDescriptorSet,
+                                    1, &JointBufferOffset);
+
+            u32 PushConstants[3] = 
+            {
+                VertexOffset,
+                SkinningVertexOffset,
+                VertexCount,
+            };
+            vkCmdPushConstants(Frame->CmdBuffer, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
+                               0, sizeof(PushConstants), PushConstants);
+
+
+            constexpr u32 SkinningGroupSize = 64;
+            vkCmdDispatch(Frame->CmdBuffer, VertexCount / SkinningGroupSize, 1, 1);
+
+            u32 MaterialID = Assets->MeshMaterialIndices[Instance->MeshID];
+            material Material = Assets->Materials[MaterialID];
+
+            SkinnedCmdList[SkinnedCmdCount++] = 
+            {
+                .Indirect = 
+                {
+                    .indexCount = IndexCount,
+                    .instanceCount = 1,
+                    .firstIndex = IndexOffset,
+                    .vertexOffset = (s32)SkinningVertexOffset,
+                    .firstInstance = 0,
+                },
+                .Transform = Instance->Transform,
+                .Material = Material,
+            };
+        }
+
+        VkBufferMemoryBarrier2 EndBarriers[] =
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
+                .dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = Frame->SkinningBuffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE,
+            },
+        };
+
+        VkDependencyInfo EndDependencies = 
+        {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .bufferMemoryBarrierCount = CountOf(EndBarriers),
+            .pBufferMemoryBarriers = EndBarriers,
+        };
+        vkCmdPipelineBarrier2(Frame->CmdBuffer, &EndDependencies);
+    }
+#endif
+
     // 3D render
     {
         const VkDescriptorSet DescriptorSets[] = 
@@ -199,8 +456,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                                sizeof(push_constants), sizeof(u32), &Cascade);
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
                                     0, 3, DescriptorSets, 0, nullptr);
-            RenderMeshes(Frame->CmdBuffer, Pipeline.Layout,
-                         &Renderer->GeometryBuffer, GameState);
+            RenderMeshes(Frame, GameState, Pipeline.Layout, SkinnedCmdCount, SkinnedCmdList);
 
             EndCascade(Frame);
         }
@@ -215,8 +471,8 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                     0, 3, DescriptorSets,
                                     0, nullptr);
-            RenderMeshes(Frame->CmdBuffer, Pipeline.Layout,
-                         &Renderer->GeometryBuffer, GameState,
+            RenderMeshes(Frame, GameState, Pipeline.Layout,
+                         SkinnedCmdCount, SkinnedCmdList,
                          &Frame->CameraFrustum, EnablePrimaryCull);
         }
         EndPrepass(Frame);
@@ -262,113 +518,9 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                                     0, CountOf(DescriptorSets), DescriptorSets,
                                     0, nullptr);
 
-            RenderMeshes(Frame->CmdBuffer, Pipeline.Layout,
-                         &Renderer->GeometryBuffer, GameState,
+            RenderMeshes(Frame, GameState, Pipeline.Layout,
+                         SkinnedCmdCount, SkinnedCmdList,
                          &Frame->CameraFrustum, EnablePrimaryCull);
-
-            // Skinned mesh rendering
-            {
-                // TODO(boti): The sizes here should be dynamically read from the device
-                constexpr u32 MaxUBOSize = 1 << 16;
-                constexpr u32 UBOAlignment = 0x100;
-
-                u32 JointBufferAlignment = UBOAlignment / sizeof(m4); // Alignment in # of joints
-
-                VkDescriptorSet JointDescriptorSet = 
-                    PushBufferDescriptor(Frame, 
-                        Renderer->SetLayouts[SetLayout_Skinned], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 
-                        Frame->JointBuffer, 0, MaxUBOSize); 
-
-                pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Skinned];
-                vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-                vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
-                                        0, 1, &Frame->UniformDescriptorSet,
-                                        0, nullptr);
-
-                u32 JointOffset = 0;
-                for (u32 Index = 0; Index < World->SkinnedInstanceCount; Index++)
-                {
-                    skinned_mesh_instance* Instance = World->SkinnedInstances + Index;
-                    m4 Transform = Instance->Transform;
-                    skin* Skin = Assets->Skins + Instance->SkinID;
-
-                    animation* Animation = Assets->Animations + Instance->CurrentAnimationID;
-
-                    if (Instance->DoAnimation)
-                    {
-                        f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
-                        Instance->AnimationCounter += IO->dt;
-                        while (Instance->AnimationCounter >= LastKeyFrameTimestamp)
-                        {
-                            Instance->AnimationCounter -= LastKeyFrameTimestamp;
-                        }
-                    }
-
-                    u32 NextKeyFrameIndex;
-                    for (NextKeyFrameIndex = 0; NextKeyFrameIndex < Animation->KeyFrameCount; NextKeyFrameIndex++)
-                    {
-                        if (Instance->AnimationCounter < Animation->KeyFrameTimestamps[NextKeyFrameIndex])
-                        {
-                            break;
-                        }
-                    }
-
-                    u32 KeyFrameIndex = NextKeyFrameIndex - 1;
-                    f32 KeyFrameDelta = Animation->KeyFrameTimestamps[NextKeyFrameIndex] - Animation->KeyFrameTimestamps[KeyFrameIndex];
-                    f32 BlendStart = Instance->AnimationCounter - Animation->KeyFrameTimestamps[KeyFrameIndex];
-                    f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
-
-                    animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
-                    animation_key_frame* NextFrame = Animation->KeyFrames + NextKeyFrameIndex;
-
-                    m4 Pose[skin::MaxJointCount] = {};
-                    for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
-                    {
-                        trs_transform* CurrentTransform = CurrentFrame->JointTransforms + JointIndex;
-                        trs_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
-                        trs_transform Transform;
-                        Transform.Rotation = Normalize(Lerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor));
-                        Transform.Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor);
-                        Transform.Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor);
-
-                        m4 JointPose = TRSToM4(Transform);
-                        if (Skin->JointParents[JointIndex] != U32_MAX)
-                        {
-                            Pose[JointIndex] = Pose[Skin->JointParents[JointIndex]] * JointPose;
-                        }
-                        else
-                        {
-                            Pose[JointIndex] = JointPose;
-                        }
-                    }
-
-                    for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
-                    {
-                        Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
-                    }
-                    memcpy(Frame->JointMapping + JointOffset, Pose, Skin->JointCount * sizeof(m4));
-                    u32 JointBufferOffset = JointOffset * sizeof(m4);
-                    JointOffset = Align(JointOffset + Skin->JointCount, JointBufferAlignment);
-
-                    geometry_buffer_allocation* Mesh = Assets->Meshes + Instance->MeshID;
-                    u32 IndexCount = Mesh->IndexBlock->ByteSize / sizeof(u32);
-                    u32 IndexOffset = Mesh->IndexBlock->ByteOffset / sizeof(u32);
-                    u32 VertexOffset = Mesh->VertexBlock->ByteOffset / sizeof(vertex);
-
-                    vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
-                                            1, 1, &JointDescriptorSet,
-                                            1, &JointBufferOffset);
-
-                    u32 MaterialIndex = Assets->MeshMaterialIndices[Instance->MeshID];
-                    material Material = Assets->Materials[MaterialIndex];
-
-                    vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_ALL, 0, sizeof(Transform), &Transform);
-                    vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_ALL, sizeof(Transform), sizeof(Material), &Material);
-
-                    Assert(IndexCount > 0);
-                    vkCmdDrawIndexed(Frame->CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
-                }
-            }
 
             // Render sky
 #if 1
@@ -709,6 +861,16 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     game_state* GameState = Memory->GameState;
     if (!GameState)
     {
+        Platform.DebugPrint("sizeof(vertex) = %d\n", sizeof(vertex));
+        Platform.DebugPrint("\t.P  = %d\n", OffsetOf(vertex, P));
+        Platform.DebugPrint("\t.N  = %d\n", OffsetOf(vertex, N));
+        Platform.DebugPrint("\t.T  = %d\n", OffsetOf(vertex, T));
+        Platform.DebugPrint("\t.TC = %d\n", OffsetOf(vertex, TexCoord));
+        Platform.DebugPrint("\t.W  = %d\n", OffsetOf(vertex, Weights));
+        Platform.DebugPrint("\t.J  = %d\n", OffsetOf(vertex, Joints));
+        Platform.DebugPrint("\t.C  = %d\n", OffsetOf(vertex, Color));
+        Platform.DebugPrint("sizeof(vertex_skin8) = %d\n", sizeof(vertex_skin8));
+
         memory_arena BootstrapArena = InitializeArena(Memory->Size, Memory->Memory);
 
         GameState = Memory->GameState = PushStruct<game_state>(&BootstrapArena);
@@ -815,7 +977,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
             //DEBUGLoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
             //DEBUGLoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
-            //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Fox/Fox.gltf", BaseTransform);
+            DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Fox/Fox.gltf", BaseTransform);
             GameState->World->IsLoaded = true;
         }
 

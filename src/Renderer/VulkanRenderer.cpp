@@ -651,6 +651,106 @@ VkResult CreateRenderer(renderer* Renderer,
             }
         }
 
+        // Skinned mesh buffers
+        {
+            VkBuffer Buffers[renderer::MaxSwapchainImageCount] = {};
+            u32 MemoryTypes = VK.GPUMemTypes;
+            u64 Alignment = 0;
+
+            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+            {
+                VkBufferCreateInfo BufferInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .size = R_SkinningBufferSize,
+                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                    .queueFamilyIndexCount = 0,
+                    .pQueueFamilyIndices = nullptr,
+                };
+
+                Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Buffers[i]);
+                if (Result == VK_SUCCESS)
+                {
+                    VkMemoryRequirements MemoryRequirements = {};
+                    vkGetBufferMemoryRequirements(VK.Device, Buffers[i], &MemoryRequirements);
+                    MemoryTypes &= MemoryRequirements.memoryTypeBits;
+                    Alignment = Max(Alignment, MemoryRequirements.alignment);
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (Result == VK_SUCCESS)
+            {
+                u32 MemoryTypeIndex;
+                if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
+                {
+                    VkMemoryAllocateInfo AllocInfo = 
+                    {
+                        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                        .pNext = nullptr,
+                        .allocationSize = (u64)R_SkinningBufferSize * Renderer->SwapchainImageCount,
+                        .memoryTypeIndex = MemoryTypeIndex,
+                    };
+                    VkDeviceMemory Memory = VK_NULL_HANDLE;
+                    Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Memory);
+                    if (Result == VK_SUCCESS)
+                    {
+                        b32 AllocationFailed = false;
+                        for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+                        {
+                            u64 Offset = (u64)i * R_SkinningBufferSize;
+                            Assert((Offset & (Alignment - 1)) == 0);
+                            Result = vkBindBufferMemory(VK.Device, Buffers[i], Memory, Offset);
+                            if (Result != VK_SUCCESS)
+                            {
+                                break;
+                            }
+                        }
+
+                        if (Result == VK_SUCCESS)
+                        {
+                            Renderer->SkinningMemory = Memory;
+                            Memory = VK_NULL_HANDLE;
+                            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+                            {
+                                Renderer->SkinningBuffers[i] = Buffers[i];
+                                Buffers[i] = VK_NULL_HANDLE;
+                            }
+                        }
+                        else
+                        {
+                            return(Result);
+                        }
+                    }
+                    else
+                    {
+                        return(Result);
+                    }
+
+                    vkFreeMemory(VK.Device, Memory, nullptr);
+                }
+                else
+                {
+                    UnhandledError("No suitable memory type for skinning buffer");
+                }
+            }
+            else
+            {
+                return(Result);
+            }
+
+            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+            {
+                vkDestroyBuffer(VK.Device, Buffers[i], nullptr);
+            }
+        }
+
         // Per frame descriptors
         for (u32 i = 0; i < 2; i++)
         {
@@ -1267,7 +1367,6 @@ lbfn VkResult ResizeRenderTargets(renderer* Renderer)
                     constexpr VkImageUsageFlagBits Sampled = VK_IMAGE_USAGE_SAMPLED_BIT;
                     constexpr VkImageUsageFlagBits Storage = VK_IMAGE_USAGE_STORAGE_BIT;
                     
-#if 1
                     if (i == 0)
                     {
                         Frame->DepthBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
@@ -1286,14 +1385,6 @@ lbfn VkResult ResizeRenderTargets(renderer* Renderer)
                         Frame->OcclusionBuffers[0] = Renderer->Frames[0].OcclusionBuffers[0];
                         Frame->OcclusionBuffers[1] = Renderer->Frames[0].OcclusionBuffers[1];
                     }
-#else
-                    Frame->DepthBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, DEPTH_FORMAT, DepthStencil|Sampled, 1);
-                    Frame->StructureBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, STRUCTURE_BUFFER_FORMAT, Color|Sampled, 1);
-                    Frame->HDRRenderTargets[0] = PushRenderTarget(&Renderer->RenderTargetHeap, HDR_FORMAT, Color|Sampled|Storage, 0);
-                    Frame->HDRRenderTargets[1] = PushRenderTarget(&Renderer->RenderTargetHeap, HDR_FORMAT, Color|Sampled|Storage, 0);
-                    Frame->OcclusionBuffers[0] = PushRenderTarget(&Renderer->RenderTargetHeap, SSAO_FORMAT, Color|Sampled|Storage, 1);
-                    Frame->OcclusionBuffers[1] = PushRenderTarget(&Renderer->RenderTargetHeap, SSAO_FORMAT, Color|Sampled|Storage, 1);
-#endif
                 }
             }
 
@@ -1669,6 +1760,9 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
     Frame->JointCount = 0;
     Frame->JointBuffer = Renderer->PerFrameJointBuffers[FrameID];
     Frame->JointMapping = (m4*)Renderer->PerFrameJointBufferMappings[FrameID];
+
+    Frame->SkinningBufferOffset = 0;
+    Frame->SkinningBuffer = Renderer->SkinningBuffers[FrameID];
 
     vkWaitForFences(VK.Device, 1, &Frame->ImageAcquiredFence, VK_TRUE, UINT64_MAX);
     vkResetFences(VK.Device, 1, &Frame->ImageAcquiredFence);

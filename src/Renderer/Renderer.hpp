@@ -9,12 +9,13 @@
 //
 // Config
 //
-constexpr u64 R_RenderTargetMemorySize  = MiB(320);
-constexpr u64 R_TextureMemorySize       = MiB(1024llu);
-constexpr u64 R_ShadowMapMemorySize     = MiB(256);
-constexpr u32 R_MaxShadowCascadeCount   = 4;
-constexpr u32 R_ShadowResolution        = 2048;
-constexpr u64 R_VertexBufferMaxBlockCount = (1llu << 18);
+constexpr u64 R_RenderTargetMemorySize      = MiB(320);
+constexpr u64 R_TextureMemorySize           = MiB(1024llu);
+constexpr u64 R_ShadowMapMemorySize         = MiB(256);
+constexpr u32 R_MaxShadowCascadeCount       = 4;
+constexpr u32 R_ShadowResolution            = 2048;
+constexpr u64 R_VertexBufferMaxBlockCount   = (1llu << 18);
+constexpr u64 R_SkinningBufferSize          = MiB(128);
 
 //
 // Limits
@@ -606,13 +607,20 @@ typedef u32 vert_index;
 struct vertex
 {
     v3 P;
-    v3 N;
-    v4 T;
-    v2 TexCoord;
-    v4 Weights;
+    alignas(16) v3 N;
+    alignas(16) v4 T;
+    alignas(16) v2 TexCoord;
+    alignas(16) v4 Weights;
     u8 Joints[4];
     rgba8 Color;
 };
+
+struct vertex_skin8
+{
+    v4 Weights;
+    u8 Joints[4];
+};
+typedef vertex_skin8 vertex_skin;
 
 struct ui_vertex
 {

@@ -9,7 +9,7 @@ internal bool CreateGeometryMemory(geometry_memory* Memory, geometry_buffer_type
     bool Result = false;
 
     VkBufferUsageFlags Usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    if      (Type == geometry_buffer_type::Vertex) Usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    if      (Type == geometry_buffer_type::Vertex) Usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     else if (Type == geometry_buffer_type::Index)  Usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
     else InvalidCodePath;
 

@@ -97,6 +97,9 @@ struct renderer
     vulkan_buffer DrawBuffers[MaxSwapchainImageCount];
     vulkan_buffer VertexStacks[MaxSwapchainImageCount];
 
+    VkDeviceMemory SkinningMemory;
+    VkBuffer SkinningBuffers[MaxSwapchainImageCount];
+
     //
     // Pipelines, pipeline layouts and associated descriptor set layouts
     //

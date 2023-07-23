@@ -154,6 +154,8 @@ inline void* OffsetPtr(void* Base, size_t Size)
     return Result;
 }
 
+inline u32 TruncateU64ToU32(u64 Value);
+
 struct buffer
 {
     u64 Size;
@@ -413,6 +415,16 @@ inline m4 QuaternionToM4(v4 Q);
 //
 // Implementations
 //
+
+//
+// Common
+//
+inline u32 TruncateU64ToU32(u64 Value)
+{
+    Assert(Value <= 0xFFFFFFFFllu);
+    u32 Result = (u32)Value;
+    return(Result);
+}
 
 //
 // Memory

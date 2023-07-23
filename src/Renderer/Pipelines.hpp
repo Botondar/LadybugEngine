@@ -1,12 +1,5 @@
 #pragma once
 
-/*
-TODO(boti):
-    - Have our own enums for all Vulkan the enums used here
-    - The UI/Blit pipelines currently use the depth buffer because they get rendered in 
-      the same render-pass as the gizmos. They should probably be moved to a different render-pass.
-*/
-
 enum sampler : u32
 {
     Sampler_None = 0,
@@ -38,6 +31,7 @@ enum descriptor_set_layout : u32
     SetLayout_BloomUpsample,
     SetLayout_SingleCombinedTexturePS,
     SetLayout_Skinned,
+    SetLayout_Skinning, // TODO(boti): rename, this is the pose transform buffer
 
     SetLayout_Count,
 };
@@ -59,6 +53,7 @@ enum pipeline : u32
     Pipeline_SSAOBlur,
     Pipeline_Quad,
     Pipeline_Skinned,
+    Pipeline_Skinning,
 
     Pipeline_Count,
 };

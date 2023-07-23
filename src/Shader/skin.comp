@@ -11,6 +11,9 @@ struct vertex
     v3 N;
     v4 T;
     v2 TC;
+    v4 Weights;
+    u8vec4 Joints;
+    u8vec4 Color;
 };
 
 struct vertex_skin
@@ -21,31 +24,76 @@ struct vertex_skin
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-//layout(push_constant) uniform PushConstants
-//{
-//};
-
-layout(set = 0, binding = 0, std140) writeonly buffer DstVBSSBO
+layout(push_constant) uniform PushConstants
 {
-    vertex Data[];
-} DstVB;
+    uint SrcOffset;
+    uint DstOffset;
+    uint Count;
+};
 
-layout(set = 0, binding = 1, std140) readonly buffer SrcVBSSBO
+layout(set = 0, binding = 0)
+readonly buffer SrcVB_SSBO
 {
     vertex Data[];
 } SrcVB;
 
-layout(set = 0, binding = 2, std140) readonly buffer SrcSkinSSBO
+layout(set = 0, binding = 1) 
+writeonly buffer DstVB_SSBO
 {
-    vertex_skin Data[];
-} SrcSkin;
+    vertex Data[];
+} DstVB;
 
+
+layout(set = 1, binding = 0, std140)
+uniform Skin
+{
+    m4 Joints[1024];
+};
 
 void main()
 {
     uint Index = gl_GlobalInvocationID.x;
-    vertex V = SrcVB.Data[Index];
-    v4 Weights = SrcSkin.Data[Index].Weights;
-    uvec4 Joints = uvec4(SrcSkin.Data[Index].Joints);
-    DstVB.Data[Index] = V;
+
+    if (Index < Count)
+    {
+        v3 InP = SrcVB.Data[SrcOffset + Index].P;
+        v3 InN = SrcVB.Data[SrcOffset + Index].N;
+        v4 InT = SrcVB.Data[SrcOffset + Index].T;
+        v4 Weights = SrcVB.Data[SrcOffset + Index].Weights;
+        uvec4 JointIndices = uvec4(SrcVB.Data[SrcOffset + Index].Joints);
+
+        m4 J0 = Joints[JointIndices[0]];
+        m4 J1 = Joints[JointIndices[1]];
+        m4 J2 = Joints[JointIndices[2]];
+        m4 J3 = Joints[JointIndices[3]];
+
+        v3 P = 
+            Weights[0] * TransformPoint(J0, InP) +
+            Weights[1] * TransformPoint(J1, InP) + 
+            Weights[2] * TransformPoint(J2, InP) +
+            Weights[3] * TransformPoint(J3, InP);
+
+        // TODO(boti): inverse transpose
+        v3 N = 
+            Weights[0] * TransformDirection(J0, InN) +
+            Weights[1] * TransformDirection(J1, InN) +
+            Weights[2] * TransformDirection(J2, InN) +
+            Weights[3] * TransformDirection(J3, InN);
+        N = normalize(N);
+
+        v3 T = 
+            Weights[0] * TransformDirection(J0, InT.xyz) +
+            Weights[1] * TransformDirection(J1, InT.xyz) +
+            Weights[2] * TransformDirection(J2, InT.xyz) +
+            Weights[3] * TransformDirection(J3, InT.xyz);
+        T = normalize(T);
+
+        DstVB.Data[DstOffset + Index].P = P;
+        DstVB.Data[DstOffset + Index].N = N;
+        DstVB.Data[DstOffset + Index].T = vec4(T, InT.w);
+        DstVB.Data[DstOffset + Index].TC      = SrcVB.Data[SrcOffset + Index].TC;
+        DstVB.Data[DstOffset + Index].Weights = SrcVB.Data[SrcOffset + Index].Weights;
+        DstVB.Data[DstOffset + Index].Joints  = SrcVB.Data[SrcOffset + Index].Joints;
+        DstVB.Data[DstOffset + Index].Color   = SrcVB.Data[SrcOffset + Index].Color;
+    }
 }

@@ -53,20 +53,20 @@ VkResult InitializeVulkan(vulkan* Vulkan)
             vkGetPhysicalDeviceProperties(Vulkan->PhysicalDevice, &Vulkan->DeviceProps);
             Assert(Vulkan->DeviceProps.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
 
-            Vulkan->DescriptorIndexingFeatures = 
-            { 
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
-                .pNext = nullptr,
-            };
             Vulkan->Vulkan13Features = 
             {
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-                .pNext = &Vulkan->DescriptorIndexingFeatures,
+                .pNext = nullptr,
+            };
+            Vulkan->Vulkan12Features = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+                .pNext = &Vulkan->Vulkan13Features,
             };
             Vulkan->DeviceFeatures = 
             {
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-                .pNext = &Vulkan->Vulkan13Features,
+                .pNext = &Vulkan->Vulkan12Features,
             };
             
             vkGetPhysicalDeviceFeatures2(Vulkan->PhysicalDevice, &Vulkan->DeviceFeatures);

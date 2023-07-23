@@ -1,6 +1,7 @@
 build/
 data/
 lib/
+tmp/
 *.10x
 *.rdbg
 *.obj

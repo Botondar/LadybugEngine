@@ -33,6 +33,7 @@ struct vulkan
 
     VkPhysicalDeviceFeatures2 DeviceFeatures;
     VkPhysicalDeviceVulkan13Features Vulkan13Features;
+    VkPhysicalDeviceVulkan12Features Vulkan12Features;
     VkPhysicalDeviceDescriptorIndexingFeatures DescriptorIndexingFeatures;
 };
 
