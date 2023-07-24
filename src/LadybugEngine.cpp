@@ -353,28 +353,6 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             u32 SkinningVertexOffset = Frame->SkinningBufferOffset;
             Frame->SkinningBufferOffset += VertexCount;
 
-            if (InstanceIndex != 0)
-            {
-                VkMemoryBarrier2 MemoryBarrier = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-                };
-                VkDependencyInfo MemoryDependency = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .dependencyFlags = 0,
-                    .memoryBarrierCount = 1,
-                    .pMemoryBarriers = &MemoryBarrier,
-                };
-                vkCmdPipelineBarrier2(Frame->CmdBuffer, &MemoryDependency);
-            }
-
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
                                     1, 1, &JointDescriptorSet,
                                     1, &JointBufferOffset);
