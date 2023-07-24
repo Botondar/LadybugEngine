@@ -125,90 +125,6 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Rendere
     RestoreArena(Arena, Checkpoint);
 }
 
-internal bool AddNodeToScene(game_world* World, gltf* GLTF, 
-                             u32 NodeIndex, m4 Transform, 
-                             u32 BaseMeshIndex)
-{
-    bool Result = true;
-
-    if (NodeIndex < GLTF->NodeCount)
-    {
-        gltf_node* Node = GLTF->Nodes + NodeIndex;
-
-        m4 NodeTransform = Node->Transform;
-        if (Node->IsTRS)
-        {
-            m4 S = M4(Node->Scale.x, 0.0f, 0.0f, 0.0f,
-                      0.0f, Node->Scale.y, 0.0f, 0.0f,
-                      0.0f, 0.0f, Node->Scale.z, 0.0f,
-                      0.0f, 0.0f, 0.0f, 1.0f);
-            m4 R = QuaternionToM4(Node->Rotation);
-            m4 T = M4(1.0f, 0.0f, 0.0f, Node->Translation.x,
-                      0.0f, 1.0f, 0.0f, Node->Translation.y,
-                      0.0f, 0.0f, 1.0f, Node->Translation.z,
-                      0.0f, 0.0f, 0.0f, 1.0f);
-            NodeTransform = T * R * S;
-        }
-
-        NodeTransform = Transform * NodeTransform;
-        if (Node->MeshIndex != U32_MAX)
-        {
-            if (Node->MeshIndex >= GLTF->MeshCount) return false;
-            gltf_mesh* Mesh = GLTF->Meshes + Node->MeshIndex;
-
-            // NOTE(boti): Count up the mesh index in _our_ terminology (where each primitive is considered a mesh of its own)
-            u32 MeshOffset = 0;
-            for (u32 i = 0; i < Node->MeshIndex; i++)
-            {
-                MeshOffset += GLTF->Meshes[i].PrimitiveCount;
-            }
-
-            if (Node->SkinIndex == U32_MAX)
-            {
-                for (u32 i = 0; i < Mesh->PrimitiveCount; i++)
-                {
-                    if (World->InstanceCount >= World->MaxInstanceCount) return false;
-                    World->Instances[World->InstanceCount++] = 
-                    {
-                        .MeshID = BaseMeshIndex + (MeshOffset + i),
-                        .Transform = NodeTransform,
-                    };
-                }
-            }
-            else
-            {
-                if (Mesh->PrimitiveCount != 1)
-                {
-                    UnimplementedCodePath;
-                }
-
-                if (World->SkinnedInstanceCount < World->MaxInstanceCount)
-                {
-                    skinned_mesh_instance* Instance = World->SkinnedInstances + World->SkinnedInstanceCount++;
-                    Instance->MeshID = BaseMeshIndex + MeshOffset;
-                    Instance->SkinID = Node->SkinIndex;
-                    Instance->Transform = NodeTransform;
-                }
-                else
-                {
-                    return false;
-                }
-            }
-        }
-
-        for (u32 i = 0; i < Node->ChildrenCount; i++)
-        {
-            Result = AddNodeToScene(World, GLTF, Node->Children[i], NodeTransform, BaseMeshIndex);
-            if (!Result)
-            {
-                break;
-            }
-        }
-    }
-
-    return Result;
-}
-
 // TODO(boti): remove the renderer from here
 internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_world* World, renderer* Renderer, const char* ScenePath, m4 BaseTransform)
 {
@@ -1079,8 +995,99 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
     }
 
     gltf_scene* Scene = GLTF.Scenes + GLTF.DefaultSceneIndex;
-    for (u32 RootNodeIt = 0; RootNodeIt < Scene->RootNodeCount; RootNodeIt++)
+
+    m4* ParentTransforms = PushArray<m4>(Scratch, GLTF.NodeCount);
+    u32* NodeParents = PushArray<u32>(Scratch, GLTF.NodeCount);
+
+    u32 NodeQueueCount = 0;
+    u32* NodeQueue = PushArray<u32>(Scratch, GLTF.NodeCount);
+    for (u32 It = 0; It < Scene->RootNodeCount; It++)
     {
-        AddNodeToScene(World, &GLTF, Scene->RootNodes[RootNodeIt], BaseTransform, BaseMeshIndex);
+        u32 NodeIndex = Scene->RootNodes[It];
+        NodeParents[NodeIndex] = U32_MAX;
+        ParentTransforms[NodeIndex] = BaseTransform;
+        NodeQueue[NodeQueueCount++] = NodeIndex;
+    }
+
+    for (u32 It = 0; It < NodeQueueCount; It++)
+    {
+        u32 NodeIndex = NodeQueue[It];
+        gltf_node* Node = GLTF.Nodes + NodeIndex;
+        u32 Parent = NodeParents[NodeIndex];
+
+        m4 LocalTransform = Node->Transform;
+        if (Node->IsTRS)
+        {
+            trs_transform TRS
+            {
+                .Rotation = Node->Rotation,
+                .Position = Node->Translation,
+                .Scale = Node->Scale,
+            };
+            LocalTransform = TRSToM4(TRS);
+        }
+
+        m4 ParentTransform = ParentTransforms[NodeIndex];
+        m4 NodeTransform = ParentTransform * LocalTransform;
+        for (u32 ChildIt = 0; ChildIt < Node->ChildrenCount; ChildIt++)
+        {
+            u32 ChildIndex = Node->Children[ChildIt];
+            ParentTransforms[ChildIndex] = NodeTransform;
+            NodeQueue[NodeQueueCount++] = ChildIndex;
+        }
+
+        if (Node->MeshIndex != U32_MAX)
+        {
+            Assert(Node->MeshIndex < GLTF.MeshCount);
+            gltf_mesh* Mesh = GLTF.Meshes + Node->MeshIndex;
+
+            // NOTE(boti): Because we treat each primitive as a mesh, we manually
+            // have to figure out what the base ID of said mesh is going to be in the asset storage
+            u32 MeshOffset = 0;
+            for (u32 i = 0; i < Node->MeshIndex; i++)
+            {
+                MeshOffset += GLTF.Meshes[i].PrimitiveCount;
+            }
+
+            if (Node->SkinIndex == U32_MAX)
+            {
+                for (u32 PrimitiveIndex = 0; PrimitiveIndex < Mesh->PrimitiveCount; PrimitiveIndex++)
+                {
+                    if (World->InstanceCount < World->MaxInstanceCount)
+                    {
+                        World->Instances[World->InstanceCount++] =
+                        {
+                            .MeshID = BaseMeshIndex + (MeshOffset + PrimitiveIndex),
+                            .Transform = NodeTransform,
+                        };
+                    }
+                    else
+                    {
+                        UnhandledError("Out of mesh pool");
+                    }
+                }
+            }
+            else
+            {
+                if (Mesh->PrimitiveCount != 1)
+                {
+                    UnimplementedCodePath;
+                }
+
+                if (World->SkinnedInstanceCount < World->MaxInstanceCount)
+                {
+                    World->SkinnedInstances[World->SkinnedInstanceCount++] = 
+                    {
+                        .MeshID = BaseMeshIndex + MeshOffset,
+                        .SkinID = BaseSkinIndex + Node->SkinIndex,
+                        .Transform = NodeTransform,
+                    };
+                }
+                else
+                {
+                    UnhandledError("Out of skinned mesh pool");
+                }
+            }
+        }
     }
 }
