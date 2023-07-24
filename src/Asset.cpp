@@ -1076,10 +1076,28 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
                 if (World->SkinnedInstanceCount < World->MaxInstanceCount)
                 {
+                    u32 MeshID = BaseMeshIndex + MeshOffset;
+                    u32 SkinID = BaseSkinIndex + Node->SkinIndex;
+
+                    // NOTE(boti): set default animation (for debugging!!!)
+                    u32 AnimationID = U32_MAX;
+                    for (u32 AnimationIt = 0; AnimationIt < Assets->AnimationCount; AnimationIt++)
+                    {
+                        animation* Animation = Assets->Animations + AnimationIt;
+                        if (Animation->SkinID == SkinID)
+                        {
+                            AnimationID = AnimationIt;
+                            break;
+                        }
+                    }
+
                     World->SkinnedInstances[World->SkinnedInstanceCount++] = 
                     {
-                        .MeshID = BaseMeshIndex + MeshOffset,
-                        .SkinID = BaseSkinIndex + Node->SkinIndex,
+                        .MeshID = MeshID,
+                        .SkinID = SkinID,
+                        .CurrentAnimationID = AnimationID,
+                        .DoAnimation = true, // NOTE(boti): for debug, default should be false
+                        .AnimationCounter = 0.0f,
                         .Transform = NodeTransform,
                     };
                 }
