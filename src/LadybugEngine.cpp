@@ -63,8 +63,8 @@ lbfn void RenderMeshes(render_frame* Frame, game_state* GameState,
     game_world* World = GameState->World;
 
     const VkDeviceSize ZeroOffset = 0;
+    vkCmdBindIndexBuffer(Frame->CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
     vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Frame->Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
-    vkCmdBindIndexBuffer(Frame->CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, 0, VK_INDEX_TYPE_UINT32);
     for (u32 i = 0; i < World->InstanceCount; i++)
     {
         const mesh_instance* Instance = World->Instances + i;
@@ -708,6 +708,9 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             u32 VertexOffset = (u32)(ArrowMesh.VertexBlock->ByteOffset / sizeof(vertex));
 
             pipeline_with_layout GizmoPipeline = Renderer->Pipelines[Pipeline_Gizmo];
+            const VkDeviceSize ZeroOffset = 0;
+            vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
+            vkCmdBindIndexBuffer(Frame->CmdBuffer, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
 
             auto RenderGizmo = 
                 [Renderer, GizmoPipeline,
@@ -967,17 +970,22 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                                                0.0f, 50.0f, 0.0f, 0.0f,
                                                0.0f, 0.0f, 50.0f, 0.0f,
                                                0.0f, 0.0f, 0.0f, 1.0f);
-#elif 1
+#elif 0
             BaseTransform = BaseTransform * M4(1e-2f, 0.0f, 0.0f, 0.0f,
                                                0.0f, 1e-2f, 0.0f, 0.0f,
                                                0.0f, 0.0f, 1e-2f, 0.0f,
                                                0.0f, 0.0f, 0.0f, 1.0f);
 #endif
-            //DEBUGLoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
-            //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", BaseTransform);
-            //DEBUGLoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", BaseTransform);
-            //DEBUGLoadTestScene(GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
-            DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Fox/Fox.gltf", BaseTransform);
+            //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
+            //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
+            m4 Transform = BaseTransform;
+            DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", Transform);
+            //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", Transform);
+            Transform = BaseTransform * M4(1e-2f, 0.0f, 0.0f, 0.0f,
+                                           0.0f, 1e-2f, 0.0f, 0.0f,
+                                           0.0f, 0.0f, 1e-2f, 0.0f,
+                                           0.0f, 0.0f, 0.0f, 1.0f);
+            DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Fox/Fox.gltf", Transform);
             GameState->World->IsLoaded = true;
         }
 
