@@ -1049,33 +1049,27 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 MeshOffset += GLTF.Meshes[i].PrimitiveCount;
             }
 
-            if (Node->SkinIndex == U32_MAX)
+            if (World->EntityCount + Mesh->PrimitiveCount <= World->MaxEntityCount)
             {
-                for (u32 PrimitiveIndex = 0; PrimitiveIndex < Mesh->PrimitiveCount; PrimitiveIndex++)
+                if (Node->SkinIndex == U32_MAX)
                 {
-                    if (World->InstanceCount < World->MaxInstanceCount)
+                    for (u32 PrimitiveIndex = 0; PrimitiveIndex < Mesh->PrimitiveCount; PrimitiveIndex++)
                     {
-                        World->Instances[World->InstanceCount++] =
+                        World->Entities[World->EntityCount++] = 
                         {
-                            .MeshID = BaseMeshIndex + (MeshOffset + PrimitiveIndex),
+                            .Flags = EntityFlag_Mesh,
                             .Transform = NodeTransform,
+                            .MeshID = BaseMeshIndex + (MeshOffset + PrimitiveIndex),
                         };
                     }
-                    else
+                }
+                else
+                {
+                    if (Mesh->PrimitiveCount != 1)
                     {
-                        UnhandledError("Out of mesh pool");
+                        UnimplementedCodePath;
                     }
-                }
-            }
-            else
-            {
-                if (Mesh->PrimitiveCount != 1)
-                {
-                    UnimplementedCodePath;
-                }
 
-                if (World->SkinnedInstanceCount < World->MaxInstanceCount)
-                {
                     u32 MeshID = BaseMeshIndex + MeshOffset;
                     u32 SkinID = BaseSkinIndex + Node->SkinIndex;
 
@@ -1091,20 +1085,22 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                         }
                     }
 
-                    World->SkinnedInstances[World->SkinnedInstanceCount++] = 
+                    World->Entities[World->EntityCount++] = 
                     {
+                        .Flags = EntityFlag_Mesh|EntityFlag_Skin,
+                        .Transform = NodeTransform,
                         .MeshID = MeshID,
                         .SkinID = SkinID,
                         .CurrentAnimationID = AnimationID,
                         .DoAnimation = true, // NOTE(boti): for debug, default should be false
                         .AnimationCounter = 0.0f,
-                        .Transform = NodeTransform,
+                        
                     };
                 }
-                else
-                {
-                    UnhandledError("Out of skinned mesh pool");
-                }
+            }
+            else
+            {
+                UnhandledError("Out of entity pool");
             }
         }
     }

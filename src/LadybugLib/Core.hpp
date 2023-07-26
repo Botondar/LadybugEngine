@@ -72,6 +72,7 @@ static_assert(sizeof(size_t) == 8);
 #define lbfn static
 
 #define HasFlag(b, f) (((b) & (f)) != 0)
+#define HasAllFlags(b, f) (((b) & (f)) == (f))
 
 // NOTE(boti): The default is 32-bit array count, 
 //             Use CountOf<t>(Array) if you need something else

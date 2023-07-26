@@ -65,54 +65,57 @@ lbfn void RenderMeshes(render_frame* Frame, game_state* GameState,
     const VkDeviceSize ZeroOffset = 0;
     vkCmdBindIndexBuffer(Frame->CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
     vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Frame->Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
-    for (u32 i = 0; i < World->InstanceCount; i++)
+    for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
     {
-        const mesh_instance* Instance = World->Instances + i;
-        geometry_buffer_allocation Allocation = Assets->Meshes[Instance->MeshID];
-        mmbox Box = Assets->MeshBoxes[Instance->MeshID];
-        u32 MaterialIndex = Assets->MeshMaterialIndices[Instance->MeshID];
-
-        v4 BoxMin = Instance->Transform * v4{ Box.Min.x, Box.Min.y, Box.Min.z, 1.0f };
-        v4 BoxMax = Instance->Transform * v4{ Box.Max.x, Box.Max.y, Box.Max.z, 1.0f };
-
-        Box.Min = { BoxMin.x, BoxMin.y, BoxMin.z };
-        Box.Max = { BoxMax.x, BoxMax.y, BoxMax.z };
-
-        bool IsVisible = true;
-        if (DoCulling)
+        entity* Entity = World->Entities + EntityIndex;
+        // NOTE(boti): skinned entites go through a different path
+        if (HasFlag(Entity->Flags, EntityFlag_Mesh) && !HasFlag(Entity->Flags, EntityFlag_Skin))
         {
-            IsVisible = IntersectFrustum(Frustum, &Box);
-        }
+            geometry_buffer_allocation Allocation = Assets->Meshes[Entity->MeshID];
+            mmbox Box = Assets->MeshBoxes[Entity->MeshID];
+            u32 MaterialIndex = Assets->MeshMaterialIndices[Entity->MeshID];
 
-        if (IsVisible)
-        {
-            push_constants PushConstants = {};
-            PushConstants.Transform = Instance->Transform;
-            PushConstants.Material = Assets->Materials[MaterialIndex];
+            v4 BoxMin = Entity->Transform * v4{ Box.Min.x, Box.Min.y, Box.Min.z, 1.0f };
+            v4 BoxMax = Entity->Transform * v4{ Box.Max.x, Box.Max.y, Box.Max.z, 1.0f };
 
-            vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
-                               0, sizeof(PushConstants), &PushConstants);
+            Box.Min = { BoxMin.x, BoxMin.y, BoxMin.z };
+            Box.Max = { BoxMax.x, BoxMax.y, BoxMax.z };
 
-            if (Allocation.IndexBlock)
+            bool IsVisible = true;
+            if (DoCulling)
             {
-                u32 IndexCount = (u32)(Allocation.IndexBlock->ByteSize / sizeof(vert_index));
-                u32 IndexOffset = (u32)(Allocation.IndexBlock->ByteOffset / sizeof(vert_index));
-                u32 VertexOffset = (u32)(Allocation.VertexBlock->ByteOffset / sizeof(vertex));
-                vkCmdDrawIndexed(Frame->CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
+                IsVisible = IntersectFrustum(Frustum, &Box);
             }
-            else
+
+            if (IsVisible)
             {
-                u32 VertexCount = (u32)(Allocation.VertexBlock->ByteSize / sizeof(vertex));
-                u32 VertexOffset = (u32)(Allocation.VertexBlock->ByteOffset / sizeof(vertex));
-                vkCmdDraw(Frame->CmdBuffer, VertexCount, 1, VertexOffset, 0);
+                push_constants PushConstants = {};
+                PushConstants.Transform = Entity->Transform;
+                PushConstants.Material = Assets->Materials[MaterialIndex];
+
+                vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
+                                   0, sizeof(PushConstants), &PushConstants);
+                if (Allocation.IndexBlock)
+                {
+                    u32 IndexCount = (u32)(Allocation.IndexBlock->ByteSize / sizeof(vert_index));
+                    u32 IndexOffset = (u32)(Allocation.IndexBlock->ByteOffset / sizeof(vert_index));
+                    u32 VertexOffset = (u32)(Allocation.VertexBlock->ByteOffset / sizeof(vertex));
+                    vkCmdDrawIndexed(Frame->CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
+                }
+                else
+                {
+                    u32 VertexCount = (u32)(Allocation.VertexBlock->ByteSize / sizeof(vertex));
+                    u32 VertexOffset = (u32)(Allocation.VertexBlock->ByteOffset / sizeof(vertex));
+                    vkCmdDraw(Frame->CmdBuffer, VertexCount, 1, VertexOffset, 0);
+                }
             }
         }
     }
 
     vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Frame->SkinningBuffer, &ZeroOffset);
-    for (u32 i = 0; i < SkinnedCommandCount; i++)
+    for (u32 CmdIndex = 0; CmdIndex < SkinnedCommandCount; CmdIndex++)
     {
-        skinned_cmd* Cmd = SkinnedCommands + i;
+        skinned_cmd* Cmd = SkinnedCommands + CmdIndex;
         push_constants PushConstants = 
         {
             .Transform = Cmd->Transform,
@@ -186,7 +189,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
     // Animation + Skinning
     u32 SkinnedCmdCount = 0;
-    skinned_cmd* SkinnedCmdList = PushArray<skinned_cmd>(FrameArena, World->SkinnedInstanceCount);
+    skinned_cmd* SkinnedCmdList = PushArray<skinned_cmd>(FrameArena, World->EntityCount);
 #if 1
     {
         // TODO(boti): The sizes here should be dynamically read from the device
@@ -274,32 +277,36 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         vkCmdPipelineBarrier2(Frame->CmdBuffer, &BeginDependencies);
 
         u32 JointOffset = 0;
-        for (u32 InstanceIndex = 0; InstanceIndex < World->SkinnedInstanceCount; InstanceIndex++)
+        for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
         {
-            skinned_mesh_instance* Instance = World->SkinnedInstances + InstanceIndex;
-            if (Instance->CurrentAnimationID == U32_MAX) continue;
+            entity* Entity = World->Entities + EntityIndex;
+            if (!HasAllFlags(Entity->Flags, EntityFlag_Mesh|EntityFlag_Skin))
+            {
+                continue;
+            }
+            if (Entity->CurrentAnimationID == U32_MAX) continue;
 
-            m4 Transform = Instance->Transform;
+            m4 Transform = Entity->Transform;
 
-            skin* Skin = Assets->Skins + Instance->SkinID;
-            animation* Animation = Assets->Animations + Instance->CurrentAnimationID;
-            Assert(Animation->SkinID == Instance->SkinID);
+            skin* Skin = Assets->Skins + Entity->SkinID;
+            animation* Animation = Assets->Animations + Entity->CurrentAnimationID;
+            Assert(Animation->SkinID == Entity->SkinID);
 
-            if (Instance->DoAnimation)
+            if (Entity->DoAnimation)
             {
                 f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
-                Instance->AnimationCounter += IO->dt;
+                Entity->AnimationCounter += IO->dt;
                 // TODO(boti): modulo
-                while (Instance->AnimationCounter >= LastKeyFrameTimestamp)
+                while (Entity->AnimationCounter >= LastKeyFrameTimestamp)
                 {
-                    Instance->AnimationCounter -= LastKeyFrameTimestamp;
+                    Entity->AnimationCounter -= LastKeyFrameTimestamp;
                 }
             }
             
             u32 NextKeyFrameIndex;
             for (NextKeyFrameIndex = 0; NextKeyFrameIndex < Animation->KeyFrameCount; NextKeyFrameIndex++)
             {
-                if (Instance->AnimationCounter < Animation->KeyFrameTimestamps[NextKeyFrameIndex])
+                if (Entity->AnimationCounter < Animation->KeyFrameTimestamps[NextKeyFrameIndex])
                 {
                     break;
                 }
@@ -307,7 +314,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
             u32 KeyFrameIndex = NextKeyFrameIndex - 1;
             f32 KeyFrameDelta = Animation->KeyFrameTimestamps[NextKeyFrameIndex] - Animation->KeyFrameTimestamps[KeyFrameIndex];
-            f32 BlendStart = Instance->AnimationCounter - Animation->KeyFrameTimestamps[KeyFrameIndex];
+            f32 BlendStart = Entity->AnimationCounter - Animation->KeyFrameTimestamps[KeyFrameIndex];
             f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
 
             animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
@@ -345,7 +352,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             u32 JointBufferOffset = JointOffset * sizeof(m4);
             JointOffset = Align(JointOffset + Skin->JointCount, JointBufferAlignment);
 
-            geometry_buffer_allocation* Mesh = Assets->Meshes + Instance->MeshID;
+            geometry_buffer_allocation* Mesh = Assets->Meshes + Entity->MeshID;
             u32 IndexCount = TruncateU64ToU32(Mesh->IndexBlock->ByteSize / sizeof(vert_index));
             u32 IndexOffset = TruncateU64ToU32(Mesh->IndexBlock->ByteOffset / sizeof(vert_index));
             u32 VertexOffset = TruncateU64ToU32(Mesh->VertexBlock->ByteOffset / sizeof(vertex));
@@ -370,7 +377,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             constexpr u32 SkinningGroupSize = 64;
             vkCmdDispatch(Frame->CmdBuffer, CeilDiv(VertexCount, SkinningGroupSize), 1, 1);
 
-            u32 MaterialID = Assets->MeshMaterialIndices[Instance->MeshID];
+            u32 MaterialID = Assets->MeshMaterialIndices[Entity->MeshID];
             material Material = Assets->Materials[MaterialID];
 
             SkinnedCmdList[SkinnedCmdCount++] = 
@@ -383,7 +390,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                     .vertexOffset = (s32)SkinningVertexOffset,
                     .firstInstance = 0,
                 },
-                .Transform = Instance->Transform,
+                .Transform = Entity->Transform,
                 .Material = Material,
             };
         }
@@ -789,25 +796,10 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
                                     0, 1, &Frame->UniformDescriptorSet, 
                                     0, nullptr);
-            if (IsValid(GameState->Editor.SelectedEntity))
+            if (IsValid(GameState->Editor.SelectedEntityID))
             {
-                m4 Transform;
-                switch (GameState->Editor.SelectedEntity.Type)
-                {
-                    case Entity_StaticMesh:
-                    {
-                        mesh_instance* Instance = World->Instances + GameState->Editor.SelectedEntity.ID.Value;
-                        Transform = Instance->Transform;
-                    } break;
-                    case Entity_SkinnedMesh:
-                    {
-                        skinned_mesh_instance* Instance = World->SkinnedInstances + GameState->Editor.SelectedEntity.ID.Value;
-                        Transform = Instance->Transform;
-                    } break;
-                    InvalidDefaultCase;
-                }
-                
-                RenderGizmo(Transform, 0.25f);
+                entity* Entity = World->Entities + GameState->Editor.SelectedEntityID.Value;
+                RenderGizmo(Entity->Transform, 0.25f);
             }
         }
 
@@ -1031,29 +1023,31 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         World->SunL = 2.5f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
         World->SunV = Normalize(v3{ -4.0f, 2.5f, 6.0f }); // Direction (towards the sun)
 
-        if (GameState->Assets->AnimationCount && 
-            World->SkinnedInstanceCount)
+        if (IsValid(GameState->Editor.SelectedEntityID))
         {
-            skinned_mesh_instance* Instance = World->SkinnedInstances + 0;
-            if (WasPressed(GameIO->Keys[SC_P]))
+            entity* Entity = World->Entities + GameState->Editor.SelectedEntityID.Value;
+            if (HasFlag(Entity->Flags, EntityFlag_Skin))
             {
-                Instance->DoAnimation = !Instance->DoAnimation;
-            }
-
-            if (WasPressed(GameIO->Keys[SC_0]))
-            {
-                Instance->CurrentAnimationID = 0;
-                Instance->AnimationCounter = 0.0f;
-            }
-            for (u32 Scancode = SC_1; Scancode <= SC_9; Scancode++)
-            {
-                if (WasPressed(GameIO->Keys[Scancode]))
+                if (WasPressed(GameIO->Keys[SC_P]))
                 {
-                    u32 Index = Scancode - SC_1 + 1;
-                    if (Index < GameState->Assets->AnimationCount)
+                    Entity->DoAnimation = !Entity->DoAnimation;
+                }
+
+                if (WasPressed(GameIO->Keys[SC_0]))
+                {
+                    Entity->CurrentAnimationID = 0;
+                    Entity->AnimationCounter = 0.0f;
+                }
+                for (u32 Scancode = SC_1; Scancode <= SC_9; Scancode++)
+                {
+                    if (WasPressed(GameIO->Keys[Scancode]))
                     {
-                        Instance->CurrentAnimationID = Index;
-                        Instance->AnimationCounter = 0.0f;
+                        u32 Index = Scancode - SC_1 + 1;
+                        if (Index < GameState->Assets->AnimationCount)
+                        {
+                            Entity->CurrentAnimationID = Index;
+                            Entity->AnimationCounter = 0.0f;
+                        }
                     }
                 }
             }
