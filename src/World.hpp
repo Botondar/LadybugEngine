@@ -51,14 +51,6 @@ struct game_world
     v3 SunL;
     v3 SunV;
 
-#if 0
-    static constexpr u32 MaxInstanceCount = 1u << 21;
-    u32 InstanceCount;
-    u32 SkinnedInstanceCount;
-    mesh_instance Instances[MaxInstanceCount];
-    skinned_mesh_instance SkinnedInstances[MaxInstanceCount];
-#endif
-
     static constexpr u32 MaxEntityCount = (1u << 21);
     u32 EntityCount;
     entity Entities[MaxEntityCount];
