@@ -789,10 +789,25 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
                                     0, 1, &Frame->UniformDescriptorSet, 
                                     0, nullptr);
-            if (GameState->Editor.SelectedInstanceIndex != INVALID_INDEX_U32)
+            if (IsValid(GameState->Editor.SelectedEntity))
             {
-                mesh_instance* Instance = World->Instances + GameState->Editor.SelectedInstanceIndex;
-                RenderGizmo(Instance->Transform, 0.25f);
+                m4 Transform;
+                switch (GameState->Editor.SelectedEntity.Type)
+                {
+                    case Entity_StaticMesh:
+                    {
+                        mesh_instance* Instance = World->Instances + GameState->Editor.SelectedEntity.ID.Value;
+                        Transform = Instance->Transform;
+                    } break;
+                    case Entity_SkinnedMesh:
+                    {
+                        skinned_mesh_instance* Instance = World->SkinnedInstances + GameState->Editor.SelectedEntity.ID.Value;
+                        Transform = Instance->Transform;
+                    } break;
+                    InvalidDefaultCase;
+                }
+                
+                RenderGizmo(Transform, 0.25f);
             }
         }
 
@@ -987,13 +1002,13 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             m4 Transform = BaseTransform;
             //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
             //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
-            //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", Transform);
+            DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", Transform);
             //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", Transform);
             Transform = BaseTransform * M4(1e-2f, 0.0f, 0.0f, 0.0f,
                                            0.0f, 1e-2f, 0.0f, 0.0f,
                                            0.0f, 0.0f, 1e-2f, 0.0f,
                                            0.0f, 0.0f, 0.0f, 1.0f);
-            //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Fox/Fox.gltf", Transform);
+            DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Fox/Fox.gltf", Transform);
             GameState->World->IsLoaded = true;
         }
 

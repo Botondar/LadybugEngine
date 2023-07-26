@@ -51,7 +51,7 @@ internal mesh CreateArrowMesh(memory_arena* Arena);
 lbfn void InitEditor(game_state* Game, memory_arena* Arena)
 {
     Game->Editor.IsEnabled = false;
-    Game->Editor.SelectedInstanceIndex = INVALID_INDEX_U32;
+    Game->Editor.SelectedEntity = { Entity_Undefined, { INVALID_INDEX_U32 } };
     Game->Editor.Gizmo.Type = Gizmo_Translate;
     Game->Editor.Gizmo.Selection = INVALID_INDEX_U32;
 
@@ -109,7 +109,12 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
     // Intersect the ray with the scene
     if (WasPressed(IO->Keys[SC_MouseRight]))
     {
-        u32 SelectedIndex = INVALID_INDEX_U32;
+        entity_reference SelectedEntity = 
+        {
+            .Type = Entity_Undefined,
+            .ID = { U32_MAX },
+        };
+
         {
             f32 tMax = 1e7f;
             for (u32 i = 0; i < World->InstanceCount; i++)
@@ -123,19 +128,52 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
                 f32 t = 0.0f;
                 if (IntersectRayBox(Ray, BoxP, HalfExtent, Transform, tMax, &t))
                 {
-                    SelectedIndex = i;
+                    SelectedEntity.Type = Entity_StaticMesh;
+                    SelectedEntity.ID = { i };
+                    tMax = t;
+                }
+            }
+
+            for (u32 i = 0; i < World->SkinnedInstanceCount; i++)
+            {
+                skinned_mesh_instance* Instance = World->SkinnedInstances + i;
+                m4 Transform = Instance->Transform;
+                mmbox Box = Assets->MeshBoxes[Instance->MeshID];
+                v3 BoxP = 0.5f * (Box.Min + Box.Max);
+                v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
+
+                f32 t = 0.0f;
+                if (IntersectRayBox(Ray, BoxP, HalfExtent, Transform, tMax, &t))
+                {
+                    SelectedEntity.Type = Entity_SkinnedMesh;
+                    SelectedEntity.ID = { i };
                     tMax = t;
                 }
             }
         }
-        Editor->SelectedInstanceIndex = SelectedIndex;
+        Editor->SelectedEntity = SelectedEntity;
     }
 
     // Intersect the ray with gizmos
-    if (Editor->SelectedInstanceIndex != INVALID_INDEX_U32)
+    if (IsValid(Editor->SelectedEntity))
     {
-        mesh_instance* Instance = World->Instances + Game->Editor.SelectedInstanceIndex;
-        m4 Transform = Instance->Transform;
+        m4* InstanceTransform = nullptr;
+        switch (Editor->SelectedEntity.Type)
+        {
+            case Entity_StaticMesh:
+            {
+                mesh_instance* Instance = World->Instances + Editor->SelectedEntity.ID.Value;
+                InstanceTransform = &Instance->Transform;
+            } break;
+            case Entity_SkinnedMesh:
+            {
+                skinned_mesh_instance* Instance = World->SkinnedInstances + Editor->SelectedEntity.ID.Value;
+                InstanceTransform = &Instance->Transform;
+            } break;
+            InvalidDefaultCase;
+        }
+
+        m4 Transform = *InstanceTransform;
         v3 InstanceP = Transform.P.xyz;
 
         if (Editor->Gizmo.IsGlobal)
@@ -208,9 +246,9 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
             constexpr f32 TranslationSpeed = 1e-2f;
             f32 TranslationAmount = TranslationSpeed * Dot(IO->Mouse.dP, ScreenAxis);
 
-            Instance->Transform.P.x += TranslationAmount*Axes[Editor->Gizmo.Selection].x;
-            Instance->Transform.P.y += TranslationAmount*Axes[Editor->Gizmo.Selection].y;
-            Instance->Transform.P.z += TranslationAmount*Axes[Editor->Gizmo.Selection].z;
+            InstanceTransform->P.x += TranslationAmount*Axes[Editor->Gizmo.Selection].x;
+            InstanceTransform->P.y += TranslationAmount*Axes[Editor->Gizmo.Selection].y;
+            InstanceTransform->P.z += TranslationAmount*Axes[Editor->Gizmo.Selection].z;
 
             IO->Mouse.dP = {}; // Don't propagate the mouse dP to the game
         }

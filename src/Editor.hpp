@@ -35,7 +35,7 @@ struct editor_state
 {
     b32 IsEnabled;
 
-    u32 SelectedInstanceIndex;
+    entity_reference SelectedEntity;
     gizmo Gizmo;
 
     u32 GizmoMeshID;

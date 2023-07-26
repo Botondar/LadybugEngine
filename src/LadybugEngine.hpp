@@ -23,6 +23,39 @@
 #include "LadybugLib/JSON.hpp"
 #include "LadybugLib/glTF.hpp"
 
+struct entity_id
+{
+    u32 Value;
+};
+
+inline b32 IsValid(entity_id ID)
+{
+    b32 Result = (ID.Value != U32_MAX);
+    return(Result);
+}
+
+enum entity_type : u32
+{
+    Entity_Undefined = 0,
+
+    Entity_StaticMesh,
+    Entity_SkinnedMesh,
+
+    Entity_COUNT,
+};
+
+struct entity_reference
+{
+    entity_type Type;
+    entity_id ID;
+};
+
+inline b32 IsValid(entity_reference Ref)
+{
+    b32 Result = (Ref.Type != Entity_Undefined) && IsValid(Ref.ID);
+    return(Result);
+}
+
 #include "Platform.hpp"
 #include "Font.hpp"
 #include "World.hpp"
