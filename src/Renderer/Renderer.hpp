@@ -16,6 +16,7 @@ constexpr u32 R_MaxShadowCascadeCount       = 4;
 constexpr u32 R_ShadowResolution            = 2048;
 constexpr u64 R_VertexBufferMaxBlockCount   = (1llu << 18);
 constexpr u64 R_SkinningBufferSize          = MiB(128);
+constexpr u32 R_MaxLightCount               = 1024;
 
 //
 // Limits
@@ -646,6 +647,13 @@ struct alignas(4) push_constants
     material Material;
 };
 
+// NOTE(boti): point light
+struct light
+{
+    v4 P;
+    v4 E; // NOTE(boti): w is the multiplier
+};
+
 inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
 inline rgba8 PackRGBA(v4 Color);
 inline u32 GetMaxMipCount(u32 Width, u32 Height);
@@ -681,6 +689,11 @@ struct frame_uniform_data
     f32 Padding2;
 
     v2 ScreenSize;
+
+    u32 LightCount;
+    f32 Padding4;
+
+    light Lights[R_MaxLightCount];
 };
 
 struct render_frame;

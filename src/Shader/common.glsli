@@ -9,6 +9,12 @@
 #define m3 mat3
 #define m4 mat4
 
+struct light
+{
+    vec4 P;
+    vec4 E;
+};
+
 struct per_frame
 {
     mat4 CameraTransform;
@@ -32,6 +38,9 @@ struct per_frame
     vec3 SunL;
 
     vec2 ScreenSize;
+    uint LightCount;
+
+    light Lights[1024];
 };
 
 struct material

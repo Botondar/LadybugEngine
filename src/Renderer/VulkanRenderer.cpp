@@ -1905,6 +1905,38 @@ void SetLights(render_frame* Frame, v3 SunDirection, v3 SunLuminance)
     Frame->SunV = SunDirection;
     Frame->Uniforms.SunV = TransformDirection(Frame->Uniforms.ViewTransform, SunDirection);
     Frame->Uniforms.SunL = SunLuminance;
+
+    constexpr f32 LuminanceThreshold = 1e-3f;
+
+    // DEBUG(boti):
+    light Lights[] = 
+    {
+        { {-5.0f, -1.15f, 1.15f, 1.0f }, { 2.0f, 0.8f, 0.2f, 2.0f } },
+        { {+4.0f, -1.15f, 1.15f, 1.0f }, { 2.0f, 0.8f, 0.2f, 2.0f } },
+        { {-5.0f, +1.5f, 1.15f, 1.0f }, { 2.0f, 0.8f, 0.2f, 2.0f } },
+        { {+4.0f, +1.5f, 1.15f, 1.0f }, { 2.0f, 0.8f, 0.2f, 2.0f } },
+    };
+    u32 LightCount = CountOf(Lights);
+
+    memset(Frame->Uniforms.Lights, 0, sizeof(Frame->Uniforms.Lights));
+    Frame->Uniforms.LightCount = LightCount;
+    for (u32 i = 0; i < LightCount; i++)
+    {
+        const light* Light = Lights + i;
+        f32 MaxComponent = Max(Max(Light->E.x, Light->E.y), Light->E.z);
+        f32 E = MaxComponent * Light->E.w;
+        f32 SquareR = E / LuminanceThreshold;
+        f32 R = Sqrt(Max(SquareR, 0.0f));
+
+        v3 ViewP = TransformPoint(Frame->Uniforms.ViewTransform, Light->P.xyz);
+
+
+        Frame->Uniforms.Lights[i] = 
+        {
+            Frame->Uniforms.ViewTransform * Light->P,
+            Light->E,
+        };
+    };
 }
 
 void BeginSceneRendering(render_frame* Frame)

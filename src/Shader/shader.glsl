@@ -271,24 +271,56 @@ void main()
 #endif
 
     vec3 V = normalize(-P);
-    vec3 H = normalize(PerFrame.SunV + V);
-    float VdotH = max(dot(V, H), 0.0);
-
     vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);
-    vec3 Fresnel = FresnelSchlick(F0, VdotH);
-
-    float NdotL = max(dot(PerFrame.SunV, N), 0.0);
-    vec3 Ambient = 5e-1 * Albedo.rgb * ScreenSpaceOcclusion;
-    vec3 Diffuse = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb * NdotL;
-
-    float NdotH = max(dot(N, H), 0.0);
+    vec3 DiffuseBase = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb;
     float NdotV = max(dot(N, V), 0.0);
-    float Distribution = DistributionGGX(Roughness, NdotH);
-    float Geometry = GeometryGGX(Roughness, NdotV, NdotL);
 
-    float SpecularDenominator = max(4.0 * NdotL * NdotV, 1e-4);
-    vec3 Specular = Distribution * Geometry * Fresnel / SpecularDenominator;
-    vec3 Lo = Ambient + Material.Emissive + Shadow * (Diffuse + Specular) * PerFrame.SunL;
+    vec3 Lo = vec3(0.0, 0.0, 0.0);
+    {
+        float NdotL = max(dot(PerFrame.SunV, N), 0.0);
+        vec3 Diffuse = DiffuseBase * NdotL;
+
+        vec3 H = normalize(PerFrame.SunV + V);
+        float VdotH = max(dot(V, H), 0.0);
+        vec3 Fresnel = FresnelSchlick(F0, VdotH);
+
+        float NdotH = max(dot(N, H), 0.0);
+        float Distribution = DistributionGGX(Roughness, NdotH);
+        float Geometry = GeometryGGX(Roughness, NdotV, NdotL);
+
+        float SpecularDenominator = max(4.0 * NdotL * NdotV, 1e-4);
+        vec3 Specular = Distribution * Geometry * Fresnel / SpecularDenominator;
+
+        Lo += Shadow * (Diffuse + Specular) * PerFrame.SunL;
+    }
+
+    for (uint i = 0; i < PerFrame.LightCount; i++)
+    {
+        vec3 L = PerFrame.Lights[i].P.xyz - P;
+        vec3 E = PerFrame.Lights[i].E.xyz * PerFrame.Lights[i].E.w;
+        float d = length(L);
+        float InvD = 1.0 / d;
+        L = L * InvD;
+        float Falloff = InvD*InvD;
+
+        float NdotL = max(dot(L, N), 0.0);
+        vec3 Diffuse = DiffuseBase * NdotL;
+
+        vec3 H = normalize(L + V);
+        float VdotH = max(dot(V, H), 0.0);
+        vec3 Fresnel = FresnelSchlick(F0, VdotH);
+
+        float NdotH = max(dot(N, H), 0.0);
+        float Distribution = DistributionGGX(Roughness, NdotH);
+        float Geometry = GeometryGGX(Roughness, NdotV, NdotL);
+
+        float SpecularDenominator = max(4.0 * NdotL * NdotV, 1e-4);
+        vec3 Specular = Distribution * Geometry * Fresnel / SpecularDenominator;
+        Lo += (Diffuse + Specular) * E * Falloff;
+    }
+
+    vec3 Ambient = 4e-1 * Albedo.rgb * ScreenSpaceOcclusion;
+    Lo += Ambient + Material.Emissive;
 
     Lo = CalculateAtmosphere(Lo);
 
