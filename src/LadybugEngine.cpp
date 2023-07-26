@@ -954,6 +954,36 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
     render_frame* RenderFrame = BeginRenderFrame(GameState->Renderer, GameIO->OutputWidth, GameIO->OutputHeight);
 
+    if (!GameState->World->IsLoaded)
+    {
+        m4 BaseTransform = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                              0.0f, 0.0f, -1.0f, 0.0f,
+                              0.0f, 1.0f, 0.0f, 0.0f,
+                              0.0f, 0.0f, 0.0f, 1.0f);
+#if 0
+        BaseTransform = BaseTransform * M4(50.0f, 0.0f, 0.0f, 0.0f,
+                                           0.0f, 50.0f, 0.0f, 0.0f,
+                                           0.0f, 0.0f, 50.0f, 0.0f,
+                                           0.0f, 0.0f, 0.0f, 1.0f);
+#elif 0
+        BaseTransform = BaseTransform * M4(1e-2f, 0.0f, 0.0f, 0.0f,
+                                           0.0f, 1e-2f, 0.0f, 0.0f,
+                                           0.0f, 0.0f, 1e-2f, 0.0f,
+                                           0.0f, 0.0f, 0.0f, 1.0f);
+#endif
+        m4 Transform = BaseTransform;
+        //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
+        //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
+        DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", Transform);
+        //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", Transform);
+        Transform = BaseTransform * M4(1e-2f, 0.0f, 0.0f, 0.0f,
+                                       0.0f, 1e-2f, 0.0f, 0.0f,
+                                       0.0f, 0.0f, 1e-2f, 0.0f,
+                                       0.0f, 0.0f, 0.0f, 1.0f);
+        DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Fox/Fox.gltf", Transform);
+        GameState->World->IsLoaded = true;
+    }
+
     // Update
     {
         if (GameIO->bHasDroppedFile)
@@ -963,7 +993,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 0.0f, 0.0f, -1.0f, 0.0f,
                 0.0f, 1.0f, 0.0f, 0.0f,
                 0.0f, 0.0f, 0.0f, 1.0f);
-#if 1
+#if 0
             m4 Transform = YUpToZUp;
 #else
             m4 Transform = M4(1e-2f, 0.0f, 0.0f, 5.0f,
@@ -973,35 +1003,6 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 #endif
             DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, GameIO->DroppedFilename, Transform);
             GameIO->bHasDroppedFile = false;
-        }
-        else if (!GameState->World->IsLoaded)
-        {
-            m4 BaseTransform = M4(1.0f, 0.0f, 0.0f, 0.0f,
-                                  0.0f, 0.0f, -1.0f, 0.0f,
-                                  0.0f, 1.0f, 0.0f, 0.0f,
-                                  0.0f, 0.0f, 0.0f, 1.0f);
-#if 0
-            BaseTransform = BaseTransform * M4(50.0f, 0.0f, 0.0f, 0.0f,
-                                               0.0f, 50.0f, 0.0f, 0.0f,
-                                               0.0f, 0.0f, 50.0f, 0.0f,
-                                               0.0f, 0.0f, 0.0f, 1.0f);
-#elif 0
-            BaseTransform = BaseTransform * M4(1e-2f, 0.0f, 0.0f, 0.0f,
-                                               0.0f, 1e-2f, 0.0f, 0.0f,
-                                               0.0f, 0.0f, 1e-2f, 0.0f,
-                                               0.0f, 0.0f, 0.0f, 1.0f);
-#endif
-            m4 Transform = BaseTransform;
-            //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
-            //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
-            DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", Transform);
-            //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", Transform);
-            Transform = BaseTransform * M4(1e-2f, 0.0f, 0.0f, 0.0f,
-                                           0.0f, 1e-2f, 0.0f, 0.0f,
-                                           0.0f, 0.0f, 1e-2f, 0.0f,
-                                           0.0f, 0.0f, 0.0f, 1.0f);
-            DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Fox/Fox.gltf", Transform);
-            GameState->World->IsLoaded = true;
         }
 
         if (DoDebugUI(GameState, GameIO, RenderFrame))
