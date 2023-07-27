@@ -703,7 +703,6 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
 void EndRenderFrame(render_frame* Frame);
 
 void SetRenderCamera(render_frame* Frame, const render_camera* Camera);
-void SetLights(render_frame* Frame, v3 SunDirection, v3 SunLuminance);
 
 void BeginSceneRendering(render_frame* Frame);
 void EndSceneRendering(render_frame* Frame);
