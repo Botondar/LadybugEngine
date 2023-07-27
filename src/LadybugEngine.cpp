@@ -153,15 +153,15 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
     Frame->Uniforms.SunL = World->SunL;
     light Lights[] = 
     {
-        { { -5.0f, -1.15f, 1.2f, 1.0f }, { 2.0f, 0.8f, 0.2f, 2.0f } },
-        { { +4.0f, -1.15f, 1.2f, 1.0f }, { 2.0f, 0.8f, 0.2f, 2.0f } },
-        { { -5.0f, +1.50f, 1.2f, 1.0f }, { 2.0f, 0.8f, 0.2f, 2.0f } },
-        { { +4.0f, +1.50f, 1.2f, 1.0f }, { 2.0f, 0.8f, 0.2f, 2.0f } },
+        { { -4.95f, -1.15f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+        { { +3.90f, -1.15f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+        { { -4.95f, +1.75f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+        { { +3.90f, +1.75f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
 
-        { { +9.0f, +3.50f, 1.15f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
-        { { +9.0f, -3.25f, 1.15f, 1.0f }, { 0.6f, 0.2f, 1.0f, 2.5f } },
-        { { -9.5f, +3.50f, 1.15f, 1.0f }, { 0.4f, 1.0f, 0.4f, 2.5f } },
-        { { -9.5f, -3.25f, 1.15f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
+        { { +8.95f, +3.60f, 1.30f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
+        { { +8.95f, -3.20f, 1.30f, 1.0f }, { 0.6f, 0.2f, 1.0f, 2.5f } },
+        { { -9.65f, +3.60f, 1.30f, 1.0f }, { 0.4f, 1.0f, 0.4f, 2.5f } },
+        { { -9.65f, -3.20f, 1.30f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
     };
     u32 LightCount = CountOf(Lights);
 
@@ -765,17 +765,49 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             vkCmdDraw(Frame->CmdBuffer, 3, 1, 0, 0);
         }
 
-        // Gizmos
+        // 3D debug render
+        const VkDeviceSize ZeroOffset = 0;
+        vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
+        vkCmdBindIndexBuffer(Frame->CmdBuffer, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
+
+        pipeline_with_layout GizmoPipeline = Renderer->Pipelines[Pipeline_Gizmo];
+        vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
+        vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
+                                0, 1, &Frame->UniformDescriptorSet, 
+                                0, nullptr);
+
+        if (GameState->Editor.DrawLights)
+        {
+            geometry_buffer_allocation SphereMesh = Assets->Meshes[Assets->SphereMeshID];
+            u32 IndexCount = (u32)SphereMesh.IndexBlock->ByteSize / sizeof(vert_index);
+            u32 IndexOffset = (u32)SphereMesh.IndexBlock->ByteOffset / sizeof(vert_index);
+            u32 VertexOffset = (u32)SphereMesh.VertexBlock->ByteOffset / sizeof(vertex);
+
+            for (u32 LightIndex = 0; LightIndex < LightCount; LightIndex++)
+            {
+                light* Light = Lights + LightIndex;
+                m4 Transform = M4(1e-1f, 0.0f, 0.0f, Light->P.x,
+                                  0.0f, 1e-1f, 0.0f, Light->P.y,
+                                  0.0f, 0.0f, 1e-1f, Light->P.z,
+                                  0.0f, 0.0f, 0.0f, 1.0f);
+                rgba8 Color = PackRGBA({ Light->E.x, Light->E.y, Light->E.z, 1.0f });
+
+                vkCmdPushConstants(Frame->CmdBuffer, GizmoPipeline.Layout,
+                                   VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                                   0, sizeof(Transform), &Transform);
+                vkCmdPushConstants(Frame->CmdBuffer, GizmoPipeline.Layout,
+                                   VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                                   sizeof(Transform), sizeof(Color), &Color);
+                vkCmdDrawIndexed(Frame->CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
+            }
+        }
+
+        if (GameState->Editor.IsEnabled)
         {
             geometry_buffer_allocation ArrowMesh = Assets->Meshes[GameState->Editor.GizmoMeshID];
             u32 IndexCount = (u32)(ArrowMesh.IndexBlock->ByteSize / sizeof(vert_index));
             u32 IndexOffset = (u32)(ArrowMesh.IndexBlock->ByteOffset / sizeof(vert_index));
             u32 VertexOffset = (u32)(ArrowMesh.VertexBlock->ByteOffset / sizeof(vertex));
-
-            pipeline_with_layout GizmoPipeline = Renderer->Pipelines[Pipeline_Gizmo];
-            const VkDeviceSize ZeroOffset = 0;
-            vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
-            vkCmdBindIndexBuffer(Frame->CmdBuffer, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
 
             auto RenderGizmo = 
                 [Renderer, GizmoPipeline,
@@ -850,10 +882,6 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 }
             };
 
-            vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
-            vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
-                                    0, 1, &Frame->UniformDescriptorSet, 
-                                    0, nullptr);
             if (IsValid(GameState->Editor.SelectedEntityID))
             {
                 entity* Entity = World->Entities + GameState->Editor.SelectedEntityID.Value;

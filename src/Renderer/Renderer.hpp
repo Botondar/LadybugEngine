@@ -730,10 +730,10 @@ inline rgba8 PackRGBA(v4 Color)
 {
     rgba8 Result = 
     {
-        .R = (u8)Round(Color.x * 255.0f),
-        .G = (u8)Round(Color.y * 255.0f),
-        .B = (u8)Round(Color.z * 255.0f),
-        .A = (u8)Round(Color.w * 255.0f),
+        .R = (u8)Round(Clamp(Color.x, 0.0f, 1.0f) * 255.0f),
+        .G = (u8)Round(Clamp(Color.y, 0.0f, 1.0f) * 255.0f),
+        .B = (u8)Round(Clamp(Color.z, 0.0f, 1.0f) * 255.0f),
+        .A = (u8)Round(Clamp(Color.w, 0.0f, 1.0f) * 255.0f),
     };
     return Result;
 }

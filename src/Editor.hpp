@@ -40,6 +40,8 @@ struct editor_state
 
     u32 GizmoMeshID;
     mmbox GizmoMeshBox;
+
+    b32 DrawLights;
 };
 
 lbfn void InitEditor(struct game_state* Game, memory_arena* Arena);

@@ -97,6 +97,11 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
         Editor->Gizmo.IsGlobal = !Editor->Gizmo.IsGlobal;
     }
 
+    if (WasPressed(IO->Keys[SC_L]))
+    {
+        Editor->DrawLights = !Editor->DrawLights;
+    }
+
     game_world* World = Game->World;
     assets* Assets = Game->Assets;
 
