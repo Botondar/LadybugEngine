@@ -51,6 +51,8 @@ struct assets
     texture_id DefaultFontTextureID;
     font DefaultFont;
 
+    u32 SphereMeshID;
+
     static constexpr u32 MaxMeshCount = 1u << 16;
     static constexpr u32 MaxMaterialCount = 1u << 14;
     static constexpr u32 MaxSkinCount = 1u << 14;

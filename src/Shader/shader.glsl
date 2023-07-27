@@ -319,7 +319,7 @@ void main()
         Lo += (Diffuse + Specular) * E * Falloff;
     }
 
-    vec3 Ambient = 4e-1 * Albedo.rgb * ScreenSpaceOcclusion;
+    vec3 Ambient = 3e-1 * Albedo.rgb * ScreenSpaceOcclusion;
     Lo += Ambient + Material.Emissive;
 
     Lo = CalculateAtmosphere(Lo);

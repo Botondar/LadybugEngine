@@ -1022,7 +1022,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
         game_world* World = GameState->World;
         World->SunL = 2.5f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
-        World->SunV = Normalize(v3{ -4.0f, 2.5f, 6.0f }); // Direction (towards the sun)
+        World->SunV = Normalize(v3{ -3.0f, 2.5f, 12.0f }); // Direction (towards the sun)
 
         if (IsValid(GameState->Editor.SelectedEntityID))
         {

@@ -46,6 +46,7 @@ internal line AntiProjectTo(line Line, v3 P)
     return(Result);
 }
 
+internal mesh CreateSphereMesh(memory_arena* Arena);
 internal mesh CreateArrowMesh(memory_arena* Arena);
 
 lbfn void InitEditor(game_state* Game, memory_arena* Arena)
@@ -57,16 +58,28 @@ lbfn void InitEditor(game_state* Game, memory_arena* Arena)
 
     assets* Assets = Game->Assets;
 
-    mesh Mesh = CreateArrowMesh(Arena);
-    geometry_buffer_allocation Allocation = UploadVertexData(Game->Renderer,
-                                                             Mesh.VertexCount, Mesh.VertexData, 
-                                                             Mesh.IndexCount, Mesh.IndexData);
+    mesh ArrowMesh = CreateArrowMesh(Arena);
+    geometry_buffer_allocation ArrowAllocation = UploadVertexData(Game->Renderer,
+        ArrowMesh.VertexCount, ArrowMesh.VertexData, 
+        ArrowMesh.IndexCount, ArrowMesh.IndexData);
+
     Assert(Assets->MeshCount < Assets->MaxMeshCount);
-    u32 MeshID = Game->Editor.GizmoMeshID = Assets->MeshCount++;
-    Game->Editor.GizmoMeshBox = Mesh.Box; // TODO(boti): Why is the bounding box stored separately here?
-    Assets->Meshes[MeshID] = Allocation;
-    Assets->MeshBoxes[MeshID] = {};
-    Assets->MeshMaterialIndices[MeshID] = 0;
+    u32 ArrowMeshID = Game->Editor.GizmoMeshID = Assets->MeshCount++;
+    Game->Editor.GizmoMeshBox = ArrowMesh.Box; // TODO(boti): Why is the bounding box stored separately here?
+    Assets->Meshes[ArrowMeshID] = ArrowAllocation;
+    Assets->MeshBoxes[ArrowMeshID] = ArrowMesh.Box;
+    Assets->MeshMaterialIndices[ArrowMeshID] = 0;
+
+    mesh SphereMesh = CreateSphereMesh(Arena);
+    geometry_buffer_allocation SphereAllocation = UploadVertexData(Game->Renderer,
+        SphereMesh.VertexCount, SphereMesh.VertexData,
+        SphereMesh.IndexCount, SphereMesh.IndexData);
+
+    Assert(Assets->MeshCount < Assets->MaxMeshCount);
+    Assets->SphereMeshID = Assets->MeshCount++;
+    Assets->Meshes[Assets->SphereMeshID] = SphereAllocation;
+    Assets->MeshBoxes[Assets->SphereMeshID] = SphereMesh.Box;
+    Assets->MeshMaterialIndices[Assets->SphereMeshID] = 0;
 }
 
 lbfn void UpdateEditor(game_state* Game, game_io* IO)
@@ -219,6 +232,70 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
             IO->Mouse.dP = {}; // Don't propagate the mouse dP to the game
         }
     }
+}
+
+internal mesh CreateSphereMesh(memory_arena* Arena)
+{
+    mesh Result = {};
+
+    Result.Box = { { -1.0f, -1.0f, -1.0f }, { +1.0f, +1.0f, +1.0f } };
+
+    constexpr u32 XCount = 16;
+    constexpr u32 YCount = 16;
+
+    Result.VertexCount = XCount * YCount;
+    Result.VertexData = PushArray<vertex>(Arena, Result.VertexCount);
+
+    Result.IndexCount = 6 * Result.VertexCount;
+    Result.IndexData = PushArray<u32>(Arena, Result.IndexCount);
+
+    vertex* VertexAt = Result.VertexData;
+    vert_index* IndexAt = Result.IndexData;
+    for (u32 X = 0; X < XCount; X++)
+    {
+        for (u32 Y = 0; Y < YCount; Y++)
+        {
+            f32 U = (f32)X / (f32)XCount;
+            f32 V = (f32)Y / (f32)YCount;
+            
+            f32 Phi = 2.0f * Pi * U;
+            f32 Theta = Pi * V;
+
+            f32 SinPhi = Sin(Phi);
+            f32 CosPhi = Cos(Phi);
+            f32 SinTheta = Sin(Theta);
+            f32 CosTheta = Cos(Theta);
+
+            v3 P = { CosPhi * SinTheta, SinPhi * SinTheta, CosTheta };
+            v3 T = { -SinPhi * SinTheta, CosPhi * SinTheta, CosTheta }; // TODO(boti): verify
+            v3 N = P;
+
+            *VertexAt++ =
+            {
+                .P = P,
+                .N = N,
+                .T = { T.x, T.y, T.z, 1.0f }, 
+                .TexCoord = { U, V },
+                .Weights = {},
+                .Joints = {},
+                .Color = PackRGBA8(0xFF, 0xFF, 0xFF),
+            };
+
+            u32 X0 = X;
+            u32 Y0 = Y;
+            u32 X1 = (X + 1) % XCount;
+            u32 Y1 = (Y + 1) % YCount;
+            *IndexAt++ = X0 + Y0 * XCount;
+            *IndexAt++ = X1 + Y0 * XCount;
+            *IndexAt++ = X0 + Y1 * XCount;
+
+            *IndexAt++ = X1 + Y0 * XCount;
+            *IndexAt++ = X1 + Y1 * XCount;
+            *IndexAt++ = X0 + Y1 * XCount;
+        }
+    }
+
+    return(Result);
 }
 
 internal mesh CreateArrowMesh(memory_arena* Arena)

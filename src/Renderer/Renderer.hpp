@@ -352,9 +352,9 @@ enum rasterizer_flags : flags32
     RS_Flags_None = 0,
 
     RS_DepthClampEnable = (1 << 0),
-    RS_DiscardEnable = (1 << 1),
-    RS_DepthBiasEnable = (1 << 2),
-    RS_FrontCW = (1 << 3),
+    RS_DiscardEnable    = (1 << 1),
+    RS_DepthBiasEnable  = (1 << 2),
+    RS_FrontCW          = (1 << 3),
 };
 
 struct rasterizer_state

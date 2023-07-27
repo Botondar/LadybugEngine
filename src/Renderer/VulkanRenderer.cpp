@@ -1916,18 +1916,19 @@ void SetLights(render_frame* Frame, v3 SunDirection, v3 SunLuminance)
         { { -5.0f, +1.50f, 1.2f, 1.0f }, { 2.0f, 0.8f, 0.2f, 2.0f } },
         { { +4.0f, +1.50f, 1.2f, 1.0f }, { 2.0f, 0.8f, 0.2f, 2.0f } },
 
-        { { +9.0f, +3.50f, 1.15f, 1.0f }, { 0.2f, 0.6f, 1.0f, 1.5f } },
-        { { +9.0f, -3.25f, 1.15f, 1.0f }, { 0.6f, 0.2f, 1.0f, 1.5f } },
-        { { -9.5f, +3.50f, 1.15f, 1.0f }, { 0.4f, 1.0f, 0.4f, 1.5f } },
-        { { -9.5f, -3.25f, 1.15f, 1.0f }, { 0.2f, 0.6f, 1.0f, 1.5f } },
+        { { +9.0f, +3.50f, 1.15f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
+        { { +9.0f, -3.25f, 1.15f, 1.0f }, { 0.6f, 0.2f, 1.0f, 2.5f } },
+        { { -9.5f, +3.50f, 1.15f, 1.0f }, { 0.4f, 1.0f, 0.4f, 2.5f } },
+        { { -9.5f, -3.25f, 1.15f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
     };
     u32 LightCount = CountOf(Lights);
 
     memset(Frame->Uniforms.Lights, 0, sizeof(Frame->Uniforms.Lights));
     Frame->Uniforms.LightCount = LightCount;
-    for (u32 i = 0; i < LightCount; i++)
+    for (u32 LightIndex = 0; LightIndex < LightCount; LightIndex++)
     {
-        const light* Light = Lights + i;
+        light* Light = Lights + LightIndex;
+
         f32 MaxComponent = Max(Max(Light->E.x, Light->E.y), Light->E.z);
         f32 E = MaxComponent * Light->E.w;
         f32 SquareR = E / LuminanceThreshold;
@@ -1935,8 +1936,25 @@ void SetLights(render_frame* Frame, v3 SunDirection, v3 SunLuminance)
 
         v3 ViewP = TransformPoint(Frame->Uniforms.ViewTransform, Light->P.xyz);
 
+        v3 BoundingBox[] = 
+        {
+            ViewP + v3{ -R, -R, -R },
+            ViewP + v3{ +R, -R, -R },
+            ViewP + v3{ +R, +R, -R },
+            ViewP + v3{ -R, +R, -R },
 
-        Frame->Uniforms.Lights[i] = 
+            ViewP + v3{ -R, -R, +R },
+            ViewP + v3{ +R, -R, +R },
+            ViewP + v3{ +R, +R, +R },
+            ViewP + v3{ -R, +R, +R },
+        };
+
+        v2 MinP = { +F32_MAX_NORMAL, +F32_MAX_NORMAL };
+        v2 MaxP = { -F32_MAX_NORMAL, -F32_MAX_NORMAL };
+        //for (u32 )
+
+
+        Frame->Uniforms.Lights[LightIndex] = 
         {
             Frame->Uniforms.ViewTransform * Light->P,
             Light->E,

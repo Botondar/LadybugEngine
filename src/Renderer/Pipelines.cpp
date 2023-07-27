@@ -523,9 +523,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
         {
-            .Flags = RS_Flags_None,
+            .Flags = RS_FrontCW,
             .Fill = Fill_Solid,
-            .CullFlags = Cull_None, // TODO
+            .CullFlags = Cull_Back, // TODO
             .DepthBiasConstantFactor = 0.0f,
             .DepthBiasClamp = 0.0f,
             .DepthBiasSlopeFactor = 0.0f,
@@ -572,9 +572,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
         {
-            .Flags = RS_Flags_None,
+            .Flags = RS_FrontCW,
             .Fill = Fill_Solid,
-            .CullFlags = Cull_None, // TODO
+            .CullFlags = Cull_Back, // TODO
             .DepthBiasConstantFactor = 0.0f,
             .DepthBiasClamp = 0.0f,
             .DepthBiasSlopeFactor = 0.0f,
