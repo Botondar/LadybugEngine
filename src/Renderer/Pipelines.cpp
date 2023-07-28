@@ -448,7 +448,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
-    [SetLayout_Skinned] = 
+    [SetLayout_PoseTransform] = 
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 1,
@@ -972,56 +972,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .DepthAttachment = DEPTH_FORMAT,
         .StencilAttachment = Format_Undefined,
     },
-
-    [Pipeline_Skinned] = 
-    {
-        .Name = "skinned",
-        .Type = PipelineType_Graphics,
-        .Layout = 
-        {
-            .PushConstantRangeCount = 1,
-            .DescriptorSetCount = 2,
-            .PushConstantRanges = 
-            {
-                {
-                    .Stages = PipelineStage_All,
-                    .Size = sizeof(m4) + sizeof(material),
-                    .Offset = 0,
-                },
-            },
-            .DescriptorSets = 
-            { 
-                SetLayout_PerFrameUniformData,
-                SetLayout_Skinned,
-            },
-        },
-
-        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
-        .InputAssemblerState = InputState_skinned,
-        .RasterizerState = 
-        {
-            .Flags = RS_Flags_None,
-            .Fill = Fill_Solid,
-            .CullFlags = Cull_None,
-            .DepthBiasConstantFactor = 0.0f,
-            .DepthBiasClamp = 0.0f,
-            .DepthBiasSlopeFactor = 0.0f,
-        },
-        .DepthStencilState = 
-        {
-            .Flags = DS_DepthTestEnable|DS_DepthWriteEnable,
-            .DepthCompareOp = Compare_LessEqual,
-            .MinDepthBounds = 0.0f,
-            .MaxDepthBounds = 1.0f,
-        },
-        .BlendAttachmentCount = 1,
-        .BlendAttachments = { { .BlendEnable = false }, },
-        .ColorAttachmentCount = 1,
-        .ColorAttachments = { HDR_FORMAT },
-        .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = Format_Undefined,
-    },
-
+    
     [Pipeline_Skinning] = 
     {
         .Name = "skin",
@@ -1041,7 +992,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSets = 
             {
                 SetLayout_Skinning,
-                SetLayout_Skinned,
+                SetLayout_PoseTransform,
             },
         },
         .EnabledStages = PipelineStage_CS,

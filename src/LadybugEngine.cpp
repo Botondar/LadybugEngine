@@ -258,7 +258,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
         VkDescriptorSet JointDescriptorSet = 
             PushBufferDescriptor(Frame, 
-                                 Renderer->SetLayouts[SetLayout_Skinned], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 
+                                 Renderer->SetLayouts[SetLayout_PoseTransform], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 
                                  Frame->JointBuffer, 0, MaxUBOSize); 
 
         VkDescriptorSet SkinningBuffersDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_Skinning]);

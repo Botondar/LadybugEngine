@@ -30,8 +30,8 @@ enum descriptor_set_layout : u32
     SetLayout_Blit,
     SetLayout_BloomUpsample,
     SetLayout_SingleCombinedTexturePS,
-    SetLayout_Skinned,
-    SetLayout_Skinning, // TODO(boti): rename, this is the pose transform buffer
+    SetLayout_PoseTransform,
+    SetLayout_Skinning, 
 
     SetLayout_Count,
 };
@@ -52,7 +52,6 @@ enum pipeline : u32
     Pipeline_SSAO,
     Pipeline_SSAOBlur,
     Pipeline_Quad,
-    Pipeline_Skinned,
     Pipeline_Skinning,
 
     Pipeline_Count,
