@@ -57,19 +57,100 @@ VkResult InitializeVulkan(vulkan* Vulkan)
             {
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
                 .pNext = nullptr,
+
+                .robustImageAccess = VK_TRUE,
+                .inlineUniformBlock = VK_TRUE,
+                .descriptorBindingInlineUniformBlockUpdateAfterBind = VK_TRUE,
+                .synchronization2 = VK_TRUE,
+                .shaderZeroInitializeWorkgroupMemory = VK_TRUE,
+                .dynamicRendering = VK_TRUE,
+                .maintenance4 = VK_TRUE,
             };
             Vulkan->Vulkan12Features = 
             {
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
                 .pNext = &Vulkan->Vulkan13Features,
+
+                .drawIndirectCount = VK_TRUE,
+                .storageBuffer8BitAccess = VK_TRUE,
+                .uniformAndStorageBuffer8BitAccess = VK_TRUE,
+                .descriptorIndexing = VK_TRUE,
+                .shaderUniformTexelBufferArrayDynamicIndexing = VK_TRUE,
+                .shaderStorageTexelBufferArrayDynamicIndexing = VK_TRUE,
+                .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
+                .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+                .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
+                .shaderStorageImageArrayNonUniformIndexing = VK_TRUE,
+                .shaderUniformTexelBufferArrayNonUniformIndexing = VK_TRUE,
+                .shaderStorageTexelBufferArrayNonUniformIndexing = VK_TRUE,
+                //.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE,
+                .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
+                .descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE,
+                .descriptorBindingUniformTexelBufferUpdateAfterBind = VK_TRUE,
+                .descriptorBindingStorageTexelBufferUpdateAfterBind = VK_TRUE,
+                .descriptorBindingUpdateUnusedWhilePending = VK_TRUE,
+                .descriptorBindingPartiallyBound = VK_TRUE,
+                .descriptorBindingVariableDescriptorCount = VK_TRUE,
+                .runtimeDescriptorArray = VK_TRUE,
+                .scalarBlockLayout = VK_TRUE,
+                .imagelessFramebuffer = VK_TRUE,
+                .uniformBufferStandardLayout = VK_TRUE,
+                .separateDepthStencilLayouts = VK_TRUE,
+                .hostQueryReset = VK_TRUE,
+                .timelineSemaphore = VK_TRUE,
+                .bufferDeviceAddress = VK_TRUE,
+                .bufferDeviceAddressCaptureReplay = VK_TRUE,
+                .vulkanMemoryModel = VK_TRUE,
+                .shaderOutputViewportIndex = VK_TRUE,
+                .shaderOutputLayer = VK_TRUE,
+                .subgroupBroadcastDynamicId = VK_TRUE,
+            };
+            Vulkan->Vulkan11Features = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+                .pNext = &Vulkan->Vulkan12Features,
+
+                .storageBuffer16BitAccess = VK_TRUE,
+                .uniformAndStorageBuffer16BitAccess = VK_TRUE,
+                .shaderDrawParameters = VK_TRUE,
             };
             Vulkan->DeviceFeatures = 
             {
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-                .pNext = &Vulkan->Vulkan12Features,
+                .pNext = &Vulkan->Vulkan11Features,
+                .features = 
+                {
+                    .robustBufferAccess = VK_TRUE,
+                    .fullDrawIndexUint32 = VK_TRUE,
+                    .multiDrawIndirect = VK_TRUE,
+                    .drawIndirectFirstInstance = VK_TRUE,
+                    .depthClamp = VK_TRUE,
+                    .depthBiasClamp = VK_TRUE,
+                    .depthBounds = VK_TRUE,
+                    .alphaToOne = VK_TRUE,
+                    .samplerAnisotropy = VK_TRUE,
+                    .textureCompressionBC = VK_TRUE,
+                    .pipelineStatisticsQuery = VK_TRUE,
+                    .fragmentStoresAndAtomics = VK_TRUE,
+                    .shaderImageGatherExtended = VK_TRUE,
+                    .shaderStorageImageExtendedFormats = VK_TRUE,
+                    .shaderStorageImageMultisample = VK_TRUE,
+                    .shaderStorageImageReadWithoutFormat = VK_TRUE,
+                    .shaderStorageImageWriteWithoutFormat = VK_TRUE,
+                    .shaderUniformBufferArrayDynamicIndexing = VK_TRUE,
+                    .shaderSampledImageArrayDynamicIndexing = VK_TRUE,
+                    .shaderStorageBufferArrayDynamicIndexing = VK_TRUE,
+                    .shaderResourceResidency = VK_TRUE,
+                    .shaderResourceMinLod = VK_TRUE,
+                    .sparseBinding = VK_TRUE,
+                    .sparseResidencyBuffer = VK_TRUE,
+                    .sparseResidencyImage2D = VK_TRUE,
+                    .sparseResidencyImage3D = VK_TRUE,
+                    .sparseResidencyAliased = VK_TRUE,
+                },
             };
             
-            vkGetPhysicalDeviceFeatures2(Vulkan->PhysicalDevice, &Vulkan->DeviceFeatures);
+            //vkGetPhysicalDeviceFeatures2(Vulkan->PhysicalDevice, &Vulkan->DeviceFeatures);
 
             // TODO(boti): This code is incorrect on shared memory devices
             vkGetPhysicalDeviceMemoryProperties(Vulkan->PhysicalDevice, &Vulkan->MemoryProps);
