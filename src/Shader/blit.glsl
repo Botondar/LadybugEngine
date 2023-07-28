@@ -85,7 +85,7 @@ void main()
     //float BloomStrength = 0.25;
     Sample = mix(Sample, SampleBloom, BloomStrength);
 
-    float Exposure = 0.75;
+    float Exposure = 0.55;
 #if 0
     Sample = vec3(1.0) - exp(-Sample * Exposure);
 #elif 0
