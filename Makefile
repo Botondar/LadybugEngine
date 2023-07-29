@@ -32,8 +32,7 @@ SHADERS = build/blit.vs build/blit.fs build/shader.vs build/shader.fs build/prep
     build/downsample_bloom.cs build/upsample_bloom.cs build/ssao.cs build/ssao_blur.cs \
     build/fx.vs build/fx.fs \
     build/quad.vs build/quad.fs \
-    build/skin.cs \
-    build/skinned.vs build/skinned.fs
+    build/skin.cs
 
 all: "$(OUT)/Win_LadybugEngine.exe" "$(OUT)/game.dll" "$(OUT)/renderer.obj" $(SHADERS)
 
