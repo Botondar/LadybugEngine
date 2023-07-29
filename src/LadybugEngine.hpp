@@ -4,12 +4,6 @@
 - Render pass cleanup:
     - Certain render passes (SSAO, Bloom, etc.) should have struct definitions that
       contain their inputs/parameters, descriptor definitions, etc.
-- Animation:
-    - Separate vertex buffer in the geometry heap for animated meshes
-    - Skinning pass on GPU: 
-        - Writes data into the static geometry vertex buffer w/o joint 
-          weights/indices (specialized section in vertbuffer?)
-    - Skinned mesh data can be referenced as static geometry
 - Decals
 - Multiple lights/shadows
 - Visibility buffer rendering
