@@ -197,15 +197,6 @@ mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Fo
 // Rendering
 //
 
-void RenderVertexBlock(render_frame* Frame, render_flags Flags, 
-                       geometry_buffer_allocation* Block, m4 Transform, material* Material)
-{
-    if (HasFlag(Flags, Render_Skinned))
-    {
-        UnimplementedCodePath;
-    }
-}
-
 void BeginPrepass(render_frame* Frame)
 {
     VkImageMemoryBarrier2 BeginBarriers[] = 
