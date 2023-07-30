@@ -35,7 +35,6 @@ struct vulkan
     VkPhysicalDeviceVulkan13Features Vulkan13Features;
     VkPhysicalDeviceVulkan12Features Vulkan12Features;
     VkPhysicalDeviceVulkan11Features Vulkan11Features;
-    VkPhysicalDeviceDescriptorIndexingFeatures DescriptorIndexingFeatures;
 };
 
 VkResult InitializeVulkan(vulkan* Vulkan);
