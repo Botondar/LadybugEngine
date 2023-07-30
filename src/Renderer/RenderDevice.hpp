@@ -22,6 +22,17 @@ struct vulkan
     u32 BARMemTypes;
     u32 SharedMemTypes;
 
+    f32 TimestampPeriod;
+
+    u64 TexelBufferAlignment;
+    u64 ConstantBufferAlignment;
+    u64 StorageBufferAlignment;
+
+    u64 MaxTexelBufferCount;
+    u64 MaxConstantBufferByteSize;
+    u64 MaxStorageBufferByteSize;
+    u64 MaxPushConstantByteSize;
+
     //
     // Info
     //
@@ -35,6 +46,8 @@ struct vulkan
     VkPhysicalDeviceVulkan13Features Vulkan13Features;
     VkPhysicalDeviceVulkan12Features Vulkan12Features;
     VkPhysicalDeviceVulkan11Features Vulkan11Features;
+
+    VkPhysicalDeviceLimits Limits;
 };
 
 VkResult InitializeVulkan(vulkan* Vulkan);

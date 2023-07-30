@@ -250,10 +250,8 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
     skinned_cmd* SkinnedCmdList = PushArray<skinned_cmd>(FrameArena, World->EntityCount);
 #if 1
     {
-        // TODO(boti): The sizes here should be dynamically read from the device
-        constexpr u32 MaxUBOSize = 1 << 16;
-        constexpr u32 UBOAlignment = 0x100;
-        constexpr u32 SSBOAlignment = 0x10;
+        u32 MaxUBOSize = (u32)VK.MaxConstantBufferByteSize;
+        u32 UBOAlignment = (u32)VK.ConstantBufferAlignment;
         u32 JointBufferAlignment = UBOAlignment / sizeof(m4); // Alignment in # of joints
 
         VkDescriptorSet JointDescriptorSet = 

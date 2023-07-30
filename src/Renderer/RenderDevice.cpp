@@ -51,7 +51,30 @@ VkResult InitializeVulkan(vulkan* Vulkan)
             // TODO(boti): device selection
             Vulkan->PhysicalDevice = PhysicalDevices[0];
             vkGetPhysicalDeviceProperties(Vulkan->PhysicalDevice, &Vulkan->DeviceProps);
-            Assert(Vulkan->DeviceProps.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
+            if (Vulkan->DeviceProps.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+            {
+                UnimplementedCodePath;
+            }
+
+            Vulkan->TimestampPeriod = Vulkan->DeviceProps.limits.timestampPeriod;
+
+            Vulkan->TexelBufferAlignment = Vulkan->DeviceProps.limits.minTexelBufferOffsetAlignment;
+            Vulkan->ConstantBufferAlignment = Vulkan->DeviceProps.limits.minUniformBufferOffsetAlignment;
+            Vulkan->StorageBufferAlignment = Vulkan->DeviceProps.limits.minStorageBufferOffsetAlignment;
+
+            Vulkan->MaxTexelBufferCount = Vulkan->DeviceProps.limits.maxTexelBufferElements;
+            Vulkan->MaxConstantBufferByteSize = Vulkan->DeviceProps.limits.maxUniformBufferRange;
+            Vulkan->MaxStorageBufferByteSize = Vulkan->DeviceProps.limits.maxStorageBufferRange;
+            Vulkan->MaxPushConstantByteSize = Vulkan->DeviceProps.limits.maxPushConstantsSize;
+
+            if (Vulkan->MaxPushConstantByteSize < 256)
+            {
+                UnimplementedCodePath;
+            }
+            if (Vulkan->MaxConstantBufferByteSize < (1 << 16))
+            {
+                UnimplementedCodePath;
+            }
 
             Vulkan->Vulkan13Features = 
             {
@@ -149,8 +172,6 @@ VkResult InitializeVulkan(vulkan* Vulkan)
                     .sparseResidencyAliased = VK_TRUE,
                 },
             };
-            
-            //vkGetPhysicalDeviceFeatures2(Vulkan->PhysicalDevice, &Vulkan->DeviceFeatures);
 
             // TODO(boti): This code is incorrect on shared memory devices
             vkGetPhysicalDeviceMemoryProperties(Vulkan->PhysicalDevice, &Vulkan->MemoryProps);
