@@ -30,6 +30,7 @@ enum descriptor_set_layout : u32
     SetLayout_Blit,
     SetLayout_BloomUpsample,
     SetLayout_SingleCombinedTexturePS,
+    SetLayout_ParticleBuffer,
     SetLayout_PoseTransform,
     SetLayout_Skinning, 
 

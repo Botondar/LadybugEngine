@@ -38,8 +38,8 @@ struct per_frame
     vec3 SunL;
 
     vec2 ScreenSize;
-    uint LightCount;
 
+    uint LightCount;
     light Lights[1024];
 };
 

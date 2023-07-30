@@ -448,6 +448,22 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         },
     },
 
+    [SetLayout_ParticleBuffer] = 
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = Descriptor_StorageBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_VS,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
+
     [SetLayout_PoseTransform] = 
     {
         .Flags = SetLayoutFlag_None,
@@ -933,17 +949,14 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Graphics,
         .Layout = 
         {
-            .PushConstantRangeCount = 1,
-            .DescriptorSetCount = 0,
-            .PushConstantRanges = 
-            { 
-                {
-                    .Stages = PipelineStage_All,
-                    .Size = 2 * sizeof(v2) + sizeof(v3),
-                    .Offset = 0,
-                },
+            .PushConstantRangeCount = 0,
+            .DescriptorSetCount = 2,
+            .PushConstantRanges = {},
+            .DescriptorSets = 
+            {
+                SetLayout_PerFrameUniformData,
+                SetLayout_ParticleBuffer,
             },
-            .DescriptorSets = {},
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = 

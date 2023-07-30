@@ -1,36 +1,53 @@
 #version 460 core
 
-layout(push_constant) uniform PushConstants
+#include "common.glsli"
+
+layout(set = 0, binding = 0) uniform PerFrameBlock
 {
-    vec2 P;
-    vec2 HalfExtent;
-    vec3 Color;
+    per_frame PerFrame;
 };
 
 #if defined(VS)
+
+layout(set = 1, binding = 0) buffer VertexBlock
+{
+    vec3 VertexData[];
+};
+
+layout(location = 0) out vec2 TexCoord;
+
 void main()
 {
-    vec2 VertexData[4] = 
+    vec3 BaseVertices[4] = 
     {
-        vec2(-1.0, +1.0),
-        vec2(+1.0, +1.0),
-        vec2(-1.0, -1.0),
-        vec2(+1.0, -1.0),
+        vec3(-1.0, +1.0, 0.0),
+        vec3(+1.0, +1.0, 0.0),
+        vec3(-1.0, -1.0, 0.0),
+        vec3(+1.0, -1.0, 0.0),
     };
     uint IndexData[6] = 
     {
-        0, 1, 2, 
+        0, 1, 2,
         1, 3, 2,
     };
 
-    vec2 Vertex = VertexData[IndexData[gl_VertexIndex]];
-    gl_Position = vec4(HalfExtent * Vertex + P, 0.0, 1.0);
+    uint GlobalIndex = gl_VertexIndex / 6;
+    uint LocalIndex = gl_VertexIndex % 6;
+
+    vec3 BaseVertex = BaseVertices[IndexData[LocalIndex]];
+    vec3 Vertex = BaseVertex + TransformPoint(PerFrame.View, VertexData[GlobalIndex]);
+
+    TexCoord = 0.5 * (BaseVertex.xy + vec2(1.0, 1.0));
+    gl_Position = PerFrame.Projection * vec4(Vertex, 1.0);
 }
 #else
+
+layout(location = 0) in vec2 TexCoord;
+
 layout(location = 0) out vec4 Target0;
 
 void main()
 {
-    Target0 = vec4(Color, 1.0);
+    Target0 = vec4(TexCoord, 0.0, 1.0);
 }
 #endif
