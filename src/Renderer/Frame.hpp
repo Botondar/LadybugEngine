@@ -41,9 +41,9 @@ struct render_frame
     void* PerFrameUniformMemory;
 
     static constexpr u32 MaxParticleCount = (1u << 18);
-    u32 ParticleCount;
     VkBuffer ParticleBuffer;
-    v3* ParticleMapping;
+    u32 ParticleCount;
+    v3* Particles;
 
     static constexpr u32 MaxJointCount = (1u << 17);
     u32 JointCount;

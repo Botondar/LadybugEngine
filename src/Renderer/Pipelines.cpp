@@ -974,7 +974,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         },
         .DepthStencilState = 
         {
-            .Flags = DS_Flags_None,
+            .Flags = DS_DepthTestEnable,
+            .DepthCompareOp = Compare_Less,
             .MinDepthBounds = 0.0f,
             .MaxDepthBounds = 1.0f,
         },

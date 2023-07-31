@@ -1749,7 +1749,7 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
 
     Frame->ParticleCount = 0;
     Frame->ParticleBuffer = Renderer->PerFrameParticleBuffers[FrameID];
-    Frame->ParticleMapping = (v3*)Renderer->PerFrameParticleBufferMappings[FrameID];
+    Frame->Particles = (v3*)Renderer->PerFrameParticleBufferMappings[FrameID];
 
     Frame->JointCount = 0;
     Frame->JointBuffer = Renderer->PerFrameJointBuffers[FrameID];

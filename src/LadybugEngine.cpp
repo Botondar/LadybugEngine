@@ -591,10 +591,33 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
                 vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
                 vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Layout, 
-                                        0, 1, &Frame->UniformDescriptorSet, 0, nullptr);
+                                        0, 1, &Frame->UniformDescriptorSet, 
+                                        0, nullptr);
                 vkCmdDraw(Frame->CmdBuffer, 3, 1, 0, 0);
             }
 #endif
+
+            // Particles
+            {
+                Frame->Particles[Frame->ParticleCount++] = { 0.0f, 0.0f, 0.5f };
+
+
+                VkDescriptorSet ParticleBufferDescriptor = 
+                    PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_ParticleBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                                         Frame->ParticleBuffer, 0, VK_WHOLE_SIZE);
+                VkDescriptorSet ParticleDescriptorSets[] = 
+                {
+                    Frame->UniformDescriptorSet,
+                    ParticleBufferDescriptor,
+                };
+
+                pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
+                vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
+                vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
+                                        0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
+                                        0, nullptr);
+                vkCmdDraw(Frame->CmdBuffer, 6 * Frame->ParticleCount, 1, 0, 0);
+            }
         }
         EndForwardPass(Frame);
     }
