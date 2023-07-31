@@ -301,7 +301,7 @@ void main()
         float d = length(L);
         float InvD = 1.0 / d;
         L = L * InvD;
-        float Falloff = InvD*InvD;
+        E = E * (InvD*InvD);
 
         float NdotL = max(dot(L, N), 0.0);
         vec3 Diffuse = DiffuseBase * NdotL;
@@ -316,7 +316,7 @@ void main()
 
         float SpecularDenominator = max(4.0 * NdotL * NdotV, 1e-4);
         vec3 Specular = Distribution * Geometry * Fresnel / SpecularDenominator;
-        Lo += (Diffuse + Specular) * E * Falloff;
+        Lo += (Diffuse + Specular) * E;
     }
 
     vec3 Ambient = 3e-1 * Albedo.rgb * ScreenSpaceOcclusion;
