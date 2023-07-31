@@ -469,7 +469,7 @@ VkResult CreateRenderer(renderer* Renderer,
         for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
         {
             VkBufferUsageFlags Usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-            size_t Size = MiB(8);
+            umm Size = MiB(2);
             Result = CreateAndAllocateBuffer(Usage, VK.SharedMemTypes, Size, 
                                              &Renderer->DrawBuffers[i].Buffer, &Renderer->DrawBuffers[i].Memory);
             if (Result == VK_SUCCESS)
@@ -488,7 +488,7 @@ VkResult CreateRenderer(renderer* Renderer,
         for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
         {
             VkBufferUsageFlags Usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-            size_t Size = MiB(32);
+            umm Size = MiB(8);
             Result = CreateAndAllocateBuffer(Usage, VK.SharedMemTypes, Size, 
                                              &Renderer->VertexStacks[i].Buffer, &Renderer->VertexStacks[i].Memory);
             if (Result == VK_SUCCESS)
