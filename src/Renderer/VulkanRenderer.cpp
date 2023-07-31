@@ -585,11 +585,49 @@ VkResult CreateRenderer(renderer* Renderer,
                     VkMemoryRequirements MemoryRequirements = {};
                     vkGetBufferMemoryRequirements(VK.Device, Renderer->PerFrameJointBuffers[Index], &MemoryRequirements);
                     VkDeviceSize Offset = PushBARMemory(MemoryRequirements.size, MemoryRequirements.alignment);
-
                     Result = vkBindBufferMemory(VK.Device, Renderer->PerFrameJointBuffers[Index], Renderer->BARMemory, Offset);
                     if (Result == VK_SUCCESS)
                     {
                         Renderer->PerFrameJointBufferMappings[Index] = OffsetPtr(Renderer->BARMemoryMapping, Offset);
+                    }
+                    else
+                    {
+                        return(Result);
+                    }
+                }
+                else
+                {
+                    return(Result);
+                }
+            }
+        }
+
+        // Particle buffers
+        {
+            u64 BufferSizePerFrame = render_frame::MaxParticleCount * sizeof(v2);
+            for (u32 Index = 0; Index < Renderer->SwapchainImageCount; Index++)
+            {
+                VkBufferCreateInfo BufferInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .size = BufferSizePerFrame,
+                    .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                    .queueFamilyIndexCount = 0,
+                    .pQueueFamilyIndices = nullptr,
+                };
+                Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->PerFrameParticleBuffers[Index]);
+                if (Result == VK_SUCCESS)
+                {
+                    VkMemoryRequirements MemoryRequirements = {};
+                    vkGetBufferMemoryRequirements(VK.Device, Renderer->PerFrameParticleBuffers[Index], &MemoryRequirements);
+                    VkDeviceSize Offset = PushBARMemory(MemoryRequirements.size, MemoryRequirements.alignment);
+                    Result = vkBindBufferMemory(VK.Device, Renderer->PerFrameParticleBuffers[Index], Renderer->BARMemory, Offset);
+                    if (Result == VK_SUCCESS)
+                    {
+                        Renderer->PerFrameParticleBufferMappings[Index] = OffsetPtr(Renderer->BARMemoryMapping, Offset);
                     }
                     else
                     {
@@ -1708,6 +1746,10 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
     Frame->Commands = (VkDrawIndirectCommand*)Frame->DrawBuffer.Mapping;
     Frame->VertexCount = 0;
     Frame->Vertices = (ui_vertex*)Frame->VertexStack.Mapping;
+
+    Frame->ParticleCount = 0;
+    Frame->ParticleBuffer = Renderer->PerFrameParticleBuffers[FrameID];
+    Frame->ParticleMapping = (v3*)Renderer->PerFrameParticleBufferMappings[FrameID];
 
     Frame->JointCount = 0;
     Frame->JointBuffer = Renderer->PerFrameJointBuffers[FrameID];

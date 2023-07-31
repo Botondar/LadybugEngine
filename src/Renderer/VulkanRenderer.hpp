@@ -85,11 +85,13 @@ struct renderer
     VkDeviceMemory BARMemory;
     void* BARMemoryMapping;
 
+    // NOTE(boti): These are all allocated from BAR memory
     VkBuffer PerFrameUniformBuffers[MaxSwapchainImageCount];
     void* PerFrameUniformBufferMappings[MaxSwapchainImageCount];
-
     VkBuffer PerFrameJointBuffers[MaxSwapchainImageCount];
     void* PerFrameJointBufferMappings[MaxSwapchainImageCount];
+    VkBuffer PerFrameParticleBuffers[MaxSwapchainImageCount];
+    void* PerFrameParticleBufferMappings[MaxSwapchainImageCount];
 
     VkSemaphore ImageAcquiredSemaphores[MaxSwapchainImageCount];
     VkFence ImageAcquiredFences[MaxSwapchainImageCount];
