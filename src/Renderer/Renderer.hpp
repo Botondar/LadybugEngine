@@ -518,7 +518,7 @@ struct texture_id
 
 // TODO(boti): Maybe we should just have an indirected enum for this too?
 constexpr format DEPTH_FORMAT = Format_D32;
-constexpr format HDR_FORMAT = Format_R16G16B16A16_Float;//Format_R11G11B10_Float;
+constexpr format HDR_FORMAT = Format_R16G16B16A16_Float;
 constexpr format STRUCTURE_BUFFER_FORMAT = Format_R16G16B16A16_Float;
 constexpr format SSAO_FORMAT = Format_R8_UNorm;
 constexpr format SHADOW_FORMAT = Format_D16; // TODO(boti): is this enough?
