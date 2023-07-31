@@ -122,36 +122,3 @@ geometry_buffer_allocation UploadVertexData(renderer* Renderer,
                                                  u32 VertexCount, const vertex* VertexData,
                                                  u32 IndexCount, const vert_index* IndexData);
 texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format, texture_swizzle Swizzle);
-
-enum transfer_type
-{
-    Transfer_Texture = 0,
-    Transfer_VertexData = (1 << 0),
-    Transfer_IndexData = (1 << 1),
-};
-
-struct transfer
-{
-    transfer_type Type;
-    union
-    {
-        struct
-        {
-            u32 Width;
-            u32 Height;
-            u32 MipCount;
-            format Format;
-            void* TexelData;
-        } Texture;
-
-        struct
-        {
-            u32 VertexCount;
-            u32 IndexCount;
-            void* VertexData;
-            void* IndexData;
-        } Geometry;
-    };
-};
-
-void TransferData(renderer* Renderer, transfer Transfer);

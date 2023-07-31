@@ -1682,11 +1682,6 @@ texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, 
     return Result;
 }
 
-void TransferData(renderer* Renderer)
-{
-
-}
-
 //
 // Rendering interface implementation
 //
