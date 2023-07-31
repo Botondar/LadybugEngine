@@ -80,8 +80,6 @@ struct renderer
     static constexpr u32 MaxPerFrameDescriptorSetCount = 1024;
     VkDescriptorPool PerFrameDescriptorPool[2];
 
-    VkDeviceMemory PerFrameUniformMemory;
-    void* PerFrameUniformMappingBase;
     VkBuffer PerFrameUniformBuffers[MaxSwapchainImageCount];
     void* PerFrameUniformBufferMappings[MaxSwapchainImageCount];
 
