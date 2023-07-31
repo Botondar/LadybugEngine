@@ -26,6 +26,6 @@ lbfn u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, format_byterate By
 
 lbfn bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes);
 lbfn VkImage GetImage(texture_manager* Manager, texture_id ID);
-lbfn texture_id CreateTexture(texture_manager* Manager, 
-                              u32 Width, u32 Height, u32 MipCount, 
-                              VkFormat Format, texture_swizzle Swizzle);
+lbfn texture_id CreateTexture2D(texture_manager* Manager, 
+                                u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
+                                VkFormat Format, texture_swizzle Swizzle);

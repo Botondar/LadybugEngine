@@ -216,11 +216,12 @@ lbfn VkImage GetImage(texture_manager* Manager, texture_id ID)
     return Result;
 }
 
-lbfn texture_id CreateTexture(texture_manager* Manager, 
-                              u32 Width, u32 Height, u32 MipCount, 
+lbfn texture_id CreateTexture2D(texture_manager* Manager, 
+                              u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
                               VkFormat Format, texture_swizzle Swizzle)
 {
     texture_id Result = { U32_MAX };
+    Assert(ArrayCount < VK.DeviceProps.limits.maxImageArrayLayers);
 
     auto SwizzleToVulkan = [](texture_swizzle_type Type) -> VkComponentSwizzle 
     {
@@ -249,7 +250,7 @@ lbfn texture_id CreateTexture(texture_manager* Manager,
             .format = Format,
             .extent = { Width, Height, 1 },
             .mipLevels = MipCount,
-            .arrayLayers = 1,
+            .arrayLayers = ArrayCount,
             .samples = VK_SAMPLE_COUNT_1_BIT,
             .tiling = VK_IMAGE_TILING_OPTIMAL,
             .usage = VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,

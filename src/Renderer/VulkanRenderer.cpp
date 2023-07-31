@@ -1543,7 +1543,7 @@ texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, 
 
     format_byterate ByteRate = GetByteRate(Format);
 
-    Result = CreateTexture(TextureManager, Width, Height, MipCount, Format, Swizzle);
+    Result = CreateTexture2D(TextureManager, Width, Height, MipCount, 1, Format, Swizzle);
     if (IsValid(Result))
     {
         VkImage Image = GetImage(TextureManager, Result);
