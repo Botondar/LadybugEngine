@@ -80,6 +80,11 @@ struct renderer
     static constexpr u32 MaxPerFrameDescriptorSetCount = 1024;
     VkDescriptorPool PerFrameDescriptorPool[2];
 
+    VkDeviceSize BARMemoryByteSize;
+    VkDeviceSize BARMemoryByteOffset;
+    VkDeviceMemory BARMemory;
+    void* BARMemoryMapping;
+
     VkBuffer PerFrameUniformBuffers[MaxSwapchainImageCount];
     void* PerFrameUniformBufferMappings[MaxSwapchainImageCount];
 
@@ -92,11 +97,6 @@ struct renderer
 
     vulkan_buffer DrawBuffers[MaxSwapchainImageCount];
     vulkan_buffer VertexStacks[MaxSwapchainImageCount];
-
-    VkDeviceSize BARMemoryByteSize;
-    VkDeviceSize BARMemoryByteOffset;
-    VkDeviceMemory BARMemory;
-    void* BARMemoryMapping;
 
     VkDeviceMemory SkinningMemory;
     VkBuffer SkinningBuffers[MaxSwapchainImageCount];
