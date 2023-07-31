@@ -85,8 +85,6 @@ struct renderer
     VkBuffer PerFrameUniformBuffers[MaxSwapchainImageCount];
     void* PerFrameUniformBufferMappings[MaxSwapchainImageCount];
 
-    VkDeviceMemory PerFrameJointMemory;
-    void* PerFrameJointMemoryMapping;
     VkBuffer PerFrameJointBuffers[MaxSwapchainImageCount];
     void* PerFrameJointBufferMappings[MaxSwapchainImageCount];
 
@@ -96,6 +94,11 @@ struct renderer
 
     vulkan_buffer DrawBuffers[MaxSwapchainImageCount];
     vulkan_buffer VertexStacks[MaxSwapchainImageCount];
+
+    VkDeviceSize BARMemoryByteSize;
+    VkDeviceSize BARMemoryByteOffset;
+    VkDeviceMemory BARMemory;
+    void* BARMemoryMapping;
 
     VkDeviceMemory SkinningMemory;
     VkBuffer SkinningBuffers[MaxSwapchainImageCount];

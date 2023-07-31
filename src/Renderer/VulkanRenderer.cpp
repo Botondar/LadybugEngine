@@ -503,10 +503,38 @@ VkResult CreateRenderer(renderer* Renderer,
             }
         }
 
+        // BAR memory
+        {
+            u32 MemoryTypeIndex = 0;
+            BitScanForward(&MemoryTypeIndex, VK.BARMemTypes);
+            
+            Renderer->BARMemoryByteSize = MiB(64);
+            VkMemoryAllocateInfo AllocInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .allocationSize = Renderer->BARMemoryByteSize,
+                .memoryTypeIndex = MemoryTypeIndex,
+            };
+            Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->BARMemory);
+            ReturnOnFailure();
+            Result = vkMapMemory(VK.Device, Renderer->BARMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->BARMemoryMapping);
+            ReturnOnFailure();
+
+            Renderer->BARMemoryByteOffset = 0;
+        }
+
+        auto PushBARMemory = [Renderer](VkDeviceSize Size, VkDeviceSize Alignment) -> VkDeviceSize
+        {
+            VkDeviceSize Result = Align(Renderer->BARMemoryByteOffset, Alignment);
+            Assert(Result + Size <= Renderer->BARMemoryByteSize);
+            Renderer->BARMemoryByteOffset = Result + Size;
+            return(Result);
+        };
+
         // Per frame uniform data
         {
             constexpr u64 BufferSize = KiB(64);
-            u32 MemoryTypes = VK.BARMemTypes;
             for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
             {
                 VkBufferCreateInfo BufferInfo = 
@@ -527,113 +555,41 @@ VkResult CreateRenderer(renderer* Renderer,
                 vkGetBufferMemoryRequirements(VK.Device, Renderer->PerFrameUniformBuffers[i], &MemoryRequirements);
                 Assert((BufferSize % MemoryRequirements.alignment) == 0);
 
-                MemoryTypes &= MemoryRequirements.memoryTypeBits;
-            }
-
-            
-            u32 MemoryTypeIndex = 0;
-            if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
-            {
-                VkMemoryAllocateInfo AllocInfo = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                    .pNext = nullptr,
-                    .allocationSize =  Renderer->SwapchainImageCount * BufferSize,
-                    .memoryTypeIndex = MemoryTypeIndex,
-                };
-                Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->PerFrameUniformMemory);
+                VkDeviceSize Offset = PushBARMemory(MemoryRequirements.size, MemoryRequirements.alignment);
+                Result = vkBindBufferMemory(VK.Device, Renderer->PerFrameUniformBuffers[i], Renderer->BARMemory, Offset);
                 ReturnOnFailure();
 
-                Result = vkMapMemory(VK.Device, Renderer->PerFrameUniformMemory, 
-                                     0, VK_WHOLE_SIZE, 
-                                     0, &Renderer->PerFrameUniformMappingBase);
-                ReturnOnFailure();
-
-                for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
-                {
-                    u64 Offset = i * BufferSize;
-                    Result = vkBindBufferMemory(VK.Device, Renderer->PerFrameUniformBuffers[i], 
-                                                Renderer->PerFrameUniformMemory, Offset);
-                    ReturnOnFailure();
-
-                    Renderer->PerFrameUniformBufferMappings[i] = (void*)((u8*)Renderer->PerFrameUniformMappingBase + Offset);
-                }
-            }
-            else
-            {
-                UnhandledError("No memory type for uniform buffers");
+                Renderer->PerFrameUniformBufferMappings[i] = OffsetPtr(Renderer->BARMemoryMapping, Offset);
             }
         }
 
         // Joint buffers
         {
-            u32 MemoryTypeIndex = 0;
-            if (BitScanForward(&MemoryTypeIndex, VK.BARMemTypes))
+            u64 BufferSizePerFrame = render_frame::MaxJointCount * sizeof(m4);
+            for (u32 Index = 0; Index < Renderer->SwapchainImageCount; Index++)
             {
-                u64 BufferSizePerFrame = render_frame::MaxJointCount * sizeof(m4);
-                VkMemoryAllocateInfo AllocInfo = 
+                VkBufferCreateInfo BufferInfo = 
                 {
-                    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
                     .pNext = nullptr,
-                    .allocationSize = Renderer->SwapchainImageCount * BufferSizePerFrame,
-                    .memoryTypeIndex = MemoryTypeIndex,
+                    .flags = 0,
+                    .size = BufferSizePerFrame,
+                    .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                    .queueFamilyIndexCount = 0,
+                    .pQueueFamilyIndices = nullptr,
                 };
-
-                VkDeviceMemory Memory = VK_NULL_HANDLE;
-                Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Memory);
-                ReturnOnFailure();
-
-                void* Mapping = nullptr;
-                Result = vkMapMemory(VK.Device, Memory, 0, VK_WHOLE_SIZE, 0, &Mapping);
+                Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->PerFrameJointBuffers[Index]);
                 if (Result == VK_SUCCESS)
                 {
-                    VkBuffer Buffers[Renderer->MaxSwapchainImageCount] = { VK_NULL_HANDLE };
-                    void* BufferMappings[Renderer->MaxSwapchainImageCount] = { nullptr };
+                    VkMemoryRequirements MemoryRequirements = {};
+                    vkGetBufferMemoryRequirements(VK.Device, Renderer->PerFrameJointBuffers[Index], &MemoryRequirements);
+                    VkDeviceSize Offset = PushBARMemory(MemoryRequirements.size, MemoryRequirements.alignment);
 
-                    bool BufferCreationFailed = false;
-                    for (u32 Index = 0; Index < Renderer->SwapchainImageCount; Index++)
+                    Result = vkBindBufferMemory(VK.Device, Renderer->PerFrameJointBuffers[Index], Renderer->BARMemory, Offset);
+                    if (Result == VK_SUCCESS)
                     {
-                        VkBufferCreateInfo BufferInfo = 
-                        {
-                            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                            .pNext = nullptr,
-                            .flags = 0,
-                            .size = BufferSizePerFrame,
-                            .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-                            .queueFamilyIndexCount = 0,
-                            .pQueueFamilyIndices = nullptr,
-                        };
-                        Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, Buffers + Index);
-                        if (Result == VK_SUCCESS)
-                        {
-                            Result = vkBindBufferMemory(VK.Device, Buffers[Index], Memory, Index * BufferSizePerFrame);
-                            if (Result == VK_SUCCESS)
-                            {
-                                BufferMappings[Index] = OffsetPtr(Mapping, Index * BufferSizePerFrame);
-                            }
-                            else
-                            {
-                                BufferCreationFailed = true;
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            BufferCreationFailed = true;
-                            break;
-                        }
-                    }
-
-                    if (!BufferCreationFailed)
-                    {
-                        Renderer->PerFrameJointMemory = Memory;
-                        Renderer->PerFrameJointMemoryMapping = Mapping;
-                        for (u32 Index = 0; Index < Renderer->SwapchainImageCount; Index++)
-                        {
-                            Renderer->PerFrameJointBuffers[Index] = Buffers[Index];
-                            Renderer->PerFrameJointBufferMappings[Index] = BufferMappings[Index];
-                        }
+                        Renderer->PerFrameJointBufferMappings[Index] = OffsetPtr(Renderer->BARMemoryMapping, Offset);
                     }
                     else
                     {
@@ -644,10 +600,6 @@ VkResult CreateRenderer(renderer* Renderer,
                 {
                     return(Result);
                 }
-            }
-            else
-            {
-                UnhandledError("No memory type for uniform buffers");
             }
         }
 
