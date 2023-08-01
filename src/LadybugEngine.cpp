@@ -1019,14 +1019,14 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         {
             {
                 u32 Value = 0xFFFFFFFFu;
-                texture_id Whiteness = PushTexture(GameState->Renderer, 1, 1, 1, 1, VK_FORMAT_R8G8B8A8_SRGB, {}, &Value);
+                texture_id Whiteness = PushTexture(GameState->Renderer, TextureFlag_None, 1, 1, 1, 1, VK_FORMAT_R8G8B8A8_SRGB, {}, &Value);
 
                 Assets->DefaultDiffuseID = Whiteness;
                 Assets->DefaultMetallicRoughnessID = Whiteness;
             }
             {
                 u16 Value = 0x8080u;
-                Assets->DefaultNormalID = PushTexture(GameState->Renderer, 1, 1, 1, 1, VK_FORMAT_R8G8_UNORM, {}, &Value);
+                Assets->DefaultNormalID = PushTexture(GameState->Renderer, TextureFlag_None, 1, 1, 1, 1, VK_FORMAT_R8G8_UNORM, {}, &Value);
             }
         }
 
@@ -1060,12 +1060,11 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 MemoryAt += ImageSize;
             }
 
-#if 0
-            Assets->ParticleArrayID = PushTexture(GameState->Renderer, 
-                        ParticleWidth, ParticleHeight, 1, ParticleCount, 
-                        VK_FORMAT_R8_UNORM, { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
-                        Memory);
-#endif
+            Assets->ParticleArrayID = PushTexture(
+                GameState->Renderer, TextureFlag_Special,
+                ParticleWidth, ParticleHeight, 1, ParticleCount, 
+                VK_FORMAT_R8_UNORM, { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
+                Memory);
             if (!IsValid(Assets->ParticleArrayID))
             {
                 UnhandledError("Failed to create particles texture");

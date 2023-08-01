@@ -1535,7 +1535,7 @@ geometry_buffer_allocation UploadVertexData(renderer* Renderer,
 
 #undef ReturnOnFailure
 
-texture_id PushTexture(renderer* Renderer, 
+texture_id PushTexture(renderer* Renderer, texture_flags Flags,
                        u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
                        VkFormat Format, texture_swizzle Swizzle, 
                        const void* Data)
@@ -1543,7 +1543,7 @@ texture_id PushTexture(renderer* Renderer,
     texture_id ID = { INVALID_INDEX_U32 };
 
     texture_manager* TextureManager = &Renderer->TextureManager;
-    ID = CreateTexture2D(TextureManager, Width, Height, MipCount, ArrayCount, Format, Swizzle);
+    ID = CreateTexture2D(TextureManager, Flags, Width, Height, MipCount, ArrayCount, Format, Swizzle);
     if (IsValid(ID))
     {
         VkImage Image = GetImage(TextureManager, ID);

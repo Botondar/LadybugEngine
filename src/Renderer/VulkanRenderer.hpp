@@ -121,7 +121,7 @@ VkResult CreateRenderer(renderer* Renderer,
 geometry_buffer_allocation UploadVertexData(renderer* Renderer, 
                                             u32 VertexCount, const vertex* VertexData,
                                             u32 IndexCount, const vert_index* IndexData);
-texture_id PushTexture(renderer* Renderer, 
+texture_id PushTexture(renderer* Renderer, texture_flags Flags,
                        u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
                        VkFormat Format, texture_swizzle Swizzle,
                        const void* Data);

@@ -102,7 +102,7 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Rendere
                 }
             }
 
-            Assets->DefaultFontTextureID = PushTexture(Renderer, 
+            Assets->DefaultFontTextureID = PushTexture(Renderer, TextureFlag_None,
                                                        FontFile->Bitmap.Width, FontFile->Bitmap.Height, 1, 1,
                                                        VK_FORMAT_R8_UNORM, 
                                                        {
@@ -293,7 +293,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                     }
                 }
 
-                Result = PushTexture(Renderer, (u32)Width, (u32)Height, (u32)MipCount, 1, Format, {}, Texels);
+                Result = PushTexture(Renderer, TextureFlag_None, (u32)Width, (u32)Height, (u32)MipCount, 1, Format, {}, Texels);
             }
             else
             {

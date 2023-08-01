@@ -1,5 +1,7 @@
 #include "TextureManager.hpp"
 
+constexpr u32 SpecialTextureBit = (1u << 31);
+
 lbfn format_byterate GetByteRate(VkFormat Format)
 {
     format_byterate Result = { 0, 1, false };
@@ -210,14 +212,22 @@ lbfn bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 Mem
 lbfn VkImage GetImage(texture_manager* Manager, texture_id ID)
 {
     VkImage Result = VK_NULL_HANDLE;
-    if (ID.Value != U32_MAX)
+    if (IsValid(ID))
     {
-        Result = Manager->Images[ID.Value];
+        if (ID.Value & SpecialTextureBit)
+        {
+            u32 Index = ID.Value & (~SpecialTextureBit);
+            Result = Manager->SpecialImages[Index];
+        }
+        else
+        {
+            Result = Manager->Images[ID.Value];
+        }
     }
     return Result;
 }
 
-lbfn texture_id CreateTexture2D(texture_manager* Manager, 
+lbfn texture_id CreateTexture2D(texture_manager* Manager, texture_flags Flags,
                               u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
                               VkFormat Format, texture_swizzle Swizzle)
 {
@@ -280,7 +290,7 @@ lbfn texture_id CreateTexture2D(texture_manager* Manager,
                         .pNext = nullptr,
                         .flags = 0,
                         .image = Image,
-                        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                        .viewType = (ArrayCount == 1) ? VK_IMAGE_VIEW_TYPE_2D : VK_IMAGE_VIEW_TYPE_2D_ARRAY,
                         .format = Format,
                         .components = 
                         {
@@ -302,29 +312,40 @@ lbfn texture_id CreateTexture2D(texture_manager* Manager,
                     VkImageView ImageView = VK_NULL_HANDLE;
                     if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, &ImageView) == VK_SUCCESS)
                     {
-                        VkDescriptorImageInfo DescriptorImage = 
+                        u32 Index = Manager->TextureCount++;
+                        if (HasFlag(Flags, TextureFlag_Special))
                         {
-                            .sampler = VK_NULL_HANDLE,
-                            .imageView = ImageView,
-                            .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
-                        };
-
-                        VkWriteDescriptorSet DescriptorWrite = 
+                            Result = { SpecialTextureBit | Index };
+                            Manager->SpecialImages[Index] = Image;
+                            Manager->SpecialImageViews[Index] = ImageView;
+                        }
+                        else
                         {
-                            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                            .pNext = nullptr,
-                            .dstSet = Manager->DescriptorSets[1],
-                            .dstBinding = 0,
-                            .dstArrayElement = Manager->TextureCount,
-                            .descriptorCount = 1,
-                            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                            .pImageInfo = &DescriptorImage,
-                        };
-                        vkUpdateDescriptorSets(VK.Device, 1, &DescriptorWrite, 0, nullptr);
+                            Assert(ArrayCount == 1);
+                            VkDescriptorImageInfo DescriptorImage = 
+                            {
+                                .sampler = VK_NULL_HANDLE,
+                                .imageView = ImageView,
+                                .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                            };
 
-                        Manager->Images[Manager->TextureCount] = Image;
-                        Manager->ImageViews[Manager->TextureCount] = ImageView;
-                        Result = { Manager->TextureCount++ };
+                            VkWriteDescriptorSet DescriptorWrite = 
+                            {
+                                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                .pNext = nullptr,
+                                .dstSet = Manager->DescriptorSets[1],
+                                .dstBinding = 0,
+                                .dstArrayElement = Index,
+                                .descriptorCount = 1,
+                                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                .pImageInfo = &DescriptorImage,
+                            };
+                            vkUpdateDescriptorSets(VK.Device, 1, &DescriptorWrite, 0, nullptr);
+
+                            Manager->Images[Index] = Image;
+                            Manager->ImageViews[Index] = ImageView;
+                            Result = { Index };
+                        }
                     }
                     else
                     {
