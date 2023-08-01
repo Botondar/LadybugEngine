@@ -103,14 +103,15 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Rendere
             }
 
             Assets->DefaultFontTextureID = PushTexture(Renderer, 
-                                                       FontFile->Bitmap.Width, FontFile->Bitmap.Height, 1, 
-                                                       FontFile->Bitmap.Bitmap, VK_FORMAT_R8_UNORM, 
+                                                       FontFile->Bitmap.Width, FontFile->Bitmap.Height, 1, 1,
+                                                       VK_FORMAT_R8_UNORM, 
                                                        {
                                                            .R = Swizzle_One,
                                                            .G = Swizzle_One,
                                                            .B = Swizzle_One,
                                                            .A = Swizzle_R,
-                                                       });
+                                                       },
+                                                       FontFile->Bitmap.Bitmap);
         }
         else
         {
@@ -292,7 +293,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                     }
                 }
 
-                Result = PushTexture(Renderer, (u32)Width, (u32)Height, (u32)MipCount, Texels, Format, {});
+                Result = PushTexture(Renderer, (u32)Width, (u32)Height, (u32)MipCount, 1, Format, {}, Texels);
             }
             else
             {

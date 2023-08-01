@@ -22,7 +22,7 @@ struct texture_manager
 };
 
 lbfn format_byterate GetByteRate(VkFormat Format);
-lbfn u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, format_byterate ByteRate);
+lbfn u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate);
 
 lbfn bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes);
 lbfn VkImage GetImage(texture_manager* Manager, texture_id ID);

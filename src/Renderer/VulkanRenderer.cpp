@@ -1535,19 +1535,21 @@ geometry_buffer_allocation UploadVertexData(renderer* Renderer,
 
 #undef ReturnOnFailure
 
-texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, const void* Data, VkFormat Format, texture_swizzle Swizzle)
+texture_id PushTexture(renderer* Renderer, 
+                       u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
+                       VkFormat Format, texture_swizzle Swizzle, 
+                       const void* Data)
 {
-    texture_id Result = { INVALID_INDEX_U32 };
+    texture_id ID = { INVALID_INDEX_U32 };
 
     texture_manager* TextureManager = &Renderer->TextureManager;
-
-    format_byterate ByteRate = GetByteRate(Format);
-
-    Result = CreateTexture2D(TextureManager, Width, Height, MipCount, 1, Format, Swizzle);
-    if (IsValid(Result))
+    ID = CreateTexture2D(TextureManager, Width, Height, MipCount, ArrayCount, Format, Swizzle);
+    if (IsValid(ID))
     {
-        VkImage Image = GetImage(TextureManager, Result);
-        u64 MemorySize = GetMipChainSize(Width, Height, MipCount, ByteRate);
+        VkImage Image = GetImage(TextureManager, ID);
+
+        format_byterate ByteRate = GetByteRate(Format);
+        u64 MemorySize = GetMipChainSize(Width, Height, MipCount, ArrayCount, ByteRate);
 
         vulkan_buffer* StagingBuffer = &Renderer->StagingBuffer;
         Assert(MemorySize <= StagingBuffer->Size);
@@ -1578,7 +1580,7 @@ texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, 
                 .baseMipLevel = 0,
                 .levelCount = MipCount,
                 .baseArrayLayer = 0,
-                .layerCount = 1,
+                .layerCount = ArrayCount,
             },
         };
         vkCmdPipelineBarrier(Renderer->TransferCmdBuffer, 
@@ -1591,47 +1593,49 @@ texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, 
         memcpy(Mapping, Data, MemorySize);
 
         u64 CopyOffset = 0;
-        for (u32 i = 0; i < MipCount; i++)
+        for (u32 ArrayIndex = 0; ArrayIndex < ArrayCount; ArrayIndex++)
         {
-            u32 CurrentWidth = Max(Width >> i, 1u);
-            u32 CurrentHeight = Max(Height >> i, 1u);
-
-            u32 RowLength = 0;
-            u32 ImageHeight = 0;
-            u64 TexelCount;
-            u64 MipSize;
-            if (ByteRate.IsBlock)
+            for (u32 Mip = 0; Mip < MipCount; Mip++)
             {
-                RowLength = Align(CurrentWidth, 4u);
-                ImageHeight = Align(CurrentHeight, 4u);
+                u32 CurrentWidth = Max(Width >> Mip, 1u);
+                u32 CurrentHeight = Max(Height >> Mip, 1u);
 
-                TexelCount = (u64)RowLength * ImageHeight;
-            }
-            else
-            {
-                TexelCount = CurrentWidth * CurrentHeight;
-            }
-            MipSize = TexelCount * ByteRate.Numerator / ByteRate.Denominator;
-
-            VkBufferImageCopy CopyRegion = 
-            {
-                .bufferOffset = CopyOffset,
-                .bufferRowLength = RowLength,
-                .bufferImageHeight = ImageHeight,
-                .imageSubresource = 
+                u32 RowLength = 0;
+                u32 ImageHeight = 0;
+                u64 TexelCount;
+                u64 MipSize;
+                if (ByteRate.IsBlock)
                 {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .mipLevel = i,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1,
-                },
-                .imageOffset = { 0, 0, 0 },
-                .imageExtent = { CurrentWidth, CurrentHeight, 1 },
-            };
-            vkCmdCopyBufferToImage(Renderer->TransferCmdBuffer, StagingBuffer->Buffer, Image, 
-                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &CopyRegion);
+                    RowLength = Align(CurrentWidth, 4u);
+                    ImageHeight = Align(CurrentHeight, 4u);
 
-            CopyOffset += MipSize;
+                    TexelCount = (u64)RowLength * ImageHeight;
+                }
+                else
+                {
+                    TexelCount = CurrentWidth * CurrentHeight;
+                }
+                MipSize = TexelCount * ByteRate.Numerator / ByteRate.Denominator;
+
+                VkBufferImageCopy CopyRegion = 
+                {
+                    .bufferOffset = CopyOffset,
+                    .bufferRowLength = RowLength,
+                    .bufferImageHeight = ImageHeight,
+                    .imageSubresource = 
+                    {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .mipLevel = Mip,
+                        .baseArrayLayer = ArrayIndex,
+                        .layerCount = 1,
+                    },
+                    .imageOffset = { 0, 0, 0 },
+                    .imageExtent = { CurrentWidth, CurrentHeight, 1 },
+                };
+                vkCmdCopyBufferToImage(Renderer->TransferCmdBuffer, StagingBuffer->Buffer, Image, 
+                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &CopyRegion);
+                CopyOffset += MipSize;
+            }
         }
         VkImageMemoryBarrier EndBarrier = 
         {
@@ -1650,7 +1654,7 @@ texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, 
                 .baseMipLevel = 0,
                 .levelCount = MipCount,
                 .baseArrayLayer = 0,
-                .layerCount = 1,
+                .layerCount = ArrayCount,
             },
         };
         vkCmdPipelineBarrier(Renderer->TransferCmdBuffer, 
@@ -1679,7 +1683,7 @@ texture_id PushTexture(renderer* Renderer, u32 Width, u32 Height, u32 MipCount, 
         vkResetCommandPool(VK.Device, Renderer->TransferCmdPool, 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
     }
     
-    return Result;
+    return(ID);
 }
 
 //

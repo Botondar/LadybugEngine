@@ -138,6 +138,8 @@ struct assets
     texture_id DefaultFontTextureID;
     font DefaultFont;
 
+    texture_id ParticleArrayID;
+
     u32 SphereMeshID;
 
     static constexpr u32 MaxMeshCount = 1u << 16;

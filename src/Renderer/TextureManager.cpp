@@ -57,7 +57,7 @@ lbfn format_byterate GetByteRate(VkFormat Format)
     return Result;
 }
 
-lbfn u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, format_byterate ByteRate)
+lbfn u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate)
 {
     u64 Result = 0;
 
@@ -73,6 +73,7 @@ lbfn u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, format_byterate By
 
         Result += ((u64)CurrentWidth * (u64)CurrentHeight * ByteRate.Numerator) / ByteRate.Denominator;
     }
+    Result *= ArrayCount;
 
     return Result;
 }
@@ -294,7 +295,7 @@ lbfn texture_id CreateTexture2D(texture_manager* Manager,
                             .baseMipLevel = 0,
                             .levelCount = VK_REMAINING_MIP_LEVELS,
                             .baseArrayLayer = 0,
-                            .layerCount = 1,
+                            .layerCount = VK_REMAINING_ARRAY_LAYERS,
                         },
                     };
 

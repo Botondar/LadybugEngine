@@ -1019,14 +1019,56 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         {
             {
                 u32 Value = 0xFFFFFFFFu;
-                texture_id Whiteness = PushTexture(GameState->Renderer, 1, 1, 1, &Value, VK_FORMAT_R8G8B8A8_SRGB, {});
+                texture_id Whiteness = PushTexture(GameState->Renderer, 1, 1, 1, 1, VK_FORMAT_R8G8B8A8_SRGB, {}, &Value);
 
                 Assets->DefaultDiffuseID = Whiteness;
                 Assets->DefaultMetallicRoughnessID = Whiteness;
             }
             {
                 u16 Value = 0x8080u;
-                Assets->DefaultNormalID = PushTexture(GameState->Renderer, 1, 1, 1, &Value, VK_FORMAT_R8G8_UNORM, {});
+                Assets->DefaultNormalID = PushTexture(GameState->Renderer, 1, 1, 1, 1, VK_FORMAT_R8G8_UNORM, {}, &Value);
+            }
+        }
+
+        // Particle textures
+        {
+            // TODO(boti): For now we know that the texture pack we're using is 512x512, 
+            // but we may want to figure out some way for the user code to pack texture arrays/atlases dynamically
+            u32 ParticleWidth = 512;
+            u32 ParticleHeight = 512;
+            u32 ParticleCount = Particle_COUNT;
+
+            umm ImageSize = ParticleWidth * ParticleHeight;
+            umm MemorySize = ImageSize * ParticleCount;
+            void* Memory = PushSize(&GameState->TransientArena, MemorySize, 0x100);
+
+            u8* MemoryAt = (u8*)Memory;
+            for (u32 ParticleIndex = 0; ParticleIndex < ParticleCount; ParticleIndex++)
+            {
+                s32 Width, Height, ChannelCount;
+                u8* Texels = stbi_load(ParticlePaths[ParticleIndex], &Width, &Height, &ChannelCount, 1);
+                if (Texels)
+                {
+                    Assert(((u32)Width == ParticleWidth) && ((u32)Height == ParticleHeight));
+                    memcpy(MemoryAt, Texels, ImageSize);
+                }
+                else
+                {
+                    UnhandledError("Failed to load particle texture");
+                }
+                stbi_image_free(Texels);
+                MemoryAt += ImageSize;
+            }
+
+#if 0
+            Assets->ParticleArrayID = PushTexture(GameState->Renderer, 
+                        ParticleWidth, ParticleHeight, 1, ParticleCount, 
+                        VK_FORMAT_R8_UNORM, { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
+                        Memory);
+#endif
+            if (!IsValid(Assets->ParticleArrayID))
+            {
+                UnhandledError("Failed to create particles texture");
             }
         }
 
