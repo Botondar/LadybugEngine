@@ -950,12 +950,13 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Layout = 
         {
             .PushConstantRangeCount = 0,
-            .DescriptorSetCount = 2,
+            .DescriptorSetCount = 3,
             .PushConstantRanges = {},
             .DescriptorSets = 
             {
                 SetLayout_PerFrameUniformData,
                 SetLayout_ParticleBuffer,
+                SetLayout_SingleCombinedTexturePS,
             },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
@@ -980,7 +981,18 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .MaxDepthBounds = 1.0f,
         },
         .BlendAttachmentCount = 1,
-        .BlendAttachments = { { .BlendEnable = false } },
+        .BlendAttachments = 
+        { 
+            { 
+                .BlendEnable = true,
+                .SrcColor = Blend_SrcAlpha,
+                .DstColor = Blend_One,
+                .ColorOp = BlendOp_Add,
+                .SrcAlpha = Blend_Zero,
+                .DstAlpha = Blend_One,
+                .AlphaOp = BlendOp_Add,
+            } 
+        },
         .ColorAttachmentCount = 1,
         .ColorAttachments = { HDR_FORMAT },
         .DepthAttachment = DEPTH_FORMAT,

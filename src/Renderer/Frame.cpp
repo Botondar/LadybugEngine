@@ -82,7 +82,7 @@ VkDescriptorSet PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout L
     texture_manager* TextureManager = &Frame->Renderer->TextureManager;
     VkDescriptorSet Set = PushImageDescriptor(Frame, Layout,
                                               VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                              TextureManager->ImageViews[ID.Value],
+                                              GetImageView(TextureManager, ID),
                                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     return(Set);
 }

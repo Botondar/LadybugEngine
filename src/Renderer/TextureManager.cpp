@@ -2,7 +2,7 @@
 
 constexpr u32 SpecialTextureBit = (1u << 31);
 
-lbfn format_byterate GetByteRate(VkFormat Format)
+format_byterate GetByteRate(VkFormat Format)
 {
     format_byterate Result = { 0, 1, false };
     switch (Format)
@@ -59,7 +59,7 @@ lbfn format_byterate GetByteRate(VkFormat Format)
     return Result;
 }
 
-lbfn u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate)
+u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate)
 {
     u64 Result = 0;
 
@@ -80,7 +80,7 @@ lbfn u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, fo
     return Result;
 }
 
-lbfn bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes)
+bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes)
 {
     VkResult Result = VK_SUCCESS;
 
@@ -209,7 +209,7 @@ lbfn bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 Mem
     return (Result == VK_SUCCESS);
 }
 
-lbfn VkImage GetImage(texture_manager* Manager, texture_id ID)
+VkImage GetImage(texture_manager* Manager, texture_id ID)
 {
     VkImage Result = VK_NULL_HANDLE;
     if (IsValid(ID))
@@ -227,9 +227,27 @@ lbfn VkImage GetImage(texture_manager* Manager, texture_id ID)
     return Result;
 }
 
-lbfn texture_id CreateTexture2D(texture_manager* Manager, texture_flags Flags,
-                              u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
-                              VkFormat Format, texture_swizzle Swizzle)
+VkImageView GetImageView(texture_manager* Manager, texture_id ID)
+{
+    VkImageView Result = VK_NULL_HANDLE;
+    if (IsValid(ID))
+    {
+        if (ID.Value & SpecialTextureBit)
+        {
+            u32 Index = ID.Value & (~SpecialTextureBit);
+            Result = Manager->SpecialImageViews[Index];
+        }
+        else
+        {
+            Result = Manager->ImageViews[ID.Value];
+        }
+    }
+    return(Result);
+}
+
+texture_id CreateTexture2D(texture_manager* Manager, texture_flags Flags,
+                           u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
+                           VkFormat Format, texture_swizzle Swizzle)
 {
     texture_id Result = { U32_MAX };
     Assert(ArrayCount < VK.DeviceProps.limits.maxImageArrayLayers);
@@ -312,9 +330,9 @@ lbfn texture_id CreateTexture2D(texture_manager* Manager, texture_flags Flags,
                     VkImageView ImageView = VK_NULL_HANDLE;
                     if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, &ImageView) == VK_SUCCESS)
                     {
-                        u32 Index = Manager->TextureCount++;
                         if (HasFlag(Flags, TextureFlag_Special))
                         {
+                            u32 Index = Manager->SpecialTextureCount++;
                             Result = { SpecialTextureBit | Index };
                             Manager->SpecialImages[Index] = Image;
                             Manager->SpecialImageViews[Index] = ImageView;
@@ -322,6 +340,8 @@ lbfn texture_id CreateTexture2D(texture_manager* Manager, texture_flags Flags,
                         else
                         {
                             Assert(ArrayCount == 1);
+
+                            u32 Index = Manager->TextureCount++;
                             VkDescriptorImageInfo DescriptorImage = 
                             {
                                 .sampler = VK_NULL_HANDLE,

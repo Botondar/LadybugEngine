@@ -42,12 +42,15 @@ void main()
 }
 #else
 
+layout(set = 2, binding = 0) uniform sampler2DArray Texture;
+
 layout(location = 0) in vec2 TexCoord;
 
 layout(location = 0) out vec4 Target0;
 
 void main()
 {
-    Target0 = vec4(TexCoord, 0.0, 1.0);
+    v4 Color = texture(Texture, vec3(TexCoord, 0));
+    Target0 = vec4(0.8, 1.0, 0.4, 10.0 * Color.a);
 }
 #endif

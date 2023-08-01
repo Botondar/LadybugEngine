@@ -36,11 +36,14 @@ enum texture_flag_bits : texture_flags
     TextureFlag_Special = (1 << 0),
 };
 
-lbfn format_byterate GetByteRate(VkFormat Format);
-lbfn u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate);
+format_byterate GetByteRate(VkFormat Format);
+u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate);
 
-lbfn bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes);
-lbfn VkImage GetImage(texture_manager* Manager, texture_id ID);
-lbfn texture_id CreateTexture2D(texture_manager* Manager, texture_flags Flags,
+bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes);
+
+VkImage GetImage(texture_manager* Manager, texture_id ID);
+VkImageView GetImageView(texture_manager* Manager, texture_id ID);
+
+texture_id CreateTexture2D(texture_manager* Manager, texture_flags Flags,
                                 u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
                                 VkFormat Format, texture_swizzle Swizzle);

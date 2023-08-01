@@ -601,6 +601,26 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             {
                 Frame->Particles[Frame->ParticleCount++] = { 0.0f, 0.0f, 0.5f };
 
+                VkImageView ParticleView = GetImageView(&Renderer->TextureManager, Assets->ParticleArrayID);
+                VkDescriptorSet TextureSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS]);
+                VkDescriptorImageInfo DescriptorImage = 
+                {
+                    .sampler = Renderer->Samplers[Sampler_Default],
+                    .imageView = ParticleView,
+                    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                };
+                VkWriteDescriptorSet TextureWrite = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .pNext = nullptr,
+                    .dstSet = TextureSet,
+                    .dstBinding = 0,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                    .pImageInfo = &DescriptorImage,
+                };
+                vkUpdateDescriptorSets(VK.Device, 1, &TextureWrite, 0, nullptr);
 
                 VkDescriptorSet ParticleBufferDescriptor = 
                     PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_ParticleBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
@@ -609,6 +629,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 {
                     Frame->UniformDescriptorSet,
                     ParticleBufferDescriptor,
+                    TextureSet,
                 };
 
                 pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
