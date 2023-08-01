@@ -43,7 +43,7 @@ struct render_frame
     static constexpr u32 MaxParticleCount = (1u << 18);
     VkBuffer ParticleBuffer;
     u32 ParticleCount;
-    v3* Particles;
+    particle_vertex* Particles;
 
     static constexpr u32 MaxJointCount = (1u << 17);
     u32 JointCount;

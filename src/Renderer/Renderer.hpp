@@ -617,6 +617,13 @@ struct ui_vertex
     rgba8 Color;
 };
 
+struct particle_vertex
+{
+    v3 P;
+    v2 HalfExtent;
+    v3 Color;
+};
+
 struct material
 {
     v3 Emissive;

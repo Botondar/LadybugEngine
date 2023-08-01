@@ -599,7 +599,12 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
             // Particles
             {
-                Frame->Particles[Frame->ParticleCount++] = { 0.0f, 0.0f, 0.5f };
+                Frame->Particles[Frame->ParticleCount++] = 
+                { 
+                    { 0.0f, 0.0f, 0.5f },
+                    { 0.5f, 0.5f },
+                    5.0f * v3{ 0.8f, 1.0f, 0.4f },
+                };
 
                 VkImageView ParticleView = GetImageView(&Renderer->TextureManager, Assets->ParticleArrayID);
                 VkDescriptorSet TextureSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS]);

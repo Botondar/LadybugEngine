@@ -1,24 +1,36 @@
 #version 460 core
 
+#extension GL_EXT_scalar_block_layout : require
+
 #include "common.glsli"
 
-layout(set = 0, binding = 0) uniform PerFrameBlock
+layout(set = 0, binding = 0) 
+uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
 
 #if defined(VS)
 
-layout(set = 1, binding = 0) buffer VertexBlock
+struct particle
 {
-    vec3 VertexData[];
+    v3 P;
+    v2 HalfExtent;
+    v3 Color;
 };
 
-layout(location = 0) out vec2 TexCoord;
+layout(scalar, set = 1, binding = 0) 
+buffer VertexBlock
+{
+    particle Particles[];
+};
+
+layout(location = 0) out v2 TexCoord;
+layout(location = 1) out v3 ParticleColor;
 
 void main()
 {
-    vec3 BaseVertices[4] = 
+    v3 BaseVertices[4] = 
     {
         vec3(-1.0, +1.0, 0.0),
         vec3(+1.0, +1.0, 0.0),
@@ -34,23 +46,28 @@ void main()
     uint GlobalIndex = gl_VertexIndex / 6;
     uint LocalIndex = gl_VertexIndex % 6;
 
-    vec3 BaseVertex = BaseVertices[IndexData[LocalIndex]];
-    vec3 Vertex = BaseVertex + TransformPoint(PerFrame.View, VertexData[GlobalIndex]);
+    v3 BaseP = BaseVertices[IndexData[LocalIndex]];
+    particle Particle = Particles[GlobalIndex];
 
-    TexCoord = 0.5 * (BaseVertex.xy + vec2(1.0, 1.0));
-    gl_Position = PerFrame.Projection * vec4(Vertex, 1.0);
+    v3 P = v3(Particle.HalfExtent.xy, 1.0) * BaseP + TransformPoint(PerFrame.View, Particle.P);
+
+    TexCoord = 0.5 * (BaseP.xy + vec2(1.0, 1.0));
+    ParticleColor = Particle.Color;
+    gl_Position = PerFrame.Projection * vec4(P, 1.0);
 }
 #else
 
 layout(set = 2, binding = 0) uniform sampler2DArray Texture;
 
-layout(location = 0) in vec2 TexCoord;
+layout(location = 0) in v2 TexCoord;
+layout(location = 1) in v3 ParticleColor;
 
-layout(location = 0) out vec4 Target0;
+layout(location = 0) out v4 Target0;
 
 void main()
 {
-    v4 Color = texture(Texture, vec3(TexCoord, 0));
-    Target0 = vec4(0.8, 1.0, 0.4, 10.0 * Color.a);
+    v4 SampleColor = texture(Texture, vec3(TexCoord, 0));
+    
+    Target0 = vec4(SampleColor.rgb * ParticleColor.rgb, SampleColor.a);
 }
 #endif

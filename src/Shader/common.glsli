@@ -1,3 +1,8 @@
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_shader_8bit_storage : require
+#extension GL_EXT_shader_16bit_storage : require
+
 #define PI 3.14159265359
 #define ALPHA_TEST_THRESHOLD 0.5
 
