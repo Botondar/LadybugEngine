@@ -595,10 +595,10 @@ typedef u32 vert_index;
 struct vertex
 {
     v3 P;
-    alignas(16) v3 N;
-    alignas(16) v4 T;
-    alignas(16) v2 TexCoord;
-    alignas(16) v4 Weights;
+    v3 N;
+    v4 T;
+    v2 TexCoord;
+    v4 Weights;
     u8 Joints[4];
     rgba8 Color;
 };
