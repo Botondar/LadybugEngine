@@ -1163,7 +1163,12 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                             f32 X = Scale * RandBilateral(&World->EffectEntropy);
                             f32 Y = Scale * RandBilateral(&World->EffectEntropy);
                             f32 Z = (ParticleSystem->MaxZ - ParticleSystem->MinZ) * RandUnilateral(&World->EffectEntropy) + ParticleSystem->MinZ;
-                            ParticleSystem->Particles[ParticleIndex] = { { X, Y, Z } };
+                            f32 dP = 2.0f * RandUnilateral(&World->EffectEntropy) + 0.25f;
+                            ParticleSystem->Particles[ParticleIndex] = 
+                            { 
+                                .P = { X, Y, Z },
+                                .dP = { 0.0f, 0.0f, dP },
+                            };
                         }
                     }
                 }
@@ -1322,40 +1327,48 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         for (u32 ParticleSystemIndex = 0; ParticleSystemIndex < World->ParticleSystemCount; ParticleSystemIndex++)
         {
             particle_system* ParticleSystem = World->ParticleSystems + ParticleSystemIndex;
-            if (ParticleSystem->Type == ParticleSystem_Magic)
+            switch (ParticleSystem->Type)
             {
-                f32 ZRange = ParticleSystem->MaxZ - ParticleSystem->MinZ;
-
-                for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
+                case ParticleSystem_Undefined:
                 {
-                    particle* Particle = ParticleSystem->Particles + It;
-                    Particle->P.z += 2.0f * dt;
-                    Particle->P.z = Modulo(Particle->P.z - ParticleSystem->MinZ, ZRange) + ParticleSystem->MinZ;
-                }
-
-                v3 BaseP = { 0.0f, 0.0f, 0.0f };
-                v3 Color = { 1.0f, 1.0f, 1.0f };
-                if (IsValid(ParticleSystem->ParentID))
+                    // Ignored
+                } break;
+                case ParticleSystem_Magic:
                 {
-                    entity* Parent = World->Entities + ParticleSystem->ParentID.Value;
-                    BaseP = Parent->Transform.P.xyz;
-                    if (Parent->Flags & EntityFlag_LightSource)
+                    f32 ZRange = ParticleSystem->MaxZ - ParticleSystem->MinZ;
+
+                    for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
                     {
-                        Color = Parent->LightEmission.xyz * Parent->LightEmission.w;
+                        particle* Particle = ParticleSystem->Particles + It;
+                        Particle->P += Particle->dP * dt;
+                        Particle->P.z = Modulo(Particle->P.z - ParticleSystem->MinZ, ZRange) + ParticleSystem->MinZ;
                     }
-                }
+                } break;
+                InvalidDefaultCase;
+            }
 
-                u32 CopyCount = Min(ParticleSystem->ParticleCount, RenderFrame->MaxParticleCount - RenderFrame->ParticleCount);
-                for (u32 It = 0; It < CopyCount; It++)
+            v3 BaseP = { 0.0f, 0.0f, 0.0f };
+            v3 Color = { 1.0f, 1.0f, 1.0f };
+            if (IsValid(ParticleSystem->ParentID))
+            {
+                entity* Parent = World->Entities + ParticleSystem->ParentID.Value;
+                BaseP = Parent->Transform.P.xyz;
+                if (Parent->Flags & EntityFlag_LightSource)
                 {
-                    RenderFrame->Particles[RenderFrame->ParticleCount++] = 
-                    {
-                        .P = BaseP + ParticleSystem->Particles[It].P,
-                        .HalfExtent = { 0.25f, 0.25f },
-                        .Color = Color,
-                        .TextureIndex = Particle_Star04,
-                    };
+                    Color = Parent->LightEmission.xyz * Parent->LightEmission.w;
                 }
+            }
+
+            u32 CopyCount = Min(ParticleSystem->ParticleCount, RenderFrame->MaxParticleCount - RenderFrame->ParticleCount);
+            for (u32 It = 0; It < CopyCount; It++)
+            {
+                RenderFrame->Particles[RenderFrame->ParticleCount++] = 
+                {
+                    .P = BaseP + ParticleSystem->Particles[It].P,
+                    .HalfExtent = { 0.25f, 0.25f },
+                    .Color = Color,
+                    .TextureIndex = Particle_Star04,
+                };
             }
         }
     }

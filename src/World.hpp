@@ -38,6 +38,7 @@ struct entity
 struct particle
 {
     v3 P;
+    v3 dP;
 };
 
 enum particle_system_type
