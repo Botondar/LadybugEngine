@@ -151,29 +151,15 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
     Frame->SunV = World->SunV;
     Frame->Uniforms.SunV = TransformDirection(ViewTransform, World->SunV);
     Frame->Uniforms.SunL = World->SunL;
-    light Lights[] = 
     {
-        { { -4.95f, -1.15f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
-        { { +3.90f, -1.15f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
-        { { -4.95f, +1.75f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
-        { { +3.90f, +1.75f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
-
-        { { +8.95f, +3.60f, 1.30f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
-        { { +8.95f, -3.20f, 1.30f, 1.0f }, { 0.6f, 0.2f, 1.0f, 2.5f } },
-        { { -9.65f, +3.60f, 1.30f, 1.0f }, { 0.4f, 1.0f, 0.4f, 2.5f } },
-        { { -9.65f, -3.20f, 1.30f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
-    };
-    u32 LightCount = CountOf(Lights);
-
-    {
-        Frame->Uniforms.LightCount = LightCount;
-        memset(Frame->Uniforms.Lights, 0, sizeof(Frame->Uniforms.Lights));
-
         constexpr f32 LuminanceThreshold = 1e-3f;
-        for (u32 LightIndex = 0; LightIndex < LightCount; LightIndex++)
+        for (u32 LightIndex = 0; LightIndex < Frame->Uniforms.LightCount; LightIndex++)
         {
-            light* Light = Lights + LightIndex;
+            light* Light = Frame->Uniforms.Lights + LightIndex;
+            Light->P = Frame->Uniforms.ViewTransform * Light->P;
 
+            // TODO(boti): Coarse light culling here
+#if 0
             f32 MaxComponent = Max(Max(Light->E.x, Light->E.y), Light->E.z);
             f32 E = MaxComponent * Light->E.w;
             f32 SquareR = E / LuminanceThreshold;
@@ -193,17 +179,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 ViewP + v3{ +R, +R, +R },
                 ViewP + v3{ -R, +R, +R },
             };
-
-            v2 MinP = { +F32_MAX_NORMAL, +F32_MAX_NORMAL };
-            v2 MaxP = { -F32_MAX_NORMAL, -F32_MAX_NORMAL };
-            //for (u32 )
-
-
-            Frame->Uniforms.Lights[LightIndex] = 
-            {
-                Frame->Uniforms.ViewTransform * Light->P,
-                Light->E,
-            };
+#endif
         };
     }
 
@@ -830,13 +806,15 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             u32 IndexOffset = (u32)SphereMesh.IndexBlock->ByteOffset / sizeof(vert_index);
             u32 VertexOffset = (u32)SphereMesh.VertexBlock->ByteOffset / sizeof(vertex);
 
-            for (u32 LightIndex = 0; LightIndex < LightCount; LightIndex++)
+            for (u32 LightIndex = 0; LightIndex < Frame->Uniforms.LightCount; LightIndex++)
             {
-                light* Light = Lights + LightIndex;
+                light* Light = Frame->Uniforms.Lights + LightIndex;
+
+                // NOTE(boti): At this point our lights are in view space, so we have to transform them back...
                 m4 Transform = M4(1e-1f, 0.0f, 0.0f, Light->P.x,
                                   0.0f, 1e-1f, 0.0f, Light->P.y,
                                   0.0f, 0.0f, 1e-1f, Light->P.z,
-                                  0.0f, 0.0f, 0.0f, 1.0f);
+                                  0.0f, 0.0f, 0.0f, 1.0f) * Frame->Uniforms.CameraTransform;
                 rgba8 Color = PackRGBA({ Light->E.x, Light->E.y, Light->E.z, 1.0f });
 
                 vkCmdPushConstants(Frame->CmdBuffer, GizmoPipeline.Layout,
@@ -1128,34 +1106,64 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
     render_frame* RenderFrame = BeginRenderFrame(GameState->Renderer, GameIO->OutputWidth, GameIO->OutputHeight);
 
+    // Load debug scene
     if (!GameState->World->IsLoaded)
     {
-        m4 BaseTransform = M4(1.0f, 0.0f, 0.0f, 0.0f,
-                              0.0f, 0.0f, -1.0f, 0.0f,
-                              0.0f, 1.0f, 0.0f, 0.0f,
-                              0.0f, 0.0f, 0.0f, 1.0f);
-#if 0
-        BaseTransform = BaseTransform * M4(50.0f, 0.0f, 0.0f, 0.0f,
-                                           0.0f, 50.0f, 0.0f, 0.0f,
-                                           0.0f, 0.0f, 50.0f, 0.0f,
-                                           0.0f, 0.0f, 0.0f, 1.0f);
-#elif 0
-        BaseTransform = BaseTransform * M4(1e-2f, 0.0f, 0.0f, 0.0f,
-                                           0.0f, 1e-2f, 0.0f, 0.0f,
-                                           0.0f, 0.0f, 1e-2f, 0.0f,
-                                           0.0f, 0.0f, 0.0f, 1.0f);
-#endif
-        m4 Transform = BaseTransform;
-        //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza2/NewSponza_Main_Blender_glTF.gltf", BaseTransform);
-        //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Medieval/scene.gltf", BaseTransform);
-        DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Sponza/Sponza.gltf", Transform);
-        //DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/bathroom/bathroom.gltf", Transform);
-        Transform = BaseTransform * M4(1e-2f, 0.0f, 0.0f, 0.0f,
-                                       0.0f, 1e-2f, 0.0f, 0.0f,
-                                       0.0f, 0.0f, 1e-2f, 0.0f,
-                                       0.0f, 0.0f, 0.0f, 1.0f);
-        DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, "data/Scenes/Fox/Fox.gltf", Transform);
-        GameState->World->IsLoaded = true;
+        game_world* World = GameState->World;
+        m4 YUpToZUp = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                         0.0f, 0.0f, -1.0f, 0.0f,
+                         0.0f, 1.0f, 0.0f, 0.0f,
+                         0.0f, 0.0f, 0.0f, 1.0f);
+        // Sponza scene
+        {
+            m4 Transform = YUpToZUp;
+            DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, World, GameState->Renderer, 
+                               "data/Scenes/Sponza/Sponza.gltf", Transform);
+        
+            const light LightSources[] = 
+            {
+                // "Fire" lights on top of the metal hangers
+                { { -4.95f, -1.15f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+                { { +3.90f, -1.15f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+                { { -4.95f, +1.75f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+                { { +3.90f, +1.75f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+
+                // "Magic" lights on top of the wells
+                { { +8.95f, +3.60f, 1.30f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
+                { { +8.95f, -3.20f, 1.30f, 1.0f }, { 0.6f, 0.2f, 1.0f, 2.5f } },
+                { { -9.65f, +3.60f, 1.30f, 1.0f }, { 0.4f, 1.0f, 0.4f, 2.5f } },
+                { { -9.65f, -3.20f, 1.30f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
+            };
+
+            for (u32 LightIndex = 0; LightIndex < CountOf(LightSources); LightIndex++)
+            {
+                const light* Light = LightSources + LightIndex;
+                if (World->EntityCount < World->MaxEntityCount)
+                {
+                    World->Entities[World->EntityCount++] = 
+                    {
+                        .Flags = EntityFlag_LightSource,
+                        .Transform = M4(1.0f, 0.0f, 0.0f, Light->P.x,
+                                        0.0f, 1.0f, 0.0f, Light->P.y,
+                                        0.0f, 0.0f, 1.0f, Light->P.z,
+                                        0.0f, 0.0f, 0.0f, 1.0f),
+                        .LightEmission = Light->E,
+                    };
+                }
+            }
+        }
+
+        // Animated fox
+        {
+            m4 Transform = YUpToZUp * M4(1e-2f, 0.0f, 0.0f, 0.0f,
+                                         0.0f, 1e-2f, 0.0f, 0.0f,
+                                         0.0f, 0.0f, 1e-2f, 0.0f,
+                                         0.0f, 0.0f, 0.0f, 1.0f);
+            DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, World, GameState->Renderer, 
+                               "data/Scenes/Fox/Fox.gltf", Transform);
+        }
+
+        World->IsLoaded = true;
     }
 
     // Update
@@ -1228,42 +1236,71 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             }
         }
 
-        camera* Camera = &World->Camera;
-        v3 MoveDirection = {};
-        if (GameIO->Keys[SC_W].bIsDown) { MoveDirection.z += 1.0f; }
-        if (GameIO->Keys[SC_S].bIsDown) { MoveDirection.z -= 1.0f; }
-        if (GameIO->Keys[SC_D].bIsDown) { MoveDirection.x += 1.0f; }
-        if (GameIO->Keys[SC_A].bIsDown) { MoveDirection.x -= 1.0f; }
-
-        if (GameIO->Keys[SC_Left].bIsDown)
+        // Camera update
         {
-            Camera->Yaw += 1e-1f * dt;
+            camera* Camera = &World->Camera;
+            v3 MoveDirection = {};
+            if (GameIO->Keys[SC_W].bIsDown) { MoveDirection.z += 1.0f; }
+            if (GameIO->Keys[SC_S].bIsDown) { MoveDirection.z -= 1.0f; }
+            if (GameIO->Keys[SC_D].bIsDown) { MoveDirection.x += 1.0f; }
+            if (GameIO->Keys[SC_A].bIsDown) { MoveDirection.x -= 1.0f; }
+
+            if (GameIO->Keys[SC_Left].bIsDown)
+            {
+                Camera->Yaw += 1e-1f * dt;
+            }
+            if (GameIO->Keys[SC_Right].bIsDown)
+            {
+                Camera->Yaw -= 1e-1f * dt;
+            }
+
+            if (GameIO->Keys[SC_MouseLeft].bIsDown)
+            {
+                constexpr f32 MouseTurnSpeed = 1e-2f;
+                Camera->Yaw -= -MouseTurnSpeed * GameIO->Mouse.dP.x;
+                Camera->Pitch -= MouseTurnSpeed * GameIO->Mouse.dP.y;
+            }
+
+            constexpr f32 PitchClamp = 0.5f * Pi - 1e-3f;
+            Camera->Pitch = Clamp(Camera->Pitch, -PitchClamp, PitchClamp);
+
+            m4 CameraTransform = GetTransform(Camera);
+            v3 Forward = CameraTransform.Z.xyz;
+            v3 Right = CameraTransform.X.xyz;
+
+            constexpr f32 MoveSpeed = 1.0f;
+            f32 SpeedMul = GameIO->Keys[SC_LeftShift].bIsDown ? 2.5f : 1.0f;
+            Camera->P += (Right * MoveDirection.x + Forward * MoveDirection.z) * SpeedMul * MoveSpeed * dt;
+
+            if (GameIO->Keys[SC_Space].bIsDown) { Camera->P.z += SpeedMul * MoveSpeed * dt; }
+            if (GameIO->Keys[SC_LeftControl].bIsDown) { Camera->P.z -= SpeedMul * MoveSpeed * dt; }
         }
-        if (GameIO->Keys[SC_Right].bIsDown)
+
+        frame_uniform_data* Uniforms = &RenderFrame->Uniforms;
+        for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
         {
-            Camera->Yaw -= 1e-1f * dt;
+            entity* Entity = World->Entities + EntityIndex;
+            if (Entity->Flags & EntityFlag_Mesh)
+            {
+                // TODO
+                if (Entity->Flags & EntityFlag_Skin)
+                {
+                    // TODO
+                }
+            }
+
+            if (Entity->Flags & EntityFlag_LightSource)
+            {
+                if (Uniforms->LightCount < R_MaxLightCount)
+                {
+                    Uniforms->Lights[Uniforms->LightCount++] = 
+                    {
+                        .P = Entity->Transform.P,
+                        .E = Entity->LightEmission,
+                    };
+                }
+            }
         }
-
-        if (GameIO->Keys[SC_MouseLeft].bIsDown)
-        {
-            constexpr f32 MouseTurnSpeed = 1e-2f;
-            Camera->Yaw -= -MouseTurnSpeed * GameIO->Mouse.dP.x;
-            Camera->Pitch -= MouseTurnSpeed * GameIO->Mouse.dP.y;
-        }
-
-        constexpr f32 PitchClamp = 0.5f * Pi - 1e-3f;
-        Camera->Pitch = Clamp(Camera->Pitch, -PitchClamp, PitchClamp);
-
-        m4 CameraTransform = GetTransform(Camera);
-        v3 Forward = CameraTransform.Z.xyz;
-        v3 Right = CameraTransform.X.xyz;
-
-        constexpr f32 MoveSpeed = 1.0f;
-        f32 SpeedMul = GameIO->Keys[SC_LeftShift].bIsDown ? 2.5f : 1.0f;
-        Camera->P += (Right * MoveDirection.x + Forward * MoveDirection.z) * SpeedMul * MoveSpeed * dt;
-
-        if (GameIO->Keys[SC_Space].bIsDown) { Camera->P.z += SpeedMul * MoveSpeed * dt; }
-        if (GameIO->Keys[SC_LeftControl].bIsDown) { Camera->P.z -= SpeedMul * MoveSpeed * dt; }
     }
 
     GameRender(GameState, GameIO, RenderFrame);

@@ -1797,6 +1797,8 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
 
     vkResetDescriptorPool(VK.Device, Frame->DescriptorPool, 0);
     Frame->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrameUniformData]);
+
+    Frame->Uniforms = {};
     Frame->Uniforms.ScreenSize = { (f32)Frame->RenderExtent.width, (f32)Frame->RenderExtent.height };
 
     VkCommandBufferBeginInfo CmdBufferBegin = 

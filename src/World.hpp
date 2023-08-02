@@ -14,6 +14,7 @@ enum entity_flag_bits : entity_flags
 
     EntityFlag_Mesh = (1u << 0),
     EntityFlag_Skin = (1u << 1),
+    EntityFlag_LightSource = (1u << 2),
 };
 
 struct entity
@@ -29,6 +30,9 @@ struct entity
     u32 CurrentAnimationID;
     b32 DoAnimation;
     f32 AnimationCounter;
+
+    // EntityFlag_LightSource
+    v4 LightEmission;
 };
 
 struct camera
@@ -59,7 +63,6 @@ struct game_world
 //
 // Implementation
 //
-
 inline b32 IsValid(entity_id ID)
 {
     b32 Result = (ID.Value != U32_MAX);
