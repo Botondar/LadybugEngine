@@ -811,10 +811,11 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 light* Light = Frame->Uniforms.Lights + LightIndex;
 
                 // NOTE(boti): At this point our lights are in view space, so we have to transform them back...
-                m4 Transform = M4(1e-1f, 0.0f, 0.0f, Light->P.x,
-                                  0.0f, 1e-1f, 0.0f, Light->P.y,
-                                  0.0f, 0.0f, 1e-1f, Light->P.z,
-                                  0.0f, 0.0f, 0.0f, 1.0f) * Frame->Uniforms.CameraTransform;
+                m4 Transform = Frame->Uniforms.CameraTransform * 
+                    M4(1e-1f, 0.0f, 0.0f, Light->P.x,
+                       0.0f, 1e-1f, 0.0f, Light->P.y,
+                       0.0f, 0.0f, 1e-1f, Light->P.z,
+                       0.0f, 0.0f, 0.0f, 1.0f);
                 rgba8 Color = PackRGBA({ Light->E.x, Light->E.y, Light->E.z, 1.0f });
 
                 vkCmdPushConstants(Frame->CmdBuffer, GizmoPipeline.Layout,
