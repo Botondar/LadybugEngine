@@ -94,7 +94,7 @@ static bool IntersectRayBox(ray Ray, v3 P, v3 HalfExtent, m4 Transform, f32 tMax
 
         v3 N = Axes[i];
         // Two checks for the positive and negative planes along the current axis,
-        // N gets negated at the of this loop
+        // N gets negated at the end of this loop
         for (u32 n = 0; n < 2; n++)
         {
             f32 NdotP = Dot(Ray.P, N);
