@@ -35,6 +35,28 @@ struct entity
     v4 LightEmission;
 };
 
+struct particle
+{
+    v3 P;
+};
+
+enum particle_system_type
+{
+    ParticleSystem_Undefined = 0,
+    ParticleSystem_Magic,
+
+    ParticleSystem_COUNT,
+};
+
+struct particle_system
+{
+    entity_id ParentID;
+    particle_system_type Type;
+
+    static constexpr MaxParticleCount = 8192;
+    particle Particles[MaxParticleCount];
+};
+
 struct camera
 {
     v3 P;
@@ -58,6 +80,10 @@ struct game_world
     static constexpr u32 MaxEntityCount = (1u << 21);
     u32 EntityCount;
     entity Entities[MaxEntityCount];
+
+    static constexpr u32 MaxParticleSystemCount = 512u;
+    u32 ParticleSystemCount;
+    particle_system ParticleSystems[MaxParticleSystemCount];
 };
 
 //
