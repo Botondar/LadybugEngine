@@ -53,7 +53,11 @@ struct particle_system
     entity_id ParentID;
     particle_system_type Type;
 
+    f32 MinZ;
+    f32 MaxZ;
+
     static constexpr u32 MaxParticleCount = 8192;
+    u32 ParticleCount;
     particle Particles[MaxParticleCount];
 };
 
@@ -76,6 +80,8 @@ struct game_world
     camera Camera;
     v3 SunL;
     v3 SunV;
+
+    entropy32 EffectEntropy; // NOTE(boti): for visual effects only
 
     static constexpr u32 MaxEntityCount = (1u << 21);
     u32 EntityCount;

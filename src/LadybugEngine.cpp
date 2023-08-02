@@ -575,14 +575,6 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
             // Particles
             {
-                Frame->Particles[Frame->ParticleCount++] = 
-                { 
-                    { 0.0f, 0.0f, 0.5f },
-                    { 0.5f, 0.5f },
-                    5.0f * v3{ 0.8f, 1.0f, 0.4f },
-                    Particle_Star01,
-                };
-
                 VkImageView ParticleView = GetImageView(&Renderer->TextureManager, Assets->ParticleArrayID);
                 VkDescriptorSet TextureSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS]);
                 VkDescriptorImageInfo DescriptorImage = 
@@ -1112,6 +1104,8 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     if (!GameState->World->IsLoaded)
     {
         game_world* World = GameState->World;
+        World->EffectEntropy = { 0x13370420 };
+
         m4 YUpToZUp = M4(1.0f, 0.0f, 0.0f, 0.0f,
                          0.0f, 0.0f, -1.0f, 0.0f,
                          0.0f, 1.0f, 0.0f, 0.0f,
@@ -1142,7 +1136,8 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 const light* Light = LightSources + LightIndex;
                 if (World->EntityCount < World->MaxEntityCount)
                 {
-                    World->Entities[World->EntityCount++] = 
+                    entity_id ID = { World->EntityCount++ };
+                    World->Entities[ID.Value] = 
                     {
                         .Flags = EntityFlag_LightSource,
                         .Transform = M4(1.0f, 0.0f, 0.0f, Light->P.x,
@@ -1151,6 +1146,26 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                                         0.0f, 0.0f, 0.0f, 1.0f),
                         .LightEmission = Light->E,
                     };
+
+                    b32 IsMagicLight = (LightIndex >= 4);
+                    if (IsMagicLight)
+                    {
+                        particle_system* ParticleSystem = World->ParticleSystems + World->ParticleSystemCount++;
+                        ParticleSystem->ParentID = ID;
+                        ParticleSystem->Type = ParticleSystem_Magic;
+                        ParticleSystem->MinZ = -0.25f;
+                        ParticleSystem->MaxZ = +1.75f;
+
+                        ParticleSystem->ParticleCount = 128;
+                        constexpr f32 Scale = 0.3f;
+                        for (u32 ParticleIndex = 0; ParticleIndex < ParticleSystem->ParticleCount; ParticleIndex++)
+                        {
+                            f32 X = Scale * RandBilateral(&World->EffectEntropy);
+                            f32 Y = Scale * RandBilateral(&World->EffectEntropy);
+                            f32 Z = (ParticleSystem->MaxZ - ParticleSystem->MinZ) * RandUnilateral(&World->EffectEntropy) + ParticleSystem->MinZ;
+                            ParticleSystem->Particles[ParticleIndex] = { { X, Y, Z } };
+                        }
+                    }
                 }
             }
         }
@@ -1299,6 +1314,46 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                     {
                         .P = Entity->Transform.P,
                         .E = Entity->LightEmission,
+                    };
+                }
+            }
+        }
+
+        for (u32 ParticleSystemIndex = 0; ParticleSystemIndex < World->ParticleSystemCount; ParticleSystemIndex++)
+        {
+            particle_system* ParticleSystem = World->ParticleSystems + ParticleSystemIndex;
+            if (ParticleSystem->Type == ParticleSystem_Magic)
+            {
+                f32 ZRange = ParticleSystem->MaxZ - ParticleSystem->MinZ;
+
+                for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
+                {
+                    particle* Particle = ParticleSystem->Particles + It;
+                    Particle->P.z += 2.0f * dt;
+                    Particle->P.z = Modulo(Particle->P.z - ParticleSystem->MinZ, ZRange) + ParticleSystem->MinZ;
+                }
+
+                v3 BaseP = { 0.0f, 0.0f, 0.0f };
+                v3 Color = { 1.0f, 1.0f, 1.0f };
+                if (IsValid(ParticleSystem->ParentID))
+                {
+                    entity* Parent = World->Entities + ParticleSystem->ParentID.Value;
+                    BaseP = Parent->Transform.P.xyz;
+                    if (Parent->Flags & EntityFlag_LightSource)
+                    {
+                        Color = Parent->LightEmission.xyz * Parent->LightEmission.w;
+                    }
+                }
+
+                u32 CopyCount = Min(ParticleSystem->ParticleCount, RenderFrame->MaxParticleCount - RenderFrame->ParticleCount);
+                for (u32 It = 0; It < CopyCount; It++)
+                {
+                    RenderFrame->Particles[RenderFrame->ParticleCount++] = 
+                    {
+                        .P = BaseP + ParticleSystem->Particles[It].P,
+                        .HalfExtent = { 0.25f, 0.25f },
+                        .Color = Color,
+                        .TextureIndex = Particle_Star04,
                     };
                 }
             }

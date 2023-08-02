@@ -280,6 +280,7 @@ inline f32 Tan(f32 x) { return tanf(x); }
 inline f32 Ln(f32 x) { return logf(x); }
 inline f32 Pow(f32 a, f32 b) { return powf(a, b); }
 inline f32 Ratio0(f32 Numerator, f32 Denominator);
+inline f32 Modulo(f32 x, f32 d) { return fmodf(x, d); }
 
 
 template<typename T> inline constexpr 
@@ -298,6 +299,15 @@ T Lerp(T a, T b, f32 t);
 
 inline constexpr f32 ToRadians(f32 Degrees);
 inline constexpr f32 ToDegrees(f32 Radians);
+
+struct entropy32
+{
+    u32 Value;
+};
+
+inline u32 RandU32(entropy32* Entropy);
+inline f32 RandUnilateral(entropy32* Entropy);
+inline f32 RandBilateral(entropy32* Entropy);
 
 inline bool PointRectOverlap(v2 P, mmrect2 Rect);
 
@@ -595,6 +605,33 @@ inline T* DListRemove(T* Elem)
 //
 // Math
 //
+
+inline u32 RandU32(entropy32* Entropy)
+{
+    // NOTE(boti): XorShift32
+    u32 Value = Entropy->Value;
+    Value ^= Value << 13;
+    Value ^= Value >> 17;
+    Value ^= Value << 5;
+    Entropy->Value = Value;
+    return(Value);
+}
+
+inline f32 RandUnilateral(entropy32* Entropy)
+{
+    u32 Value = RandU32(Entropy);
+    // NOTE(boti): Shove the bits into the mantissa and set the exponent to 1
+    // to get a value in [1,2).
+    Value = (F32_EXPONENT_BIAS << F32_EXPONENT_SHIFT) | (Value & F32_MANTISSA_MASK);
+    f32 Result = *((f32*)&Value) - 1.0f; // NOTE(boti): subtract 1 to get [0,1)
+    return(Result);
+}
+
+inline f32 RandBilateral(entropy32* Entropy)
+{
+    f32 Result = 2.0f * RandUnilateral(Entropy) - 1.0f;
+    return(Result);
+}
 
 inline f32 Ratio0(f32 Numerator, f32 Denominator)
 {
