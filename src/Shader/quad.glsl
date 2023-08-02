@@ -17,6 +17,7 @@ struct particle
     v3 P;
     v2 HalfExtent;
     v3 Color;
+    uint TextureIndex;
 };
 
 layout(scalar, set = 1, binding = 0) 
@@ -27,6 +28,7 @@ buffer VertexBlock
 
 layout(location = 0) out v2 TexCoord;
 layout(location = 1) out v3 ParticleColor;
+layout(location = 2) out flat uint ParticleTexture;
 
 void main()
 {
@@ -53,6 +55,7 @@ void main()
 
     TexCoord = 0.5 * (BaseP.xy + vec2(1.0, 1.0));
     ParticleColor = Particle.Color;
+    ParticleTexture = Particle.TextureIndex;
     gl_Position = PerFrame.Projection * vec4(P, 1.0);
 }
 #else
@@ -61,12 +64,13 @@ layout(set = 2, binding = 0) uniform sampler2DArray Texture;
 
 layout(location = 0) in v2 TexCoord;
 layout(location = 1) in v3 ParticleColor;
+layout(location = 2) in flat uint ParticleTexture;
 
 layout(location = 0) out v4 Target0;
 
 void main()
 {
-    v4 SampleColor = texture(Texture, vec3(TexCoord, 0));
+    v4 SampleColor = texture(Texture, vec3(TexCoord, float(ParticleTexture)));
     
     Target0 = vec4(SampleColor.rgb * ParticleColor.rgb, SampleColor.a);
 }

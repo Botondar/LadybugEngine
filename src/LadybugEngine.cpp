@@ -580,6 +580,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                     { 0.0f, 0.0f, 0.5f },
                     { 0.5f, 0.5f },
                     5.0f * v3{ 0.8f, 1.0f, 0.4f },
+                    Particle_Star01,
                 };
 
                 VkImageView ParticleView = GetImageView(&Renderer->TextureManager, Assets->ParticleArrayID);

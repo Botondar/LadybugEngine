@@ -622,6 +622,7 @@ struct render_particle
     v3 P;
     v2 HalfExtent;
     v3 Color;
+    u32 TextureIndex;
 };
 
 struct material
