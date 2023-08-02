@@ -1348,14 +1348,14 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             }
 
             v3 BaseP = { 0.0f, 0.0f, 0.0f };
-            v3 Color = { 1.0f, 1.0f, 1.0f };
+            v4 Color = { 1.0f, 1.0f, 1.0f, 1.0f };
             if (IsValid(ParticleSystem->ParentID))
             {
                 entity* Parent = World->Entities + ParticleSystem->ParentID.Value;
                 BaseP = Parent->Transform.P.xyz;
                 if (Parent->Flags & EntityFlag_LightSource)
                 {
-                    Color = Parent->LightEmission.xyz * Parent->LightEmission.w;
+                    Color = Parent->LightEmission;
                 }
             }
 
@@ -1365,9 +1365,9 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 RenderFrame->Particles[RenderFrame->ParticleCount++] = 
                 {
                     .P = BaseP + ParticleSystem->Particles[It].P,
-                    .HalfExtent = { 0.25f, 0.25f },
-                    .Color = Color,
                     .TextureIndex = Particle_Star04,
+                    .Color = Color,
+                    .HalfExtent = { 0.25f, 0.25f },
                 };
             }
         }

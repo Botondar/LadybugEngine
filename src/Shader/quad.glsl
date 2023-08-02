@@ -15,9 +15,9 @@ uniform PerFrameBlock
 struct particle
 {
     v3 P;
-    v2 HalfExtent;
-    v3 Color;
     uint TextureIndex;
+    v4 Color;
+    v2 HalfExtent;
 };
 
 layout(scalar, set = 1, binding = 0) 
@@ -27,7 +27,7 @@ buffer VertexBlock
 };
 
 layout(location = 0) out v2 TexCoord;
-layout(location = 1) out v3 ParticleColor;
+layout(location = 1) out v4 ParticleColor;
 layout(location = 2) out flat uint ParticleTexture;
 
 void main()
@@ -63,7 +63,7 @@ void main()
 layout(set = 2, binding = 0) uniform sampler2DArray Texture;
 
 layout(location = 0) in v2 TexCoord;
-layout(location = 1) in v3 ParticleColor;
+layout(location = 1) in v4 ParticleColor;
 layout(location = 2) in flat uint ParticleTexture;
 
 layout(location = 0) out v4 Target0;
@@ -71,7 +71,6 @@ layout(location = 0) out v4 Target0;
 void main()
 {
     v4 SampleColor = texture(Texture, vec3(TexCoord, float(ParticleTexture)));
-    
-    Target0 = vec4(SampleColor.rgb * ParticleColor.rgb, SampleColor.a);
+    Target0 = ParticleColor * SampleColor;
 }
 #endif

@@ -620,9 +620,9 @@ struct ui_vertex
 struct render_particle
 {
     v3 P;
-    v2 HalfExtent;
-    v3 Color;
     u32 TextureIndex;
+    v4 Color;
+    v2 HalfExtent;
 };
 
 struct material
