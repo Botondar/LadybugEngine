@@ -53,7 +53,7 @@ struct particle_system
     entity_id ParentID;
     particle_system_type Type;
 
-    static constexpr MaxParticleCount = 8192;
+    static constexpr u32 MaxParticleCount = 8192;
     particle Particles[MaxParticleCount];
 };
 

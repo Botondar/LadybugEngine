@@ -604,7 +604,7 @@ VkResult CreateRenderer(renderer* Renderer,
 
         // Particle buffers
         {
-            u64 BufferSizePerFrame = render_frame::MaxParticleCount * sizeof(particle_vertex);
+            u64 BufferSizePerFrame = render_frame::MaxParticleCount * sizeof(render_particle);
             for (u32 Index = 0; Index < Renderer->SwapchainImageCount; Index++)
             {
                 VkBufferCreateInfo BufferInfo = 
@@ -1748,7 +1748,7 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
 
     Frame->ParticleCount = 0;
     Frame->ParticleBuffer = Renderer->PerFrameParticleBuffers[FrameID];
-    Frame->Particles = (particle_vertex*)Renderer->PerFrameParticleBufferMappings[FrameID];
+    Frame->Particles = (render_particle*)Renderer->PerFrameParticleBufferMappings[FrameID];
 
     Frame->JointCount = 0;
     Frame->JointBuffer = Renderer->PerFrameJointBuffers[FrameID];

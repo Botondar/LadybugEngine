@@ -617,7 +617,7 @@ struct ui_vertex
     rgba8 Color;
 };
 
-struct particle_vertex
+struct render_particle
 {
     v3 P;
     v2 HalfExtent;
