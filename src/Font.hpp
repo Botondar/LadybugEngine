@@ -41,7 +41,7 @@ enum class font_layout_type : u32
     Bottom,
 };
 
-// NOTE(boti): The results of these lbfns are  normalized to the em square, 
+// NOTE(boti): The results of these lbfnts are normalized to the em square, 
 //             multiply the result by the render size if you want to use it for layout.
 
 // Get the enclosing rectangle for the text including the full ascent+descent
