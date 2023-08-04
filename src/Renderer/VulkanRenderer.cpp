@@ -958,8 +958,8 @@ VkResult CreateRenderer(renderer* Renderer,
                 PushConstantRanges[Index] = 
                 {
                     .stageFlags = PipelineStagesToVulkan(Range->Stages),
-                    .offset = Range->Offset,
-                    .size = Range->Size,
+                    .offset = Range->ByteOffset,
+                    .size = Range->ByteSize,
                 };
             }
 
@@ -1749,6 +1749,8 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
     Frame->ParticleCount = 0;
     Frame->ParticleBuffer = Renderer->PerFrameParticleBuffers[FrameID];
     Frame->Particles = (render_particle*)Renderer->PerFrameParticleBufferMappings[FrameID];
+
+    Frame->ParticleDrawCmdCount = 0;
 
     Frame->JointCount = 0;
     Frame->JointBuffer = Renderer->PerFrameJointBuffers[FrameID];

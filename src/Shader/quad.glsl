@@ -4,6 +4,9 @@
 
 #include "common.glsli"
 
+#define Billboard_ViewAligned 0
+#define Billboard_ZAligned 1
+
 layout(set = 0, binding = 0) 
 uniform PerFrameBlock
 {
@@ -11,6 +14,11 @@ uniform PerFrameBlock
 };
 
 #if defined(VS)
+layout(push_constant) 
+uniform PushConstants
+{
+    uint BillboardMode;
+};
 
 struct particle
 {
@@ -52,7 +60,14 @@ void main()
     v3 BaseP = BaseVertices[IndexData[LocalIndex]];
     particle Particle = Particles[GlobalIndex];
 
-    v3 P = v3(Particle.HalfExtent.xy, 1.0) * BaseP + TransformPoint(PerFrame.View, Particle.P);
+    v3 X = PerFrame.CameraTransform[0].xyz;
+    v3 Y = PerFrame.CameraTransform[1].xyz;
+    if (BillboardMode == Billboard_ZAligned)
+    {
+        Y = v3(0.0, 0.0, 1.0);
+    }
+    v3 P = Particle.HalfExtent.x * BaseP.x * X + Particle.HalfExtent.y * BaseP.y * Y + Particle.P;
+    P = TransformPoint(PerFrame.View, P);
 
     TexCoord = 0.5 * (BaseP.xy + vec2(1.0, 1.0));
     ParticleColor = Particle.Color;
@@ -77,7 +92,9 @@ void main()
     f32 Depth = StructureDecode(textureLod(StructureBuffer, gl_FragCoord.xy, 0)).z;
     v4 SampleColor = texture(Texture, vec3(TexCoord, float(ParticleTexture)));
 
-    f32 Fade = clamp(2.0 * (Depth - ViewP.z), 0.0, 1.0);
+    f32 FarFade = clamp(2.0 * (Depth - ViewP.z), 0.0, 1.0);
+    f32 NearFade = smoothstep(PerFrame.NearZ, PerFrame.NearZ + 0.1, ViewP.z);
+    f32 Fade = min(FarFade, NearFade);
     Target0 = v4(ParticleColor.xyz * SampleColor.xyz, Fade * ParticleColor.w * SampleColor.w);
 }
 #endif

@@ -45,6 +45,10 @@ struct render_frame
     u32 ParticleCount;
     render_particle* Particles;
 
+    static constexpr u32 MaxParticleDrawCmdCount = 8192u;
+    u32 ParticleDrawCmdCount;
+    particle_cmd ParticleDrawCmds[MaxParticleDrawCmdCount];
+
     static constexpr u32 MaxJointCount = (1u << 17);
     u32 JointCount;
     VkBuffer JointBuffer;

@@ -240,7 +240,8 @@ enum pipeline_type : u32
     PipelineType_Count,
 };
 
-enum pipeline_stage : flags32
+typedef flags32 pipeline_stages;
+enum pipeline_stage_bits : pipeline_stages
 {
     PipelineStage_None = 0,
 
@@ -318,9 +319,9 @@ enum cull_flags : u32
 
 struct push_constant_range
 {
-    flags32 Stages;
-    u32 Size;
-    u32 Offset;
+    pipeline_stages Stages;
+    u32 ByteSize;
+    u32 ByteOffset;
 };
 
 struct descriptor_set_binding
@@ -328,7 +329,7 @@ struct descriptor_set_binding
     u32 Binding;
     descriptor_type Type;
     u32 DescriptorCount;
-    flags32 Stages;
+    pipeline_stages Stages;
     u32 ImmutableSampler; // NOTE(boti): for now we only allow single immutable samplers
 };
 
@@ -617,12 +618,25 @@ struct ui_vertex
     rgba8 Color;
 };
 
+enum billboard_mode : u32
+{
+    Billboard_ViewAligned = 0, // Billboards facing the camera directly
+    Billboard_ZAligned = 1, // Billboards aligned to the vertical axis (but rotated horizontally)
+};
+
 struct render_particle
 {
     v3 P;
     u32 TextureIndex;
     v4 Color;
     v2 HalfExtent;
+};
+
+struct particle_cmd
+{
+    u32 FirstParticle;
+    u32 ParticleCount;
+    billboard_mode Mode;
 };
 
 struct material

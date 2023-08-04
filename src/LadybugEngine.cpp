@@ -612,7 +612,16 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
                                         0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
                                         0, nullptr);
-                vkCmdDraw(Frame->CmdBuffer, 6 * Frame->ParticleCount, 1, 0, 0);
+
+                for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
+                {
+                    particle_cmd* Cmd = Frame->ParticleDrawCmds + CmdIndex;
+                    u32 VertexCount = 6 * Cmd->ParticleCount;
+                    u32 FirstVertex = 6 * Cmd->FirstParticle;
+                    vkCmdPushConstants(Frame->CmdBuffer, ParticlePipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
+                                       0, sizeof(Cmd->Mode), &Cmd->Mode);
+                    vkCmdDraw(Frame->CmdBuffer, VertexCount, 1, FirstVertex, 0);
+                }
             }
         }
         EndForwardPass(Frame);
@@ -1352,16 +1361,27 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 }
             }
 
-            u32 CopyCount = Min(ParticleSystem->ParticleCount, RenderFrame->MaxParticleCount - RenderFrame->ParticleCount);
-            for (u32 It = 0; It < CopyCount; It++)
+            if (RenderFrame->ParticleDrawCmdCount < RenderFrame->MaxParticleDrawCmdCount)
             {
-                RenderFrame->Particles[RenderFrame->ParticleCount++] = 
+                u32 FirstParticle = RenderFrame->ParticleCount;
+                u32 ParticleCount = Min(ParticleSystem->ParticleCount, RenderFrame->MaxParticleCount - RenderFrame->ParticleCount);
+                RenderFrame->ParticleDrawCmds[RenderFrame->ParticleDrawCmdCount++] = 
                 {
-                    .P = BaseP + ParticleSystem->Particles[It].P,
-                    .TextureIndex = Texture,
-                    .Color = Color,
-                    .HalfExtent = { 0.25f, 0.25f },
+                    .FirstParticle = FirstParticle,
+                    .ParticleCount = ParticleCount,
+                    .Mode = Billboard_ZAligned,
                 };
+
+                for (u32 It = 0; It < ParticleCount; It++)
+                {
+                    RenderFrame->Particles[RenderFrame->ParticleCount++] = 
+                    {
+                        .P = BaseP + ParticleSystem->Particles[It].P,
+                        .TextureIndex = Texture,
+                        .Color = Color,
+                        .HalfExtent = { 0.25f, 0.25f },
+                    };
+                }
             }
         }
     }

@@ -521,8 +521,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 { 
                     .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .Size = sizeof(m4) + sizeof(material),
-                    .Offset = 0, 
+                    .ByteSize = sizeof(m4) + sizeof(material),
+                    .ByteOffset = 0, 
                 },
             },
             .DescriptorSets = 
@@ -573,8 +573,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 { 
                     .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .Size = sizeof(m4) + sizeof(material),
-                    .Offset = 0, 
+                    .ByteSize = sizeof(m4) + sizeof(material),
+                    .ByteOffset = 0, 
                 },
             },
             .DescriptorSets = 
@@ -622,8 +622,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 { 
                     .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .Size = sizeof(m4) + sizeof(material) + sizeof(u32),
-                    .Offset = 0, 
+                    .ByteSize = sizeof(m4) + sizeof(material) + sizeof(u32),
+                    .ByteOffset = 0, 
                 },
             },
             .DescriptorSets = 
@@ -671,8 +671,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 { 
                     .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .Size = sizeof(m4) + sizeof(u32),
-                    .Offset = 0, 
+                    .ByteSize = sizeof(m4) + sizeof(u32),
+                    .ByteOffset = 0, 
                 },
             },
             .DescriptorSets = { SetLayout_PerFrameUniformData },
@@ -753,8 +753,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             { 
                 { 
                     .Stages = PipelineStage_VS,
-                    .Size = sizeof(m4),
-                    .Offset = 0, 
+                    .ByteSize = sizeof(m4),
+                    .ByteOffset = 0, 
                 },
             },
             .DescriptorSets = { SetLayout_SingleCombinedTexturePS },
@@ -833,8 +833,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 {
                     .Stages = PipelineStage_PS,
-                    .Size = sizeof(f32),
-                    .Offset = 0,
+                    .ByteSize = sizeof(f32),
+                    .ByteOffset = 0,
                 },
             },
             .DescriptorSets = { SetLayout_Blit },
@@ -879,8 +879,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 {
                     .Stages = PipelineStage_CS,
-                    .Size = sizeof(b32),
-                    .Offset = 0,
+                    .ByteSize = sizeof(b32),
+                    .ByteOffset = 0,
                 },
             },
             .DescriptorSets = { SetLayout_Bloom },
@@ -899,8 +899,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             { 
                 {
                     .Stages = PipelineStage_CS,
-                    .Size = 2 * sizeof(f32),
-                    .Offset = 0,
+                    .ByteSize = 2 * sizeof(f32),
+                    .ByteOffset = 0,
                 }
             },
             .DescriptorSets = { SetLayout_BloomUpsample },
@@ -919,8 +919,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 {
                     .Stages = PipelineStage_CS,
-                    .Size = 3 * sizeof(f32),
-                    .Offset = 0,
+                    .ByteSize = 3 * sizeof(f32),
+                    .ByteOffset = 0,
                 },
             },
             .DescriptorSets = 
@@ -949,9 +949,16 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Graphics,
         .Layout = 
         {
-            .PushConstantRangeCount = 0,
+            .PushConstantRangeCount = 1,
             .DescriptorSetCount = 4,
-            .PushConstantRanges = {},
+            .PushConstantRanges = 
+            {
+                {
+                    .Stages = PipelineStage_VS,
+                    .ByteSize = sizeof(billboard_mode),
+                    .ByteOffset = 0,
+                },
+            },
             .DescriptorSets = 
             {
                 SetLayout_PerFrameUniformData,
@@ -1012,8 +1019,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 {
                     .Stages = PipelineStage_All,
-                    .Size = 3 * sizeof(u32),
-                    .Offset = 0,
+                    .ByteSize = 3 * sizeof(u32),
+                    .ByteOffset = 0,
                 },
             },
             .DescriptorSets = 
