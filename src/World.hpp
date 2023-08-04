@@ -39,6 +39,9 @@ struct particle
 {
     v3 P;
     v3 dP;
+    f32 Alpha;
+    f32 t;
+    u32 TextureIndex;
 };
 
 enum particle_system_type

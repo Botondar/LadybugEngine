@@ -668,6 +668,22 @@ inline rgba8 PackRGBA(v4 Color);
 inline u32 GetMaxMipCount(u32 Width, u32 Height);
 inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFFFFFFu);
 
+struct draw_cmd_base
+{
+    u32 IndexCount;
+    u32 InstanceCount;
+    u32 IndexOffset;
+    u32 VertexOffset;
+    u32 InstanceOffset;
+};
+
+struct draw_cmd
+{
+    draw_cmd_base Base;
+    m4 Transform;
+    material Material;
+};
+
 //
 // Render API
 //

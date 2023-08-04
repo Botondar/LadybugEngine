@@ -15,16 +15,9 @@
 #include "stb/stb_image.h"
 #pragma warning(pop)
 
-struct skinned_cmd
-{
-    VkDrawIndexedIndirectCommand Indirect;
-    m4 Transform;
-    material Material;
-};
-
 lbfn void RenderMeshes(render_frame* Frame, game_state* GameState,
                        VkPipelineLayout PipelineLayout,
-                       u32 SkinnedCommandCount, skinned_cmd* SkinnedCommands,
+                       u32 SkinnedCommandCount, draw_cmd* SkinnedCommands,
                        const frustum* Frustum = nullptr, bool DoCulling = false);
 
 lbfn bool IntersectFrustum(const frustum* Frustum, const mmbox* Box)
@@ -56,7 +49,7 @@ lbfn bool IntersectFrustum(const frustum* Frustum, const mmbox* Box)
 
 lbfn void RenderMeshes(render_frame* Frame, game_state* GameState,
                        VkPipelineLayout PipelineLayout,
-                       u32 SkinnedCommandCount, skinned_cmd* SkinnedCommands,
+                       u32 SkinnedCommandCount, draw_cmd* SkinnedCommands,
                        const frustum* Frustum /*= nullptr*/, bool DoCulling /*= false*/)
 {
     assets* Assets = GameState->Assets;
@@ -115,7 +108,7 @@ lbfn void RenderMeshes(render_frame* Frame, game_state* GameState,
     vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Frame->SkinningBuffer, &ZeroOffset);
     for (u32 CmdIndex = 0; CmdIndex < SkinnedCommandCount; CmdIndex++)
     {
-        skinned_cmd* Cmd = SkinnedCommands + CmdIndex;
+        draw_cmd* Cmd = SkinnedCommands + CmdIndex;
         push_constants PushConstants = 
         {
             .Transform = Cmd->Transform,
@@ -123,7 +116,7 @@ lbfn void RenderMeshes(render_frame* Frame, game_state* GameState,
         };
         vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(PushConstants), &PushConstants);
-        vkCmdDrawIndexed(Frame->CmdBuffer, Cmd->Indirect.indexCount, 1, Cmd->Indirect.firstIndex, Cmd->Indirect.vertexOffset, 0);
+        vkCmdDrawIndexed(Frame->CmdBuffer, Cmd->Base.IndexCount, 1, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, 0);
     }
 }
 
@@ -223,7 +216,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
     // Animation + Skinning
     u32 SkinnedCmdCount = 0;
-    skinned_cmd* SkinnedCmdList = PushArray<skinned_cmd>(FrameArena, World->EntityCount);
+    draw_cmd* SkinnedCmdList = PushArray<draw_cmd>(FrameArena, World->EntityCount);
 #if 1
     {
         u32 MaxUBOSize = (u32)VK.MaxConstantBufferByteSize;
@@ -414,13 +407,13 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
             SkinnedCmdList[SkinnedCmdCount++] = 
             {
-                .Indirect = 
+                .Base = 
                 {
-                    .indexCount = IndexCount,
-                    .instanceCount = 1,
-                    .firstIndex = IndexOffset,
-                    .vertexOffset = (s32)SkinningVertexOffset,
-                    .firstInstance = 0,
+                    .IndexCount = IndexCount,
+                    .InstanceCount = 1,
+                    .IndexOffset = IndexOffset,
+                    .VertexOffset = SkinningVertexOffset,
+                    .InstanceOffset = 0,
                 },
                 .Transform = Entity->Transform,
                 .Material = Material,
@@ -986,16 +979,6 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     game_state* GameState = Memory->GameState;
     if (!GameState)
     {
-        Platform.DebugPrint("sizeof(vertex) = %d\n", sizeof(vertex));
-        Platform.DebugPrint("\t.P  = %d\n", OffsetOf(vertex, P));
-        Platform.DebugPrint("\t.N  = %d\n", OffsetOf(vertex, N));
-        Platform.DebugPrint("\t.T  = %d\n", OffsetOf(vertex, T));
-        Platform.DebugPrint("\t.TC = %d\n", OffsetOf(vertex, TexCoord));
-        Platform.DebugPrint("\t.W  = %d\n", OffsetOf(vertex, Weights));
-        Platform.DebugPrint("\t.J  = %d\n", OffsetOf(vertex, Joints));
-        Platform.DebugPrint("\t.C  = %d\n", OffsetOf(vertex, Color));
-        Platform.DebugPrint("sizeof(vertex_skin8) = %d\n", sizeof(vertex_skin8));
-
         memory_arena BootstrapArena = InitializeArena(Memory->Size, Memory->Memory);
 
         GameState = Memory->GameState = PushStruct<game_state>(&BootstrapArena);
@@ -1108,6 +1091,11 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         return;
     }
 
+    if (GameIO->dt >= 0.3f)
+    {
+        GameIO->dt = 0.0f;
+    }
+
     render_frame* RenderFrame = BeginRenderFrame(GameState->Renderer, GameIO->OutputWidth, GameIO->OutputHeight);
 
     // Load debug scene
@@ -1166,6 +1154,15 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                             .Max = { +0.3f, +0.3f, +1.75f },
                         };
                         MakeParticleSystem(World, ID, ParticleSystem_Magic, Bounds);
+                    }
+                    else
+                    {
+                        mmbox Bounds = 
+                        {
+                            .Min = { -0.15f, -0.15f, -0.15f },
+                            .Max = { +0.15f, +0.15f, +0.50f },
+                        };
+                        MakeParticleSystem(World, ID, ParticleSystem_Fire, Bounds);
                     }
                 }
             }
@@ -1323,7 +1320,8 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         for (u32 ParticleSystemIndex = 0; ParticleSystemIndex < World->ParticleSystemCount; ParticleSystemIndex++)
         {
             particle_system* ParticleSystem = World->ParticleSystems + ParticleSystemIndex;
-            particle_texture Texture = Particle_Circle01;
+            billboard_mode Mode = Billboard_ZAligned;
+            v2 ParticleSize = { 1.0f, 1.0f };
             switch (ParticleSystem->Type)
             {
                 case ParticleSystem_Undefined:
@@ -1332,7 +1330,8 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 } break;
                 case ParticleSystem_Magic:
                 {
-                    Texture = Particle_Trace02;
+                    Mode = Billboard_ZAligned;
+                    ParticleSize = { 0.25f, 0.25f };
                     f32 ZRange = ParticleSystem->Bounds.Max.z - ParticleSystem->Bounds.Min.z;
 
                     for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
@@ -1344,7 +1343,51 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 } break;
                 case ParticleSystem_Fire:
                 {
-                    Texture = Particle_Smoke03;
+                    Mode = Billboard_ViewAligned;
+                    ParticleSize = { 0.15f, 0.15f };
+
+                    mmbox Bounds = ParticleSystem->Bounds;
+                    for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
+                    {
+                        particle* Particle = ParticleSystem->Particles + It;
+                        v3 ddP = v3{ RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy) };
+                        ddP = 1.5f * ddP;
+                        Particle->dP += ddP * dt;
+                        Particle->P += Particle->dP * dt;
+
+                        if (Particle->P.x < Bounds.Min.x)
+                        {
+                            Particle->dP.x = -Particle->dP.x;
+                            Particle->P.x = Bounds.Min.x;
+                        }
+                        else if (Particle->P.x > Bounds.Max.x)
+                        {
+                            Particle->dP.x = -Particle->dP.x;
+                            Particle->P.x = Bounds.Max.x;
+                        }
+
+                        if (Particle->P.y < Bounds.Min.y)
+                        {
+                            Particle->dP.y = -Particle->dP.y;
+                            Particle->P.y = Bounds.Min.y;
+                        }
+                        else if (Particle->P.y > Bounds.Max.y)
+                        {
+                            Particle->dP.y = -Particle->dP.y;
+                            Particle->P.y = Bounds.Max.y;
+                        }
+
+                        if (Particle->P.z < Bounds.Min.z)
+                        {
+                            Particle->dP.z = -Particle->dP.z;
+                            Particle->P.z = Bounds.Min.z;
+                        }
+                        else if (Particle->P.z > Bounds.Max.z)
+                        {
+                            Particle->dP.z = -Particle->dP.z;
+                            Particle->P.z = Bounds.Max.z;
+                        }
+                    }
                 } break;
                 InvalidDefaultCase;
             }
@@ -1369,17 +1412,18 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 {
                     .FirstParticle = FirstParticle,
                     .ParticleCount = ParticleCount,
-                    .Mode = Billboard_ZAligned,
+                    .Mode = Mode,
                 };
 
                 for (u32 It = 0; It < ParticleCount; It++)
                 {
-                    RenderFrame->Particles[RenderFrame->ParticleCount++] = 
+                    particle* Particle = ParticleSystem->Particles + It;
+                    RenderFrame->Particles[RenderFrame->ParticleCount++] =
                     {
-                        .P = BaseP + ParticleSystem->Particles[It].P,
-                        .TextureIndex = Texture,
-                        .Color = Color,
-                        .HalfExtent = { 0.25f, 0.25f },
+                        .P = BaseP + Particle->P,
+                        .TextureIndex = Particle->TextureIndex,
+                        .Color = { Color.x, Color.y, Color.z, Particle->Alpha * Color.w },
+                        .HalfExtent = ParticleSize,
                     };
                 }
             }
