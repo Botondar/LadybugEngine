@@ -1361,10 +1361,11 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                             .P = { 0.0f, 0.0f, Bounds.Min.z },
                             .dP = 
                             { 
-                                0.25f * RandBilateral(&World->EffectEntropy),
-                                0.25f * RandBilateral(&World->EffectEntropy),
+                                0.3f * RandBilateral(&World->EffectEntropy),
+                                0.3f * RandBilateral(&World->EffectEntropy),
                                 RandBetween(&World->EffectEntropy, 0.25f, 1.20f) 
                             },
+                            .ddP = { 0.5f, 0.2f, 0.0f },
                             .Alpha = 1.0f,
                             .dAlpha = -1.5f,
                             .TextureIndex = FirstTexture + (RandU32(&World->EffectEntropy) % TextureCount),
@@ -1376,6 +1377,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                     {
                         particle* Particle = ParticleSystem->Particles + It;
                         Particle->P += Particle->dP * dt;
+                        Particle->dP += Particle->ddP * dt;
                         Particle->Alpha += Particle->dAlpha * dt;
                     }
                 } break;

@@ -39,6 +39,7 @@ struct particle
 {
     v3 P;
     v3 dP;
+    v3 ddP;
     f32 Alpha;
     f32 dAlpha;
     u32 TextureIndex;
