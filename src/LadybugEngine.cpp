@@ -1354,7 +1354,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
                     {
                         u32 FirstTexture = Particle_Flame01;
-                        u32 OnePastLastTexture = Particle_Flame06 + 1;
+                        u32 OnePastLastTexture = Particle_Flame04 + 1;
                         u32 TextureCount = OnePastLastTexture - FirstTexture;
                         ParticleSystem->Particles[ParticleSystem->NextParticle] = 
                         {

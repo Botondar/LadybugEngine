@@ -98,9 +98,6 @@ lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_syst
             } break;
             case ParticleSystem_Fire:
             {
-                u32 FirstTexture = Particle_Flame01;
-                u32 OnePastLastTexture = Particle_Flame06 + 1;
-                u32 TextureCount = OnePastLastTexture - FirstTexture;
                 ParticleSystem->ParticleCount = 128;
             } break;
             InvalidDefaultCase;
