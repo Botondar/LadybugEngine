@@ -603,6 +603,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 {
                     Frame->UniformDescriptorSet,
                     ParticleBufferDescriptor,
+                    StructureBufferDescriptorSet,
                     TextureSet,
                 };
 

@@ -29,6 +29,7 @@ buffer VertexBlock
 layout(location = 0) out v2 TexCoord;
 layout(location = 1) out v4 ParticleColor;
 layout(location = 2) out flat uint ParticleTexture;
+layout(location = 3) out v3 ViewP;
 
 void main()
 {
@@ -56,21 +57,27 @@ void main()
     TexCoord = 0.5 * (BaseP.xy + vec2(1.0, 1.0));
     ParticleColor = Particle.Color;
     ParticleTexture = Particle.TextureIndex;
+    ViewP = P;
     gl_Position = PerFrame.Projection * vec4(P, 1.0);
 }
 #else
 
-layout(set = 2, binding = 0) uniform sampler2DArray Texture;
+layout(set = 2, binding = 0) uniform sampler2D StructureBuffer;
+layout(set = 3, binding = 0) uniform sampler2DArray Texture;
 
 layout(location = 0) in v2 TexCoord;
 layout(location = 1) in v4 ParticleColor;
 layout(location = 2) in flat uint ParticleTexture;
+layout(location = 3) in v3 ViewP;
 
 layout(location = 0) out v4 Target0;
 
 void main()
 {
+    f32 Depth = StructureDecode(textureLod(StructureBuffer, gl_FragCoord.xy, 0)).z;
     v4 SampleColor = texture(Texture, vec3(TexCoord, float(ParticleTexture)));
-    Target0 = ParticleColor * SampleColor;
+
+    f32 Fade = clamp(2.0 * (Depth - ViewP.z), 0.0, 1.0);
+    Target0 = v4(ParticleColor.xyz * SampleColor.xyz, Fade * ParticleColor.w * SampleColor.w);
 }
 #endif

@@ -950,12 +950,13 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Layout = 
         {
             .PushConstantRangeCount = 0,
-            .DescriptorSetCount = 3,
+            .DescriptorSetCount = 4,
             .PushConstantRanges = {},
             .DescriptorSets = 
             {
                 SetLayout_PerFrameUniformData,
                 SetLayout_ParticleBuffer,
+                SetLayout_SampledRenderTargetPS,
                 SetLayout_SingleCombinedTexturePS,
             },
         },
