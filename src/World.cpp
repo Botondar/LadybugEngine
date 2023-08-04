@@ -101,19 +101,7 @@ lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_syst
                 u32 FirstTexture = Particle_Flame01;
                 u32 OnePastLastTexture = Particle_Flame06 + 1;
                 u32 TextureCount = OnePastLastTexture - FirstTexture;
-
                 ParticleSystem->ParticleCount = 128;
-
-                for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
-                {
-                    ParticleSystem->Particles[It] = 
-                    {
-                        .P = { 0.0f, 0.0f, 0.0f },
-                        .dP = { 0.0f, 0.0f, 0.0f },
-                        .Alpha = 1.0f,
-                        .TextureIndex = (RandU32(&World->EffectEntropy) % TextureCount) + FirstTexture,
-                    };
-                }
             } break;
             InvalidDefaultCase;
         }
