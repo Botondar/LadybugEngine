@@ -379,6 +379,7 @@ inline f32 VectorLength(v3 v);
 inline v3 Normalize(v3 v);
 inline v3 NOZ(v3 v);
 inline v3 Cross(v3 a, v3 b);
+inline v3 Hadamard(v3 a, v3 b);
 
 inline v4 operator-(v4 v);
 inline v4 operator*(v4 v, f32 s);
@@ -867,6 +868,12 @@ inline v3 Cross(v3 a, v3 b)
         a.x * b.y - a.y * b.x,
     };
     return Result;
+}
+
+inline v3 Hadamard(v3 a, v3 b)
+{
+    v3 Result = { a.x*b.x, a.y*b.y, a.z*b.z };
+    return(Result);
 }
 
 inline v4 operator-(v4 v)

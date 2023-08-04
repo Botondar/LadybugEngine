@@ -1151,26 +1151,12 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                     b32 IsMagicLight = (LightIndex >= 4);
                     if (IsMagicLight)
                     {
-                        particle_system* ParticleSystem = World->ParticleSystems + World->ParticleSystemCount++;
-                        ParticleSystem->ParentID = ID;
-                        ParticleSystem->Type = ParticleSystem_Magic;
-                        ParticleSystem->MinZ = -0.25f;
-                        ParticleSystem->MaxZ = +1.75f;
-
-                        ParticleSystem->ParticleCount = 128;
-                        constexpr f32 Scale = 0.3f;
-                        for (u32 ParticleIndex = 0; ParticleIndex < ParticleSystem->ParticleCount; ParticleIndex++)
+                        mmbox Bounds = 
                         {
-                            f32 X = Scale * RandBilateral(&World->EffectEntropy);
-                            f32 Y = Scale * RandBilateral(&World->EffectEntropy);
-                            f32 Z = (ParticleSystem->MaxZ - ParticleSystem->MinZ) * RandUnilateral(&World->EffectEntropy) + ParticleSystem->MinZ;
-                            f32 dP = 2.0f * RandUnilateral(&World->EffectEntropy) + 0.25f;
-                            ParticleSystem->Particles[ParticleIndex] = 
-                            { 
-                                .P = { X, Y, Z },
-                                .dP = { 0.0f, 0.0f, dP },
-                            };
-                        }
+                            .Min = { -0.3f, -0.3f, -0.25f },
+                            .Max = { +0.3f, +0.3f, +1.75f },
+                        };
+                        MakeParticleSystem(World, ID, ParticleSystem_Magic, Bounds);
                     }
                 }
             }
@@ -1328,6 +1314,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         for (u32 ParticleSystemIndex = 0; ParticleSystemIndex < World->ParticleSystemCount; ParticleSystemIndex++)
         {
             particle_system* ParticleSystem = World->ParticleSystems + ParticleSystemIndex;
+            particle_texture Texture = Particle_Circle01;
             switch (ParticleSystem->Type)
             {
                 case ParticleSystem_Undefined:
@@ -1336,14 +1323,19 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 } break;
                 case ParticleSystem_Magic:
                 {
-                    f32 ZRange = ParticleSystem->MaxZ - ParticleSystem->MinZ;
+                    Texture = Particle_Trace02;
+                    f32 ZRange = ParticleSystem->Bounds.Max.z - ParticleSystem->Bounds.Min.z;
 
                     for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
                     {
                         particle* Particle = ParticleSystem->Particles + It;
                         Particle->P += Particle->dP * dt;
-                        Particle->P.z = Modulo(Particle->P.z - ParticleSystem->MinZ, ZRange) + ParticleSystem->MinZ;
+                        Particle->P.z = Modulo(Particle->P.z - ParticleSystem->Bounds.Min.z, ZRange) + ParticleSystem->Bounds.Min.z;
                     }
+                } break;
+                case ParticleSystem_Fire:
+                {
+                    Texture = Particle_Smoke03;
                 } break;
                 InvalidDefaultCase;
             }
@@ -1366,7 +1358,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 RenderFrame->Particles[RenderFrame->ParticleCount++] = 
                 {
                     .P = BaseP + ParticleSystem->Particles[It].P,
-                    .TextureIndex = Particle_Trace02,
+                    .TextureIndex = Texture,
                     .Color = Color,
                     .HalfExtent = { 0.25f, 0.25f },
                 };

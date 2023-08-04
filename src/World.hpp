@@ -45,6 +45,7 @@ enum particle_system_type
 {
     ParticleSystem_Undefined = 0,
     ParticleSystem_Magic,
+    ParticleSystem_Fire,
 
     ParticleSystem_COUNT,
 };
@@ -54,8 +55,7 @@ struct particle_system
     entity_id ParentID;
     particle_system_type Type;
 
-    f32 MinZ;
-    f32 MaxZ;
+    mmbox Bounds;
 
     static constexpr u32 MaxParticleCount = 8192;
     u32 ParticleCount;
@@ -93,6 +93,8 @@ struct game_world
     particle_system ParticleSystems[MaxParticleSystemCount];
 };
 
+lbfn u32 MakeParticleSystem(game_world* World, particle_system_type Type, entity_id ParentID, mmbox Bounds);
+
 //
 // Implementation
 //
@@ -101,4 +103,3 @@ inline b32 IsValid(entity_id ID)
     b32 Result = (ID.Value != U32_MAX);
     return(Result);
 }
-

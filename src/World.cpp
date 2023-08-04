@@ -53,3 +53,53 @@ lbfn m4 GetTransform(const camera* Camera)
     m4 Result = Translation * BasisTransform;
     return Result;
 }
+
+lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_system_type Type, mmbox Bounds)
+{
+    u32 Result = U32_MAX;
+    if (World->ParticleSystemCount < World->MaxParticleSystemCount)
+    {
+        if (IsValid(ParentID))
+        {
+            Assert(ParentID.Value < World->EntityCount);
+        }
+
+        Result = World->ParticleSystemCount++;
+        particle_system* ParticleSystem = World->ParticleSystems + Result;
+        ParticleSystem->ParentID = ParentID;
+        ParticleSystem->Type = Type;
+        ParticleSystem->Bounds = Bounds;
+
+        v3 CenterP = 0.5f * (Bounds.Max + Bounds.Min);
+        v3 HalfExtent = 0.5f * (Bounds.Max - Bounds.Min);
+
+        switch (Type)
+        {
+            case ParticleSystem_Undefined:
+            {
+                // Ignored
+            } break;
+            case ParticleSystem_Magic:
+            {
+                ParticleSystem->ParticleCount = 128;
+                for (u32 ParticleIndex = 0; ParticleIndex < ParticleSystem->ParticleCount; ParticleIndex++)
+                {
+                    v3 BaseP = { RandUnilateral(&World->EffectEntropy), RandUnilateral(&World->EffectEntropy), RandUnilateral(&World->EffectEntropy) };
+                    v3 P = 2.0f * Hadamard(HalfExtent, BaseP) + Bounds.Min;
+                    f32 dPz = 2.0f * RandUnilateral(&World->EffectEntropy) + 0.25f;
+                    ParticleSystem->Particles[ParticleIndex] = 
+                    {
+                        .P = P,
+                        .dP = { 0.0f, 0.0f, dPz },
+                    };
+                }
+            } break;
+            case ParticleSystem_Fire:
+            {
+                UnimplementedCodePath;
+            } break;
+            InvalidDefaultCase;
+        }
+    }
+    return(Result);
+}
