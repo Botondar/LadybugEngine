@@ -1366,7 +1366,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 RenderFrame->Particles[RenderFrame->ParticleCount++] = 
                 {
                     .P = BaseP + ParticleSystem->Particles[It].P,
-                    .TextureIndex = Particle_Star04,
+                    .TextureIndex = Particle_Trace02,
                     .Color = Color,
                     .HalfExtent = { 0.25f, 0.25f },
                 };
