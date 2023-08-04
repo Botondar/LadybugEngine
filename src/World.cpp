@@ -92,18 +92,17 @@ lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_syst
                         .P = P,
                         .dP = { 0.0f, 0.0f, dPz },
                         .Alpha = 1.0f,
-                        .t = 0.0f,
                         .TextureIndex = Particle_Trace02,
                     };
                 }
             } break;
             case ParticleSystem_Fire:
             {
-                u32 FirstTexture = Particle_Fire01;
-                u32 OnePastLastTexture = Particle_Fire02 + 1;
+                u32 FirstTexture = Particle_Flame01;
+                u32 OnePastLastTexture = Particle_Flame06 + 1;
                 u32 TextureCount = OnePastLastTexture - FirstTexture;
 
-                ParticleSystem->ParticleCount = 32;
+                ParticleSystem->ParticleCount = 128;
 
                 for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
                 {
@@ -112,7 +111,6 @@ lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_syst
                         .P = { 0.0f, 0.0f, 0.0f },
                         .dP = { 0.0f, 0.0f, 0.0f },
                         .Alpha = 1.0f,
-                        .t = 0.0f,
                         .TextureIndex = (RandU32(&World->EffectEntropy) % TextureCount) + FirstTexture,
                     };
                 }

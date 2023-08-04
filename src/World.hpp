@@ -40,7 +40,7 @@ struct particle
     v3 P;
     v3 dP;
     f32 Alpha;
-    f32 t;
+    f32 dAlpha;
     u32 TextureIndex;
 };
 
@@ -59,6 +59,7 @@ struct particle_system
     particle_system_type Type;
 
     mmbox Bounds;
+    u32 NextParticle;
 
     static constexpr u32 MaxParticleCount = 8192;
     u32 ParticleCount;

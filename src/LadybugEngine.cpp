@@ -1347,46 +1347,36 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                     ParticleSize = { 0.15f, 0.15f };
 
                     mmbox Bounds = ParticleSystem->Bounds;
+                    if (++ParticleSystem->NextParticle >= ParticleSystem->ParticleCount)
+                    {
+                        ParticleSystem->NextParticle -= ParticleSystem->ParticleCount;
+                    }
+
+                    {
+                        u32 FirstTexture = Particle_Flame01;
+                        u32 OnePastLastTexture = Particle_Flame06 + 1;
+                        u32 TextureCount = OnePastLastTexture - FirstTexture;
+                        ParticleSystem->Particles[ParticleSystem->NextParticle] = 
+                        {
+                            .P = { 0.0f, 0.0f, Bounds.Min.z },
+                            .dP = 
+                            { 
+                                0.25f * RandBilateral(&World->EffectEntropy),
+                                0.25f * RandBilateral(&World->EffectEntropy),
+                                RandBetween(&World->EffectEntropy, 0.25f, 1.20f) 
+                            },
+                            .Alpha = 1.0f,
+                            .dAlpha = -1.5f,
+                            .TextureIndex = FirstTexture + (RandU32(&World->EffectEntropy) % TextureCount),
+                        };
+                    }
+
+
                     for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
                     {
                         particle* Particle = ParticleSystem->Particles + It;
-                        v3 ddP = v3{ RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy) };
-                        ddP = 1.5f * ddP;
-                        Particle->dP += ddP * dt;
                         Particle->P += Particle->dP * dt;
-
-                        if (Particle->P.x < Bounds.Min.x)
-                        {
-                            Particle->dP.x = -Particle->dP.x;
-                            Particle->P.x = Bounds.Min.x;
-                        }
-                        else if (Particle->P.x > Bounds.Max.x)
-                        {
-                            Particle->dP.x = -Particle->dP.x;
-                            Particle->P.x = Bounds.Max.x;
-                        }
-
-                        if (Particle->P.y < Bounds.Min.y)
-                        {
-                            Particle->dP.y = -Particle->dP.y;
-                            Particle->P.y = Bounds.Min.y;
-                        }
-                        else if (Particle->P.y > Bounds.Max.y)
-                        {
-                            Particle->dP.y = -Particle->dP.y;
-                            Particle->P.y = Bounds.Max.y;
-                        }
-
-                        if (Particle->P.z < Bounds.Min.z)
-                        {
-                            Particle->dP.z = -Particle->dP.z;
-                            Particle->P.z = Bounds.Min.z;
-                        }
-                        else if (Particle->P.z > Bounds.Max.z)
-                        {
-                            Particle->dP.z = -Particle->dP.z;
-                            Particle->P.z = Bounds.Max.z;
-                        }
+                        Particle->Alpha += Particle->dAlpha * dt;
                     }
                 } break;
                 InvalidDefaultCase;
@@ -1418,11 +1408,12 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 for (u32 It = 0; It < ParticleCount; It++)
                 {
                     particle* Particle = ParticleSystem->Particles + It;
+                    f32 Alpha = Max(Particle->Alpha, 0.0f);
                     RenderFrame->Particles[RenderFrame->ParticleCount++] =
                     {
                         .P = BaseP + Particle->P,
                         .TextureIndex = Particle->TextureIndex,
-                        .Color = { Color.x, Color.y, Color.z, Particle->Alpha * Color.w },
+                        .Color = { Color.x, Color.y, Color.z, Alpha * Color.w },
                         .HalfExtent = ParticleSize,
                     };
                 }

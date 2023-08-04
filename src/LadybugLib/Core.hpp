@@ -246,6 +246,19 @@ constexpr f32 F32_MIN_SUBNORMAL = 1.40129846e-45f;
 constexpr f32 F32_EPSILON = 1.19209290e-7f;
 
 //
+// Random
+//
+struct entropy32
+{
+    u32 Value;
+};
+
+inline u32 RandU32(entropy32* Entropy);
+inline f32 RandUnilateral(entropy32* Entropy);
+inline f32 RandBilateral(entropy32* Entropy);
+inline f32 RandBetween(entropy32* Entropy, f32 Minimum, f32 Maximum);
+
+//
 // Math
 //
 
@@ -299,15 +312,6 @@ T Lerp(T a, T b, f32 t);
 
 inline constexpr f32 ToRadians(f32 Degrees);
 inline constexpr f32 ToDegrees(f32 Radians);
-
-struct entropy32
-{
-    u32 Value;
-};
-
-inline u32 RandU32(entropy32* Entropy);
-inline f32 RandUnilateral(entropy32* Entropy);
-inline f32 RandBilateral(entropy32* Entropy);
 
 inline bool PointRectOverlap(v2 P, mmrect2 Rect);
 
@@ -602,9 +606,8 @@ inline T* DListRemove(T* Elem)
     return Elem;
 }
 
-
 //
-// Math
+// Random
 //
 
 inline u32 RandU32(entropy32* Entropy)
@@ -621,8 +624,7 @@ inline u32 RandU32(entropy32* Entropy)
 inline f32 RandUnilateral(entropy32* Entropy)
 {
     u32 Value = RandU32(Entropy);
-    // NOTE(boti): Shove the bits into the mantissa and set the exponent to 1
-    // to get a value in [1,2).
+    // NOTE(boti): Shove the bits into the mantissa and set the exponent to 1 to get a value in [1,2).
     Value = (F32_EXPONENT_BIAS << F32_EXPONENT_SHIFT) | (Value & F32_MANTISSA_MASK);
     f32 Result = *((f32*)&Value) - 1.0f; // NOTE(boti): subtract 1 to get [0,1)
     return(Result);
@@ -633,6 +635,16 @@ inline f32 RandBilateral(entropy32* Entropy)
     f32 Result = 2.0f * RandUnilateral(Entropy) - 1.0f;
     return(Result);
 }
+
+inline f32 RandBetween(entropy32* Entropy, f32 Minimum, f32 Maximum)
+{
+    f32 Result = (Maximum - Minimum) * RandUnilateral(Entropy) + Minimum;
+    return(Result);
+}
+
+//
+// Math
+//
 
 inline f32 Ratio0(f32 Numerator, f32 Denominator)
 {
