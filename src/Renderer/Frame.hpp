@@ -1,5 +1,7 @@
 #pragma once
 
+extern vulkan VK;
+
 struct render_frame
 {
     renderer* Renderer;
@@ -81,6 +83,16 @@ struct render_frame
     frame_uniform_data Uniforms;
 };
 
+inline b32 RenderMesh(render_frame* Frame, 
+                      u32 VertexOffset, u32 VertexCount, 
+                      u32 IndexOffset, u32 IndexCount,
+                      m4 Transform, material Material);
+inline b32 RenderSkinnedMesh(render_frame* Frame,
+                             u32 VertexOffset, u32 VertexCount,
+                             u32 IndexOffset, u32 IndexCount,
+                             m4 Transform, material,
+                             u32 JointCount, m4* Pose);
+
 VkDescriptorSet PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayout Layout);
 VkDescriptorSet PushBufferDescriptor(render_frame* Frame, 
                                      VkDescriptorSetLayout Layout,
@@ -138,3 +150,84 @@ void RenderBloom(render_frame* Frame,
                       VkPipeline UpsamplePipeline, 
                       VkDescriptorSetLayout DownsampleSetLayout,
                       VkDescriptorSetLayout UpsampleSetLayout);
+
+//
+// Implementation
+//
+
+inline b32 RenderMesh(render_frame* Frame, 
+                      u32 VertexOffset, u32 VertexCount, 
+                      u32 IndexOffset, u32 IndexCount,
+                      m4 Transform, material Material)
+{
+    b32 Result = false;
+    if (Frame->DrawCmdCount < Frame->MaxDrawCmdCount)
+    {
+        Frame->DrawCmds[Frame->DrawCmdCount++] = 
+        {
+            .Base = 
+            {
+                .IndexCount = IndexCount,
+                .InstanceCount = 1,
+                .IndexOffset = IndexOffset,
+                .VertexOffset = VertexOffset,
+                .InstanceOffset = 0,
+            },
+            .Transform = Transform,
+            .Material = Material,
+        };
+        Result = true;
+    }
+    return(Result);
+}
+
+inline b32 RenderSkinnedMesh(render_frame* Frame,
+                             u32 VertexOffset, u32 VertexCount,
+                             u32 IndexOffset, u32 IndexCount,
+                             m4 Transform, material Material,
+                             u32 JointCount, m4* Pose)
+{
+    b32 Result = false;
+
+    if ((Frame->SkinningCmdCount < Frame->MaxSkinningCmdCount) &&
+        (Frame->SkinnedDrawCmdCount < Frame->MaxSkinnedDrawCmdCount))
+    {
+        const u32 CBAlignment = (u32)VK.ConstantBufferAlignment;
+        const u32 JointBufferAlignment = CBAlignment / sizeof(m4);
+
+        // TODO(boti): bounds checking
+        u32 DstVertexOffset = Frame->SkinningBufferOffset;
+        Frame->SkinningBufferOffset += VertexCount;
+
+        // TODO(boti): bounds checking
+        memcpy(Frame->JointMapping + Frame->JointCount, Pose, JointCount * sizeof(m4));
+        u32 JointBufferOffset = Frame->JointCount * sizeof(m4);
+        Frame->JointCount = Align(Frame->JointCount + JointCount, JointBufferAlignment);
+
+        Frame->SkinningCmds[Frame->SkinningCmdCount++] =
+        {
+            .SrcVertexOffset = VertexOffset,
+            .DstVertexOffset = DstVertexOffset,
+            .VertexCount = VertexCount,
+            .PoseOffset = JointBufferOffset,
+        };
+
+        Frame->SkinnedDrawCmds[Frame->SkinnedDrawCmdCount++] = 
+        {
+            .Base = 
+            {
+                .IndexCount = IndexCount,
+                .InstanceCount = 1,
+                .IndexOffset = IndexOffset,
+                .VertexOffset = DstVertexOffset,
+                .InstanceOffset = 0,
+            },
+            .Transform = Transform,
+            .Material = Material,
+        };
+
+        Result = true;
+    }
+
+    return(Result);
+}

@@ -229,59 +229,14 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     }
                 }
 
-                if (Frame->SkinningCmdCount < Frame->MaxSkinningCmdCount)
-                {
-                    u32 DstVertexOffset = Frame->SkinningBufferOffset;
-                    Frame->SkinningBufferOffset += VertexCount;
-
-                    // TODO(boti): bounds checking
-                    memcpy(Frame->JointMapping + Frame->JointCount, Pose, JointCount * sizeof(m4));
-                    u32 JointBufferOffset = Frame->JointCount * sizeof(m4);
-
-                    // HACK(boti): this should just be done through the render-frame interface
-                    u32 UBOAlignment = (u32)VK.ConstantBufferAlignment;
-                    u32 JointBufferAlignment = UBOAlignment / sizeof(m4);
-
-                    Frame->JointCount = Align(Frame->JointCount, JointBufferAlignment);
-
-                    skinning_cmd* SkinningCmd = Frame->SkinningCmds + Frame->SkinningCmdCount++;
-                    SkinningCmd->SrcVertexOffset = VertexOffset;
-                    SkinningCmd->DstVertexOffset = DstVertexOffset;
-                    SkinningCmd->VertexCount = VertexCount;
-                    SkinningCmd->PoseOffset = JointBufferOffset;
-
-                    if (Frame->SkinnedDrawCmdCount < Frame->MaxSkinnedDrawCmdCount)
-                    {
-                        draw_cmd* DrawCmd = Frame->SkinnedDrawCmds + Frame->SkinnedDrawCmdCount++;
-                        DrawCmd->Base = 
-                        {
-                            .IndexCount = IndexCount,
-                            .InstanceCount = 1,
-                            .IndexOffset = IndexOffset,
-                            .VertexOffset = DstVertexOffset,
-                            .InstanceOffset = 0,
-                        };
-                        DrawCmd->Transform = Entity->Transform;
-                        DrawCmd->Material = Assets->Materials[MaterialID];
-                    }
-                }
+                RenderSkinnedMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
+                                  Entity->Transform, Assets->Materials[MaterialID],
+                                  JointCount, Pose);
             }
             else
             {
-                if (Frame->DrawCmdCount < Frame->MaxDrawCmdCount)
-                {
-                    draw_cmd* DrawCmd = Frame->DrawCmds + Frame->DrawCmdCount++;
-                    DrawCmd->Base = 
-                    {
-                        .IndexCount = IndexCount,
-                        .InstanceCount = 1,
-                        .IndexOffset = IndexOffset,
-                        .VertexOffset = VertexOffset,
-                        .InstanceOffset = 0,
-                    };
-                    DrawCmd->Transform = Entity->Transform;
-                    DrawCmd->Material = Assets->Materials[MaterialID];
-                }
+                RenderMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
+                           Entity->Transform, Assets->Materials[MaterialID]);
             }
         }
             
