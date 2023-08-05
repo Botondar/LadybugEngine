@@ -133,9 +133,10 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
         for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
         {
             entity* Entity = World->Entities + EntityIndex;
+            m4 Transform = Entity->Transform;
+
             if (HasFlag(Entity->Flags, EntityFlag_Mesh))
             {
-                m4 Transform = Entity->Transform;
                 mmbox Box = Assets->MeshBoxes[Entity->MeshID];
                 v3 BoxP = 0.5f * (Box.Min + Box.Max);
                 v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
@@ -144,6 +145,17 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
                 if (IntersectRayBox(Ray, BoxP, HalfExtent, Transform, tMax, &t))
                 {
                     SelectedEntityID.Value = EntityIndex;
+                    tMax = t;
+                }
+            }
+            else if (HasFlag(Entity->Flags, EntityFlag_LightSource))
+            {
+                v3 HalfExtent = v3{ 0.2f, 0.2f, 0.2f };
+                f32 t = 0.0f;
+                if (IntersectRayBox(Ray, v3{ 0.0f, 0.0f, 0.0f }, HalfExtent, Transform, tMax, &t))
+                {
+                    SelectedEntityID.Value = EntityIndex;
+                    tMax = t;
                 }
             }
         }
