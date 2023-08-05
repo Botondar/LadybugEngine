@@ -1320,69 +1320,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         for (u32 ParticleSystemIndex = 0; ParticleSystemIndex < World->ParticleSystemCount; ParticleSystemIndex++)
         {
             particle_system* ParticleSystem = World->ParticleSystems + ParticleSystemIndex;
-            billboard_mode Mode = Billboard_ZAligned;
             v2 ParticleSize = { 1.0f, 1.0f };
-            switch (ParticleSystem->Type)
-            {
-                case ParticleSystem_Undefined:
-                {
-                    // Ignored
-                } break;
-                case ParticleSystem_Magic:
-                {
-                    Mode = Billboard_ZAligned;
-                    ParticleSize = { 0.25f, 0.25f };
-                    f32 ZRange = ParticleSystem->Bounds.Max.z - ParticleSystem->Bounds.Min.z;
-
-                    for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
-                    {
-                        particle* Particle = ParticleSystem->Particles + It;
-                        Particle->P += Particle->dP * dt;
-                        Particle->P.z = Modulo(Particle->P.z - ParticleSystem->Bounds.Min.z, ZRange) + ParticleSystem->Bounds.Min.z;
-                    }
-                } break;
-                case ParticleSystem_Fire:
-                {
-                    Mode = Billboard_ViewAligned;
-                    ParticleSize = { 0.15f, 0.15f };
-
-                    mmbox Bounds = ParticleSystem->Bounds;
-                    if (++ParticleSystem->NextParticle >= ParticleSystem->ParticleCount)
-                    {
-                        ParticleSystem->NextParticle -= ParticleSystem->ParticleCount;
-                    }
-
-                    {
-                        u32 FirstTexture = Particle_Flame01;
-                        u32 OnePastLastTexture = Particle_Flame04 + 1;
-                        u32 TextureCount = OnePastLastTexture - FirstTexture;
-                        ParticleSystem->Particles[ParticleSystem->NextParticle] = 
-                        {
-                            .P = { 0.0f, 0.0f, Bounds.Min.z },
-                            .dP = 
-                            { 
-                                0.3f * RandBilateral(&World->EffectEntropy),
-                                0.3f * RandBilateral(&World->EffectEntropy),
-                                RandBetween(&World->EffectEntropy, 0.25f, 1.20f) 
-                            },
-                            .ddP = { 0.5f, 0.2f, 0.0f },
-                            .Alpha = 1.0f,
-                            .dAlpha = -1.5f,
-                            .TextureIndex = FirstTexture + (RandU32(&World->EffectEntropy) % TextureCount),
-                        };
-                    }
-
-
-                    for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
-                    {
-                        particle* Particle = ParticleSystem->Particles + It;
-                        Particle->P += Particle->dP * dt;
-                        Particle->dP += Particle->ddP * dt;
-                        Particle->Alpha += Particle->dAlpha * dt;
-                    }
-                } break;
-                InvalidDefaultCase;
-            }
 
             v3 BaseP = { 0.0f, 0.0f, 0.0f };
             v4 Color = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -1396,28 +1334,98 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 }
             }
 
+            mmbox Bounds = ParticleSystem->Bounds;
+            if (ParticleSystem->EmissionRate > 0.0f)
+            {
+                ParticleSystem->Counter += dt;
+                while (ParticleSystem->Counter > ParticleSystem->EmissionRate)
+                {
+                    ParticleSystem->Counter -= ParticleSystem->EmissionRate;
+                    if (++ParticleSystem->NextParticle >= ParticleSystem->ParticleCount)
+                    {
+                        ParticleSystem->NextParticle -= ParticleSystem->ParticleCount;
+                    }
+
+                    switch (ParticleSystem->Type)
+                    {
+                        case ParticleSystem_Undefined:
+                        {
+                            // Ignored
+                        } break;
+                        case ParticleSystem_Magic:
+                        {
+                            v3 ParticleP = 
+                            { 
+                                RandBetween(&World->EffectEntropy, Bounds.Min.x, Bounds.Max.x), 
+                                RandBetween(&World->EffectEntropy, Bounds.Min.y, Bounds.Max.y), 
+                                Bounds.Min.z,
+                            };
+                            ParticleSystem->Particles[ParticleSystem->NextParticle] = 
+                            {
+                                .P = BaseP + ParticleP,
+                                .dP = { 0.0f, 0.0f, RandBetween(&World->EffectEntropy, 0.25f, 2.25f) },
+                                .Alpha = 1.0f,
+                                .dAlpha = 0.0f,
+                                .TextureIndex = Particle_Trace02,
+                            };
+                        } break;
+                        case ParticleSystem_Fire:
+                        {
+                            u32 FirstTexture = Particle_Flame01;
+                            u32 OnePastLastTexture = Particle_Flame04 + 1;
+                            u32 TextureCount = OnePastLastTexture - FirstTexture;
+
+                            v3 ParticleP = { 0.0f, 0.0f, Bounds.Min.z };
+                            ParticleSystem->Particles[ParticleSystem->NextParticle] = 
+                            {
+                                .P = ParticleP + BaseP,
+                                .dP = 
+                                { 
+                                    0.3f * RandBilateral(&World->EffectEntropy),
+                                    0.3f * RandBilateral(&World->EffectEntropy),
+                                    RandBetween(&World->EffectEntropy, 0.25f, 1.20f) 
+                                },
+                                .ddP = { 0.5f, 0.2f, 0.0f },
+                                .Alpha = 1.0f,
+                                .dAlpha = -1.25f,
+                                .TextureIndex = FirstTexture + (RandU32(&World->EffectEntropy) % TextureCount),
+                            };
+                        } break;
+                        InvalidDefaultCase;
+                    }
+                }
+            }
+
+            particle_cmd* Cmd = nullptr;
             if (RenderFrame->ParticleDrawCmdCount < RenderFrame->MaxParticleDrawCmdCount)
             {
-                u32 FirstParticle = RenderFrame->ParticleCount;
-                u32 ParticleCount = Min(ParticleSystem->ParticleCount, RenderFrame->MaxParticleCount - RenderFrame->ParticleCount);
-                RenderFrame->ParticleDrawCmds[RenderFrame->ParticleDrawCmdCount++] = 
-                {
-                    .FirstParticle = FirstParticle,
-                    .ParticleCount = ParticleCount,
-                    .Mode = Mode,
-                };
+                Cmd = RenderFrame->ParticleDrawCmds + RenderFrame->ParticleDrawCmdCount++;
+                Cmd->FirstParticle = RenderFrame->ParticleCount;
+                Cmd->ParticleCount = 0;
+                Cmd->Mode = ParticleSystem->Mode;
+            }
 
-                for (u32 It = 0; It < ParticleCount; It++)
+            for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
+            {
+                particle* Particle = ParticleSystem->Particles + It;
+                Particle->P += Particle->dP * dt;
+                Particle->dP += Particle->ddP * dt;
+                Particle->Alpha += Particle->dAlpha * dt;
+
+                if (Cmd)
                 {
-                    particle* Particle = ParticleSystem->Particles + It;
-                    f32 Alpha = Max(Particle->Alpha, 0.0f);
-                    RenderFrame->Particles[RenderFrame->ParticleCount++] =
+                    if (RenderFrame->ParticleCount < RenderFrame->MaxParticleCount)
                     {
-                        .P = BaseP + Particle->P,
-                        .TextureIndex = Particle->TextureIndex,
-                        .Color = { Color.x, Color.y, Color.z, Alpha * Color.w },
-                        .HalfExtent = ParticleSize,
-                    };
+                        Cmd->ParticleCount++;
+                        f32 Alpha = Max(Particle->Alpha, 0.0f);
+                        RenderFrame->Particles[RenderFrame->ParticleCount++] = 
+                        {
+                            .P = Particle->P,
+                            .TextureIndex = Particle->TextureIndex,
+                            .Color = { Color.x, Color.y, Color.z, Alpha * Color.w },
+                            .HalfExtent = ParticleSystem->ParticleHalfExtent,
+                        };
+                    }
                 }
             }
         }

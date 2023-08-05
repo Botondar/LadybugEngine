@@ -59,10 +59,16 @@ struct particle_system
     entity_id ParentID;
     particle_system_type Type;
 
+    billboard_mode Mode;
+    v2 ParticleHalfExtent;
+
+    f32 Counter;
+    f32 EmissionRate;
+
     mmbox Bounds;
     u32 NextParticle;
 
-    static constexpr u32 MaxParticleCount = 8192;
+    static constexpr u32 MaxParticleCount = 512;
     u32 ParticleCount;
     particle Particles[MaxParticleCount];
 };

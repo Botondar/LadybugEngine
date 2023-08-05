@@ -69,9 +69,7 @@ lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_syst
         ParticleSystem->ParentID = ParentID;
         ParticleSystem->Type = Type;
         ParticleSystem->Bounds = Bounds;
-
-        v3 CenterP = 0.5f * (Bounds.Max + Bounds.Min);
-        v3 HalfExtent = 0.5f * (Bounds.Max - Bounds.Min);
+        ParticleSystem->Counter = 0.0f;
 
         switch (Type)
         {
@@ -81,24 +79,18 @@ lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_syst
             } break;
             case ParticleSystem_Magic:
             {
-                ParticleSystem->ParticleCount = 128;
-                for (u32 ParticleIndex = 0; ParticleIndex < ParticleSystem->ParticleCount; ParticleIndex++)
-                {
-                    v3 BaseP = { RandUnilateral(&World->EffectEntropy), RandUnilateral(&World->EffectEntropy), RandUnilateral(&World->EffectEntropy) };
-                    v3 P = 2.0f * Hadamard(HalfExtent, BaseP) + Bounds.Min;
-                    f32 dPz = 2.0f * RandUnilateral(&World->EffectEntropy) + 0.25f;
-                    ParticleSystem->Particles[ParticleIndex] = 
-                    {
-                        .P = P,
-                        .dP = { 0.0f, 0.0f, dPz },
-                        .Alpha = 1.0f,
-                        .TextureIndex = Particle_Trace02,
-                    };
-                }
+                ParticleSystem->Mode = Billboard_ZAligned;
+                ParticleSystem->ParticleHalfExtent = { 0.25f, 0.25f };
+                ParticleSystem->EmissionRate = 1.0f / 144.0f;
+                ParticleSystem->ParticleCount = ParticleSystem->MaxParticleCount;
+                
             } break;
             case ParticleSystem_Fire:
             {
-                ParticleSystem->ParticleCount = 128;
+                ParticleSystem->Mode = Billboard_ViewAligned;
+                ParticleSystem->ParticleHalfExtent = { 0.15f, 0.15f };
+                ParticleSystem->ParticleCount = ParticleSystem->MaxParticleCount;
+                ParticleSystem->EmissionRate = 1.0f / 30.0f;
             } break;
             InvalidDefaultCase;
         }

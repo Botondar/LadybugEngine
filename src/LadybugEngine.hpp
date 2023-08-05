@@ -18,11 +18,12 @@
 #include "LadybugLib/glTF.hpp"
 
 #include "Platform.hpp"
+#include "Renderer/Renderer.hpp"
+
 #include "Font.hpp"
 #include "World.hpp"
 #include "Debug.hpp"
 #include "Editor.hpp"
-#include "Renderer/Renderer.hpp"
 #include "Asset.hpp"
 
 #include <stb/stb_image.h>
