@@ -92,6 +92,7 @@ inline b32 RenderSkinnedMesh(render_frame* Frame,
                              u32 IndexOffset, u32 IndexCount,
                              m4 Transform, material,
                              u32 JointCount, m4* Pose);
+inline b32 AddLight(render_frame* Frame, light Light);
 
 VkDescriptorSet PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayout Layout);
 VkDescriptorSet PushBufferDescriptor(render_frame* Frame, 
@@ -229,5 +230,16 @@ inline b32 RenderSkinnedMesh(render_frame* Frame,
         Result = true;
     }
 
+    return(Result);
+}
+
+inline b32 AddLight(render_frame* Frame, light Light)
+{
+    b32 Result = false;
+    if (Frame->Uniforms.LightCount < R_MaxLightCount)
+    {
+        Frame->Uniforms.Lights[Frame->Uniforms.LightCount++] = Light;
+        Result = true;
+    }
     return(Result);
 }

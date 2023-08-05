@@ -239,18 +239,10 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                            Entity->Transform, Assets->Materials[MaterialID]);
             }
         }
-            
 
         if (Entity->Flags & EntityFlag_LightSource)
         {
-            if (Uniforms->LightCount < R_MaxLightCount)
-            {
-                Uniforms->Lights[Uniforms->LightCount++] = 
-                {
-                    .P = Entity->Transform.P,
-                    .E = Entity->LightEmission,
-                };
-            }
+            AddLight(Frame, { Entity->Transform.P, Entity->LightEmission });
         }
     }
 
