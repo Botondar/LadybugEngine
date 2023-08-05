@@ -947,386 +947,69 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         World->IsLoaded = true;
     }
 
-    // Update
+    
+    if (GameIO->bHasDroppedFile)
     {
-        if (GameIO->bHasDroppedFile)
-        {
-            m4 YUpToZUp = M4(
-                1.0f, 0.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, -1.0f, 0.0f,
-                0.0f, 1.0f, 0.0f, 0.0f,
-                0.0f, 0.0f, 0.0f, 1.0f);
+        m4 YUpToZUp = M4(
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, -1.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f);
 #if 1
-            m4 Transform = YUpToZUp;
+        m4 Transform = YUpToZUp;
 #else
-            m4 Transform = M4(1e-2f, 0.0f, 0.0f, 5.0f,
-                              0.0f, 1e-2f, 0.0f, 0.0f,
-                              0.0f, 0.0f, 1e-2f, 0.0f,
-                              0.0f, 0.0f, 0.0f, 1.0f) * YUpToZUp;
+        m4 Transform = M4(1e-2f, 0.0f, 0.0f, 5.0f,
+                          0.0f, 1e-2f, 0.0f, 0.0f,
+                          0.0f, 0.0f, 1e-2f, 0.0f,
+                          0.0f, 0.0f, 0.0f, 1.0f) * YUpToZUp;
 #endif
-            DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, GameIO->DroppedFilename, Transform);
-            GameIO->bHasDroppedFile = false;
-        }
-
-        if (DoDebugUI(GameState, GameIO, RenderFrame))
+        DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, GameIO->DroppedFilename, Transform);
+        GameIO->bHasDroppedFile = false;
+    }
+    
+    if (DoDebugUI(GameState, GameIO, RenderFrame))
+    {
+        GameIO->Mouse.dP = { 0.0f, 0.0f };
+        GameIO->Keys[SC_MouseLeft].TransitionFlags = 0;
+    }
+    
+    if (GameIO->Keys[SC_LeftAlt].bIsDown && GameIO->Keys[SC_F4].bIsDown)
+    {
+        GameIO->bQuitRequested = true;
+    }
+    
+    UpdateEditor(GameState, GameIO);
+    if (IsValid(GameState->Editor.SelectedEntityID))
+    {
+        entity* Entity = GameState->World->Entities + GameState->Editor.SelectedEntityID.Value;
+        if (HasFlag(Entity->Flags, EntityFlag_Skin))
         {
-            GameIO->Mouse.dP = { 0.0f, 0.0f };
-            GameIO->Keys[SC_MouseLeft].TransitionFlags = 0;
-        }
-
-        f32 dt = GameIO->dt;
-
-        if (GameIO->Keys[SC_LeftAlt].bIsDown && GameIO->Keys[SC_F4].bIsDown)
-        {
-            GameIO->bQuitRequested = true;
-        }
-
-        UpdateEditor(GameState, GameIO);
-
-        game_world* World = GameState->World;
-        World->SunL = 2.5f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
-        World->SunV = Normalize(v3{ -3.0f, 2.5f, 12.0f }); // Direction (towards the sun)
-
-        if (IsValid(GameState->Editor.SelectedEntityID))
-        {
-            entity* Entity = World->Entities + GameState->Editor.SelectedEntityID.Value;
-            if (HasFlag(Entity->Flags, EntityFlag_Skin))
+            if (WasPressed(GameIO->Keys[SC_P]))
             {
-                if (WasPressed(GameIO->Keys[SC_P]))
+                Entity->DoAnimation = !Entity->DoAnimation;
+            }
+    
+            if (WasPressed(GameIO->Keys[SC_0]))
+            {
+                Entity->CurrentAnimationID = 0;
+                Entity->AnimationCounter = 0.0f;
+            }
+            for (u32 Scancode = SC_1; Scancode <= SC_9; Scancode++)
+            {
+                if (WasPressed(GameIO->Keys[Scancode]))
                 {
-                    Entity->DoAnimation = !Entity->DoAnimation;
-                }
-
-                if (WasPressed(GameIO->Keys[SC_0]))
-                {
-                    Entity->CurrentAnimationID = 0;
-                    Entity->AnimationCounter = 0.0f;
-                }
-                for (u32 Scancode = SC_1; Scancode <= SC_9; Scancode++)
-                {
-                    if (WasPressed(GameIO->Keys[Scancode]))
+                    u32 Index = Scancode - SC_1 + 1;
+                    if (Index < GameState->Assets->AnimationCount)
                     {
-                        u32 Index = Scancode - SC_1 + 1;
-                        if (Index < GameState->Assets->AnimationCount)
-                        {
-                            Entity->CurrentAnimationID = Index;
-                            Entity->AnimationCounter = 0.0f;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Camera update
-        {
-            camera* Camera = &World->Camera;
-            v3 MoveDirection = {};
-            if (GameIO->Keys[SC_W].bIsDown) { MoveDirection.z += 1.0f; }
-            if (GameIO->Keys[SC_S].bIsDown) { MoveDirection.z -= 1.0f; }
-            if (GameIO->Keys[SC_D].bIsDown) { MoveDirection.x += 1.0f; }
-            if (GameIO->Keys[SC_A].bIsDown) { MoveDirection.x -= 1.0f; }
-
-            if (GameIO->Keys[SC_Left].bIsDown)
-            {
-                Camera->Yaw += 1e-1f * dt;
-            }
-            if (GameIO->Keys[SC_Right].bIsDown)
-            {
-                Camera->Yaw -= 1e-1f * dt;
-            }
-
-            if (GameIO->Keys[SC_MouseLeft].bIsDown)
-            {
-                constexpr f32 MouseTurnSpeed = 1e-2f;
-                Camera->Yaw -= -MouseTurnSpeed * GameIO->Mouse.dP.x;
-                Camera->Pitch -= MouseTurnSpeed * GameIO->Mouse.dP.y;
-            }
-
-            constexpr f32 PitchClamp = 0.5f * Pi - 1e-3f;
-            Camera->Pitch = Clamp(Camera->Pitch, -PitchClamp, PitchClamp);
-
-            m4 CameraTransform = GetTransform(Camera);
-            v3 Forward = CameraTransform.Z.xyz;
-            v3 Right = CameraTransform.X.xyz;
-
-            constexpr f32 MoveSpeed = 1.0f;
-            f32 SpeedMul = GameIO->Keys[SC_LeftShift].bIsDown ? 2.5f : 1.0f;
-            Camera->P += (Right * MoveDirection.x + Forward * MoveDirection.z) * SpeedMul * MoveSpeed * dt;
-
-            if (GameIO->Keys[SC_Space].bIsDown) { Camera->P.z += SpeedMul * MoveSpeed * dt; }
-            if (GameIO->Keys[SC_LeftControl].bIsDown) { Camera->P.z -= SpeedMul * MoveSpeed * dt; }
-        }
-
-        assets* Assets = GameState->Assets;
-        frame_uniform_data* Uniforms = &RenderFrame->Uniforms;
-        for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
-        {
-            entity* Entity = World->Entities + EntityIndex;
-            if (Entity->Flags & EntityFlag_Mesh)
-            {
-                mmbox BoundingBox = Assets->MeshBoxes[Entity->MeshID];
-                geometry_buffer_allocation MeshAllocation = Assets->Meshes[Entity->MeshID];
-                u32 MaterialID = Assets->MeshMaterialIndices[Entity->MeshID];
-                
-                u32 VertexOffset = TruncateU64ToU32(MeshAllocation.VertexBlock->ByteOffset / sizeof(vertex));
-                u32 VertexCount = TruncateU64ToU32(MeshAllocation.VertexBlock->ByteSize / sizeof(vertex));
-                u32 IndexOffset = TruncateU64ToU32(MeshAllocation.IndexBlock->ByteOffset / sizeof(vert_index));
-                u32 IndexCount = TruncateU64ToU32(MeshAllocation.IndexBlock->ByteSize / sizeof(vert_index));
-
-                if (Entity->Flags & EntityFlag_Skin)
-                {
-                    u32 JointCount = 0;
-                    m4 Pose[skin::MaxJointCount] = {};
-
-                    // Animation
-                    {
-                        skin* Skin = Assets->Skins + Entity->SkinID;
-                        JointCount = Skin->JointCount;
-                        animation* Animation = Assets->Animations + Entity->CurrentAnimationID;
-                        Assert(Animation->SkinID == Entity->SkinID);
-                        if (Entity->DoAnimation)
-                        {
-                            Entity->AnimationCounter += dt;
-                            f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
-                            while (Entity->AnimationCounter >= LastKeyFrameTimestamp)
-                            {
-                                Entity->AnimationCounter -= LastKeyFrameTimestamp;
-                            }
-                        }
-
-                        u32 NextKeyFrameIndex;
-                        for (NextKeyFrameIndex = 0; NextKeyFrameIndex < Animation->KeyFrameCount; NextKeyFrameIndex++)
-                        {
-                            if (Entity->AnimationCounter < Animation->KeyFrameTimestamps[NextKeyFrameIndex])
-                            {
-                                break;
-                            }
-                        }
-
-                        u32 KeyFrameIndex = NextKeyFrameIndex - 1;
-                        f32 Timestamp0 = Animation->KeyFrameTimestamps[KeyFrameIndex];
-                        f32 Timestamp1 = Animation->KeyFrameTimestamps[NextKeyFrameIndex];
-                        f32 KeyFrameDelta = Timestamp1 - Timestamp0;
-                        f32 BlendStart = Entity->AnimationCounter - Timestamp0;
-                        f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
-
-                        animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
-                        animation_key_frame* NextFrame = Animation->KeyFrames + NextKeyFrameIndex;
-                        for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
-                        {
-                            trs_transform* CurrentTransform = CurrentFrame->JointTransforms + JointIndex;
-                            trs_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
-                            trs_transform Transform = 
-                            {
-                                .Rotation = Normalize(Lerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor)),
-                                .Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor),
-                                .Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor),
-                            };
-
-                            m4 Matrix = TRSToM4(Transform);
-                            u32 ParentIndex = Skin->JointParents[JointIndex];
-                            if (ParentIndex != U32_MAX)
-                            {
-                                Pose[JointIndex] = Pose[ParentIndex] * Matrix;
-                            }
-                            else
-                            {
-                                Pose[JointIndex] = Matrix;
-                            }
-                        }
-
-                        // NOTE(boti): This _cannot_ be folded into the above loop, because the parent transforms must not contain
-                        // the inverse bind transform when propagating the transforms down the hierarchy
-                        for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
-                        {
-                            Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
-                        }
-                    }
-
-                    if (RenderFrame->SkinningCmdCount < RenderFrame->MaxSkinningCmdCount)
-                    {
-                        u32 DstVertexOffset = RenderFrame->SkinningBufferOffset;
-                        RenderFrame->SkinningBufferOffset += VertexCount;
-
-                        // TODO(boti): bounds checking
-                        memcpy(RenderFrame->JointMapping + RenderFrame->JointCount, Pose, JointCount * sizeof(m4));
-                        u32 JointBufferOffset = RenderFrame->JointCount * sizeof(m4);
-
-                        // HACK(boti): this should just be done through the render-frame interface
-                        u32 UBOAlignment = (u32)VK.ConstantBufferAlignment;
-                        u32 JointBufferAlignment = UBOAlignment / sizeof(m4);
-
-                        RenderFrame->JointCount = Align(RenderFrame->JointCount, JointBufferAlignment);
-
-                        skinning_cmd* SkinningCmd = RenderFrame->SkinningCmds + RenderFrame->SkinningCmdCount++;
-                        SkinningCmd->SrcVertexOffset = VertexOffset;
-                        SkinningCmd->DstVertexOffset = DstVertexOffset;
-                        SkinningCmd->VertexCount = VertexCount;
-                        SkinningCmd->PoseOffset = JointBufferOffset;
-
-                        if (RenderFrame->SkinnedDrawCmdCount < RenderFrame->MaxSkinnedDrawCmdCount)
-                        {
-                            draw_cmd* DrawCmd = RenderFrame->SkinnedDrawCmds + RenderFrame->SkinnedDrawCmdCount++;
-                            DrawCmd->Base = 
-                            {
-                                .IndexCount = IndexCount,
-                                .InstanceCount = 1,
-                                .IndexOffset = IndexOffset,
-                                .VertexOffset = DstVertexOffset,
-                                .InstanceOffset = 0,
-                            };
-                            DrawCmd->Transform = Entity->Transform;
-                            DrawCmd->Material = Assets->Materials[MaterialID];
-                        }
-                    }
-                }
-                else
-                {
-                    if (RenderFrame->DrawCmdCount < RenderFrame->MaxDrawCmdCount)
-                    {
-                        draw_cmd* DrawCmd = RenderFrame->DrawCmds + RenderFrame->DrawCmdCount++;
-                        DrawCmd->Base = 
-                        {
-                            .IndexCount = IndexCount,
-                            .InstanceCount = 1,
-                            .IndexOffset = IndexOffset,
-                            .VertexOffset = VertexOffset,
-                            .InstanceOffset = 0,
-                        };
-                        DrawCmd->Transform = Entity->Transform;
-                        DrawCmd->Material = Assets->Materials[MaterialID];
-                    }
-                }
-            }
-            
-
-            if (Entity->Flags & EntityFlag_LightSource)
-            {
-                if (Uniforms->LightCount < R_MaxLightCount)
-                {
-                    Uniforms->Lights[Uniforms->LightCount++] = 
-                    {
-                        .P = Entity->Transform.P,
-                        .E = Entity->LightEmission,
-                    };
-                }
-            }
-        }
-
-        for (u32 ParticleSystemIndex = 0; ParticleSystemIndex < World->ParticleSystemCount; ParticleSystemIndex++)
-        {
-            particle_system* ParticleSystem = World->ParticleSystems + ParticleSystemIndex;
-            v2 ParticleSize = { 1.0f, 1.0f };
-
-            v3 BaseP = { 0.0f, 0.0f, 0.0f };
-            v4 Color = { 1.0f, 1.0f, 1.0f, 1.0f };
-            if (IsValid(ParticleSystem->ParentID))
-            {
-                entity* Parent = World->Entities + ParticleSystem->ParentID.Value;
-                BaseP = Parent->Transform.P.xyz;
-                if (Parent->Flags & EntityFlag_LightSource)
-                {
-                    Color = Parent->LightEmission;
-                }
-            }
-
-            mmbox Bounds = ParticleSystem->Bounds;
-            if (ParticleSystem->EmissionRate > 0.0f)
-            {
-                ParticleSystem->Counter += dt;
-                while (ParticleSystem->Counter > ParticleSystem->EmissionRate)
-                {
-                    ParticleSystem->Counter -= ParticleSystem->EmissionRate;
-                    if (++ParticleSystem->NextParticle >= ParticleSystem->ParticleCount)
-                    {
-                        ParticleSystem->NextParticle -= ParticleSystem->ParticleCount;
-                    }
-
-                    switch (ParticleSystem->Type)
-                    {
-                        case ParticleSystem_Undefined:
-                        {
-                            // Ignored
-                        } break;
-                        case ParticleSystem_Magic:
-                        {
-                            v3 ParticleP = 
-                            { 
-                                RandBetween(&World->EffectEntropy, Bounds.Min.x, Bounds.Max.x), 
-                                RandBetween(&World->EffectEntropy, Bounds.Min.y, Bounds.Max.y), 
-                                Bounds.Min.z,
-                            };
-                            ParticleSystem->Particles[ParticleSystem->NextParticle] = 
-                            {
-                                .P = BaseP + ParticleP,
-                                .dP = { 0.0f, 0.0f, RandBetween(&World->EffectEntropy, 0.25f, 2.25f) },
-                                .Alpha = 1.0f,
-                                .dAlpha = 0.0f,
-                                .TextureIndex = Particle_Trace02,
-                            };
-                        } break;
-                        case ParticleSystem_Fire:
-                        {
-                            u32 FirstTexture = Particle_Flame01;
-                            u32 OnePastLastTexture = Particle_Flame04 + 1;
-                            u32 TextureCount = OnePastLastTexture - FirstTexture;
-
-                            v3 ParticleP = { 0.0f, 0.0f, Bounds.Min.z };
-                            ParticleSystem->Particles[ParticleSystem->NextParticle] = 
-                            {
-                                .P = ParticleP + BaseP,
-                                .dP = 
-                                { 
-                                    0.3f * RandBilateral(&World->EffectEntropy),
-                                    0.3f * RandBilateral(&World->EffectEntropy),
-                                    RandBetween(&World->EffectEntropy, 0.25f, 1.20f) 
-                                },
-                                .ddP = { 0.5f, 0.2f, 0.0f },
-                                .Alpha = 1.0f,
-                                .dAlpha = -1.25f,
-                                .TextureIndex = FirstTexture + (RandU32(&World->EffectEntropy) % TextureCount),
-                            };
-                        } break;
-                        InvalidDefaultCase;
-                    }
-                }
-            }
-
-            particle_cmd* Cmd = nullptr;
-            if (RenderFrame->ParticleDrawCmdCount < RenderFrame->MaxParticleDrawCmdCount)
-            {
-                Cmd = RenderFrame->ParticleDrawCmds + RenderFrame->ParticleDrawCmdCount++;
-                Cmd->FirstParticle = RenderFrame->ParticleCount;
-                Cmd->ParticleCount = 0;
-                Cmd->Mode = ParticleSystem->Mode;
-            }
-
-            for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
-            {
-                particle* Particle = ParticleSystem->Particles + It;
-                Particle->P += Particle->dP * dt;
-                Particle->dP += Particle->ddP * dt;
-                Particle->Alpha += Particle->dAlpha * dt;
-
-                if (Cmd)
-                {
-                    if (RenderFrame->ParticleCount < RenderFrame->MaxParticleCount)
-                    {
-                        Cmd->ParticleCount++;
-                        f32 Alpha = Max(Particle->Alpha, 0.0f);
-                        RenderFrame->Particles[RenderFrame->ParticleCount++] = 
-                        {
-                            .P = Particle->P,
-                            .TextureIndex = Particle->TextureIndex,
-                            .Color = { Color.x, Color.y, Color.z, Alpha * Color.w },
-                            .HalfExtent = ParticleSystem->ParticleHalfExtent,
-                        };
+                        Entity->CurrentAnimationID = Index;
+                        Entity->AnimationCounter = 0.0f;
                     }
                 }
             }
         }
     }
-
+    
+    UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO);
     GameRender(GameState, GameIO, RenderFrame);
     EndRenderFrame(RenderFrame);
 

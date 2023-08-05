@@ -106,6 +106,8 @@ struct game_world
 
 lbfn u32 MakeParticleSystem(game_world* World, particle_system_type Type, entity_id ParentID, mmbox Bounds);
 
+lbfn void UpdateAndRenderWorld(game_world* World, struct assets* Assets, render_frame* Frame, game_io* IO);
+
 //
 // Implementation
 //
