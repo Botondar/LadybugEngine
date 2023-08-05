@@ -1746,6 +1746,10 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
     Frame->VertexCount = 0;
     Frame->Vertices = (ui_vertex*)Frame->VertexStack.Mapping;
 
+    Frame->DrawCmdCount = 0;
+    Frame->SkinnedDrawCmdCount = 0;
+    Frame->SkinningCmdCount = 0;
+
     Frame->ParticleCount = 0;
     Frame->ParticleBuffer = Renderer->PerFrameParticleBuffers[FrameID];
     Frame->Particles = (render_particle*)Renderer->PerFrameParticleBufferMappings[FrameID];

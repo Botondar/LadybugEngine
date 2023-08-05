@@ -684,6 +684,14 @@ struct draw_cmd
     material Material;
 };
 
+struct skinning_cmd
+{
+    u32 SrcVertexOffset;
+    u32 DstVertexOffset;
+    u32 VertexCount;
+    u32 PoseOffset;
+};
+
 //
 // Render API
 //

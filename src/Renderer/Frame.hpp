@@ -40,6 +40,14 @@ struct render_frame
     VkBuffer PerFrameUniformBuffer;
     void* PerFrameUniformMemory;
 
+    static constexpr u32 MaxDrawCmdCount = (1u << 22);
+    u32 DrawCmdCount;
+    draw_cmd DrawCmds[MaxDrawCmdCount];
+
+    static constexpr u32 MaxSkinnedDrawCmdCount = (1u << 20);
+    u32 SkinnedDrawCmdCount;
+    draw_cmd SkinnedDrawCmds[MaxSkinnedDrawCmdCount];
+
     static constexpr u32 MaxParticleCount = (1u << 18);
     VkBuffer ParticleBuffer;
     u32 ParticleCount;
@@ -48,6 +56,10 @@ struct render_frame
     static constexpr u32 MaxParticleDrawCmdCount = 8192u;
     u32 ParticleDrawCmdCount;
     particle_cmd ParticleDrawCmds[MaxParticleDrawCmdCount];
+
+    static constexpr u32 MaxSkinningCmdCount = MaxSkinnedDrawCmdCount;
+    u32 SkinningCmdCount;
+    skinning_cmd SkinningCmds[MaxSkinningCmdCount];
 
     static constexpr u32 MaxJointCount = (1u << 17);
     u32 JointCount;

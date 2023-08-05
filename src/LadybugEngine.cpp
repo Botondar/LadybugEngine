@@ -47,68 +47,31 @@ lbfn bool IntersectFrustum(const frustum* Frustum, const mmbox* Box)
     return Result;
 }
 
-lbfn void RenderMeshes(render_frame* Frame, game_state* GameState,
-                       VkPipelineLayout PipelineLayout,
-                       u32 SkinnedCommandCount, draw_cmd* SkinnedCommands,
-                       const frustum* Frustum /*= nullptr*/, bool DoCulling /*= false*/)
+lbfn void RenderMeshes(render_frame* Frame, VkPipelineLayout PipelineLayout)
 {
-    assets* Assets = GameState->Assets;
-    game_world* World = GameState->World;
-
     const VkDeviceSize ZeroOffset = 0;
     vkCmdBindIndexBuffer(Frame->CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
     vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Frame->Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
-    for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
+
+    for (u32 CmdIndex = 0; CmdIndex < Frame->DrawCmdCount; CmdIndex++)
     {
-        entity* Entity = World->Entities + EntityIndex;
-        // NOTE(boti): skinned entites go through a different path
-        if (HasFlag(Entity->Flags, EntityFlag_Mesh) && !HasFlag(Entity->Flags, EntityFlag_Skin))
+        draw_cmd* Cmd = Frame->DrawCmds + CmdIndex;
+        push_constants PushConstants = 
         {
-            geometry_buffer_allocation Allocation = Assets->Meshes[Entity->MeshID];
-            mmbox Box = Assets->MeshBoxes[Entity->MeshID];
-            u32 MaterialIndex = Assets->MeshMaterialIndices[Entity->MeshID];
+            .Transform = Cmd->Transform,
+            .Material = Cmd->Material,
+        };
 
-            v4 BoxMin = Entity->Transform * v4{ Box.Min.x, Box.Min.y, Box.Min.z, 1.0f };
-            v4 BoxMax = Entity->Transform * v4{ Box.Max.x, Box.Max.y, Box.Max.z, 1.0f };
+        vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(PushConstants), &PushConstants);
+        vkCmdDrawIndexed(Frame->CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
 
-            Box.Min = { BoxMin.x, BoxMin.y, BoxMin.z };
-            Box.Max = { BoxMax.x, BoxMax.y, BoxMax.z };
-
-            bool IsVisible = true;
-            if (DoCulling)
-            {
-                IsVisible = IntersectFrustum(Frustum, &Box);
-            }
-
-            if (IsVisible)
-            {
-                push_constants PushConstants = {};
-                PushConstants.Transform = Entity->Transform;
-                PushConstants.Material = Assets->Materials[MaterialIndex];
-
-                vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 
-                                   0, sizeof(PushConstants), &PushConstants);
-                if (Allocation.IndexBlock)
-                {
-                    u32 IndexCount = (u32)(Allocation.IndexBlock->ByteSize / sizeof(vert_index));
-                    u32 IndexOffset = (u32)(Allocation.IndexBlock->ByteOffset / sizeof(vert_index));
-                    u32 VertexOffset = (u32)(Allocation.VertexBlock->ByteOffset / sizeof(vertex));
-                    vkCmdDrawIndexed(Frame->CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
-                }
-                else
-                {
-                    u32 VertexCount = (u32)(Allocation.VertexBlock->ByteSize / sizeof(vertex));
-                    u32 VertexOffset = (u32)(Allocation.VertexBlock->ByteOffset / sizeof(vertex));
-                    vkCmdDraw(Frame->CmdBuffer, VertexCount, 1, VertexOffset, 0);
-                }
-            }
-        }
     }
 
     vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Frame->SkinningBuffer, &ZeroOffset);
-    for (u32 CmdIndex = 0; CmdIndex < SkinnedCommandCount; CmdIndex++)
+    for (u32 CmdIndex = 0; CmdIndex < Frame->SkinnedDrawCmdCount; CmdIndex++)
     {
-        draw_cmd* Cmd = SkinnedCommands + CmdIndex;
+        draw_cmd* Cmd = Frame->SkinnedDrawCmds + CmdIndex;
         push_constants PushConstants = 
         {
             .Transform = Cmd->Transform,
@@ -214,19 +177,13 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         .extent = Renderer->SurfaceExtent,
     };
 
-    // Animation + Skinning
-    u32 SkinnedCmdCount = 0;
-    draw_cmd* SkinnedCmdList = PushArray<draw_cmd>(FrameArena, World->EntityCount);
-#if 1
-    {
-        u32 MaxUBOSize = (u32)VK.MaxConstantBufferByteSize;
-        u32 UBOAlignment = (u32)VK.ConstantBufferAlignment;
-        u32 JointBufferAlignment = UBOAlignment / sizeof(m4); // Alignment in # of joints
 
+    // Skinning
+    {
         VkDescriptorSet JointDescriptorSet = 
             PushBufferDescriptor(Frame, 
                                  Renderer->SetLayouts[SetLayout_PoseTransform], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 
-                                 Frame->JointBuffer, 0, MaxUBOSize); 
+                                 Frame->JointBuffer, 0, VK.MaxConstantBufferByteSize); 
 
         VkDescriptorSet SkinningBuffersDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_Skinning]);
 
@@ -301,123 +258,25 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         };
         vkCmdPipelineBarrier2(Frame->CmdBuffer, &BeginDependencies);
 
-        u32 JointOffset = 0;
-        for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
+        for (u32 SkinningCmdIndex = 0; SkinningCmdIndex < Frame->SkinningCmdCount; SkinningCmdIndex++)
         {
-            entity* Entity = World->Entities + EntityIndex;
-            if (!HasAllFlags(Entity->Flags, EntityFlag_Mesh|EntityFlag_Skin))
-            {
-                continue;
-            }
-            if (Entity->CurrentAnimationID == U32_MAX) continue;
-
-            m4 Transform = Entity->Transform;
-
-            skin* Skin = Assets->Skins + Entity->SkinID;
-            animation* Animation = Assets->Animations + Entity->CurrentAnimationID;
-            Assert(Animation->SkinID == Entity->SkinID);
-
-            if (Entity->DoAnimation)
-            {
-                f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
-                Entity->AnimationCounter += IO->dt;
-                // TODO(boti): modulo
-                while (Entity->AnimationCounter >= LastKeyFrameTimestamp)
-                {
-                    Entity->AnimationCounter -= LastKeyFrameTimestamp;
-                }
-            }
-            
-            u32 NextKeyFrameIndex;
-            for (NextKeyFrameIndex = 0; NextKeyFrameIndex < Animation->KeyFrameCount; NextKeyFrameIndex++)
-            {
-                if (Entity->AnimationCounter < Animation->KeyFrameTimestamps[NextKeyFrameIndex])
-                {
-                    break;
-                }
-            }
-
-            u32 KeyFrameIndex = NextKeyFrameIndex - 1;
-            f32 KeyFrameDelta = Animation->KeyFrameTimestamps[NextKeyFrameIndex] - Animation->KeyFrameTimestamps[KeyFrameIndex];
-            f32 BlendStart = Entity->AnimationCounter - Animation->KeyFrameTimestamps[KeyFrameIndex];
-            f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
-
-            animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
-            animation_key_frame* NextFrame = Animation->KeyFrames + NextKeyFrameIndex;
-
-            m4 Pose[skin::MaxJointCount] = {};
-            for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
-            {
-                trs_transform* CurrentTransform = CurrentFrame->JointTransforms + JointIndex;
-                trs_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
-                trs_transform Transform;
-                Transform.Rotation = Normalize(Lerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor));
-                Transform.Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor);
-                Transform.Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor);
-
-                m4 JointTransform = TRSToM4(Transform);
-                u32 ParentIndex = Skin->JointParents[JointIndex];
-                if (ParentIndex != U32_MAX)
-                {
-                    Pose[JointIndex] = Pose[ParentIndex] * JointTransform;
-                }
-                else
-                {
-                    Pose[JointIndex] = JointTransform;
-                }
-            }
-
-            // NOTE(boti): This _cannot_ be folded into the above loop, because the parent transforms must not contain
-            // the inverse bind transform when propagating the transforms down the hierarchy
-            for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
-            {
-                Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
-            }
-            memcpy(Frame->JointMapping + JointOffset, Pose, Skin->JointCount * sizeof(m4));
-            u32 JointBufferOffset = JointOffset * sizeof(m4);
-            JointOffset = Align(JointOffset + Skin->JointCount, JointBufferAlignment);
-
-            geometry_buffer_allocation* Mesh = Assets->Meshes + Entity->MeshID;
-            u32 IndexCount = TruncateU64ToU32(Mesh->IndexBlock->ByteSize / sizeof(vert_index));
-            u32 IndexOffset = TruncateU64ToU32(Mesh->IndexBlock->ByteOffset / sizeof(vert_index));
-            u32 VertexOffset = TruncateU64ToU32(Mesh->VertexBlock->ByteOffset / sizeof(vertex));
-            u32 VertexCount = TruncateU64ToU32(Mesh->VertexBlock->ByteSize / sizeof(vertex));
-            u32 SkinningVertexOffset = Frame->SkinningBufferOffset;
-            Frame->SkinningBufferOffset += VertexCount;
-
+            skinning_cmd* Cmd = Frame->SkinningCmds + SkinningCmdIndex;
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
                                     1, 1, &JointDescriptorSet,
-                                    1, &JointBufferOffset);
+                                    1, &Cmd->PoseOffset);
 
             u32 PushConstants[3] = 
             {
-                VertexOffset,
-                SkinningVertexOffset,
-                VertexCount,
+                Cmd->SrcVertexOffset,
+                Cmd->DstVertexOffset,
+                Cmd->VertexCount,
             };
             vkCmdPushConstants(Frame->CmdBuffer, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
                                0, sizeof(PushConstants), PushConstants);
 
 
             constexpr u32 SkinningGroupSize = 64;
-            vkCmdDispatch(Frame->CmdBuffer, CeilDiv(VertexCount, SkinningGroupSize), 1, 1);
-
-            u32 MaterialID = Assets->MeshMaterialIndices[Entity->MeshID];
-            material Material = Assets->Materials[MaterialID];
-
-            SkinnedCmdList[SkinnedCmdCount++] = 
-            {
-                .Base = 
-                {
-                    .IndexCount = IndexCount,
-                    .InstanceCount = 1,
-                    .IndexOffset = IndexOffset,
-                    .VertexOffset = SkinningVertexOffset,
-                    .InstanceOffset = 0,
-                },
-                .Transform = Entity->Transform,
-                .Material = Material,
-            };
+            vkCmdDispatch(Frame->CmdBuffer, CeilDiv(Cmd->VertexCount, SkinningGroupSize), 1, 1);
         }
 
         VkBufferMemoryBarrier2 EndBarriers[] =
@@ -447,7 +306,6 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         };
         vkCmdPipelineBarrier2(Frame->CmdBuffer, &EndDependencies);
     }
-#endif
 
     // 3D render
     {
@@ -488,7 +346,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                                sizeof(push_constants), sizeof(u32), &Cascade);
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
                                     0, 3, DescriptorSets, 0, nullptr);
-            RenderMeshes(Frame, GameState, Pipeline.Layout, SkinnedCmdCount, SkinnedCmdList);
+            RenderMeshes(Frame, Pipeline.Layout);
 
             EndCascade(Frame);
         }
@@ -503,9 +361,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                     0, 3, DescriptorSets,
                                     0, nullptr);
-            RenderMeshes(Frame, GameState, Pipeline.Layout,
-                         SkinnedCmdCount, SkinnedCmdList,
-                         &Frame->CameraFrustum, EnablePrimaryCull);
+            RenderMeshes(Frame, Pipeline.Layout);
         }
         EndPrepass(Frame);
 
@@ -520,29 +376,6 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
         BeginForwardPass(Frame);
         {
-            // Bloom testing
-#if 0
-            {
-                f32 PixelSizeX = 1.0f / Frame->RenderExtent.width;
-                f32 PixelSizeY = 1.0f / Frame->RenderExtent.height;
-                pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Quad];
-                struct data
-                {
-                    v2 P;
-                    v2 HalfExtent;
-                    v3 Color;
-                };
-                data Data = 
-                {
-                    .P = { 0.0f, 0.0f }, 
-                    .HalfExtent = { 30.0f * PixelSizeX, 30.0f * PixelSizeY },
-                    .Color = 1000.0f * v3{ 1.0f, 0.0f, 0.0f },
-                };
-                vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-                vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_ALL, 0, sizeof(data), &Data);
-                vkCmdDraw(Frame->CmdBuffer, 6, 1, 0, 0);
-            }
-#endif
 
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Simple];
             vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
@@ -550,9 +383,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                                     0, CountOf(DescriptorSets), DescriptorSets,
                                     0, nullptr);
 
-            RenderMeshes(Frame, GameState, Pipeline.Layout,
-                         SkinnedCmdCount, SkinnedCmdList,
-                         &Frame->CameraFrustum, EnablePrimaryCull);
+            RenderMeshes(Frame, Pipeline.Layout);
 
             // Render sky
 #if 1
@@ -721,7 +552,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
             vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_FRAGMENT_BIT, 
                                0, sizeof(f32), &GameState->PostProcessParams.Bloom.Strength);
-#if 1
+
             VkDescriptorSet BlitDescriptorSet = VK_NULL_HANDLE;
             VkDescriptorSetAllocateInfo BlitSetInfo = 
             {
@@ -771,13 +602,6 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 },
             };
             vkUpdateDescriptorSets(VK.Device, CountOf(SetWrites), SetWrites, 0, nullptr);
-#else
-            VkDescriptorSet BlitDescriptorSet = PushImageDescriptor(Frame,
-                                                                    Renderer->SetLayouts[SetLayout_SampledRenderTargetNormalized_PS_CS],
-                                                                    VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                                                    Frame->HDRRenderTargets[0]->View,
-                                                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-#endif
 
             vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
                                     0, 1, &BlitDescriptorSet, 0, nullptr);
@@ -961,7 +785,6 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
     };
     vkCmdPipelineBarrier2(Frame->CmdBuffer, &EndDependencyInfo);
 }
-
 
 vulkan VK;
 platform_api Platform;
@@ -1234,18 +1057,148 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             if (GameIO->Keys[SC_LeftControl].bIsDown) { Camera->P.z -= SpeedMul * MoveSpeed * dt; }
         }
 
+        assets* Assets = GameState->Assets;
         frame_uniform_data* Uniforms = &RenderFrame->Uniforms;
         for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
         {
             entity* Entity = World->Entities + EntityIndex;
             if (Entity->Flags & EntityFlag_Mesh)
             {
-                // TODO
+                mmbox BoundingBox = Assets->MeshBoxes[Entity->MeshID];
+                geometry_buffer_allocation MeshAllocation = Assets->Meshes[Entity->MeshID];
+                u32 MaterialID = Assets->MeshMaterialIndices[Entity->MeshID];
+                
+                u32 VertexOffset = TruncateU64ToU32(MeshAllocation.VertexBlock->ByteOffset / sizeof(vertex));
+                u32 VertexCount = TruncateU64ToU32(MeshAllocation.VertexBlock->ByteSize / sizeof(vertex));
+                u32 IndexOffset = TruncateU64ToU32(MeshAllocation.IndexBlock->ByteOffset / sizeof(vert_index));
+                u32 IndexCount = TruncateU64ToU32(MeshAllocation.IndexBlock->ByteSize / sizeof(vert_index));
+
                 if (Entity->Flags & EntityFlag_Skin)
                 {
-                    // TODO
+                    u32 JointCount = 0;
+                    m4 Pose[skin::MaxJointCount] = {};
+
+                    // Animation
+                    {
+                        skin* Skin = Assets->Skins + Entity->SkinID;
+                        JointCount = Skin->JointCount;
+                        animation* Animation = Assets->Animations + Entity->CurrentAnimationID;
+                        Assert(Animation->SkinID == Entity->SkinID);
+                        if (Entity->DoAnimation)
+                        {
+                            Entity->AnimationCounter += dt;
+                            f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
+                            while (Entity->AnimationCounter >= LastKeyFrameTimestamp)
+                            {
+                                Entity->AnimationCounter -= LastKeyFrameTimestamp;
+                            }
+                        }
+
+                        u32 NextKeyFrameIndex;
+                        for (NextKeyFrameIndex = 0; NextKeyFrameIndex < Animation->KeyFrameCount; NextKeyFrameIndex++)
+                        {
+                            if (Entity->AnimationCounter < Animation->KeyFrameTimestamps[NextKeyFrameIndex])
+                            {
+                                break;
+                            }
+                        }
+
+                        u32 KeyFrameIndex = NextKeyFrameIndex - 1;
+                        f32 Timestamp0 = Animation->KeyFrameTimestamps[KeyFrameIndex];
+                        f32 Timestamp1 = Animation->KeyFrameTimestamps[NextKeyFrameIndex];
+                        f32 KeyFrameDelta = Timestamp1 - Timestamp0;
+                        f32 BlendStart = Entity->AnimationCounter - Timestamp0;
+                        f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
+
+                        animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
+                        animation_key_frame* NextFrame = Animation->KeyFrames + NextKeyFrameIndex;
+                        for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                        {
+                            trs_transform* CurrentTransform = CurrentFrame->JointTransforms + JointIndex;
+                            trs_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
+                            trs_transform Transform = 
+                            {
+                                .Rotation = Normalize(Lerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor)),
+                                .Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor),
+                                .Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor),
+                            };
+
+                            m4 Matrix = TRSToM4(Transform);
+                            u32 ParentIndex = Skin->JointParents[JointIndex];
+                            if (ParentIndex != U32_MAX)
+                            {
+                                Pose[JointIndex] = Pose[ParentIndex] * Matrix;
+                            }
+                            else
+                            {
+                                Pose[JointIndex] = Matrix;
+                            }
+                        }
+
+                        // NOTE(boti): This _cannot_ be folded into the above loop, because the parent transforms must not contain
+                        // the inverse bind transform when propagating the transforms down the hierarchy
+                        for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                        {
+                            Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
+                        }
+                    }
+
+                    if (RenderFrame->SkinningCmdCount < RenderFrame->MaxSkinningCmdCount)
+                    {
+                        u32 DstVertexOffset = RenderFrame->SkinningBufferOffset;
+                        RenderFrame->SkinningBufferOffset += VertexCount;
+
+                        // TODO(boti): bounds checking
+                        memcpy(RenderFrame->JointMapping + RenderFrame->JointCount, Pose, JointCount * sizeof(m4));
+                        u32 JointBufferOffset = RenderFrame->JointCount * sizeof(m4);
+
+                        // HACK(boti): this should just be done through the render-frame interface
+                        u32 UBOAlignment = (u32)VK.ConstantBufferAlignment;
+                        u32 JointBufferAlignment = UBOAlignment / sizeof(m4);
+
+                        RenderFrame->JointCount = Align(RenderFrame->JointCount, JointBufferAlignment);
+
+                        skinning_cmd* SkinningCmd = RenderFrame->SkinningCmds + RenderFrame->SkinningCmdCount++;
+                        SkinningCmd->SrcVertexOffset = VertexOffset;
+                        SkinningCmd->DstVertexOffset = DstVertexOffset;
+                        SkinningCmd->VertexCount = VertexCount;
+                        SkinningCmd->PoseOffset = JointBufferOffset;
+
+                        if (RenderFrame->SkinnedDrawCmdCount < RenderFrame->MaxSkinnedDrawCmdCount)
+                        {
+                            draw_cmd* DrawCmd = RenderFrame->SkinnedDrawCmds + RenderFrame->SkinnedDrawCmdCount++;
+                            DrawCmd->Base = 
+                            {
+                                .IndexCount = IndexCount,
+                                .InstanceCount = 1,
+                                .IndexOffset = IndexOffset,
+                                .VertexOffset = DstVertexOffset,
+                                .InstanceOffset = 0,
+                            };
+                            DrawCmd->Transform = Entity->Transform;
+                            DrawCmd->Material = Assets->Materials[MaterialID];
+                        }
+                    }
+                }
+                else
+                {
+                    if (RenderFrame->DrawCmdCount < RenderFrame->MaxDrawCmdCount)
+                    {
+                        draw_cmd* DrawCmd = RenderFrame->DrawCmds + RenderFrame->DrawCmdCount++;
+                        DrawCmd->Base = 
+                        {
+                            .IndexCount = IndexCount,
+                            .InstanceCount = 1,
+                            .IndexOffset = IndexOffset,
+                            .VertexOffset = VertexOffset,
+                            .InstanceOffset = 0,
+                        };
+                        DrawCmd->Transform = Entity->Transform;
+                        DrawCmd->Material = Assets->Materials[MaterialID];
+                    }
                 }
             }
+            
 
             if (Entity->Flags & EntityFlag_LightSource)
             {
