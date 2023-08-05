@@ -38,9 +38,6 @@ struct editor_state
     entity_id SelectedEntityID;
     gizmo Gizmo;
 
-    u32 GizmoMeshID;
-    mmbox GizmoMeshBox;
-
     b32 DrawLights;
 };
 

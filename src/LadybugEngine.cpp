@@ -826,7 +826,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
         if (GameState->Editor.IsEnabled)
         {
-            geometry_buffer_allocation ArrowMesh = Assets->Meshes[GameState->Editor.GizmoMeshID];
+            geometry_buffer_allocation ArrowMesh = Assets->Meshes[Assets->ArrowMeshID];
             u32 IndexCount = (u32)(ArrowMesh.IndexBlock->ByteSize / sizeof(vert_index));
             u32 IndexOffset = (u32)(ArrowMesh.IndexBlock->ByteOffset / sizeof(vert_index));
             u32 VertexOffset = (u32)(ArrowMesh.VertexBlock->ByteOffset / sizeof(vertex));
@@ -1005,64 +1005,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
         assets* Assets = GameState->Assets = PushStruct<assets>(&GameState->TotalArena);
         Assets->Arena = &GameState->TotalArena;
-
-        // Default textures
-        {
-            {
-                u32 Value = 0xFFFFFFFFu;
-                texture_id Whiteness = PushTexture(GameState->Renderer, TextureFlag_None, 1, 1, 1, 1, VK_FORMAT_R8G8B8A8_SRGB, {}, &Value);
-
-                Assets->DefaultDiffuseID = Whiteness;
-                Assets->DefaultMetallicRoughnessID = Whiteness;
-            }
-            {
-                u16 Value = 0x8080u;
-                Assets->DefaultNormalID = PushTexture(GameState->Renderer, TextureFlag_None, 1, 1, 1, 1, VK_FORMAT_R8G8_UNORM, {}, &Value);
-            }
-        }
-
-        // Particle textures
-        {
-            // TODO(boti): For now we know that the texture pack we're using is 512x512, 
-            // but we may want to figure out some way for the user code to pack texture arrays/atlases dynamically
-            u32 ParticleWidth = 512;
-            u32 ParticleHeight = 512;
-            u32 ParticleCount = Particle_COUNT;
-
-            umm ImageSize = ParticleWidth * ParticleHeight;
-            umm MemorySize = ImageSize * ParticleCount;
-            void* Memory = PushSize(&GameState->TransientArena, MemorySize, 0x100);
-
-            u8* MemoryAt = (u8*)Memory;
-            for (u32 ParticleIndex = 0; ParticleIndex < ParticleCount; ParticleIndex++)
-            {
-                s32 Width, Height, ChannelCount;
-                u8* Texels = stbi_load(ParticlePaths[ParticleIndex], &Width, &Height, &ChannelCount, 1);
-                if (Texels)
-                {
-                    Assert(((u32)Width == ParticleWidth) && ((u32)Height == ParticleHeight));
-                    memcpy(MemoryAt, Texels, ImageSize);
-                }
-                else
-                {
-                    UnhandledError("Failed to load particle texture");
-                }
-                stbi_image_free(Texels);
-                MemoryAt += ImageSize;
-            }
-
-            Assets->ParticleArrayID = PushTexture(
-                GameState->Renderer, TextureFlag_Special,
-                ParticleWidth, ParticleHeight, 1, ParticleCount, 
-                VK_FORMAT_R8_UNORM, { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
-                Memory);
-            if (!IsValid(Assets->ParticleArrayID))
-            {
-                UnhandledError("Failed to create particles texture");
-            }
-        }
-
-        LoadDebugFont(&GameState->TransientArena, GameState->Assets, GameState->Renderer, "data/liberation-mono.lbfnt");
+        InitializeAssets(Assets, GameState->Renderer, &GameState->TransientArena);
 
         game_world* World = GameState->World = PushStruct<game_world>(&GameState->TotalArena);
 

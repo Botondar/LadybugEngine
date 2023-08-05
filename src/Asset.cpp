@@ -1,5 +1,8 @@
 #include "Asset.hpp"
 
+internal mesh CreateSphereMesh(memory_arena* Arena);
+internal mesh CreateArrowMesh(memory_arena* Arena);
+
 // NOTE(boti): This is pretty much the only place where we include something locally, because in the future Nvtt should be removed
 // from the runtime
 #include <nvtt/nvtt.h>
@@ -39,6 +42,96 @@ struct NvttOutputHandler : public nvtt::OutputHandler
     {
     }
 };
+
+lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scratch)
+{
+    b32 Result = true;
+
+    // Default textures
+    {
+        u32 Value = 0xFFFFFFFFu;
+        texture_id Whiteness = PushTexture(Renderer, TextureFlag_None, 1, 1, 1, 1, VK_FORMAT_R8G8B8A8_SRGB, {}, &Value);
+
+        Assets->DefaultDiffuseID = Whiteness;
+        Assets->DefaultMetallicRoughnessID = Whiteness;
+    }
+    {
+        u16 Value = 0x8080u;
+        Assets->DefaultNormalID = PushTexture(Renderer, TextureFlag_None, 1, 1, 1, 1, VK_FORMAT_R8G8_UNORM, {}, &Value);
+    }
+
+    // Particle textures
+    {
+        // TODO(boti): For now we know that the texture pack we're using is 512x512, 
+        // but we may want to figure out some way for the user code to pack texture arrays/atlases dynamically
+        u32 ParticleWidth = 512;
+        u32 ParticleHeight = 512;
+        u32 ParticleCount = Particle_COUNT;
+
+        umm ImageSize = ParticleWidth * ParticleHeight;
+        umm MemorySize = ImageSize * ParticleCount;
+        void* Memory = PushSize(Scratch, MemorySize, 0x100);
+
+        u8* MemoryAt = (u8*)Memory;
+        for (u32 ParticleIndex = 0; ParticleIndex < ParticleCount; ParticleIndex++)
+        {
+            s32 Width, Height, ChannelCount;
+            u8* Texels = stbi_load(ParticlePaths[ParticleIndex], &Width, &Height, &ChannelCount, 1);
+            if (Texels)
+            {
+                Assert(((u32)Width == ParticleWidth) && ((u32)Height == ParticleHeight));
+                memcpy(MemoryAt, Texels, ImageSize);
+            }
+            else
+            {
+                UnhandledError("Failed to load particle texture");
+            }
+            stbi_image_free(Texels);
+            MemoryAt += ImageSize;
+        }
+
+        Assets->ParticleArrayID = PushTexture(
+            Renderer, TextureFlag_Special,
+            ParticleWidth, ParticleHeight, 1, ParticleCount, 
+            VK_FORMAT_R8_UNORM, { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
+            Memory);
+        if (!IsValid(Assets->ParticleArrayID))
+        {
+            UnhandledError("Failed to create particles texture");
+        }
+    }
+
+    LoadDebugFont(Scratch, Assets, Renderer, "data/liberation-mono.lbfnt");
+
+    // Default meshes
+    {
+        mesh ArrowMesh = CreateArrowMesh(Scratch);
+        geometry_buffer_allocation ArrowAllocation = UploadVertexData(Renderer,
+                                                                      ArrowMesh.VertexCount, ArrowMesh.VertexData, 
+                                                                      ArrowMesh.IndexCount, ArrowMesh.IndexData);
+
+        Assert(Assets->MeshCount < Assets->MaxMeshCount);
+        Assets->ArrowMeshID = Assets->MeshCount++;
+        Assets->Meshes[Assets->ArrowMeshID] = ArrowAllocation;
+        Assets->MeshBoxes[Assets->ArrowMeshID] = ArrowMesh.Box;
+        Assets->MeshMaterialIndices[Assets->ArrowMeshID] = 0;
+    }
+
+    {
+        mesh SphereMesh = CreateSphereMesh(Scratch);
+        geometry_buffer_allocation SphereAllocation = UploadVertexData(Renderer,
+                                                                       SphereMesh.VertexCount, SphereMesh.VertexData,
+                                                                       SphereMesh.IndexCount, SphereMesh.IndexData);
+
+        Assert(Assets->MeshCount < Assets->MaxMeshCount);
+        Assets->SphereMeshID = Assets->MeshCount++;
+        Assets->Meshes[Assets->SphereMeshID] = SphereAllocation;
+        Assets->MeshBoxes[Assets->SphereMeshID] = SphereMesh.Box;
+        Assets->MeshMaterialIndices[Assets->SphereMeshID] = 0;
+    }
+
+    return(Result);
+}
 
 static void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Renderer, const char* Path)
 {
@@ -1105,6 +1198,217 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             }
         }
     }
+}
+
+
+internal mesh CreateSphereMesh(memory_arena* Arena)
+{
+    mesh Result = {};
+
+    Result.Box = { { -1.0f, -1.0f, -1.0f }, { +1.0f, +1.0f, +1.0f } };
+
+    constexpr u32 XCount = 16;
+    constexpr u32 YCount = 16;
+
+    Result.VertexCount = XCount * YCount;
+    Result.VertexData = PushArray<vertex>(Arena, Result.VertexCount);
+
+    Result.IndexCount = 6 * Result.VertexCount;
+    Result.IndexData = PushArray<u32>(Arena, Result.IndexCount);
+
+    vertex* VertexAt = Result.VertexData;
+    vert_index* IndexAt = Result.IndexData;
+    for (u32 X = 0; X < XCount; X++)
+    {
+        for (u32 Y = 0; Y < YCount; Y++)
+        {
+            f32 U = (f32)X / (f32)XCount;
+            f32 V = (f32)Y / (f32)YCount;
+            
+            f32 Phi = 2.0f * Pi * U;
+            f32 Theta = Pi * V;
+
+            f32 SinPhi = Sin(Phi);
+            f32 CosPhi = Cos(Phi);
+            f32 SinTheta = Sin(Theta);
+            f32 CosTheta = Cos(Theta);
+
+            v3 P = { CosPhi * SinTheta, SinPhi * SinTheta, CosTheta };
+            v3 T = { -SinPhi * SinTheta, CosPhi * SinTheta, CosTheta }; // TODO(boti): verify
+            v3 N = P;
+
+            *VertexAt++ =
+            {
+                .P = P,
+                .N = N,
+                .T = { T.x, T.y, T.z, 1.0f }, 
+                .TexCoord = { U, V },
+                .Weights = {},
+                .Joints = {},
+                .Color = PackRGBA8(0xFF, 0xFF, 0xFF),
+            };
+
+            u32 X0 = X;
+            u32 Y0 = Y;
+            u32 X1 = (X + 1) % XCount;
+            u32 Y1 = (Y + 1) % YCount;
+            *IndexAt++ = X0 + Y0 * XCount;
+            *IndexAt++ = X1 + Y0 * XCount;
+            *IndexAt++ = X0 + Y1 * XCount;
+
+            *IndexAt++ = X1 + Y0 * XCount;
+            *IndexAt++ = X1 + Y1 * XCount;
+            *IndexAt++ = X0 + Y1 * XCount;
+        }
+    }
+
+    return(Result);
+}
+
+internal mesh CreateArrowMesh(memory_arena* Arena)
+{
+    mesh Result = {};
+
+    rgba8 White = { 0xFFFFFFFFu };
+
+    constexpr f32 Radius = 0.05f;
+    constexpr f32 Height = 0.8f;
+    constexpr f32 TipRadius = 0.1f;
+    constexpr f32 TipHeight = 0.2f;
+
+    // NOTE(boti): Not a real bounding box, but should be better for clicking.
+    Result.Box = { { -Radius, -Radius, 0.0f }, { +Radius, +Radius, TipHeight } };
+
+    u32 RadiusDivisionCount = 16;
+
+    u32 CapVertexCount = 1 + RadiusDivisionCount;
+    u32 CylinderVertexCount = 2 * RadiusDivisionCount;
+    u32 TipCapVertexCount = 2 * RadiusDivisionCount;
+    u32 TipVertexCount = TipCapVertexCount + 2*RadiusDivisionCount;
+    Result.VertexCount = CapVertexCount + CylinderVertexCount + TipVertexCount;
+
+    u32 CapIndexCount = 3 * RadiusDivisionCount;
+    u32 CylinderIndexCount = 2 * 3 * RadiusDivisionCount;
+    u32 TipIndexCount = 2 * 3 * RadiusDivisionCount + 3 * RadiusDivisionCount;
+    Result.IndexCount = CapIndexCount + CylinderIndexCount + TipIndexCount;
+
+    Result.VertexData = PushArray<vertex>(Arena, Result.VertexCount);
+    Result.IndexData = PushArray<u32>(Arena, Result.IndexCount);
+
+    u32* IndexAt = Result.IndexData;
+    vertex* VertexAt = Result.VertexData;
+
+    // Bottom cap
+    {
+        v3 N = { 0.0f, 0.0f, -1.0f };
+        v4 T = { 1.0f, 0.0f, 0.0f, 1.0f };
+        // Origin
+        *VertexAt++ = { { 0.0f, 0.0f, 0.0f }, N, T, {}, {}, {}, White };
+        u32 BaseIndex = 1;
+
+        for (u32 i = 0; i < RadiusDivisionCount; i++)
+        {
+            f32 Angle = (2.0f * Pi * i) / RadiusDivisionCount;
+            v3 P = { Radius * Cos(Angle), Radius * Sin(Angle), 0.0f };
+            *VertexAt++ = { P, N, T, {}, {}, {}, White };
+
+            *IndexAt++ = 0;
+            *IndexAt++ = ((i + 1) % RadiusDivisionCount) + BaseIndex;
+            *IndexAt++ = i + BaseIndex;
+        }
+    }
+
+    // Cylinder
+    {
+        u32 BaseIndex = CapVertexCount;
+        for (u32 i = 0; i < RadiusDivisionCount; i++)
+        {
+            f32 Angle = (2.0f * Pi * i) / RadiusDivisionCount;
+            f32 CosA = Cos(Angle);
+            f32 SinA = Sin(Angle);
+
+            v3 P = { Radius * CosA, Radius * SinA, 0.0f };
+            v3 N = { CosA, SinA, 0.0f };
+            v4 T = { -SinA, CosA, 0.0f, 1.0f };
+
+            *VertexAt++ = { P, N, T, {}, {}, {}, White };
+            *VertexAt++ = { P + v3{ 0.0f, 0.0f, Height }, N, T, {}, {}, {}, White };
+
+            u32 i00 = 2*i + 0 + BaseIndex;
+            u32 i01 = 2*i + 1 + BaseIndex;
+            u32 i10 = 2*((i + 1) % RadiusDivisionCount) + 0 + BaseIndex;
+            u32 i11 = 2*((i + 1) % RadiusDivisionCount) + 1 + BaseIndex;
+
+            *IndexAt++ = i00;
+            *IndexAt++ = i11;
+            *IndexAt++ = i01;
+                        
+            *IndexAt++ = i00;
+            *IndexAt++ = i10;
+            *IndexAt++ = i11;
+        }
+    }
+
+    // Tip
+    {
+        u32 BaseIndex = CapVertexCount + CylinderVertexCount;
+        for (u32 i = 0; i < RadiusDivisionCount; i++)
+        {
+            f32 Angle = (2.0f * Pi * i) / RadiusDivisionCount;
+            f32 CosA = Cos(Angle);
+            f32 SinA = Sin(Angle);
+
+            v3 P1 = { Radius * CosA, Radius * SinA, Height };
+            v3 P2 = { TipRadius * CosA, TipRadius * SinA, Height  };
+
+            v3 N = { 0.0f, 0.0f, -1.0f };
+            v4 T = { 1.0f, 0.0f, 0.0f, 1.0f };
+            *VertexAt++ = { P1, N, T, {}, {}, {}, White };
+            *VertexAt++ = { P2, N, T, {}, {}, {}, White };
+
+            u32 i00 = 2*i + 0 + BaseIndex;
+            u32 i01 = 2*i + 1 + BaseIndex;
+            u32 i10 = 2*((i + 1) % RadiusDivisionCount) + 0 + BaseIndex;
+            u32 i11 = 2*((i + 1) % RadiusDivisionCount) + 1 + BaseIndex;
+
+            *IndexAt++ = i00;
+            *IndexAt++ = i11;
+            *IndexAt++ = i01;
+                        
+            *IndexAt++ = i00;
+            *IndexAt++ = i10;
+            *IndexAt++ = i11;
+        }
+
+        BaseIndex += TipCapVertexCount;
+
+        f32 Slope = TipRadius / TipHeight;
+        for (u32 i = 0; i < RadiusDivisionCount; i++)
+        {
+            f32 Angle = (2.0f * Pi * i) / RadiusDivisionCount;
+            f32 CosA = Cos(Angle);
+            f32 SinA = Sin(Angle);
+
+            f32 CosT = Cos(2.0f * Pi * (i + 0.5f) / RadiusDivisionCount);
+            f32 SinT = Sin(2.0f * Pi * (i + 0.5f) / RadiusDivisionCount);
+
+            v3 P = { TipRadius * CosA, TipRadius * SinA, Height };
+            v3 N = Normalize(v3{ CosA, SinA, Slope });
+            v3 TipP = { 0.0f, 0.0f, Height + TipHeight };
+            v3 TipN = Normalize(v3{ CosT, SinT, Slope });
+
+            v4 T = { -SinA, CosA, 0.0f, 1.0f };
+
+            *VertexAt++ = { P, N, T, {}, {}, {}, White };
+            *VertexAt++ = { TipP, TipN, T, {}, {}, {}, White };
+
+            *IndexAt++ = 2 * i + 0 + BaseIndex;
+            *IndexAt++ = (2 * ((i + 1) % RadiusDivisionCount)) + 0 + BaseIndex;
+            *IndexAt++ = 2 * i + 1 + BaseIndex;
+        }
+    }
+
+    return(Result);
 }
 
 #define PARTICLE_BASE_PATH "data/kenney_particle-pack/PNG (Black background)/"

@@ -16,6 +16,8 @@ struct trs_transform
     v3 Scale;
 };
 
+inline m4 TRSToM4(trs_transform Transform);
+
 struct skin
 {
     static constexpr u32 MaxJointCount = 256;
@@ -131,6 +133,8 @@ struct assets
 {
     memory_arena* Arena;
 
+    texture_id Whiteness;
+
     texture_id DefaultDiffuseID;
     texture_id DefaultNormalID;
     texture_id DefaultMetallicRoughnessID;
@@ -140,6 +144,7 @@ struct assets
 
     texture_id ParticleArrayID;
 
+    u32 ArrowMeshID;
     u32 SphereMeshID;
 
     static constexpr u32 MaxMeshCount = 1u << 16;
@@ -162,12 +167,16 @@ struct assets
     animation Animations[MaxAnimationCount];
 };
 
-inline m4 TRSToM4(trs_transform Transform);
+lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scratch);
 
-static void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Renderer, const char* Path);
-static void DEBUGLoadTestScene(memory_arena* Scratch, 
+lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Renderer, const char* Path);
+lbfn void DEBUGLoadTestScene(memory_arena* Scratch, 
                                assets* Assets, struct game_world* World, renderer* Renderer,
                                const char* ScenePath, m4 BaseTransform);
+
+//
+// Implementation
+//
 
 inline m4 TRSToM4(trs_transform Transform)
 {
