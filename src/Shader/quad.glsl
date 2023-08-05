@@ -73,7 +73,19 @@ void main()
     ParticleColor = Particle.Color;
     ParticleTexture = Particle.TextureIndex;
     ViewP = P;
-    gl_Position = PerFrame.Projection * vec4(P, 1.0);
+
+    if (ParticleColor.a > 0.0)
+    {
+        gl_Position = PerFrame.Projection * vec4(P, 1.0);
+    }
+    else
+    {
+        // NOTE(boti): We're essentially doing particle culling here,
+        // the idea is that when a particle is fully transparent
+        // we want the rasterizer to take care of that, 
+        // otherwise the GPU would choke on the fill-rate.
+        gl_Position = v4(0.0, 0.0, 0.0, 0.0);
+    }
 }
 #else
 
