@@ -90,23 +90,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
     assets* Assets = GameState->Assets;
     memory_arena* FrameArena = &GameState->TransientArena;
 
-    m4 CameraTransform = GetTransform(&World->Camera);
-    m4 ViewTransform = AffineOrthonormalInverse(CameraTransform);
-    render_camera Camera = 
-    {
-        .CameraTransform = CameraTransform,
-        .ViewTransform = ViewTransform,
-        .FocalLength = 1.0f / Tan(0.5f * World->Camera.FieldOfView),
-        .NearZ = World->Camera.NearZ,
-        .FarZ = World->Camera.FarZ,
-    };
-
-    SetRenderCamera(Frame, &Camera);
-
     // TODO(boti): this should have happened in UpdateAndRenderWorld
-    Frame->SunV = World->SunV;
-    Frame->Uniforms.SunV = TransformDirection(ViewTransform, World->SunV);
-    Frame->Uniforms.SunL = World->SunL;
     {
         constexpr f32 LuminanceThreshold = 1e-3f;
         for (u32 LightIndex = 0; LightIndex < Frame->Uniforms.LightCount; LightIndex++)
@@ -883,15 +867,15 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         GameIO->bHasDroppedFile = false;
     }
     
+    if (GameIO->Keys[SC_LeftAlt].bIsDown && GameIO->Keys[SC_F4].bIsDown)
+    {
+        GameIO->bQuitRequested = true;
+    }
+
     if (DoDebugUI(GameState, GameIO, RenderFrame))
     {
         GameIO->Mouse.dP = { 0.0f, 0.0f };
         GameIO->Keys[SC_MouseLeft].TransitionFlags = 0;
-    }
-    
-    if (GameIO->Keys[SC_LeftAlt].bIsDown && GameIO->Keys[SC_F4].bIsDown)
-    {
-        GameIO->bQuitRequested = true;
     }
     
     UpdateEditor(GameState, GameIO);

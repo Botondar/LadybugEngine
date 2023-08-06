@@ -181,8 +181,6 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     }
 
     f32 dt = IO->dt;
-    World->SunL = 2.5f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
-    World->SunV = Normalize(v3{ -3.0f, 2.5f, 12.0f }); // Direction (towards the sun)
     
     // Camera update
     {
@@ -222,9 +220,29 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
         if (IO->Keys[SC_Space].bIsDown) { Camera->P.z += SpeedMul * MoveSpeed * dt; }
         if (IO->Keys[SC_LeftControl].bIsDown) { Camera->P.z -= SpeedMul * MoveSpeed * dt; }
+
+        CameraTransform = GetTransform(Camera);
+        m4 ViewTransform = AffineOrthonormalInverse(CameraTransform);
+        render_camera RenderCamera = 
+        {
+            .CameraTransform = CameraTransform,
+            .ViewTransform = ViewTransform,
+            .FocalLength = 1.0f / Tan(0.5f * Camera->FieldOfView),
+            .NearZ = Camera->NearZ,
+            .FarZ = Camera->FarZ,
+        };
+        SetRenderCamera(Frame, &RenderCamera);
     }
 
-    frame_uniform_data* Uniforms = &Frame->Uniforms;
+    // Sun update
+    {
+        World->SunL = 2.5f * v3{ 10.0f, 7.0f, 3.0f };
+        World->SunV = Normalize(v3{ -3.0f, 2.5f, 12.0f });
+        Frame->SunV = World->SunV;
+        Frame->Uniforms.SunV = TransformDirection(Frame->Uniforms.ViewTransform, World->SunV);
+        Frame->Uniforms.SunL = World->SunL;
+    }
+
     for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
     {
         entity* Entity = World->Entities + EntityIndex;
