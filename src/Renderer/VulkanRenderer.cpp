@@ -307,6 +307,11 @@ VkResult CreateRenderer(renderer* Renderer,
         }
 
         Renderer->SwapchainImageCount = Renderer->MaxSwapchainImageCount;
+        // HACK(boti):
+        for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+        {
+            Renderer->Frames[i].Backend = Renderer->BackendFrames + i;
+        }
         Result = ResizeRenderTargets(Renderer);
         ReturnOnFailure();
     }
@@ -1359,21 +1364,21 @@ lbfn VkResult ResizeRenderTargets(renderer* Renderer)
                     
                     if (i == 0)
                     {
-                        Frame->DepthBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
-                        Frame->StructureBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[STRUCTURE_BUFFER_FORMAT], Color|Sampled, 1);
-                        Frame->HDRRenderTargets[0] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
-                        Frame->HDRRenderTargets[1] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
-                        Frame->OcclusionBuffers[0] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
-                        Frame->OcclusionBuffers[1] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
+                        Frame->Backend->DepthBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
+                        Frame->Backend->StructureBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[STRUCTURE_BUFFER_FORMAT], Color|Sampled, 1);
+                        Frame->Backend->HDRRenderTargets[0] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
+                        Frame->Backend->HDRRenderTargets[1] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
+                        Frame->Backend->OcclusionBuffers[0] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
+                        Frame->Backend->OcclusionBuffers[1] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
                     }
                     else
                     {
-                        Frame->DepthBuffer = Renderer->Frames[0].DepthBuffer;
-                        Frame->StructureBuffer = Renderer->Frames[0].StructureBuffer;
-                        Frame->HDRRenderTargets[0] = Renderer->Frames[0].HDRRenderTargets[0];
-                        Frame->HDRRenderTargets[1] = Renderer->Frames[0].HDRRenderTargets[1];
-                        Frame->OcclusionBuffers[0] = Renderer->Frames[0].OcclusionBuffers[0];
-                        Frame->OcclusionBuffers[1] = Renderer->Frames[0].OcclusionBuffers[1];
+                        Frame->Backend->DepthBuffer = Renderer->Frames[0].Backend->DepthBuffer;
+                        Frame->Backend->StructureBuffer = Renderer->Frames[0].Backend->StructureBuffer;
+                        Frame->Backend->HDRRenderTargets[0] = Renderer->Frames[0].Backend->HDRRenderTargets[0];
+                        Frame->Backend->HDRRenderTargets[1] = Renderer->Frames[0].Backend->HDRRenderTargets[1];
+                        Frame->Backend->OcclusionBuffers[0] = Renderer->Frames[0].Backend->OcclusionBuffers[0];
+                        Frame->Backend->OcclusionBuffers[1] = Renderer->Frames[0].Backend->OcclusionBuffers[1];
                     }
                 }
             }
@@ -1710,61 +1715,61 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
     render_frame* Frame = Renderer->Frames + FrameID;
     Frame->Renderer = Renderer;
 
-    Frame->SwapchainImageIndex = INVALID_INDEX_U32;
-    Frame->RenderFrameID = FrameID;
+    Frame->Backend->SwapchainImageIndex = INVALID_INDEX_U32;
+    Frame->FrameID = FrameID;
 
-    Frame->ImageAcquiredSemaphore = Renderer->ImageAcquiredSemaphores[FrameID];
-    Frame->ImageAcquiredFence = Renderer->ImageAcquiredFences[FrameID];
-    Frame->RenderFinishedFence = Renderer->RenderFinishedFences[FrameID];
+    Frame->Backend->ImageAcquiredSemaphore = Renderer->ImageAcquiredSemaphores[FrameID];
+    Frame->Backend->ImageAcquiredFence = Renderer->ImageAcquiredFences[FrameID];
+    Frame->Backend->RenderFinishedFence = Renderer->RenderFinishedFences[FrameID];
 
-    Frame->CmdPool = Renderer->CmdPools[FrameID];
-    Frame->CmdBuffer = Renderer->CmdBuffers[FrameID];
+    Frame->Backend->CmdPool = Renderer->CmdPools[FrameID];
+    Frame->Backend->CmdBuffer = Renderer->CmdBuffers[FrameID];
 
-    vkWaitForFences(VK.Device, 1, &Frame->RenderFinishedFence, VK_TRUE, UINT64_MAX);
-    vkResetFences(VK.Device, 1, &Frame->RenderFinishedFence);
+    vkWaitForFences(VK.Device, 1, &Frame->Backend->RenderFinishedFence, VK_TRUE, UINT64_MAX);
+    vkResetFences(VK.Device, 1, &Frame->Backend->RenderFinishedFence);
 
-    vkResetCommandPool(VK.Device, Frame->CmdPool, 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
+    vkResetCommandPool(VK.Device, Frame->Backend->CmdPool, 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
 
-    Frame->DescriptorPool = Renderer->PerFrameDescriptorPool[FrameID];    
+    Frame->Backend->DescriptorPool = Renderer->PerFrameDescriptorPool[FrameID];    
 
-    Frame->ShadowCascadeCount = Renderer->ShadowCascadeCount;
-    Frame->ShadowMap = Renderer->ShadowMap;
-    Frame->ShadowMapView = Renderer->ShadowView;
-    for (u32 i = 0; i < Frame->ShadowCascadeCount; i++)
+    Frame->Backend->ShadowCascadeCount = Renderer->ShadowCascadeCount;
+    Frame->Backend->ShadowMap = Renderer->ShadowMap;
+    Frame->Backend->ShadowMapView = Renderer->ShadowView;
+    for (u32 i = 0; i < Frame->Backend->ShadowCascadeCount; i++)
     {
-        Frame->ShadowCascadeViews[i] = Renderer->ShadowCascadeViews[i];
+        Frame->Backend->ShadowCascadeViews[i] = Renderer->ShadowCascadeViews[i];
     }
 
-    Frame->PerFrameUniformBuffer = Renderer->PerFrameUniformBuffers[FrameID];
-    Frame->PerFrameUniformMemory = Renderer->PerFrameUniformBufferMappings[FrameID];
+    Frame->Backend->UniformBuffer = Renderer->PerFrameUniformBuffers[FrameID];
+    Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
 
-    Frame->DrawBuffer = Renderer->DrawBuffers[FrameID];
-    Frame->VertexStack = Renderer->VertexStacks[FrameID];
+    Frame->Backend->DrawBuffer = Renderer->DrawBuffers[FrameID];
+    Frame->Backend->VertexStack = Renderer->VertexStacks[FrameID];
 
-    Frame->DrawCount = 0;
-    Frame->Commands = (VkDrawIndirectCommand*)Frame->DrawBuffer.Mapping;
-    Frame->VertexCount = 0;
-    Frame->Vertices = (ui_vertex*)Frame->VertexStack.Mapping;
+    Frame->UIDrawCmdCount = 0;
+    Frame->UIDrawCmds = (draw_indirect_cmd*)Frame->Backend->DrawBuffer.Mapping;
+    Frame->UIVertexCount = 0;
+    Frame->UIVertices = (ui_vertex*)Frame->Backend->VertexStack.Mapping;
 
     Frame->DrawCmdCount = 0;
     Frame->SkinnedDrawCmdCount = 0;
     Frame->SkinningCmdCount = 0;
 
     Frame->ParticleCount = 0;
-    Frame->ParticleBuffer = Renderer->PerFrameParticleBuffers[FrameID];
+    Frame->Backend->ParticleBuffer = Renderer->PerFrameParticleBuffers[FrameID];
     Frame->Particles = (render_particle*)Renderer->PerFrameParticleBufferMappings[FrameID];
 
     Frame->ParticleDrawCmdCount = 0;
 
     Frame->JointCount = 0;
-    Frame->JointBuffer = Renderer->PerFrameJointBuffers[FrameID];
+    Frame->Backend->JointBuffer = Renderer->PerFrameJointBuffers[FrameID];
     Frame->JointMapping = (m4*)Renderer->PerFrameJointBufferMappings[FrameID];
 
-    Frame->SkinningBufferOffset = 0;
-    Frame->SkinningBuffer = Renderer->SkinningBuffers[FrameID];
+    Frame->SkinnedMeshVertexCount = 0;
+    Frame->Backend->SkinnedMeshVB = Renderer->SkinningBuffers[FrameID];
 
-    vkWaitForFences(VK.Device, 1, &Frame->ImageAcquiredFence, VK_TRUE, UINT64_MAX);
-    vkResetFences(VK.Device, 1, &Frame->ImageAcquiredFence);
+    vkWaitForFences(VK.Device, 1, &Frame->Backend->ImageAcquiredFence, VK_TRUE, UINT64_MAX);
+    vkResetFences(VK.Device, 1, &Frame->Backend->ImageAcquiredFence);
 
     if (OutputWidth != Renderer->SurfaceExtent.width ||
         OutputHeight != Renderer->SurfaceExtent.height)
@@ -1775,14 +1780,14 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
     for (;;)
     {
         VkResult ImageAcquireResult = vkAcquireNextImageKHR(VK.Device, Renderer->Swapchain, 0, 
-                                                            Frame->ImageAcquiredSemaphore, 
-                                                            Frame->ImageAcquiredFence, 
-                                                            &Frame->SwapchainImageIndex);
+                                                            Frame->Backend->ImageAcquiredSemaphore, 
+                                                            Frame->Backend->ImageAcquiredFence, 
+                                                            &Frame->Backend->SwapchainImageIndex);
         if (ImageAcquireResult == VK_SUCCESS || 
             ImageAcquireResult == VK_TIMEOUT ||
             ImageAcquireResult == VK_NOT_READY)
         {
-            Assert(Frame->SwapchainImageIndex != INVALID_INDEX_U32);
+            Assert(Frame->Backend->SwapchainImageIndex != INVALID_INDEX_U32);
             break;
         }
         else if (ImageAcquireResult == VK_SUBOPTIMAL_KHR ||
@@ -1797,15 +1802,16 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
         }
     }
 
-    Frame->RenderExtent = Renderer->SurfaceExtent;
-    Frame->SwapchainImage = Renderer->SwapchainImages[Frame->SwapchainImageIndex];
-    Frame->SwapchainImageView = Renderer->SwapchainImageViews[Frame->SwapchainImageIndex];
+    Frame->RenderWidth = Renderer->SurfaceExtent.width;
+    Frame->RenderHeight = Renderer->SurfaceExtent.height;
+    Frame->Backend->SwapchainImage = Renderer->SwapchainImages[Frame->Backend->SwapchainImageIndex];
+    Frame->Backend->SwapchainImageView = Renderer->SwapchainImageViews[Frame->Backend->SwapchainImageIndex];
 
-    vkResetDescriptorPool(VK.Device, Frame->DescriptorPool, 0);
-    Frame->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrameUniformData]);
+    vkResetDescriptorPool(VK.Device, Frame->Backend->DescriptorPool, 0);
+    Frame->Backend->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrameUniformData]);
 
     Frame->Uniforms = {};
-    Frame->Uniforms.ScreenSize = { (f32)Frame->RenderExtent.width, (f32)Frame->RenderExtent.height };
+    Frame->Uniforms.ScreenSize = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
 
     VkCommandBufferBeginInfo CmdBufferBegin = 
     {
@@ -1814,14 +1820,14 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
         .pInheritanceInfo = nullptr,
     };
-    vkBeginCommandBuffer(Frame->CmdBuffer, &CmdBufferBegin);
+    vkBeginCommandBuffer(Frame->Backend->CmdBuffer, &CmdBufferBegin);
 
-    return Frame;
+    return(Frame);
 }
 
 void EndRenderFrame(render_frame* Frame)
 {
-    vkEndCommandBuffer(Frame->CmdBuffer);
+    vkEndCommandBuffer(Frame->Backend->CmdBuffer);
 
     VkPipelineStageFlags WaitDstStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
     VkSubmitInfo SubmitInfo = 
@@ -1829,15 +1835,15 @@ void EndRenderFrame(render_frame* Frame)
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .pNext = nullptr,
         .waitSemaphoreCount= 1,
-        .pWaitSemaphores = &Frame->ImageAcquiredSemaphore,
+        .pWaitSemaphores = &Frame->Backend->ImageAcquiredSemaphore,
         .pWaitDstStageMask = &WaitDstStage,
         .commandBufferCount = 1,
-        .pCommandBuffers = &Frame->CmdBuffer,
+        .pCommandBuffers = &Frame->Backend->CmdBuffer,
         .signalSemaphoreCount = 0,
         .pSignalSemaphores = nullptr,
     };
 
-    vkQueueSubmit(VK.GraphicsQueue, 1, &SubmitInfo, Frame->RenderFinishedFence);
+    vkQueueSubmit(VK.GraphicsQueue, 1, &SubmitInfo, Frame->Backend->RenderFinishedFence);
 
     VkPresentInfoKHR PresentInfo = 
     {
@@ -1847,7 +1853,7 @@ void EndRenderFrame(render_frame* Frame)
         .pWaitSemaphores = nullptr,
         .swapchainCount = 1,
         .pSwapchains = &Frame->Renderer->Swapchain,
-        .pImageIndices = &Frame->SwapchainImageIndex,
+        .pImageIndices = &Frame->Backend->SwapchainImageIndex,
         .pResults = nullptr,
     };
     vkQueuePresentKHR(VK.GraphicsQueue, &PresentInfo);
@@ -1855,7 +1861,7 @@ void EndRenderFrame(render_frame* Frame)
 
 void SetRenderCamera(render_frame* Frame, const render_camera* Camera)
 {
-    f32 AspectRatio = (f32)Frame->RenderExtent.width / (f32)Frame->RenderExtent.height;
+    f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
 
     f32 InvZRange = 1.0f / (Camera->FarZ - Camera->NearZ);
     m4 ProjectionTransform = M4(
@@ -2049,14 +2055,14 @@ void BeginSceneRendering(render_frame* Frame)
     }
 
     // Upload uniform data
-    memcpy(Frame->PerFrameUniformMemory, &Frame->Uniforms, sizeof(Frame->Uniforms));
+    memcpy(Frame->UniformData, &Frame->Uniforms, sizeof(Frame->Uniforms));
     {
-         VkDescriptorBufferInfo Info = { Frame->PerFrameUniformBuffer, 0, sizeof(Frame->Uniforms) };
+         VkDescriptorBufferInfo Info = { Frame->Backend->UniformBuffer, 0, sizeof(Frame->Uniforms) };
          VkWriteDescriptorSet Write = 
          {
              .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
              .pNext = nullptr,
-             .dstSet = Frame->UniformDescriptorSet,
+             .dstSet = Frame->Backend->UniformDescriptorSet,
              .dstBinding = 0,
              .dstArrayElement = 0,
              .descriptorCount = 1 ,

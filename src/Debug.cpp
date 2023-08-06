@@ -1,5 +1,3 @@
-#include "Debug.hpp"
-
 #if 0
 lbfn void DEBUGRenderVBUsage(renderer* Renderer, v2 P, v2 Size)
 {
@@ -51,7 +49,7 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
         Rect.Min *= FrameTimeSize;
         Rect.Max *= FrameTimeSize;
         f32 Width = Rect.Max.x - Rect.Min.x;
-        v2 P = { (f32)Frame->RenderExtent.width - Width, 0.0f };
+        v2 P = { (f32)Frame->RenderWidth - Width, 0.0f };
         PushTextWithShadow(Frame, Buff, Font, FrameTimeSize, P,  DefaultForegroundColor, Layout);
     }
 
@@ -91,7 +89,7 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
         {
             u32 PlaybackID = CurrentID++;
 
-            v2 ScreenExtent = { (f32)Frame->RenderExtent.width, (f32)Frame->RenderExtent.height };
+            v2 ScreenExtent = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
             f32 OutlineSize = 1.0f;
             f32 MinX = 0.1f * ScreenExtent.x;
             f32 MaxX = 0.9f * ScreenExtent.x;

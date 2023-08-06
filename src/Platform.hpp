@@ -1,7 +1,7 @@
 #pragma once
 
 #include "LadybugLib/Core.hpp"
-#include <vulkan/vulkan.h>
+//#include <vulkan/vulkan.h>
 
 // High resolution counter
 struct counter 

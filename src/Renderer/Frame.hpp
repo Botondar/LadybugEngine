@@ -1,5 +1,6 @@
 #pragma once
 
+#if 0
 extern vulkan VK;
 
 struct render_frame
@@ -82,17 +83,7 @@ struct render_frame
     VkDescriptorSet UniformDescriptorSet;
     frame_uniform_data Uniforms;
 };
-
-inline b32 RenderMesh(render_frame* Frame, 
-                      u32 VertexOffset, u32 VertexCount, 
-                      u32 IndexOffset, u32 IndexCount,
-                      m4 Transform, material Material);
-inline b32 RenderSkinnedMesh(render_frame* Frame,
-                             u32 VertexOffset, u32 VertexCount,
-                             u32 IndexOffset, u32 IndexCount,
-                             m4 Transform, material,
-                             u32 JointCount, m4* Pose);
-inline b32 AddLight(render_frame* Frame, light Light);
+#endif
 
 VkDescriptorSet PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayout Layout);
 VkDescriptorSet PushBufferDescriptor(render_frame* Frame, 
@@ -110,8 +101,8 @@ VkDescriptorSet PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout L
 //
 
 void RenderImmediates(render_frame* Frame, 
-                           VkPipeline Pipeline, VkPipelineLayout PipelineLayout,
-                           VkDescriptorSet DescriptorSet);
+                      VkPipeline Pipeline, VkPipelineLayout PipelineLayout,
+                      VkDescriptorSet DescriptorSet);
 
 void PushRect(render_frame* Frame, 
                    v2 P1, v2 P2, 
@@ -120,8 +111,7 @@ void PushRect(render_frame* Frame,
 mmrect2 PushText(render_frame* Frame, const char* Text, const font* Font, 
              f32 Size, v2 P, rgba8 Color, font_layout_type Layout = font_layout_type::Baseline);
 
-mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Font,                        f32 Size, v2 P, rgba8 Color, font_layout_type Layout = font_layout_type::Baseline);
-
+mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Font, f32 Size, v2 P, rgba8 Color, font_layout_type Layout = font_layout_type::Baseline);
 
 //
 // Rendering
@@ -151,95 +141,3 @@ void RenderBloom(render_frame* Frame,
                       VkPipeline UpsamplePipeline, 
                       VkDescriptorSetLayout DownsampleSetLayout,
                       VkDescriptorSetLayout UpsampleSetLayout);
-
-//
-// Implementation
-//
-
-inline b32 RenderMesh(render_frame* Frame, 
-                      u32 VertexOffset, u32 VertexCount, 
-                      u32 IndexOffset, u32 IndexCount,
-                      m4 Transform, material Material)
-{
-    b32 Result = false;
-    if (Frame->DrawCmdCount < Frame->MaxDrawCmdCount)
-    {
-        Frame->DrawCmds[Frame->DrawCmdCount++] = 
-        {
-            .Base = 
-            {
-                .IndexCount = IndexCount,
-                .InstanceCount = 1,
-                .IndexOffset = IndexOffset,
-                .VertexOffset = VertexOffset,
-                .InstanceOffset = 0,
-            },
-            .Transform = Transform,
-            .Material = Material,
-        };
-        Result = true;
-    }
-    return(Result);
-}
-
-inline b32 RenderSkinnedMesh(render_frame* Frame,
-                             u32 VertexOffset, u32 VertexCount,
-                             u32 IndexOffset, u32 IndexCount,
-                             m4 Transform, material Material,
-                             u32 JointCount, m4* Pose)
-{
-    b32 Result = false;
-
-    if ((Frame->SkinningCmdCount < Frame->MaxSkinningCmdCount) &&
-        (Frame->SkinnedDrawCmdCount < Frame->MaxSkinnedDrawCmdCount))
-    {
-        const u32 CBAlignment = (u32)VK.ConstantBufferAlignment;
-        const u32 JointBufferAlignment = CBAlignment / sizeof(m4);
-
-        // TODO(boti): bounds checking
-        u32 DstVertexOffset = Frame->SkinningBufferOffset;
-        Frame->SkinningBufferOffset += VertexCount;
-
-        // TODO(boti): bounds checking
-        memcpy(Frame->JointMapping + Frame->JointCount, Pose, JointCount * sizeof(m4));
-        u32 JointBufferOffset = Frame->JointCount * sizeof(m4);
-        Frame->JointCount = Align(Frame->JointCount + JointCount, JointBufferAlignment);
-
-        Frame->SkinningCmds[Frame->SkinningCmdCount++] =
-        {
-            .SrcVertexOffset = VertexOffset,
-            .DstVertexOffset = DstVertexOffset,
-            .VertexCount = VertexCount,
-            .PoseOffset = JointBufferOffset,
-        };
-
-        Frame->SkinnedDrawCmds[Frame->SkinnedDrawCmdCount++] = 
-        {
-            .Base = 
-            {
-                .IndexCount = IndexCount,
-                .InstanceCount = 1,
-                .IndexOffset = IndexOffset,
-                .VertexOffset = DstVertexOffset,
-                .InstanceOffset = 0,
-            },
-            .Transform = Transform,
-            .Material = Material,
-        };
-
-        Result = true;
-    }
-
-    return(Result);
-}
-
-inline b32 AddLight(render_frame* Frame, light Light)
-{
-    b32 Result = false;
-    if (Frame->Uniforms.LightCount < R_MaxLightCount)
-    {
-        Frame->Uniforms.Lights[Frame->Uniforms.LightCount++] = Light;
-        Result = true;
-    }
-    return(Result);
-}

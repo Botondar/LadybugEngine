@@ -4,7 +4,7 @@
 #include <LadybugLib/Intrinsics.hpp>
 #include <LadybugLib/String.hpp>
 #include "Font.hpp"
-#include "Platform.hpp"
+//#include "Platform.hpp"
 
 //
 // Config
@@ -668,7 +668,17 @@ inline rgba8 PackRGBA(v4 Color);
 inline u32 GetMaxMipCount(u32 Width, u32 Height);
 inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFFFFFFu);
 
-struct draw_cmd_base
+// NOTE(boti): binary-compatible with Vulkan/D3D12
+struct draw_indirect_cmd
+{
+    u32 VertexCount;
+    u32 InstanceCount;
+    u32 VertexOffset;
+    u32 InstanceOffset;
+};
+
+// NOTE(boti): binary-compatible with Vulkan/D3D12
+struct draw_indirect_index_cmd
 {
     u32 IndexCount;
     u32 InstanceCount;
@@ -679,7 +689,7 @@ struct draw_cmd_base
 
 struct draw_cmd
 {
-    draw_cmd_base Base;
+    draw_indirect_index_cmd Base;
     m4 Transform;
     material Material;
 };
@@ -729,19 +739,75 @@ struct frame_uniform_data
     light Lights[R_MaxLightCount];
 };
 
-struct render_frame;
 struct renderer;
+struct backend_render_frame;
+
+struct render_frame
+{
+    renderer* Renderer;
+    backend_render_frame* Backend;
+
+    u32 FrameID;
+    u32 RenderWidth;
+    u32 RenderHeight;
+
+    frustum CameraFrustum;
+    v3 SunV; // World-space sun direction
+
+    void* UniformData; // GPU-backed frame_uniform_data
+
+    static constexpr u32 MaxDrawCmdCount            = (1u << 22);
+    static constexpr u32 MaxSkinnedDrawCmdCount     = (1u << 20);
+    static constexpr u32 MaxParticleCount           = (1u << 18);
+    static constexpr u32 MaxParticleDrawCmdCount    = 8192u;
+    static constexpr u32 MaxSkinningCmdCount        = MaxSkinnedDrawCmdCount;
+    static constexpr u32 MaxJointCount              = (1u << 17);
+
+    u32 DrawCmdCount;
+    u32 SkinnedDrawCmdCount;
+    u32 SkinningCmdCount;
+    u32 ParticleDrawCmdCount;
+    u32 ParticleCount;
+    u32 JointCount;
+    u32 SkinnedMeshVertexCount;
+    u32 UIVertexCount;
+    u32 UIDrawCmdCount;
+
+    draw_cmd DrawCmds[MaxDrawCmdCount];
+    draw_cmd SkinnedDrawCmds[MaxSkinnedDrawCmdCount];
+    skinning_cmd SkinningCmds[MaxSkinningCmdCount];
+    particle_cmd ParticleDrawCmds[MaxParticleDrawCmdCount];
+    render_particle* Particles;
+    m4* JointMapping;
+    ui_vertex* UIVertices;
+    draw_indirect_cmd* UIDrawCmds;
+
+    frame_uniform_data Uniforms;
+};
+
 
 render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHeight);
 void EndRenderFrame(render_frame* Frame);
 
 void SetRenderCamera(render_frame* Frame, const render_camera* Camera);
 
+inline b32 RenderMesh(render_frame* Frame,
+                      u32 VertexOffset, u32 VertexCount, 
+                      u32 IndexOffset, u32 IndexCount,
+                      m4 Transform, material Material);
+inline b32 RenderSkinnedMesh(render_frame* Frame,
+                             u32 VertexOffset, u32 VertexCount,
+                             u32 IndexOffset, u32 IndexCount,
+                             m4 Transform, material,
+                             u32 JointCount, m4* Pose);
+inline b32 AddLight(render_frame* Frame, light Light);
+
 void BeginSceneRendering(render_frame* Frame);
 void EndSceneRendering(render_frame* Frame);
 
 #include "Renderer/Pipelines.hpp"
 
+// TODO(boti): remove this
 #include "VulkanRenderer.hpp"
 
 //
@@ -813,4 +879,93 @@ inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount /*= 0xFF
     }
 
     return Result;
+}
+
+
+inline b32 RenderMesh(render_frame* Frame, 
+                      u32 VertexOffset, u32 VertexCount, 
+                      u32 IndexOffset, u32 IndexCount,
+                      m4 Transform, material Material)
+{
+    b32 Result = false;
+    if (Frame->DrawCmdCount < Frame->MaxDrawCmdCount)
+    {
+        Frame->DrawCmds[Frame->DrawCmdCount++] = 
+        {
+            .Base = 
+            {
+                .IndexCount = IndexCount,
+                .InstanceCount = 1,
+                .IndexOffset = IndexOffset,
+                .VertexOffset = VertexOffset,
+                .InstanceOffset = 0,
+            },
+            .Transform = Transform,
+            .Material = Material,
+        };
+        Result = true;
+    }
+    return(Result);
+}
+
+inline b32 RenderSkinnedMesh(render_frame* Frame,
+                             u32 VertexOffset, u32 VertexCount,
+                             u32 IndexOffset, u32 IndexCount,
+                             m4 Transform, material Material,
+                             u32 JointCount, m4* Pose)
+{
+    b32 Result = false;
+
+    if ((Frame->SkinningCmdCount < Frame->MaxSkinningCmdCount) &&
+        (Frame->SkinnedDrawCmdCount < Frame->MaxSkinnedDrawCmdCount))
+    {
+        const u32 CBAlignment = (u32)VK.ConstantBufferAlignment;
+        const u32 JointBufferAlignment = CBAlignment / sizeof(m4);
+
+        // TODO(boti): bounds checking
+        u32 DstVertexOffset = Frame->SkinnedMeshVertexCount;
+        Frame->SkinnedMeshVertexCount += VertexCount;
+
+        // TODO(boti): bounds checking
+        memcpy(Frame->JointMapping + Frame->JointCount, Pose, JointCount * sizeof(m4));
+        u32 JointBufferOffset = Frame->JointCount * sizeof(m4);
+        Frame->JointCount = Align(Frame->JointCount + JointCount, JointBufferAlignment);
+
+        Frame->SkinningCmds[Frame->SkinningCmdCount++] =
+        {
+            .SrcVertexOffset = VertexOffset,
+            .DstVertexOffset = DstVertexOffset,
+            .VertexCount = VertexCount,
+            .PoseOffset = JointBufferOffset,
+        };
+
+        Frame->SkinnedDrawCmds[Frame->SkinnedDrawCmdCount++] = 
+        {
+            .Base = 
+            {
+                .IndexCount = IndexCount,
+                .InstanceCount = 1,
+                .IndexOffset = IndexOffset,
+                .VertexOffset = DstVertexOffset,
+                .InstanceOffset = 0,
+            },
+            .Transform = Transform,
+            .Material = Material,
+        };
+
+        Result = true;
+    }
+
+    return(Result);
+}
+
+inline b32 AddLight(render_frame* Frame, light Light)
+{
+    b32 Result = false;
+    if (Frame->Uniforms.LightCount < R_MaxLightCount)
+    {
+        Frame->Uniforms.Lights[Frame->Uniforms.LightCount++] = Light;
+        Result = true;
+    }
+    return(Result);
 }

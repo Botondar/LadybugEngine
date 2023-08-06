@@ -1,5 +1,3 @@
-#include "World.hpp"
-
 lbfn m4 GetLocalTransform(const camera* Camera)
 {
     f32 SinYaw = Sin(Camera->Yaw);

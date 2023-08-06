@@ -7,7 +7,7 @@ VkDescriptorSet PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayout Lay
     {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .pNext = nullptr,
-        .descriptorPool = Frame->DescriptorPool,
+        .descriptorPool = Frame->Backend->DescriptorPool,
         .descriptorSetCount = 1,
         .pSetLayouts = &Layout,
     };
@@ -99,21 +99,19 @@ void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color)
         { { P1.x, P2.y }, { UV1.x, UV2.y }, Color },
     };
 
-    if (BumpBuffer_(&Frame->DrawBuffer, sizeof(VkDrawIndirectCommand)) && 
-        BumpBuffer_(&Frame->VertexStack, sizeof(VertexData)))
+    if (BumpBuffer_(&Frame->Backend->DrawBuffer, sizeof(VkDrawIndirectCommand)) && 
+        BumpBuffer_(&Frame->Backend->VertexStack, sizeof(VertexData)))
     {
-        Frame->DrawCount++;
-        *Frame->Commands++ = 
+        Frame->UIDrawCmds[Frame->UIDrawCmdCount++] = 
         {
-            .vertexCount = CountOf(VertexData),
-            .instanceCount = 1,
-            .firstVertex = Frame->VertexCount,
-            .firstInstance = 0,
+            .VertexCount = CountOf(VertexData),
+            .InstanceCount = 1,
+            .VertexOffset = Frame->UIVertexCount,
+            .InstanceOffset = 0,
         };
 
-        memcpy(Frame->Vertices, VertexData, sizeof(VertexData));
-        Frame->Vertices += CountOf(VertexData);
-        Frame->VertexCount += CountOf(VertexData);
+        memcpy(Frame->UIVertices + Frame->UIVertexCount, VertexData, sizeof(VertexData));
+        Frame->UIVertexCount += CountOf(VertexData);
     }
 }
 
@@ -122,23 +120,23 @@ void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color)
 //
 
 void RenderImmediates(render_frame* Frame, 
-                           VkPipeline Pipeline, VkPipelineLayout PipelineLayout,
-                           VkDescriptorSet DescriptorSet)
+                      VkPipeline Pipeline, VkPipelineLayout PipelineLayout,
+                      VkDescriptorSet DescriptorSet)
 {
-    vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline);
+    vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline);
 
-    vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PipelineLayout, 0, 1, &DescriptorSet, 0, nullptr);
+    vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PipelineLayout, 0, 1, &DescriptorSet, 0, nullptr);
 
     VkDeviceSize VBOffset = 0;
-    vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Frame->VertexStack.Buffer, &VBOffset);
+    vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Frame->Backend->VertexStack.Buffer, &VBOffset);
 
     m4 Transform = M4(
-        2.0f / Frame->RenderExtent.width, 0.0f, 0.0f, -1.0f,
-        0.0f, 2.0f / Frame->RenderExtent.height, 0.0f, -1.0f,
+        2.0f / Frame->RenderWidth, 0.0f, 0.0f, -1.0f,
+        0.0f, 2.0f / Frame->RenderHeight, 0.0f, -1.0f,
         0.0f, 0.0f, 1.0f, 0.0f,
         0.0f, 0.0f, 0.0f, 1.0f);
-    vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Transform), &Transform);
-    vkCmdDrawIndirect(Frame->CmdBuffer, Frame->DrawBuffer.Buffer, 0, Frame->DrawCount, sizeof(VkDrawIndirectCommand));
+    vkCmdPushConstants(Frame->Backend->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Transform), &Transform);
+    vkCmdDrawIndirect(Frame->Backend->CmdBuffer, Frame->Backend->DrawBuffer.Buffer, 0, Frame->UIDrawCmdCount, sizeof(VkDrawIndirectCommand));
 }
 
 mmrect2 PushText(render_frame* Frame, const char* Text, const font* Font, 
@@ -213,7 +211,7 @@ void BeginPrepass(render_frame* Frame)
             .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->StructureBuffer->Image,
+            .image = Frame->Backend->StructureBuffer->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -235,7 +233,7 @@ void BeginPrepass(render_frame* Frame)
             .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->DepthBuffer->Image,
+            .image = Frame->Backend->DepthBuffer->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -259,7 +257,7 @@ void BeginPrepass(render_frame* Frame)
         .imageMemoryBarrierCount = CountOf(BeginBarriers),
         .pImageMemoryBarriers = BeginBarriers,
     };
-    vkCmdPipelineBarrier2(Frame->CmdBuffer, &BeginDependencyInfo);
+    vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependencyInfo);
 
     VkRenderingAttachmentInfo ColorAttachments[] = 
     {
@@ -267,7 +265,7 @@ void BeginPrepass(render_frame* Frame)
         {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .imageView = Frame->StructureBuffer->View,
+            .imageView = Frame->Backend->StructureBuffer->View,
             .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .resolveMode = VK_RESOLVE_MODE_NONE,
             .resolveImageView = VK_NULL_HANDLE,
@@ -282,7 +280,7 @@ void BeginPrepass(render_frame* Frame)
     {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
-        .imageView = Frame->DepthBuffer->View,
+        .imageView = Frame->Backend->DepthBuffer->View,
         .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         .resolveMode = VK_RESOLVE_MODE_NONE,
         .resolveImageView = VK_NULL_HANDLE,
@@ -297,7 +295,7 @@ void BeginPrepass(render_frame* Frame)
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .renderArea = { .offset = { 0, 0 }, .extent = Frame->RenderExtent },
+        .renderArea = { .offset = { 0, 0 }, .extent = { Frame->RenderWidth, Frame->RenderHeight } },
         .layerCount = 1,
         .viewMask = 0,
         .colorAttachmentCount = CountOf(ColorAttachments),
@@ -306,12 +304,12 @@ void BeginPrepass(render_frame* Frame)
         .pStencilAttachment = nullptr,
     };
 
-    vkCmdBeginRendering(Frame->CmdBuffer, &RenderingInfo);
+    vkCmdBeginRendering(Frame->Backend->CmdBuffer, &RenderingInfo);
 }
 
 void EndPrepass(render_frame* Frame)
 {
-    vkCmdEndRendering(Frame->CmdBuffer);
+    vkCmdEndRendering(Frame->Backend->CmdBuffer);
 }
 
 void BeginCascade(render_frame* Frame, u32 CascadeIndex)
@@ -329,7 +327,7 @@ void BeginCascade(render_frame* Frame, u32 CascadeIndex)
             .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->ShadowMap,
+            .image = Frame->Backend->ShadowMap,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -350,13 +348,13 @@ void BeginCascade(render_frame* Frame, u32 CascadeIndex)
         .pImageMemoryBarriers = BeginBarriers,
     };
 
-    vkCmdPipelineBarrier2(Frame->CmdBuffer, &BeginDependency);
+    vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependency);
 
     VkRenderingAttachmentInfo DepthAttachment = 
     {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
-        .imageView = Frame->ShadowCascadeViews[CascadeIndex],
+        .imageView = Frame->Backend->ShadowCascadeViews[CascadeIndex],
         .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         .resolveMode = VK_RESOLVE_MODE_NONE,
         .resolveImageView = VK_NULL_HANDLE,
@@ -380,12 +378,12 @@ void BeginCascade(render_frame* Frame, u32 CascadeIndex)
         .pStencilAttachment = nullptr,
     };
             
-    vkCmdBeginRendering(Frame->CmdBuffer, &RenderingInfo);
+    vkCmdBeginRendering(Frame->Backend->CmdBuffer, &RenderingInfo);
 }
 
 void EndCascade(render_frame* Frame)
 {
-    vkCmdEndRendering(Frame->CmdBuffer);
+    vkCmdEndRendering(Frame->Backend->CmdBuffer);
 }
 
 void RenderSSAO(render_frame* Frame,
@@ -410,7 +408,7 @@ void RenderSSAO(render_frame* Frame,
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->StructureBuffer->Image,
+            .image = Frame->Backend->StructureBuffer->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -432,7 +430,7 @@ void RenderSSAO(render_frame* Frame,
             .newLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->DepthBuffer->Image,
+            .image = Frame->Backend->DepthBuffer->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -456,14 +454,14 @@ void RenderSSAO(render_frame* Frame,
         .imageMemoryBarrierCount = CountOf(GBufferReadBarriers),
         .pImageMemoryBarriers = GBufferReadBarriers,
     };
-    vkCmdPipelineBarrier2(Frame->CmdBuffer, &GBufferReadDependency);
+    vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &GBufferReadDependency);
 
     // Calculate AO
     {
         constexpr u32 GroupSizeX = 8;
         constexpr u32 GroupSizeY = 8;
-        u32 DispatchX = CeilDiv(Frame->RenderExtent.width, GroupSizeX);
-        u32 DispatchY = CeilDiv(Frame->RenderExtent.height, GroupSizeY);
+        u32 DispatchX = CeilDiv(Frame->RenderWidth, GroupSizeX);
+        u32 DispatchY = CeilDiv(Frame->RenderHeight, GroupSizeY);
 
         // Allocate the descriptor set
         VkDescriptorSet SSAODescriptorSet = VK_NULL_HANDLE;
@@ -472,7 +470,7 @@ void RenderSSAO(render_frame* Frame,
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
                 .pNext = nullptr,
-                .descriptorPool = Frame->DescriptorPool,
+                .descriptorPool = Frame->Backend->DescriptorPool,
                 .descriptorSetCount = 1,
                 .pSetLayouts = &SetLayout,
             };
@@ -482,13 +480,13 @@ void RenderSSAO(render_frame* Frame,
             VkDescriptorImageInfo StructureBufferInfo = 
             {
                 .sampler = VK_NULL_HANDLE,
-                .imageView = Frame->StructureBuffer->View,
+                .imageView = Frame->Backend->StructureBuffer->View,
                 .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             };
             VkDescriptorImageInfo SSAOImageInfo = 
             {
                 .sampler = VK_NULL_HANDLE,
-                .imageView = Frame->OcclusionBuffers[0]->View,
+                .imageView = Frame->Backend->OcclusionBuffers[0]->View,
                 .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             };
             VkWriteDescriptorSet Writes[] = 
@@ -529,7 +527,7 @@ void RenderSSAO(render_frame* Frame,
             .newLayout = VK_IMAGE_LAYOUT_GENERAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->OcclusionBuffers[0]->Image,
+            .image = Frame->Backend->OcclusionBuffers[0]->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -549,20 +547,20 @@ void RenderSSAO(render_frame* Frame,
             .pImageMemoryBarriers = &SSAOBeginBarrier,
         };
 
-        vkCmdPipelineBarrier2(Frame->CmdBuffer, &SSAOBeginDependency);
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &SSAOBeginDependency);
 
-        vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline);
+        vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline);
         f32 PushConstants[3] = { Params.Intensity, 1.0f / Params.MaxDistance, Params.TangentTau };
-        vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), PushConstants);
+        vkCmdPushConstants(Frame->Backend->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), PushConstants);
         VkDescriptorSet SSAODescriptorSets[] = 
         {
             SSAODescriptorSet,
-            Frame->UniformDescriptorSet,
+            Frame->Backend->UniformDescriptorSet,
         };
-        vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, PipelineLayout, 
+        vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, PipelineLayout, 
                                 0, CountOf(SSAODescriptorSets), SSAODescriptorSets, 0, nullptr);
 
-        vkCmdDispatch(Frame->CmdBuffer, DispatchX, DispatchY, 1);
+        vkCmdDispatch(Frame->Backend->CmdBuffer, DispatchX, DispatchY, 1);
 
         VkDescriptorSet SSAOBlurDescriptorSet = VK_NULL_HANDLE;
         {
@@ -570,7 +568,7 @@ void RenderSSAO(render_frame* Frame,
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
                 .pNext = nullptr,
-                .descriptorPool = Frame->DescriptorPool,
+                .descriptorPool = Frame->Backend->DescriptorPool,
                 .descriptorSetCount = 1,
                 .pSetLayouts = &BlurSetLayout,
             };
@@ -580,19 +578,19 @@ void RenderSSAO(render_frame* Frame,
             VkDescriptorImageInfo StructureBufferInfo = 
             {
                 .sampler = VK_NULL_HANDLE,
-                .imageView = Frame->StructureBuffer->View,
+                .imageView = Frame->Backend->StructureBuffer->View,
                 .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             };
             VkDescriptorImageInfo SSAOImageInfo = 
             {
                 .sampler = VK_NULL_HANDLE,
-                .imageView = Frame->OcclusionBuffers[0]->View,
+                .imageView = Frame->Backend->OcclusionBuffers[0]->View,
                 .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             };
             VkDescriptorImageInfo SSAOOutImageInfo = 
             {
                 .sampler = VK_NULL_HANDLE,
-                .imageView = Frame->OcclusionBuffers[1]->View,
+                .imageView = Frame->Backend->OcclusionBuffers[1]->View,
                 .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             };
             VkWriteDescriptorSet Writes[] = 
@@ -644,7 +642,7 @@ void RenderSSAO(render_frame* Frame,
                 .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Frame->OcclusionBuffers[0]->Image,
+                .image = Frame->Backend->OcclusionBuffers[0]->Image,
                 .subresourceRange = 
                 {
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -665,7 +663,7 @@ void RenderSSAO(render_frame* Frame,
                 .newLayout = VK_IMAGE_LAYOUT_GENERAL,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Frame->OcclusionBuffers[1]->Image,
+                .image = Frame->Backend->OcclusionBuffers[1]->Image,
                 .subresourceRange = 
                 {
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -686,18 +684,18 @@ void RenderSSAO(render_frame* Frame,
             .pImageMemoryBarriers = BlurBarriers,
         };
 
-        vkCmdPipelineBarrier2(Frame->CmdBuffer, &BlurDependency);
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BlurDependency);
 
-        vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, BlurPipeline);
+        vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, BlurPipeline);
 
         VkDescriptorSet SSAOBlurDescriptorSets[] = 
         {
             SSAOBlurDescriptorSet,
         };
-        vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, BlurPipelineLayout, 
+        vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, BlurPipelineLayout, 
                                 0, CountOf(SSAOBlurDescriptorSets), SSAOBlurDescriptorSets, 0, nullptr);
 
-        vkCmdDispatch(Frame->CmdBuffer, DispatchX, DispatchY, 1);
+        vkCmdDispatch(Frame->Backend->CmdBuffer, DispatchX, DispatchY, 1);
     }
 }
 
@@ -717,7 +715,7 @@ void BeginForwardPass(render_frame* Frame)
             .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->HDRRenderTargets[0]->Image,
+            .image = Frame->Backend->HDRRenderTargets[0]->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -740,14 +738,14 @@ void BeginForwardPass(render_frame* Frame)
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->ShadowMap,
+            .image = Frame->Backend->ShadowMap,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
                 .baseMipLevel = 0,
                 .levelCount = 1,
                 .baseArrayLayer = 0,
-                .layerCount = Frame->ShadowCascadeCount,
+                .layerCount = Frame->Backend->ShadowCascadeCount,
             },
         },
 
@@ -763,7 +761,7 @@ void BeginForwardPass(render_frame* Frame)
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->OcclusionBuffers[1]->Image,
+            .image = Frame->Backend->OcclusionBuffers[1]->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -787,13 +785,13 @@ void BeginForwardPass(render_frame* Frame)
         .imageMemoryBarrierCount = CountOf(BeginBarriers),
         .pImageMemoryBarriers = BeginBarriers,
     };
-    vkCmdPipelineBarrier2(Frame->CmdBuffer, &BeginDependencyInfo);
+    vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependencyInfo);
 
     VkRenderingAttachmentInfo ColorAttachment = 
     {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
-        .imageView = Frame->HDRRenderTargets[0]->MipViews[0],
+        .imageView = Frame->Backend->HDRRenderTargets[0]->MipViews[0],
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .resolveMode = VK_RESOLVE_MODE_NONE,
         .resolveImageView = VK_NULL_HANDLE,
@@ -807,7 +805,7 @@ void BeginForwardPass(render_frame* Frame)
     {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
-        .imageView = Frame->DepthBuffer->View,
+        .imageView = Frame->Backend->DepthBuffer->View,
         .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
         .resolveMode = VK_RESOLVE_MODE_NONE,
         .resolveImageView = VK_NULL_HANDLE,
@@ -822,7 +820,7 @@ void BeginForwardPass(render_frame* Frame)
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .renderArea = { .offset = { 0, 0 }, .extent = Frame->RenderExtent },
+        .renderArea = { .offset = { 0, 0 }, .extent = { Frame->RenderWidth, Frame->RenderHeight } },
         .layerCount = 1,
         .viewMask = 0,
         .colorAttachmentCount = 1,
@@ -830,12 +828,12 @@ void BeginForwardPass(render_frame* Frame)
         .pDepthAttachment = &DepthAttachment,
         .pStencilAttachment = nullptr,
     };
-    vkCmdBeginRendering(Frame->CmdBuffer, &RenderingInfo);
+    vkCmdBeginRendering(Frame->Backend->CmdBuffer, &RenderingInfo);
 }
 
 void EndForwardPass(render_frame* Frame)
 {
-    vkCmdEndRendering(Frame->CmdBuffer);
+    vkCmdEndRendering(Frame->Backend->CmdBuffer);
 }
 
 void RenderBloom(render_frame* Frame,
@@ -849,8 +847,8 @@ void RenderBloom(render_frame* Frame,
                       VkDescriptorSetLayout DownsampleSetLayout,
                       VkDescriptorSetLayout UpsampleSetLayout)
 {
-    u32 Width = Frame->RenderExtent.width;
-    u32 Height = Frame->RenderExtent.height;
+    u32 Width = Frame->RenderWidth;
+    u32 Height = Frame->RenderHeight;
 
     constexpr u32 MaxBloomMipCount = 64u;//9u;
     u32 BloomMipCount = Min(SrcRT->MipCount, MaxBloomMipCount);
@@ -866,7 +864,7 @@ void RenderBloom(render_frame* Frame,
     {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .pNext = nullptr,
-        .descriptorPool = Frame->DescriptorPool,
+        .descriptorPool = Frame->Backend->DescriptorPool,
         .descriptorSetCount = SrcRT->MipCount,
         .pSetLayouts = DownsampleSetLayouts,
     };
@@ -878,7 +876,7 @@ void RenderBloom(render_frame* Frame,
     {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .pNext = nullptr,
-        .descriptorPool = Frame->DescriptorPool,
+        .descriptorPool = Frame->Backend->DescriptorPool,
         .descriptorSetCount = DstRT->MipCount, // TODO(boti): this only needs to be BloomMipCount
         .pSetLayouts = UpsampleSetLayouts,
     };
@@ -948,11 +946,11 @@ void RenderBloom(render_frame* Frame,
         .imageMemoryBarrierCount = CountOf(BeginBarriers),
         .pImageMemoryBarriers = BeginBarriers,
     };
-    vkCmdPipelineBarrier2(Frame->CmdBuffer, &BeginDependencyInfo); 
+    vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependencyInfo); 
 
     // NOTE(boti): Downsampling always goes down to the 1x1 mip, in case someone wants the average luminance of the scene
     b32 DoKarisAverage = 1;
-    vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, DownsamplePipeline);
+    vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, DownsamplePipeline);
     for (u32 Mip = 1; Mip < SrcRT->MipCount; Mip++)
     {
         VkDescriptorImageInfo SourceImageInfo = 
@@ -992,15 +990,15 @@ void RenderBloom(render_frame* Frame,
         };
 
         vkUpdateDescriptorSets(VK.Device, CountOf(Writes), Writes, 0, nullptr);
-        vkCmdBindDescriptorSets(Frame->CmdBuffer, 
+        vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, 
                                 VK_PIPELINE_BIND_POINT_COMPUTE, DownsamplePipelineLayout,
                                 0, 1, DownsampleSets + Mip - 1, 0, nullptr);
-        vkCmdPushConstants(Frame->CmdBuffer, DownsamplePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 
+        vkCmdPushConstants(Frame->Backend->CmdBuffer, DownsamplePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 
                            0, sizeof(DoKarisAverage), &DoKarisAverage);
 
         u32 DispatchX = CeilDiv(Width, 8);
         u32 DispatchY = CeilDiv(Height, 8);
-        vkCmdDispatch(Frame->CmdBuffer, DispatchX, DispatchY, 1);
+        vkCmdDispatch(Frame->Backend->CmdBuffer, DispatchX, DispatchY, 1);
 
         DoKarisAverage = 0;
         Width = Max(Width >> 1, 1u);
@@ -1041,7 +1039,7 @@ void RenderBloom(render_frame* Frame,
             .pImageMemoryBarriers = &MipBarrier,
         };
 
-        vkCmdPipelineBarrier2(Frame->CmdBuffer, &Barrier);
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &Barrier);
     }
 
     // Copy highest mip to the bloom chain
@@ -1101,7 +1099,7 @@ void RenderBloom(render_frame* Frame,
             .imageMemoryBarrierCount = CountOf(CopyBeginImageBarriers),
             .pImageMemoryBarriers = CopyBeginImageBarriers,
         };
-        vkCmdPipelineBarrier2(Frame->CmdBuffer, &CopyBeginBarrier);
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &CopyBeginBarrier);
 
         VkImageCopy CopyRegion = 
         {
@@ -1123,13 +1121,13 @@ void RenderBloom(render_frame* Frame,
             .dstOffset = { 0, 0, 0 },
             .extent = 
             {
-                .width = Max(Frame->RenderExtent.width >> MipIndex, 1u),
-                .height = Max(Frame->RenderExtent.height >> MipIndex, 1u),
+                .width = Max(Frame->RenderWidth >> MipIndex, 1u),
+                .height = Max(Frame->RenderHeight >> MipIndex, 1u),
                 .depth = 1,
             },
         };
 
-        vkCmdCopyImage(Frame->CmdBuffer, 
+        vkCmdCopyImage(Frame->Backend->CmdBuffer, 
                        SrcRT->Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                        DstRT->Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                        1, &CopyRegion);
@@ -1187,12 +1185,12 @@ void RenderBloom(render_frame* Frame,
             .imageMemoryBarrierCount = CountOf(CopyEndImageBarriers),
             .pImageMemoryBarriers = CopyEndImageBarriers,
         };
-        vkCmdPipelineBarrier2(Frame->CmdBuffer, &CopyEndBarrier);
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &CopyEndBarrier);
     }
 
-    vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, UpsamplePipeline);
+    vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, UpsamplePipeline);
     f32 PushConstants[2] = { Params.FilterRadius, Params.InternalStrength };
-    vkCmdPushConstants(Frame->CmdBuffer, UpsamplePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), PushConstants);
+    vkCmdPushConstants(Frame->Backend->CmdBuffer, UpsamplePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), PushConstants);
     for (u32 Index = 1; Index < BloomMipCount; Index++)
     {
         u32 Mip = BloomMipCount - Index - 1;
@@ -1231,7 +1229,7 @@ void RenderBloom(render_frame* Frame,
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &Begin,
         };
-        vkCmdPipelineBarrier2(Frame->CmdBuffer, &BeginDependency);
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependency);
 
         VkDescriptorImageInfo DstMipPlus1ImageInfo = 
         {
@@ -1286,16 +1284,16 @@ void RenderBloom(render_frame* Frame,
         };
 
         vkUpdateDescriptorSets(VK.Device, CountOf(Writes), Writes, 0, nullptr);
-        vkCmdBindDescriptorSets(Frame->CmdBuffer, 
+        vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, 
                                 VK_PIPELINE_BIND_POINT_COMPUTE, UpsamplePipelineLayout,
                                 0, 1, UpsampleSets + Mip, 0, nullptr);
 
-        Width = Max(Frame->RenderExtent.width >> Mip, 1u);
-        Height = Max(Frame->RenderExtent.height >> Mip, 1u);
+        Width = Max(Frame->RenderWidth >> Mip, 1u);
+        Height = Max(Frame->RenderHeight >> Mip, 1u);
 
         u32 DispatchX = CeilDiv(Width, 8);
         u32 DispatchY = CeilDiv(Height, 8);
-        vkCmdDispatch(Frame->CmdBuffer, DispatchX, DispatchY, 1);
+        vkCmdDispatch(Frame->Backend->CmdBuffer, DispatchX, DispatchY, 1);
 
         VkImageMemoryBarrier2 End = 
         {
@@ -1332,6 +1330,6 @@ void RenderBloom(render_frame* Frame,
             .imageMemoryBarrierCount = 1,
             .pImageMemoryBarriers = &End,
         };
-        vkCmdPipelineBarrier2(Frame->CmdBuffer, &EndDependency);
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &EndDependency);
     }
 }

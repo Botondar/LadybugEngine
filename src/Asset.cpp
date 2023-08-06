@@ -1,5 +1,3 @@
-#include "Asset.hpp"
-
 internal mesh CreateSphereMesh(memory_arena* Arena);
 internal mesh CreateArrowMesh(memory_arena* Arena);
 

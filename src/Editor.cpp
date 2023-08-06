@@ -1,5 +1,3 @@
-#include "Editor.hpp"
-
 internal line LineFromPoints(v3 P1, v3 P2)
 {
     line Result;

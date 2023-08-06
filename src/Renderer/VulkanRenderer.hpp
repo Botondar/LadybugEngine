@@ -20,6 +20,7 @@ struct vulkan_buffer
 #include "Renderer/Geometry.hpp"
 #include "Renderer/TextureManager.hpp"
 #include "Renderer/Frame.hpp"
+#include "Platform.hpp"
 
 extern vulkan VK;
 
@@ -27,6 +28,41 @@ struct pipeline_with_layout
 {
     VkPipeline Pipeline;
     VkPipelineLayout Layout;
+};
+
+struct backend_render_frame
+{
+    VkCommandPool CmdPool;
+    VkCommandBuffer CmdBuffer;
+
+    VkDescriptorPool DescriptorPool;
+    VkDescriptorSet UniformDescriptorSet;
+
+    VkSemaphore ImageAcquiredSemaphore;
+    VkFence ImageAcquiredFence;
+    VkFence RenderFinishedFence;
+
+    u32 SwapchainImageIndex;
+    VkImage SwapchainImage;
+    VkImageView SwapchainImageView;
+    render_target* DepthBuffer;
+    render_target* StructureBuffer;
+    render_target* HDRRenderTargets[2];
+    render_target* OcclusionBuffers[2];
+
+    u32 ShadowCascadeCount;
+    VkImage ShadowMap;
+    VkImageView ShadowMapView;
+    VkImageView ShadowCascadeViews[R_MaxShadowCascadeCount];
+
+    VkBuffer UniformBuffer;
+    VkBuffer ParticleBuffer;
+    VkBuffer JointBuffer;
+    VkBuffer SkinnedMeshVB;
+
+    // TODO(boti): rework these
+    vulkan_buffer DrawBuffer;
+    vulkan_buffer VertexStack;
 };
 
 struct renderer
@@ -112,6 +148,7 @@ struct renderer
 
     u64 CurrentFrameID;
     render_frame Frames[MaxSwapchainImageCount];
+    backend_render_frame BackendFrames[MaxSwapchainImageCount];
 };
 
 VkResult CreateRenderer(renderer* Renderer, 

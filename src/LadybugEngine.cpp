@@ -1,7 +1,6 @@
 #include "LadybugEngine.hpp"
 
 #include "LadybugLib/LBLibBuild.cpp"
-//#include "Renderer/Renderer.cpp"
 
 #include "Debug.cpp"
 #include "Font.cpp"
@@ -50,8 +49,8 @@ lbfn bool IntersectFrustum(const frustum* Frustum, const mmbox* Box)
 lbfn void RenderMeshes(render_frame* Frame, VkPipelineLayout PipelineLayout)
 {
     const VkDeviceSize ZeroOffset = 0;
-    vkCmdBindIndexBuffer(Frame->CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
-    vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Frame->Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
+    vkCmdBindIndexBuffer(Frame->Backend->CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
+    vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Frame->Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
 
     for (u32 CmdIndex = 0; CmdIndex < Frame->DrawCmdCount; CmdIndex++)
     {
@@ -62,13 +61,13 @@ lbfn void RenderMeshes(render_frame* Frame, VkPipelineLayout PipelineLayout)
             .Material = Cmd->Material,
         };
 
-        vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+        vkCmdPushConstants(Frame->Backend->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(PushConstants), &PushConstants);
-        vkCmdDrawIndexed(Frame->CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
+        vkCmdDrawIndexed(Frame->Backend->CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
 
     }
 
-    vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Frame->SkinningBuffer, &ZeroOffset);
+    vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Frame->Backend->SkinnedMeshVB, &ZeroOffset);
     for (u32 CmdIndex = 0; CmdIndex < Frame->SkinnedDrawCmdCount; CmdIndex++)
     {
         draw_cmd* Cmd = Frame->SkinnedDrawCmds + CmdIndex;
@@ -77,9 +76,9 @@ lbfn void RenderMeshes(render_frame* Frame, VkPipelineLayout PipelineLayout)
             .Transform = Cmd->Transform,
             .Material = Cmd->Material,
         };
-        vkCmdPushConstants(Frame->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+        vkCmdPushConstants(Frame->Backend->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(PushConstants), &PushConstants);
-        vkCmdDrawIndexed(Frame->CmdBuffer, Cmd->Base.IndexCount, 1, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, 0);
+        vkCmdDrawIndexed(Frame->Backend->CmdBuffer, Cmd->Base.IndexCount, 1, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, 0);
     }
 }
 
@@ -104,6 +103,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
     SetRenderCamera(Frame, &Camera);
 
+    // TODO(boti): this should have happened in UpdateAndRenderWorld
     Frame->SunV = World->SunV;
     Frame->Uniforms.SunV = TransformDirection(ViewTransform, World->SunV);
     Frame->Uniforms.SunL = World->SunL;
@@ -145,21 +145,21 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         Frame,
         Renderer->SetLayouts[SetLayout_SampledRenderTargetPS],
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        Frame->OcclusionBuffers[1]->View,
+        Frame->Backend->OcclusionBuffers[1]->View,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL); 
 
     VkDescriptorSet StructureBufferDescriptorSet = PushImageDescriptor(
         Frame,
         Renderer->SetLayouts[SetLayout_SampledRenderTargetPS],
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        Frame->StructureBuffer->View,
+        Frame->Backend->StructureBuffer->View,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL); 
 
     VkDescriptorSet ShadowDescriptorSet = PushImageDescriptor(
         Frame,
         Renderer->SetLayouts[SetLayout_ShadowPS],
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        Frame->ShadowMapView,
+        Frame->Backend->ShadowMapView,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     VkViewport FrameViewport = 
@@ -183,7 +183,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         VkDescriptorSet JointDescriptorSet = 
             PushBufferDescriptor(Frame, 
                                  Renderer->SetLayouts[SetLayout_PoseTransform], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 
-                                 Frame->JointBuffer, 0, VK.MaxConstantBufferByteSize); 
+                                 Frame->Backend->JointBuffer, 0, VK.MaxConstantBufferByteSize); 
 
         VkDescriptorSet SkinningBuffersDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_Skinning]);
 
@@ -195,7 +195,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 .range = VK_WHOLE_SIZE,
             },
             {
-                .buffer = Frame->SkinningBuffer,
+                .buffer = Frame->Backend->SkinnedMeshVB,
                 .offset = 0,
                 .range = VK_WHOLE_SIZE,
             },
@@ -226,8 +226,8 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         vkUpdateDescriptorSets(VK.Device, CountOf(DescriptorWrites), DescriptorWrites, 0, nullptr);
 
         pipeline_with_layout SkinningPipeline = Renderer->Pipelines[Pipeline_Skinning];
-        vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Pipeline);
-        vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
+        vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Pipeline);
+        vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
                                 0, 1, &SkinningBuffersDescriptorSet,
                                 0, nullptr);
 
@@ -242,7 +242,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Frame->SkinningBuffer,
+                .buffer = Frame->Backend->SkinnedMeshVB,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE,
             },
@@ -256,12 +256,12 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             .bufferMemoryBarrierCount = CountOf(BeginBarriers),
             .pBufferMemoryBarriers = BeginBarriers,
         };
-        vkCmdPipelineBarrier2(Frame->CmdBuffer, &BeginDependencies);
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependencies);
 
         for (u32 SkinningCmdIndex = 0; SkinningCmdIndex < Frame->SkinningCmdCount; SkinningCmdIndex++)
         {
             skinning_cmd* Cmd = Frame->SkinningCmds + SkinningCmdIndex;
-            vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
+            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
                                     1, 1, &JointDescriptorSet,
                                     1, &Cmd->PoseOffset);
 
@@ -271,12 +271,12 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 Cmd->DstVertexOffset,
                 Cmd->VertexCount,
             };
-            vkCmdPushConstants(Frame->CmdBuffer, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
+            vkCmdPushConstants(Frame->Backend->CmdBuffer, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
                                0, sizeof(PushConstants), PushConstants);
 
 
             constexpr u32 SkinningGroupSize = 64;
-            vkCmdDispatch(Frame->CmdBuffer, CeilDiv(Cmd->VertexCount, SkinningGroupSize), 1, 1);
+            vkCmdDispatch(Frame->Backend->CmdBuffer, CeilDiv(Cmd->VertexCount, SkinningGroupSize), 1, 1);
         }
 
         VkBufferMemoryBarrier2 EndBarriers[] =
@@ -290,7 +290,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 .dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Frame->SkinningBuffer,
+                .buffer = Frame->Backend->SkinnedMeshVB,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE,
             },
@@ -304,7 +304,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             .bufferMemoryBarrierCount = CountOf(EndBarriers),
             .pBufferMemoryBarriers = EndBarriers,
         };
-        vkCmdPipelineBarrier2(Frame->CmdBuffer, &EndDependencies);
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &EndDependencies);
     }
 
     // 3D render
@@ -313,7 +313,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         {
             Renderer->TextureManager.DescriptorSets[0], // Samplers
             Renderer->TextureManager.DescriptorSets[1], // Images
-            Frame->UniformDescriptorSet,
+            Frame->Backend->UniformDescriptorSet,
             OcclusionDescriptorSet,
             StructureBufferDescriptorSet,
             ShadowDescriptorSet,
@@ -333,18 +333,18 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             .offset = { 0, 0 },
             .extent = { R_ShadowResolution, R_ShadowResolution },
         };
-        vkCmdSetViewport(Frame->CmdBuffer, 0, 1, &ShadowViewport);
-        vkCmdSetScissor(Frame->CmdBuffer, 0, 1, &ShadowScissor);
+        vkCmdSetViewport(Frame->Backend->CmdBuffer, 0, 1, &ShadowViewport);
+        vkCmdSetScissor(Frame->Backend->CmdBuffer, 0, 1, &ShadowScissor);
         for (u32 Cascade = 0; Cascade < R_MaxShadowCascadeCount; Cascade++)
         {
             BeginCascade(Frame, Cascade);
 
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Shadow];
-            vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout,
+            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+            vkCmdPushConstants(Frame->Backend->CmdBuffer, Pipeline.Layout,
                                VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                sizeof(push_constants), sizeof(u32), &Cascade);
-            vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
+            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
                                     0, 3, DescriptorSets, 0, nullptr);
             RenderMeshes(Frame, Pipeline.Layout);
 
@@ -352,13 +352,13 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         }
 
         bool EnablePrimaryCull = false;
-        vkCmdSetViewport(Frame->CmdBuffer, 0, 1, &FrameViewport);
-        vkCmdSetScissor(Frame->CmdBuffer, 0, 1, &FrameScissor);
+        vkCmdSetViewport(Frame->Backend->CmdBuffer, 0, 1, &FrameViewport);
+        vkCmdSetScissor(Frame->Backend->CmdBuffer, 0, 1, &FrameScissor);
         BeginPrepass(Frame);
         {
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Prepass];
-            vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
+            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                     0, 3, DescriptorSets,
                                     0, nullptr);
             RenderMeshes(Frame, Pipeline.Layout);
@@ -378,8 +378,8 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         {
 
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Simple];
-            vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
+            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                     0, CountOf(DescriptorSets), DescriptorSets,
                                     0, nullptr);
 
@@ -389,11 +389,11 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 #if 1
             {
                 pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
-                vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
-                vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Layout, 
-                                        0, 1, &Frame->UniformDescriptorSet, 
+                vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
+                vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Layout, 
+                                        0, 1, &Frame->Backend->UniformDescriptorSet, 
                                         0, nullptr);
-                vkCmdDraw(Frame->CmdBuffer, 3, 1, 0, 0);
+                vkCmdDraw(Frame->Backend->CmdBuffer, 3, 1, 0, 0);
             }
 #endif
 
@@ -422,18 +422,18 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
                 VkDescriptorSet ParticleBufferDescriptor = 
                     PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_ParticleBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                                         Frame->ParticleBuffer, 0, VK_WHOLE_SIZE);
+                                         Frame->Backend->ParticleBuffer, 0, VK_WHOLE_SIZE);
                 VkDescriptorSet ParticleDescriptorSets[] = 
                 {
-                    Frame->UniformDescriptorSet,
+                    Frame->Backend->UniformDescriptorSet,
                     ParticleBufferDescriptor,
                     StructureBufferDescriptorSet,
                     TextureSet,
                 };
 
                 pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
-                vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
-                vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
+                vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
+                vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
                                         0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
                                         0, nullptr);
 
@@ -442,9 +442,9 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                     particle_cmd* Cmd = Frame->ParticleDrawCmds + CmdIndex;
                     u32 VertexCount = 6 * Cmd->ParticleCount;
                     u32 FirstVertex = 6 * Cmd->FirstParticle;
-                    vkCmdPushConstants(Frame->CmdBuffer, ParticlePipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
+                    vkCmdPushConstants(Frame->Backend->CmdBuffer, ParticlePipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
                                        0, sizeof(Cmd->Mode), &Cmd->Mode);
-                    vkCmdDraw(Frame->CmdBuffer, VertexCount, 1, FirstVertex, 0);
+                    vkCmdDraw(Frame->Backend->CmdBuffer, VertexCount, 1, FirstVertex, 0);
                 }
             }
         }
@@ -454,8 +454,8 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
     RenderBloom(Frame,
                 GameState->PostProcessParams.Bloom,
-                Frame->HDRRenderTargets[0],
-                Frame->HDRRenderTargets[1],
+                Frame->Backend->HDRRenderTargets[0],
+                Frame->Backend->HDRRenderTargets[1],
                 Renderer->Pipelines[Pipeline_BloomDownsample].Layout,
                 Renderer->Pipelines[Pipeline_BloomDownsample].Pipeline,
                 Renderer->Pipelines[Pipeline_BloomUpsample].Layout,
@@ -479,7 +479,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                 .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Frame->SwapchainImage,
+                .image = Frame->Backend->SwapchainImage,
                 .subresourceRange = 
                 {
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -503,13 +503,13 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             .imageMemoryBarrierCount = CountOf(BeginBarriers),
             .pImageMemoryBarriers = BeginBarriers,
         };
-        vkCmdPipelineBarrier2(Frame->CmdBuffer, &BeginDependencyInfo); 
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependencyInfo); 
 
         VkRenderingAttachmentInfo ColorAttachment = 
         {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .imageView = Frame->SwapchainImageView,
+            .imageView = Frame->Backend->SwapchainImageView,
             .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .resolveMode = VK_RESOLVE_MODE_NONE,
             .resolveImageView = VK_NULL_HANDLE,
@@ -522,7 +522,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .imageView = Frame->DepthBuffer->View,
+            .imageView = Frame->Backend->DepthBuffer->View,
             .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             .resolveMode = VK_RESOLVE_MODE_NONE,
             .resolveImageView = VK_NULL_HANDLE,
@@ -536,7 +536,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .renderArea = { { 0, 0 }, Frame->RenderExtent },
+            .renderArea = { { 0, 0 }, { Frame->RenderWidth, Frame->RenderHeight } },
             .layerCount = 1,
             .viewMask = 0,
             .colorAttachmentCount = 1,
@@ -544,13 +544,13 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             .pDepthAttachment = &DepthAttachment,
             .pStencilAttachment = nullptr,
         };
-        vkCmdBeginRendering(Frame->CmdBuffer, &RenderingInfo);
+        vkCmdBeginRendering(Frame->Backend->CmdBuffer, &RenderingInfo);
         
         // Blit
         {
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Blit];
-            vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdPushConstants(Frame->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_FRAGMENT_BIT, 
+            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+            vkCmdPushConstants(Frame->Backend->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_FRAGMENT_BIT, 
                                0, sizeof(f32), &GameState->PostProcessParams.Bloom.Strength);
 
             VkDescriptorSet BlitDescriptorSet = VK_NULL_HANDLE;
@@ -558,7 +558,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
                 .pNext = nullptr,
-                .descriptorPool = Frame->DescriptorPool,
+                .descriptorPool = Frame->Backend->DescriptorPool,
                 .descriptorSetCount = 1,
                 .pSetLayouts = &Renderer->SetLayouts[SetLayout_Blit],
             };
@@ -569,12 +569,12 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             {
                 {
                     .sampler = VK_NULL_HANDLE,
-                    .imageView = Frame->HDRRenderTargets[0]->MipViews[0],
+                    .imageView = Frame->Backend->HDRRenderTargets[0]->MipViews[0],
                     .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 },
                 {
                     .sampler = VK_NULL_HANDLE,
-                    .imageView = Frame->HDRRenderTargets[1]->MipViews[0],
+                    .imageView = Frame->Backend->HDRRenderTargets[1]->MipViews[0],
                     .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 },
             };
@@ -603,20 +603,20 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             };
             vkUpdateDescriptorSets(VK.Device, CountOf(SetWrites), SetWrites, 0, nullptr);
 
-            vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
+            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
                                     0, 1, &BlitDescriptorSet, 0, nullptr);
-            vkCmdDraw(Frame->CmdBuffer, 3, 1, 0, 0);
+            vkCmdDraw(Frame->Backend->CmdBuffer, 3, 1, 0, 0);
         }
 
         // 3D debug render
         const VkDeviceSize ZeroOffset = 0;
-        vkCmdBindVertexBuffers(Frame->CmdBuffer, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
-        vkCmdBindIndexBuffer(Frame->CmdBuffer, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
+        vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
+        vkCmdBindIndexBuffer(Frame->Backend->CmdBuffer, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
 
         pipeline_with_layout GizmoPipeline = Renderer->Pipelines[Pipeline_Gizmo];
-        vkCmdBindPipeline(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
-        vkCmdBindDescriptorSets(Frame->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
-                                0, 1, &Frame->UniformDescriptorSet, 
+        vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
+        vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
+                                0, 1, &Frame->Backend->UniformDescriptorSet, 
                                 0, nullptr);
 
         if (GameState->Editor.DrawLights)
@@ -638,13 +638,13 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                        0.0f, 0.0f, 0.0f, 1.0f);
                 rgba8 Color = PackRGBA({ Light->E.x, Light->E.y, Light->E.z, 1.0f });
 
-                vkCmdPushConstants(Frame->CmdBuffer, GizmoPipeline.Layout,
+                vkCmdPushConstants(Frame->Backend->CmdBuffer, GizmoPipeline.Layout,
                                    VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                    0, sizeof(Transform), &Transform);
-                vkCmdPushConstants(Frame->CmdBuffer, GizmoPipeline.Layout,
+                vkCmdPushConstants(Frame->Backend->CmdBuffer, GizmoPipeline.Layout,
                                    VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                    sizeof(Transform), sizeof(Color), &Color);
-                vkCmdDrawIndexed(Frame->CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
+                vkCmdDrawIndexed(Frame->Backend->CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
             }
         }
 
@@ -657,7 +657,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
             auto RenderGizmo = 
                 [Renderer, GizmoPipeline,
-                CmdBuffer = Frame->CmdBuffer,
+                CmdBuffer = Frame->Backend->CmdBuffer,
                 IndexCount, IndexOffset, VertexOffset,
                 &Editor = GameState->Editor]
                 (m4 BaseTransform, f32 ScaleFactor)
@@ -741,7 +741,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                                                                 Assets->DefaultFontTextureID);
         RenderImmediates(Frame, UIPipeline.Pipeline, UIPipeline.Layout, FontDescriptorSet);
 
-        vkCmdEndRendering(Frame->CmdBuffer);
+        vkCmdEndRendering(Frame->Backend->CmdBuffer);
     }
 
     VkImageMemoryBarrier2 EndBarriers[] = 
@@ -758,7 +758,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->SwapchainImage,
+            .image = Frame->Backend->SwapchainImage,
             .subresourceRange = 
             {
 
@@ -783,7 +783,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         .imageMemoryBarrierCount = CountOf(EndBarriers),
         .pImageMemoryBarriers = EndBarriers,
     };
-    vkCmdPipelineBarrier2(Frame->CmdBuffer, &EndDependencyInfo);
+    vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &EndDependencyInfo);
 }
 
 vulkan VK;
