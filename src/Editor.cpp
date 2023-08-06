@@ -134,14 +134,36 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         Editor->SelectedEntityID = SelectedEntityID;
     }
 
-    // Intersect the ray with gizmos
     if (IsValid(Editor->SelectedEntityID))
     {
-        m4* InstanceTransform = nullptr;
         entity* Entity = World->Entities + Editor->SelectedEntityID.Value;
-        InstanceTransform = &Entity->Transform;
+        if (HasFlag(Entity->Flags, EntityFlag_Skin))
+        {
+            if (WasPressed(IO->Keys[SC_P]))
+            {
+                Entity->DoAnimation = !Entity->DoAnimation;
+            }
+    
+            if (WasPressed(IO->Keys[SC_0]))
+            {
+                Entity->CurrentAnimationID = 0;
+                Entity->AnimationCounter = 0.0f;
+            }
+            for (u32 Scancode = SC_1; Scancode <= SC_9; Scancode++)
+            {
+                if (WasPressed(IO->Keys[Scancode]))
+                {
+                    u32 Index = Scancode - SC_1 + 1;
+                    if (Index < Game->Assets->AnimationCount)
+                    {
+                        Entity->CurrentAnimationID = Index;
+                        Entity->AnimationCounter = 0.0f;
+                    }
+                }
+            }
+        }
 
-        m4 Transform = *InstanceTransform;
+        m4 Transform = Entity->Transform;
         v3 InstanceP = Transform.P.xyz;
 
         if (Editor->Gizmo.IsGlobal)
@@ -220,9 +242,9 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             constexpr f32 TranslationSpeed = 1e-2f;
             f32 TranslationAmount = TranslationSpeed * Dot(IO->Mouse.dP, ScreenAxis);
 
-            InstanceTransform->P.x += TranslationAmount*Axes[Editor->Gizmo.Selection].x;
-            InstanceTransform->P.y += TranslationAmount*Axes[Editor->Gizmo.Selection].y;
-            InstanceTransform->P.z += TranslationAmount*Axes[Editor->Gizmo.Selection].z;
+            Entity->Transform.P.x += TranslationAmount*Axes[Editor->Gizmo.Selection].x;
+            Entity->Transform.P.y += TranslationAmount*Axes[Editor->Gizmo.Selection].y;
+            Entity->Transform.P.z += TranslationAmount*Axes[Editor->Gizmo.Selection].z;
 
             IO->Mouse.dP = {}; // Don't propagate the mouse dP to the game
         }

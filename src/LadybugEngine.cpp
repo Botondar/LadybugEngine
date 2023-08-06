@@ -766,38 +766,6 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     }
     
     UpdateEditor(GameState, GameIO, RenderFrame);
-
-    // TODO(boti): This should be in the editor update
-    if (IsValid(GameState->Editor.SelectedEntityID))
-    {
-        entity* Entity = GameState->World->Entities + GameState->Editor.SelectedEntityID.Value;
-        if (HasFlag(Entity->Flags, EntityFlag_Skin))
-        {
-            if (WasPressed(GameIO->Keys[SC_P]))
-            {
-                Entity->DoAnimation = !Entity->DoAnimation;
-            }
-    
-            if (WasPressed(GameIO->Keys[SC_0]))
-            {
-                Entity->CurrentAnimationID = 0;
-                Entity->AnimationCounter = 0.0f;
-            }
-            for (u32 Scancode = SC_1; Scancode <= SC_9; Scancode++)
-            {
-                if (WasPressed(GameIO->Keys[Scancode]))
-                {
-                    u32 Index = Scancode - SC_1 + 1;
-                    if (Index < GameState->Assets->AnimationCount)
-                    {
-                        Entity->CurrentAnimationID = Index;
-                        Entity->AnimationCounter = 0.0f;
-                    }
-                }
-            }
-        }
-    }
-    
     RenderFrame->PostProcess = GameState->PostProcessParams;
 
     UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, 
