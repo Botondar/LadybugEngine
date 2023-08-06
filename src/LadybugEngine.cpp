@@ -77,15 +77,10 @@ lbfn void RenderMeshes(render_frame* Frame, VkPipelineLayout PipelineLayout)
     }
 }
 
-internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame)
+internal void GameRender(render_frame* Frame)
 {
-    renderer* Renderer = GameState->Renderer;
-    
-    game_world* World = GameState->World;
-    assets* Assets = GameState->Assets;
-    memory_arena* FrameArena = &GameState->TransientArena;
+    renderer* Renderer = Frame->Renderer;
 
-    // TODO(boti): this should have happened in UpdateAndRenderWorld
     {
         constexpr f32 LuminanceThreshold = 1e-3f;
         for (u32 LightIndex = 0; LightIndex < Frame->Uniforms.LightCount; LightIndex++)
@@ -345,7 +340,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         EndPrepass(Frame);
 
         RenderSSAO(Frame,
-                   GameState->PostProcessParams.SSAO,
+                   Frame->PostProcess.SSAO,
                    Renderer->Pipelines[Pipeline_SSAO].Pipeline, 
                    Renderer->Pipelines[Pipeline_SSAO].Layout, 
                    Renderer->SetLayouts[SetLayout_SSAO],
@@ -378,7 +373,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
 
             // Particles
             {
-                VkImageView ParticleView = GetImageView(&Renderer->TextureManager, Assets->ParticleArrayID);
+                VkImageView ParticleView = GetImageView(&Renderer->TextureManager, Frame->ParticleTextureID);
                 VkDescriptorSet TextureSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS]);
                 VkDescriptorImageInfo DescriptorImage = 
                 {
@@ -432,7 +427,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
     EndSceneRendering(Frame);
 
     RenderBloom(Frame,
-                GameState->PostProcessParams.Bloom,
+                Frame->PostProcess.Bloom,
                 Frame->Backend->HDRRenderTargets[0],
                 Frame->Backend->HDRRenderTargets[1],
                 Renderer->Pipelines[Pipeline_BloomDownsample].Layout,
@@ -530,7 +525,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Blit];
             vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
             vkCmdPushConstants(Frame->Backend->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_FRAGMENT_BIT, 
-                               0, sizeof(f32), &GameState->PostProcessParams.Bloom.Strength);
+                               0, sizeof(f32), &Frame->PostProcess.Bloom.Strength);
 
             VkDescriptorSet BlitDescriptorSet = VK_NULL_HANDLE;
             VkDescriptorSetAllocateInfo BlitSetInfo = 
@@ -612,7 +607,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
         pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
         VkDescriptorSetLayout SetLayout = Frame->Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS];
         VkDescriptorSet FontDescriptorSet = PushImageDescriptor(Frame, SetLayout, 
-                                                                Assets->DefaultFontTextureID);
+                                                                Frame->ImmediateTextureID);
         RenderImmediates(Frame, UIPipeline.Pipeline, UIPipeline.Layout, FontDescriptorSet);
 
         vkCmdEndRendering(Frame->Backend->CmdBuffer);
@@ -737,7 +732,9 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     }
 
     render_frame* RenderFrame = BeginRenderFrame(GameState->Renderer, GameIO->OutputWidth, GameIO->OutputHeight);
-    
+    RenderFrame->ImmediateTextureID = GameState->Assets->DefaultFontTextureID;
+    RenderFrame->ParticleTextureID = GameState->Assets->ParticleArrayID;
+
     if (GameIO->bHasDroppedFile)
     {
         m4 YUpToZUp = M4(
@@ -769,6 +766,8 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     }
     
     UpdateEditor(GameState, GameIO, RenderFrame);
+
+    // TODO(boti): This should be in the editor update
     if (IsValid(GameState->Editor.SelectedEntityID))
     {
         entity* Entity = GameState->World->Entities + GameState->Editor.SelectedEntityID.Value;
@@ -799,9 +798,11 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         }
     }
     
+    RenderFrame->PostProcess = GameState->PostProcessParams;
+
     UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, 
                          &GameState->TransientArena, GameState->Editor.DrawLights);
-    GameRender(GameState, GameIO, RenderFrame);
+    GameRender(RenderFrame);
     EndRenderFrame(RenderFrame);
 
     GameState->FrameID++;

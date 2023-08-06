@@ -753,10 +753,13 @@ struct render_frame
     u32 RenderWidth;
     u32 RenderHeight;
 
+    texture_id ImmediateTextureID;
+    texture_id ParticleTextureID; // TODO(boti): Move this to the particle command?
+
+    post_process_params PostProcess;
+
     frustum CameraFrustum;
     v3 SunV; // World-space sun direction
-
-    void* UniformData; // GPU-backed frame_uniform_data
 
     static constexpr u32 MaxDrawCmdCount            = (1u << 22);
     static constexpr u32 MaxSkinnedDrawCmdCount     = (1u << 20);
@@ -787,6 +790,7 @@ struct render_frame
     ui_vertex* UIVertices;
     draw_indirect_cmd* UIDrawCmds;
 
+    void* UniformData; // GPU-backed frame_uniform_data
     frame_uniform_data Uniforms;
 };
 
