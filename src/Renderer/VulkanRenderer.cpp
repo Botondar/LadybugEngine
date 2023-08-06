@@ -1768,6 +1768,8 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
     Frame->SkinnedMeshVertexCount = 0;
     Frame->Backend->SkinnedMeshVB = Renderer->SkinningBuffers[FrameID];
 
+    Frame->DrawWidget3DCmdCount = 0;
+
     vkWaitForFences(VK.Device, 1, &Frame->Backend->ImageAcquiredFence, VK_TRUE, UINT64_MAX);
     vkResetFences(VK.Device, 1, &Frame->Backend->ImageAcquiredFence);
 

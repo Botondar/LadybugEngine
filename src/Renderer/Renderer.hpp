@@ -663,11 +663,6 @@ struct light
     v4 E; // NOTE(boti): w is the multiplier
 };
 
-inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
-inline rgba8 PackRGBA(v4 Color);
-inline u32 GetMaxMipCount(u32 Width, u32 Height);
-inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFFFFFFu);
-
 // NOTE(boti): binary-compatible with Vulkan/D3D12
 struct draw_indirect_cmd
 {
@@ -700,6 +695,13 @@ struct skinning_cmd
     u32 DstVertexOffset;
     u32 VertexCount;
     u32 PoseOffset;
+};
+
+struct draw_widget3d_cmd
+{
+    draw_indirect_index_cmd Base;
+    m4 Transform;
+    rgba8 Color;
 };
 
 //
@@ -758,9 +760,10 @@ struct render_frame
 
     static constexpr u32 MaxDrawCmdCount            = (1u << 22);
     static constexpr u32 MaxSkinnedDrawCmdCount     = (1u << 20);
+    static constexpr u32 MaxSkinningCmdCount        = MaxSkinnedDrawCmdCount;
     static constexpr u32 MaxParticleCount           = (1u << 18);
     static constexpr u32 MaxParticleDrawCmdCount    = 8192u;
-    static constexpr u32 MaxSkinningCmdCount        = MaxSkinnedDrawCmdCount;
+    static constexpr u32 MaxDrawWidget3DCmdCount    = (1u << 16);
     static constexpr u32 MaxJointCount              = (1u << 17);
 
     u32 DrawCmdCount;
@@ -770,6 +773,7 @@ struct render_frame
     u32 ParticleCount;
     u32 JointCount;
     u32 SkinnedMeshVertexCount;
+    u32 DrawWidget3DCmdCount;
     u32 UIVertexCount;
     u32 UIDrawCmdCount;
 
@@ -777,6 +781,7 @@ struct render_frame
     draw_cmd SkinnedDrawCmds[MaxSkinnedDrawCmdCount];
     skinning_cmd SkinningCmds[MaxSkinningCmdCount];
     particle_cmd ParticleDrawCmds[MaxParticleDrawCmdCount];
+    draw_widget3d_cmd DrawWidget3DCmds[MaxDrawWidget3DCmdCount];
     render_particle* Particles;
     m4* JointMapping;
     ui_vertex* UIVertices;
@@ -800,10 +805,19 @@ inline b32 RenderSkinnedMesh(render_frame* Frame,
                              u32 IndexOffset, u32 IndexCount,
                              m4 Transform, material,
                              u32 JointCount, m4* Pose);
+inline b32 RenderWidget3D(render_frame* Frame,
+                          u32 VertexOffset, u32 VertexCount,
+                          u32 IndexOffset, u32 IndexCount,
+                          m4 Transform, rgba8 Color);
 inline b32 AddLight(render_frame* Frame, light Light);
 
 void BeginSceneRendering(render_frame* Frame);
 void EndSceneRendering(render_frame* Frame);
+
+inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
+inline rgba8 PackRGBA(v4 Color);
+inline u32 GetMaxMipCount(u32 Width, u32 Height);
+inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFFFFFFu);
 
 #include "Renderer/Pipelines.hpp"
 
@@ -956,6 +970,32 @@ inline b32 RenderSkinnedMesh(render_frame* Frame,
         Result = true;
     }
 
+    return(Result);
+}
+
+inline b32 DrawWidget3D(render_frame* Frame,
+                        u32 VertexOffset, u32 VertexCount,
+                        u32 IndexOffset, u32 IndexCount,
+                        m4 Transform, rgba8 Color)
+{
+    b32 Result = false;
+    if (Frame->DrawWidget3DCmdCount < Frame->MaxDrawWidget3DCmdCount)
+    {
+        Frame->DrawWidget3DCmds[Frame->DrawWidget3DCmdCount++] = 
+        {
+            .Base = 
+            {
+                .IndexCount = IndexCount,
+                .InstanceCount = 1,
+                .IndexOffset = IndexOffset,
+                .VertexOffset = VertexOffset,
+                .InstanceOffset = 0,
+            },
+            .Transform = Transform,
+            .Color = Color,
+        };
+        Result = true;
+    }
     return(Result);
 }
 

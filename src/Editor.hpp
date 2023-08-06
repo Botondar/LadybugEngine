@@ -42,4 +42,4 @@ struct editor_state
 };
 
 lbfn void InitEditor(struct game_state* Game, memory_arena* Arena);
-lbfn void UpdateEditor(struct game_state* Game, game_io* IO);
+lbfn void UpdateEditor(struct game_state* Game, game_io* IO, render_frame* Frame);

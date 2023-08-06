@@ -592,7 +592,7 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
             vkCmdDraw(Frame->Backend->CmdBuffer, 3, 1, 0, 0);
         }
 
-        // 3D debug render
+        // 3D widget render
         const VkDeviceSize ZeroOffset = 0;
         vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
         vkCmdBindIndexBuffer(Frame->Backend->CmdBuffer, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
@@ -603,120 +603,15 @@ internal void GameRender(game_state* GameState, game_io* IO, render_frame* Frame
                                 0, 1, &Frame->Backend->UniformDescriptorSet, 
                                 0, nullptr);
 
-        if (GameState->Editor.DrawLights)
+        for (u32 CmdIndex = 0; CmdIndex < Frame->DrawWidget3DCmdCount; CmdIndex++)
         {
-            geometry_buffer_allocation SphereMesh = Assets->Meshes[Assets->SphereMeshID];
-            u32 IndexCount = (u32)SphereMesh.IndexBlock->ByteSize / sizeof(vert_index);
-            u32 IndexOffset = (u32)SphereMesh.IndexBlock->ByteOffset / sizeof(vert_index);
-            u32 VertexOffset = (u32)SphereMesh.VertexBlock->ByteOffset / sizeof(vertex);
+            draw_widget3d_cmd* Cmd = Frame->DrawWidget3DCmds + CmdIndex;
 
-            for (u32 LightIndex = 0; LightIndex < Frame->Uniforms.LightCount; LightIndex++)
-            {
-                light* Light = Frame->Uniforms.Lights + LightIndex;
-
-                // NOTE(boti): At this point our lights are in view space, so we have to transform them back...
-                m4 Transform = Frame->Uniforms.CameraTransform * 
-                    M4(1e-1f, 0.0f, 0.0f, Light->P.x,
-                       0.0f, 1e-1f, 0.0f, Light->P.y,
-                       0.0f, 0.0f, 1e-1f, Light->P.z,
-                       0.0f, 0.0f, 0.0f, 1.0f);
-                rgba8 Color = PackRGBA({ Light->E.x, Light->E.y, Light->E.z, 1.0f });
-
-                vkCmdPushConstants(Frame->Backend->CmdBuffer, GizmoPipeline.Layout,
-                                   VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                                   0, sizeof(Transform), &Transform);
-                vkCmdPushConstants(Frame->Backend->CmdBuffer, GizmoPipeline.Layout,
-                                   VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                                   sizeof(Transform), sizeof(Color), &Color);
-                vkCmdDrawIndexed(Frame->Backend->CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
-            }
-        }
-
-        if (GameState->Editor.IsEnabled)
-        {
-            geometry_buffer_allocation ArrowMesh = Assets->Meshes[Assets->ArrowMeshID];
-            u32 IndexCount = (u32)(ArrowMesh.IndexBlock->ByteSize / sizeof(vert_index));
-            u32 IndexOffset = (u32)(ArrowMesh.IndexBlock->ByteOffset / sizeof(vert_index));
-            u32 VertexOffset = (u32)(ArrowMesh.VertexBlock->ByteOffset / sizeof(vertex));
-
-            auto RenderGizmo = 
-                [Renderer, GizmoPipeline,
-                CmdBuffer = Frame->Backend->CmdBuffer,
-                IndexCount, IndexOffset, VertexOffset,
-                &Editor = GameState->Editor]
-                (m4 BaseTransform, f32 ScaleFactor)
-            {
-                m4 Scale = M4(ScaleFactor, 0.0f, 0.0f, 0.0f,
-                              0.0f, ScaleFactor, 0.0f, 0.0f,
-                              0.0f, 0.0f, ScaleFactor, 0.0f,
-                              0.0f, 0.0f, 0.0f, 1.0f);
-                    
-                rgba8 Colors[3] =
-                {
-                    PackRGBA8(0xFF, 0x00, 0x00),
-                    PackRGBA8(0x00, 0xFF, 0x00),
-                    PackRGBA8(0x00, 0x00, 0xFF),
-                };
-
-                m4 Transforms[3] = 
-                {
-                    M4(0.0f, 0.0f, 1.0f, 0.0f,
-                       1.0f, 0.0f, 0.0f, 0.0f,
-                       0.0f, 1.0f, 0.0f, 0.0f,
-                       0.0f, 0.0f, 0.0f, 1.0f),
-                    M4(1.0f, 0.0f, 0.0f, 0.0f,
-                       0.0f, 0.0f, 1.0f, 0.0f,
-                       0.0f, -1.0f, 0.0f, 0.0f,
-                       0.0f, 0.0f, 0.0f, 1.0f),
-                    M4(1.0f, 0.0f, 0.0f, 0.0f,
-                       0.0f, 1.0f, 0.0f, 0.0f,
-                       0.0f, 0.0f, 1.0f, 0.0f,
-                       0.0f, 0.0f, 0.0f, 1.0f),
-                };
-
-                if (Editor.Gizmo.IsGlobal)
-                {
-                    v3 P = BaseTransform.P.xyz;
-                    BaseTransform = M4(1.0f, 0.0f, 0.0f, P.x,
-                                       0.0f, 1.0f, 0.0f, P.y,
-                                       0.0f, 0.0f, 1.0f, P.z,
-                                       0.0f, 0.0f, 0.0f, 1.0f);
-                }
-                else
-                {
-                    for (u32 AxisIndex = 0; AxisIndex < 3; AxisIndex++)
-                    {
-                        BaseTransform.C[AxisIndex].xyz = NOZ(BaseTransform.C[AxisIndex].xyz);
-                    }
-                }
-
-                for (u32 i = 0; i < 3; i++)
-                {
-                    m4 Transform = BaseTransform * Transforms[i] * Scale;
-                    vkCmdPushConstants(CmdBuffer, GizmoPipeline.Layout,
-                                       VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                                       0, sizeof(Transform), &Transform);
-                    rgba8 Color = Colors[i];
-                    if (i == Editor.Gizmo.Selection)
-                    {
-                        Color.R = Max(Color.R, (u8)0x80);
-                        Color.G = Max(Color.G, (u8)0x80);
-                        Color.B = Max(Color.B, (u8)0x80);
-                    }
-
-                    vkCmdPushConstants(CmdBuffer, GizmoPipeline.Layout,
-                                       VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                                       sizeof(Transform), sizeof(Color), &Color);
-
-                    vkCmdDrawIndexed(CmdBuffer, IndexCount, 1, IndexOffset, VertexOffset, 0);
-                }
-            };
-
-            if (IsValid(GameState->Editor.SelectedEntityID))
-            {
-                entity* Entity = World->Entities + GameState->Editor.SelectedEntityID.Value;
-                RenderGizmo(Entity->Transform, 0.25f);
-            }
+            vkCmdPushConstants(Frame->Backend->CmdBuffer, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(Cmd->Transform), &Cmd->Transform);
+            vkCmdPushConstants(Frame->Backend->CmdBuffer, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                               sizeof(Cmd->Transform), sizeof(Cmd->Color), &Cmd->Color);
+            vkCmdDrawIndexed(Frame->Backend->CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceCount);
         }
 
         pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
@@ -878,7 +773,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         GameIO->Keys[SC_MouseLeft].TransitionFlags = 0;
     }
     
-    UpdateEditor(GameState, GameIO);
+    UpdateEditor(GameState, GameIO, RenderFrame);
     if (IsValid(GameState->Editor.SelectedEntityID))
     {
         entity* Entity = GameState->World->Entities + GameState->Editor.SelectedEntityID.Value;
@@ -909,7 +804,8 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         }
     }
     
-    UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, &GameState->TransientArena);
+    UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, 
+                         &GameState->TransientArena, GameState->Editor.DrawLights);
     GameRender(GameState, GameIO, RenderFrame);
     EndRenderFrame(RenderFrame);
 

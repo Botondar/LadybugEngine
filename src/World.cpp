@@ -98,11 +98,12 @@ lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_syst
     return(Result);
 }
 
-lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* Frame, game_io* IO, memory_arena* Scratch)
+lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* Frame, game_io* IO, memory_arena* Scratch, b32 DrawLights)
 {
     // Load debug scene
     if (!World->IsLoaded)
     {
+        World->LightProxyScale = 1e-1f;
         World->EffectEntropy = { 0x13370420 };
 
         m4 YUpToZUp = M4(1.0f, 0.0f, 0.0f, 0.0f,
@@ -114,7 +115,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             m4 Transform = YUpToZUp;
             DEBUGLoadTestScene(Scratch, Assets, World, Frame->Renderer,
                                "data/Scenes/Sponza/Sponza.gltf", Transform);
-        
+
             const light LightSources[] = 
             {
                 // "Fire" lights on top of the metal hangers
@@ -343,6 +344,21 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         if (Entity->Flags & EntityFlag_LightSource)
         {
             AddLight(Frame, { Entity->Transform.P, Entity->LightEmission });
+            if (DrawLights)
+            {
+                geometry_buffer_allocation Mesh = Assets->Meshes[Assets->SphereMeshID];
+                u32 VertexOffset = Mesh.VertexBlock->ByteOffset / sizeof(vertex);
+                u32 VertexCount = Mesh.VertexBlock->ByteSize / sizeof(vertex);
+                u32 IndexOffset = Mesh.IndexBlock->ByteOffset / sizeof(vert_index);
+                u32 IndexCount = Mesh.IndexBlock->ByteSize / sizeof(vert_index);
+
+                f32 S = World->LightProxyScale;
+                m4 Transform = Entity->Transform * M4(S, 0.0f, 0.0f, 0.0f,
+                                                      0.0f, S, 0.0f, 0.0f,
+                                                      0.0f, 0.0f, S, 0.0f,
+                                                      0.0f, 0.0f, 0.0f, 1.0f);
+                DrawWidget3D(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount, Transform, PackRGBA(Entity->LightEmission));
+            }
         }
     }
 

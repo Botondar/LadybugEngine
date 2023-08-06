@@ -90,6 +90,8 @@ lbfn m4 GetTransform(const camera* Camera);
 struct game_world
 {
     b32 IsLoaded;
+    f32 LightProxyScale; // NOTE(boti): Sphere scale for editor selection and rendering
+
     camera Camera;
     v3 SunL;
     v3 SunV;
@@ -107,7 +109,7 @@ struct game_world
 
 lbfn u32 MakeParticleSystem(game_world* World, particle_system_type Type, entity_id ParentID, mmbox Bounds);
 
-lbfn void UpdateAndRenderWorld(game_world* World, struct assets* Assets, render_frame* Frame, game_io* IO, memory_arena* Scratch);
+lbfn void UpdateAndRenderWorld(game_world* World, struct assets* Assets, render_frame* Frame, game_io* IO, memory_arena* Scratch, b32 DrawLights);
 
 //
 // Implementation

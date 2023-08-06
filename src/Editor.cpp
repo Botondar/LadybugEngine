@@ -52,7 +52,7 @@ lbfn void InitEditor(game_state* Game, memory_arena* Arena)
     Game->Editor.Gizmo.Selection = INVALID_INDEX_U32;
 }
 
-lbfn void UpdateEditor(game_state* Game, game_io* IO)
+lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
 {
     editor_state* Editor = &Game->Editor;
     if (WasPressed(IO->Keys[SC_Backtick]))
@@ -75,7 +75,9 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
     game_world* World = Game->World;
     assets* Assets = Game->Assets;
 
-    f32 AspectRatio = (f32)Game->Renderer->SurfaceExtent.width / (f32)Game->Renderer->SurfaceExtent.height;
+    // TODO(boti): This shouldn't be done this way, 
+    // all of this is calculated by the world update
+    f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
     f32 g = 1.0f / Tan(0.5f * World->Camera.FieldOfView);
     // Construct a ray the intersects the pixel where the cursor's at
     m4 CameraTransform = GetTransform(&World->Camera);
@@ -83,8 +85,8 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
     ray Ray;
     {
         v2 P = IO->Mouse.P;
-        P.x /= (f32)Game->Renderer->SurfaceExtent.width;
-        P.y /= (f32)Game->Renderer->SurfaceExtent.height;
+        P.x /= (f32)Frame->RenderWidth;
+        P.y /= (f32)Frame->RenderHeight;
         P.x = 2.0f * P.x - 1.0f;
         P.y = 2.0f * P.y - 1.0f;
         P.x *= AspectRatio;
@@ -120,7 +122,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
             }
             else if (HasFlag(Entity->Flags, EntityFlag_LightSource))
             {
-                v3 HalfExtent = v3{ 0.2f, 0.2f, 0.2f };
+                v3 HalfExtent = v3{ World->LightProxyScale, World->LightProxyScale, World->LightProxyScale };
                 f32 t = 0.0f;
                 if (IntersectRayBox(Ray, v3{ 0.0f, 0.0f, 0.0f }, HalfExtent, Transform, tMax, &t))
                 {
@@ -160,35 +162,41 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
             Transform.C[AxisIndex].z = Axes[AxisIndex].z;
         }
 
+        mmbox Box = Assets->MeshBoxes[Assets->ArrowMeshID];
+        v3 BoxP = 0.5f * (Box.Min + Box.Max);
+        v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
+
+        m4 GizmoTransforms[3] = 
+        {
+            M4(0.0f, 0.0f, 1.0f, 0.0f,
+               1.0f, 0.0f, 0.0f, 0.0f,
+               0.0f, 1.0f, 0.0f, 0.0f,
+               0.0f, 0.0f, 0.0f, 1.0f),
+            M4(1.0f, 0.0f, 0.0f, 0.0f,
+               0.0f, 0.0f, 1.0f, 0.0f,
+               0.0f, -1.0f, 0.0f, 0.0f,
+               0.0f, 0.0f, 0.0f, 1.0f),
+            M4(1.0f, 0.0f, 0.0f, 0.0f,
+               0.0f, 1.0f, 0.0f, 0.0f,
+               0.0f, 0.0f, 1.0f, 0.0f,
+               0.0f, 0.0f, 0.0f, 1.0f),
+        };
+
+        m4 Transforms[3] = 
+        {
+            Transform * GizmoTransforms[0],
+            Transform * GizmoTransforms[1],
+            Transform * GizmoTransforms[2],
+        };
+
         if (!IO->Keys[SC_MouseLeft].bIsDown)
         {
-            mmbox Box = Assets->MeshBoxes[Assets->ArrowMeshID];
-            v3 BoxP = 0.5f * (Box.Min + Box.Max);
-            v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
-
-            m4 GizmoTransforms[3] = 
-            {
-                M4(0.0f, 0.0f, 1.0f, 0.0f,
-                   1.0f, 0.0f, 0.0f, 0.0f,
-                   0.0f, 1.0f, 0.0f, 0.0f,
-                   0.0f, 0.0f, 0.0f, 1.0f),
-                M4(1.0f, 0.0f, 0.0f, 0.0f,
-                   0.0f, 0.0f, 1.0f, 0.0f,
-                   0.0f, -1.0f, 0.0f, 0.0f,
-                   0.0f, 0.0f, 0.0f, 1.0f),
-                M4(1.0f, 0.0f, 0.0f, 0.0f,
-                   0.0f, 1.0f, 0.0f, 0.0f,
-                   0.0f, 0.0f, 1.0f, 0.0f,
-                   0.0f, 0.0f, 0.0f, 1.0f),
-            };
-
             u32 SelectedGizmoIndex = INVALID_INDEX_U32;
             f32 tMax = 1e7f;
             for (u32 GizmoIndex = 0; GizmoIndex < 3; GizmoIndex++)
             {
-                m4 CurrentTransform = Transform * GizmoTransforms[GizmoIndex];
                 f32 t = 0.0f;
-                if (IntersectRayBox(Ray, BoxP, HalfExtent, CurrentTransform, tMax, &t))
+                if (IntersectRayBox(Ray, BoxP, HalfExtent, Transforms[GizmoIndex], tMax, &t))
                 {
                     tMax = t;
                     SelectedGizmoIndex = GizmoIndex;
@@ -217,6 +225,41 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO)
             InstanceTransform->P.z += TranslationAmount*Axes[Editor->Gizmo.Selection].z;
 
             IO->Mouse.dP = {}; // Don't propagate the mouse dP to the game
+        }
+
+        // Render
+        geometry_buffer_allocation Mesh = Assets->Meshes[Assets->ArrowMeshID];
+        u32 VertexOffset = Mesh.VertexBlock->ByteOffset / sizeof(vertex);
+        u32 VertexCount = Mesh.VertexBlock->ByteSize / sizeof(vertex);
+        u32 IndexOffset = Mesh.IndexBlock->ByteOffset / sizeof(vert_index);
+        u32 IndexCount = Mesh.IndexBlock->ByteSize / sizeof(vert_index);
+
+        rgba8 Colors[3] = 
+        {
+            PackRGBA8(0xFF, 0x00, 0x00),
+            PackRGBA8(0x00, 0xFF, 0x00),
+            PackRGBA8(0x00, 0x00, 0xFF),
+        };
+        rgba8 SelectedColors[3] = 
+        {
+            PackRGBA8(0xFF, 0x80, 0x80),
+            PackRGBA8(0x80, 0xFF, 0x80),
+            PackRGBA8(0x80, 0x80, 0xFF),
+        };
+
+        for (u32 GizmoIndex = 0; GizmoIndex < 3; GizmoIndex++)
+        {
+            m4 CurrentTransform = Transforms[GizmoIndex];
+
+            // TODO(boti): How come the transform for the actual raycasting does NOT WORK for rendering?!??!
+            CurrentTransform =  CurrentTransform * M4(0.25f, 0.0f, 0.0, 0.0f,
+                                                      0.0f, 0.25f, 0.0f, 0.0f,
+                                                      0.0f, 0.0f, 0.25f, 0.0f,
+                                                      0.0f, 0.0f, 0.0f, 1.0f);
+            rgba8 Color = (GizmoIndex == Editor->Gizmo.Selection) ? 
+                SelectedColors[GizmoIndex] : Colors[GizmoIndex];
+            DrawWidget3D(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
+                         CurrentTransform, Color);
         }
     }
 }
