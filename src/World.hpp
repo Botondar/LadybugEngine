@@ -62,6 +62,7 @@ struct particle_system
     billboard_mode Mode;
     v2 ParticleHalfExtent;
 
+    b32 CullOutOfBoundsParticles;
     f32 Counter;
     f32 EmissionRate;
 

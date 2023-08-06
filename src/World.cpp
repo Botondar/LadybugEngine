@@ -80,6 +80,7 @@ lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_syst
                 ParticleSystem->Mode = Billboard_ZAligned;
                 ParticleSystem->ParticleHalfExtent = { 0.25f, 0.25f };
                 ParticleSystem->EmissionRate = 1.0f / 144.0f;
+                ParticleSystem->CullOutOfBoundsParticles = true;
                 ParticleSystem->ParticleCount = ParticleSystem->MaxParticleCount;
                 
             } break;
@@ -88,6 +89,7 @@ lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_syst
                 ParticleSystem->Mode = Billboard_ViewAligned;
                 ParticleSystem->ParticleHalfExtent = { 0.15f, 0.15f };
                 ParticleSystem->ParticleCount = ParticleSystem->MaxParticleCount;
+                ParticleSystem->CullOutOfBoundsParticles = false;
                 ParticleSystem->EmissionRate = 1.0f / 30.0f;
             } break;
             InvalidDefaultCase;
@@ -349,6 +351,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         particle_system* ParticleSystem = World->ParticleSystems + ParticleSystemIndex;
         v2 ParticleSize = { 1.0f, 1.0f };
 
+        // TODO(boti): we should probably just pull in the entire parent transform
         v3 BaseP = { 0.0f, 0.0f, 0.0f };
         v4 Color = { 1.0f, 1.0f, 1.0f, 1.0f };
         if (IsValid(ParticleSystem->ParentID))
@@ -362,6 +365,11 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         }
 
         mmbox Bounds = ParticleSystem->Bounds;
+        mmbox CullBounds = 
+        {
+            .Min = Bounds.Min + BaseP,
+            .Max = Bounds.Max + BaseP,
+        };
         if (ParticleSystem->EmissionRate > 0.0f)
         {
             ParticleSystem->Counter += dt;
@@ -439,19 +447,31 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             Particle->dP += Particle->ddP * dt;
             Particle->Alpha += Particle->dAlpha * dt;
 
-            if (Cmd)
+            b32 CullParticle = false;
+            if (ParticleSystem->CullOutOfBoundsParticles)
             {
-                if (Frame->ParticleCount < Frame->MaxParticleCount)
+                CullParticle = 
+                    Particle->P.x < CullBounds.Min.x || Particle->P.x >= CullBounds.Max.x ||
+                    Particle->P.y < CullBounds.Min.y || Particle->P.y >= CullBounds.Max.y ||
+                    Particle->P.z < CullBounds.Min.z || Particle->P.z >= CullBounds.Max.z;
+            }
+
+            if (!CullParticle)
+            {
+                if (Cmd)
                 {
-                    Cmd->ParticleCount++;
-                    f32 Alpha = Max(Particle->Alpha, 0.0f);
-                    Frame->Particles[Frame->ParticleCount++] = 
+                    if (Frame->ParticleCount < Frame->MaxParticleCount)
                     {
-                        .P = Particle->P,
-                        .TextureIndex = Particle->TextureIndex,
-                        .Color = { Color.x, Color.y, Color.z, Alpha * Color.w },
-                        .HalfExtent = ParticleSystem->ParticleHalfExtent,
-                    };
+                        Cmd->ParticleCount++;
+                        f32 Alpha = Max(Particle->Alpha, 0.0f);
+                        Frame->Particles[Frame->ParticleCount++] = 
+                        {
+                            .P = Particle->P,
+                            .TextureIndex = Particle->TextureIndex,
+                            .Color = { Color.x, Color.y, Color.z, Alpha * Color.w },
+                            .HalfExtent = ParticleSystem->ParticleHalfExtent,
+                        };
+                    }
                 }
             }
         }
