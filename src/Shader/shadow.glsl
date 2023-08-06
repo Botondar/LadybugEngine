@@ -40,10 +40,12 @@ layout(location = 0) in vec2 TexCoord;
 
 void main()
 {
+#if 1
     if (texture(sampler2D(Textures[Material.DiffuseID], Sampler), TexCoord).a < ALPHA_TEST_THRESHOLD)
     {
         discard;
     }
+#endif
 }
 
 #endif
