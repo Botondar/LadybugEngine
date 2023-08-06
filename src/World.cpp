@@ -96,8 +96,90 @@ lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_syst
     return(Result);
 }
 
-lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* Frame, game_io* IO)
+lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* Frame, game_io* IO, memory_arena* Scratch)
 {
+    // Load debug scene
+    if (!World->IsLoaded)
+    {
+        World->EffectEntropy = { 0x13370420 };
+
+        m4 YUpToZUp = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                         0.0f, 0.0f, -1.0f, 0.0f,
+                         0.0f, 1.0f, 0.0f, 0.0f,
+                         0.0f, 0.0f, 0.0f, 1.0f);
+        // Sponza scene
+        {
+            m4 Transform = YUpToZUp;
+            DEBUGLoadTestScene(Scratch, Assets, World, Frame->Renderer,
+                               "data/Scenes/Sponza/Sponza.gltf", Transform);
+        
+            const light LightSources[] = 
+            {
+                // "Fire" lights on top of the metal hangers
+                { { -4.95f, -1.15f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+                { { +3.90f, -1.15f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+                { { -4.95f, +1.75f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+                { { +3.90f, +1.75f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+
+                // "Magic" lights on top of the wells
+                { { +8.95f, +3.60f, 1.30f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
+                { { +8.95f, -3.20f, 1.30f, 1.0f }, { 0.6f, 0.2f, 1.0f, 2.5f } },
+                { { -9.65f, +3.60f, 1.30f, 1.0f }, { 0.4f, 1.0f, 0.4f, 2.5f } },
+                { { -9.65f, -3.20f, 1.30f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
+            };
+
+            for (u32 LightIndex = 0; LightIndex < CountOf(LightSources); LightIndex++)
+            {
+                const light* Light = LightSources + LightIndex;
+                if (World->EntityCount < World->MaxEntityCount)
+                {
+                    entity_id ID = { World->EntityCount++ };
+                    World->Entities[ID.Value] = 
+                    {
+                        .Flags = EntityFlag_LightSource,
+                        .Transform = M4(1.0f, 0.0f, 0.0f, Light->P.x,
+                                        0.0f, 1.0f, 0.0f, Light->P.y,
+                                        0.0f, 0.0f, 1.0f, Light->P.z,
+                                        0.0f, 0.0f, 0.0f, 1.0f),
+                        .LightEmission = Light->E,
+                    };
+
+                    b32 IsMagicLight = (LightIndex >= 4);
+                    if (IsMagicLight)
+                    {
+                        mmbox Bounds = 
+                        {
+                            .Min = { -0.3f, -0.3f, -0.25f },
+                            .Max = { +0.3f, +0.3f, +1.75f },
+                        };
+                        MakeParticleSystem(World, ID, ParticleSystem_Magic, Bounds);
+                    }
+                    else
+                    {
+                        mmbox Bounds = 
+                        {
+                            .Min = { -0.15f, -0.15f, -0.15f },
+                            .Max = { +0.15f, +0.15f, +0.50f },
+                        };
+                        MakeParticleSystem(World, ID, ParticleSystem_Fire, Bounds);
+                    }
+                }
+            }
+        }
+
+        // Animated fox
+        {
+            m4 Transform = YUpToZUp * M4(1e-2f, 0.0f, 0.0f, 0.0f,
+                                         0.0f, 1e-2f, 0.0f, 0.0f,
+                                         0.0f, 0.0f, 1e-2f, 0.0f,
+                                         0.0f, 0.0f, 0.0f, 1.0f);
+            DEBUGLoadTestScene(Scratch, Assets, World, Frame->Renderer, 
+                               "data/Scenes/Fox/Fox.gltf", Transform);
+        }
+
+        World->IsLoaded = true;
+    }
+
     f32 dt = IO->dt;
     World->SunL = 2.5f * v3{ 10.0f, 7.0f, 3.0f }; // Intensity
     World->SunV = Normalize(v3{ -3.0f, 2.5f, 12.0f }); // Direction (towards the sun)
