@@ -796,19 +796,19 @@ void EndRenderFrame(render_frame* Frame);
 
 void SetRenderCamera(render_frame* Frame, const render_camera* Camera);
 
-inline b32 RenderMesh(render_frame* Frame,
+inline b32 DrawMesh(render_frame* Frame,
                       u32 VertexOffset, u32 VertexCount, 
                       u32 IndexOffset, u32 IndexCount,
                       m4 Transform, material Material);
-inline b32 RenderSkinnedMesh(render_frame* Frame,
-                             u32 VertexOffset, u32 VertexCount,
-                             u32 IndexOffset, u32 IndexCount,
-                             m4 Transform, material,
-                             u32 JointCount, m4* Pose);
-inline b32 RenderWidget3D(render_frame* Frame,
-                          u32 VertexOffset, u32 VertexCount,
-                          u32 IndexOffset, u32 IndexCount,
-                          m4 Transform, rgba8 Color);
+inline b32 DrawSkinnedMesh(render_frame* Frame,
+                           u32 VertexOffset, u32 VertexCount,
+                           u32 IndexOffset, u32 IndexCount,
+                           m4 Transform, material,
+                           u32 JointCount, m4* Pose);
+inline b32 DrawWidget3D(render_frame* Frame,
+                        u32 VertexOffset, u32 VertexCount,
+                        u32 IndexOffset, u32 IndexCount,
+                        m4 Transform, rgba8 Color);
 inline b32 AddLight(render_frame* Frame, light Light);
 
 void BeginSceneRendering(render_frame* Frame);
@@ -896,7 +896,7 @@ inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount /*= 0xFF
 }
 
 
-inline b32 RenderMesh(render_frame* Frame, 
+inline b32 DrawMesh(render_frame* Frame, 
                       u32 VertexOffset, u32 VertexCount, 
                       u32 IndexOffset, u32 IndexCount,
                       m4 Transform, material Material)
@@ -922,7 +922,7 @@ inline b32 RenderMesh(render_frame* Frame,
     return(Result);
 }
 
-inline b32 RenderSkinnedMesh(render_frame* Frame,
+inline b32 DrawSkinnedMesh(render_frame* Frame,
                              u32 VertexOffset, u32 VertexCount,
                              u32 IndexOffset, u32 IndexCount,
                              m4 Transform, material Material,

@@ -330,13 +330,13 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     }
                 }
 
-                RenderSkinnedMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
+                DrawSkinnedMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
                                   Entity->Transform, Assets->Materials[MaterialID],
                                   JointCount, Pose);
             }
             else
             {
-                RenderMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
+                DrawMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
                            Entity->Transform, Assets->Materials[MaterialID]);
             }
         }

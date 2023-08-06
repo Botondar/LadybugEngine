@@ -14,11 +14,6 @@
 #include "stb/stb_image.h"
 #pragma warning(pop)
 
-lbfn void RenderMeshes(render_frame* Frame, game_state* GameState,
-                       VkPipelineLayout PipelineLayout,
-                       u32 SkinnedCommandCount, draw_cmd* SkinnedCommands,
-                       const frustum* Frustum = nullptr, bool DoCulling = false);
-
 lbfn bool IntersectFrustum(const frustum* Frustum, const mmbox* Box)
 {
     bool Result = true;
