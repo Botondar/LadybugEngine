@@ -766,26 +766,26 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .EnablePrimitiveRestart = false,
             .BindingCount = 1,
             .AttribCount = 3,
-            .Bindings = { { .Stride = sizeof(ui_vertex), .InstanceStepRate = 0 } },
+            .Bindings = { { .Stride = sizeof(vertex_2d), .InstanceStepRate = 0 } },
             .Attribs = 
             {
                 {
                     .Index = 0,
                     .Binding = 0,
                     .Format = Format_R32G32_Float,
-                    .ByteOffset = OffsetOf(ui_vertex, P),
+                    .ByteOffset = OffsetOf(vertex_2d, P),
                 },
                 {
                     .Index = 1,
                     .Binding = 0,
                     .Format = Format_R32G32_Float,
-                    .ByteOffset = OffsetOf(ui_vertex, TexCoord),
+                    .ByteOffset = OffsetOf(vertex_2d, TexCoord),
                 },
                 {
                     .Index = 2,
                     .Binding = 0,
                     .Format = Format_R8G8B8A8_UNorm,
-                    .ByteOffset = OffsetOf(ui_vertex, Color),
+                    .ByteOffset = OffsetOf(vertex_2d, Color),
                 },
             },
         },

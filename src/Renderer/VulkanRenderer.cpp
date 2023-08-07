@@ -516,17 +516,17 @@ VkResult CreateRenderer(renderer* Renderer,
                     .pQueueFamilyIndices = nullptr,
                 };
                 
-                Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->DrawBuffers[i].Buffer);
+                Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->PerFrameDraw2DCmdBuffers[i]);
                 ReturnOnFailure();
                 VkMemoryRequirements MemoryRequirements = {};
-                vkGetBufferMemoryRequirements(VK.Device, Renderer->DrawBuffers[i].Buffer, &MemoryRequirements);
+                vkGetBufferMemoryRequirements(VK.Device, Renderer->PerFrameDraw2DCmdBuffers[i], &MemoryRequirements);
 
                 VkDeviceSize Offset = PushBARMemory(MemoryRequirements.size, MemoryRequirements.alignment);
-                Result = vkBindBufferMemory(VK.Device, Renderer->DrawBuffers[i].Buffer, Renderer->BARMemory, Offset);
+                Result = vkBindBufferMemory(VK.Device, Renderer->PerFrameDraw2DCmdBuffers[i], Renderer->BARMemory, Offset);
                 ReturnOnFailure();
 
-                Renderer->DrawBuffers[i].Mapping = OffsetPtr(Renderer->BARMemoryMapping, Offset);
-                Renderer->Frames[i].MaxUIDrawCmdCount = Size / sizeof(draw_indirect_cmd);
+                Renderer->PerFrameDraw2DCmdBufferMappings[i] = OffsetPtr(Renderer->BARMemoryMapping, Offset);
+                Renderer->Frames[i].MaxDraw2DCmdCount = Size / sizeof(draw_indirect_cmd);
             }
         }
 
@@ -548,16 +548,16 @@ VkResult CreateRenderer(renderer* Renderer,
                     .queueFamilyIndexCount = 0,
                     .pQueueFamilyIndices = nullptr,
                 };
-                Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->VertexStacks[i].Buffer);
+                Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->PerFrameVertex2DBuffers[i]);
                 ReturnOnFailure();
                 VkMemoryRequirements MemoryRequirements = {};
-                vkGetBufferMemoryRequirements(VK.Device, Renderer->VertexStacks[i].Buffer, &MemoryRequirements);
+                vkGetBufferMemoryRequirements(VK.Device, Renderer->PerFrameVertex2DBuffers[i], &MemoryRequirements);
 
                 VkDeviceSize Offset = PushBARMemory(MemoryRequirements.size, MemoryRequirements.alignment);
-                Result = vkBindBufferMemory(VK.Device, Renderer->VertexStacks[i].Buffer, Renderer->BARMemory, Offset);
+                Result = vkBindBufferMemory(VK.Device, Renderer->PerFrameVertex2DBuffers[i], Renderer->BARMemory, Offset);
                 ReturnOnFailure();
-                Renderer->VertexStacks[i].Mapping = OffsetPtr(Renderer->BARMemoryMapping, Offset);
-                Renderer->Frames[i].MaxUIVertexCount = Size / sizeof(ui_vertex);
+                Renderer->PerFrameVertex2DMappings[i] = OffsetPtr(Renderer->BARMemoryMapping, Offset);
+                Renderer->Frames[i].MaxVertex2DCount = Size / sizeof(vertex_2d);
             }
         }
 
@@ -1767,13 +1767,13 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
     Frame->Backend->UniformBuffer = Renderer->PerFrameUniformBuffers[FrameID];
     Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
 
-    Frame->Backend->DrawBuffer = Renderer->DrawBuffers[FrameID];
-    Frame->Backend->VertexStack = Renderer->VertexStacks[FrameID];
+    Frame->Backend->Draw2DCmdBuffer = Renderer->PerFrameDraw2DCmdBuffers[FrameID];
+    Frame->Backend->Vertex2DBuffer = Renderer->PerFrameVertex2DBuffers[FrameID];
 
-    Frame->UIDrawCmdCount = 0;
-    Frame->UIDrawCmds = (draw_indirect_cmd*)Frame->Backend->DrawBuffer.Mapping;
-    Frame->UIVertexCount = 0;
-    Frame->UIVertices = (ui_vertex*)Frame->Backend->VertexStack.Mapping;
+    Frame->Draw2DCmdCount = 0;
+    Frame->Draw2DCmds = (draw_indirect_cmd*)Renderer->PerFrameDraw2DCmdBufferMappings[FrameID];
+    Frame->Vertex2DCount = 0;
+    Frame->Vertex2DArray = (vertex_2d*)Renderer->PerFrameVertex2DMappings[FrameID];
 
     Frame->DrawCmdCount = 0;
     Frame->SkinnedDrawCmdCount = 0;
@@ -2419,7 +2419,7 @@ void EndRenderFrame(render_frame* Frame)
 
         {
             VkDeviceSize ZeroOffset = 0;
-            vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Frame->Backend->VertexStack.Buffer, &ZeroOffset);
+            vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Frame->Backend->Vertex2DBuffer, &ZeroOffset);
 
             pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
             VkDescriptorSetLayout SetLayout = Frame->Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS];
@@ -2436,7 +2436,7 @@ void EndRenderFrame(render_frame* Frame)
 
             vkCmdPushConstants(Frame->Backend->CmdBuffer, UIPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
                                0, sizeof(OrthoTransform), &OrthoTransform);
-            vkCmdDrawIndirect(Frame->Backend->CmdBuffer, Frame->Backend->DrawBuffer.Buffer, 0, Frame->UIDrawCmdCount, sizeof(VkDrawIndirectCommand));
+            vkCmdDrawIndirect(Frame->Backend->CmdBuffer, Frame->Backend->Draw2DCmdBuffer, 0, Frame->Draw2DCmdCount, sizeof(VkDrawIndirectCommand));
         }
 
         vkCmdEndRendering(Frame->Backend->CmdBuffer);

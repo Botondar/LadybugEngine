@@ -611,7 +611,7 @@ struct vertex_skin8
 };
 typedef vertex_skin8 vertex_skin;
 
-struct ui_vertex
+struct vertex_2d
 {
     v2 P;
     v2 TexCoord;
@@ -769,8 +769,8 @@ struct render_frame
     static constexpr u32 MaxDrawWidget3DCmdCount    = (1u << 16);
     static constexpr u32 MaxJointCount              = (1u << 17);
 
-    u32 MaxUIDrawCmdCount;
-    u32 MaxUIVertexCount;
+    u32 MaxDraw2DCmdCount;
+    u32 MaxVertex2DCount;
 
     u32 DrawCmdCount;
     u32 SkinnedDrawCmdCount;
@@ -780,8 +780,8 @@ struct render_frame
     u32 JointCount;
     u32 SkinnedMeshVertexCount;
     u32 DrawWidget3DCmdCount;
-    u32 UIVertexCount;
-    u32 UIDrawCmdCount;
+    u32 Vertex2DCount;
+    u32 Draw2DCmdCount;
 
     u32 JointBufferAlignment;
 
@@ -792,8 +792,8 @@ struct render_frame
     draw_widget3d_cmd DrawWidget3DCmds[MaxDrawWidget3DCmdCount];
     render_particle* Particles;
     m4* JointMapping;
-    ui_vertex* UIVertices;
-    draw_indirect_cmd* UIDrawCmds;
+    vertex_2d* Vertex2DArray;
+    draw_indirect_cmd* Draw2DCmds;
 
     void* UniformData; // GPU-backed frame_uniform_data
     frame_uniform_data Uniforms;
@@ -820,7 +820,7 @@ inline b32 DrawWidget3D(render_frame* Frame,
                         m4 Transform, rgba8 Color);
 inline b32 AddLight(render_frame* Frame, light Light);
 
-inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, ui_vertex* VertexArray);
+inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* VertexArray);
 
 inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
 inline rgba8 PackRGBA(v4 Color);
@@ -1015,23 +1015,23 @@ inline b32 AddLight(render_frame* Frame, light Light)
     return(Result);
 }
 
-inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, ui_vertex* VertexArray)
+inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* VertexArray)
 {
     b32 Result = false;
-    if ((Frame->UIDrawCmdCount < Frame->MaxUIDrawCmdCount) &&
-        (Frame->UIVertexCount + VertexCount <= Frame->MaxUIVertexCount))
+    if ((Frame->Draw2DCmdCount < Frame->MaxDraw2DCmdCount) &&
+        (Frame->Vertex2DCount + VertexCount <= Frame->MaxVertex2DCount))
     {
-        u32 VertexOffset = Frame->UIVertexCount;
-        Frame->UIVertexCount += VertexCount;
+        u32 VertexOffset = Frame->Vertex2DCount;
+        Frame->Vertex2DCount += VertexCount;
 
-        Frame->UIDrawCmds[Frame->UIDrawCmdCount++] = 
+        Frame->Draw2DCmds[Frame->Draw2DCmdCount++] = 
         {
             .VertexCount = VertexCount,
             .InstanceCount = 1,
             .VertexOffset = VertexOffset,
             .InstanceOffset = 0,
         };
-        memcpy(Frame->UIVertices + VertexOffset, VertexArray, VertexCount * sizeof(ui_vertex));
+        memcpy(Frame->Vertex2DArray + VertexOffset, VertexArray, VertexCount * sizeof(vertex_2d));
         Result = true;
     }
 

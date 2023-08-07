@@ -59,10 +59,8 @@ struct backend_render_frame
     VkBuffer ParticleBuffer;
     VkBuffer JointBuffer;
     VkBuffer SkinnedMeshVB;
-
-    // TODO(boti): rework these
-    vulkan_buffer DrawBuffer;
-    vulkan_buffer VertexStack;
+    VkBuffer Draw2DCmdBuffer;
+    VkBuffer Vertex2DBuffer;
 };
 
 struct renderer
@@ -128,16 +126,17 @@ struct renderer
     void* PerFrameJointBufferMappings[MaxSwapchainImageCount];
     VkBuffer PerFrameParticleBuffers[MaxSwapchainImageCount];
     void* PerFrameParticleBufferMappings[MaxSwapchainImageCount];
+    VkBuffer PerFrameDraw2DCmdBuffers[MaxSwapchainImageCount];
+    void* PerFrameDraw2DCmdBufferMappings[MaxSwapchainImageCount];
+    VkBuffer PerFrameVertex2DBuffers[MaxSwapchainImageCount];
+    void* PerFrameVertex2DMappings[MaxSwapchainImageCount];
+
+    VkDeviceMemory SkinningMemory;
+    VkBuffer SkinningBuffers[MaxSwapchainImageCount];
 
     VkSemaphore ImageAcquiredSemaphores[MaxSwapchainImageCount];
     VkFence ImageAcquiredFences[MaxSwapchainImageCount];
     VkFence RenderFinishedFences[MaxSwapchainImageCount];
-
-    vulkan_buffer DrawBuffers[MaxSwapchainImageCount];
-    vulkan_buffer VertexStacks[MaxSwapchainImageCount];
-
-    VkDeviceMemory SkinningMemory;
-    VkBuffer SkinningBuffers[MaxSwapchainImageCount];
 
     //
     // Pipelines, pipeline layouts and associated descriptor set layouts

@@ -89,7 +89,7 @@ VkDescriptorSet PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout L
 
 void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color)
 {
-    ui_vertex VertexData[] = 
+    vertex_2d VertexData[] = 
     {
         { { P1.x, P1.y }, { UV1.x, UV1.y }, Color },
         { { P2.x, P1.y }, { UV2.x, UV1.y }, Color },
@@ -105,16 +105,16 @@ void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color)
     if (BumpBuffer_(&Frame->Backend->DrawBuffer, sizeof(VkDrawIndirectCommand)) && 
         BumpBuffer_(&Frame->Backend->VertexStack, sizeof(VertexData)))
     {
-        Frame->UIDrawCmds[Frame->UIDrawCmdCount++] = 
+        Frame->Draw2DCmds[Frame->Draw2DCmdCount++] = 
         {
             .VertexCount = CountOf(VertexData),
             .InstanceCount = 1,
-            .VertexOffset = Frame->UIVertexCount,
+            .VertexOffset = Frame->Vertex2DCount,
             .InstanceOffset = 0,
         };
 
-        memcpy(Frame->UIVertices + Frame->UIVertexCount, VertexData, sizeof(VertexData));
-        Frame->UIVertexCount += CountOf(VertexData);
+        memcpy(Frame->Vertex2DArray + Frame->Vertex2DCount, VertexData, sizeof(VertexData));
+        Frame->Vertex2DCount += CountOf(VertexData);
     }
 #endif
 }
