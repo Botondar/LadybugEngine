@@ -817,9 +817,6 @@ inline b32 DrawWidget3D(render_frame* Frame,
                         m4 Transform, rgba8 Color);
 inline b32 AddLight(render_frame* Frame, light Light);
 
-void BeginSceneRendering(render_frame* Frame);
-void EndSceneRendering(render_frame* Frame);
-
 inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
 inline rgba8 PackRGBA(v4 Color);
 inline u32 GetMaxMipCount(u32 Width, u32 Height);

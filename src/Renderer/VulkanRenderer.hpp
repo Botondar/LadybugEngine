@@ -155,6 +155,9 @@ VkResult CreateRenderer(renderer* Renderer,
                         memory_arena* Arena, 
                         memory_arena* TempArena);
 
+void BeginSceneRendering(render_frame* Frame);
+void EndSceneRendering(render_frame* Frame);
+
 geometry_buffer_allocation UploadVertexData(renderer* Renderer, 
                                             u32 VertexCount, const vertex* VertexData,
                                             u32 IndexCount, const vert_index* IndexData);
