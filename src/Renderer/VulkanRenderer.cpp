@@ -2370,32 +2370,50 @@ void EndRenderFrame(render_frame* Frame)
         }
 
         // 3D widget render
-        const VkDeviceSize ZeroOffset = 0;
-        vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
-        vkCmdBindIndexBuffer(Frame->Backend->CmdBuffer, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
-
-        pipeline_with_layout GizmoPipeline = Renderer->Pipelines[Pipeline_Gizmo];
-        vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
-        vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
-                                0, 1, &Frame->Backend->UniformDescriptorSet, 
-                                0, nullptr);
-
-        for (u32 CmdIndex = 0; CmdIndex < Frame->DrawWidget3DCmdCount; CmdIndex++)
         {
-            draw_widget3d_cmd* Cmd = Frame->DrawWidget3DCmds + CmdIndex;
+            const VkDeviceSize ZeroOffset = 0;
+            vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
+            vkCmdBindIndexBuffer(Frame->Backend->CmdBuffer, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
 
-            vkCmdPushConstants(Frame->Backend->CmdBuffer, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                               0, sizeof(Cmd->Transform), &Cmd->Transform);
-            vkCmdPushConstants(Frame->Backend->CmdBuffer, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                               sizeof(Cmd->Transform), sizeof(Cmd->Color), &Cmd->Color);
-            vkCmdDrawIndexed(Frame->Backend->CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceCount);
+            pipeline_with_layout GizmoPipeline = Renderer->Pipelines[Pipeline_Gizmo];
+            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
+            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
+                                    0, 1, &Frame->Backend->UniformDescriptorSet, 
+                                    0, nullptr);
+
+            for (u32 CmdIndex = 0; CmdIndex < Frame->DrawWidget3DCmdCount; CmdIndex++)
+            {
+                draw_widget3d_cmd* Cmd = Frame->DrawWidget3DCmds + CmdIndex;
+
+                vkCmdPushConstants(Frame->Backend->CmdBuffer, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                                   0, sizeof(Cmd->Transform), &Cmd->Transform);
+                vkCmdPushConstants(Frame->Backend->CmdBuffer, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                                   sizeof(Cmd->Transform), sizeof(Cmd->Color), &Cmd->Color);
+                vkCmdDrawIndexed(Frame->Backend->CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceCount);
+            }
         }
 
-        pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
-        VkDescriptorSetLayout SetLayout = Frame->Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS];
-        VkDescriptorSet FontDescriptorSet = PushImageDescriptor(Frame, SetLayout, 
-                                                                Frame->ImmediateTextureID);
-        RenderImmediates(Frame, UIPipeline.Pipeline, UIPipeline.Layout, FontDescriptorSet);
+        {
+            VkDeviceSize ZeroOffset = 0;
+            vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Frame->Backend->VertexStack.Buffer, &ZeroOffset);
+
+            pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
+            VkDescriptorSetLayout SetLayout = Frame->Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS];
+            VkDescriptorSet ImmediateDescriptorSet = PushImageDescriptor(Frame, SetLayout, Frame->ImmediateTextureID);
+
+            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Pipeline);
+            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Layout, 
+                                    0, 1, &ImmediateDescriptorSet, 0, nullptr);
+
+            m4 OrthoTransform = M4(2.0f / Frame->RenderWidth, 0.0f, 0.0f, -1.0f,
+                                   0.0f, 2.0f / Frame->RenderHeight, 0.0f, -1.0f,
+                                   0.0f, 0.0f, 1.0f, 0.0f,
+                                   0.0f, 0.0f, 0.0f, 1.0f);
+
+            vkCmdPushConstants(Frame->Backend->CmdBuffer, UIPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
+                               0, sizeof(OrthoTransform), &OrthoTransform);
+            vkCmdDrawIndirect(Frame->Backend->CmdBuffer, Frame->Backend->DrawBuffer.Buffer, 0, Frame->UIDrawCmdCount, sizeof(VkDrawIndirectCommand));
+        }
 
         vkCmdEndRendering(Frame->Backend->CmdBuffer);
     }

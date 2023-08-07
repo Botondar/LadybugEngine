@@ -14,11 +14,6 @@ VkDescriptorSet PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout L
 //
 // Immediate-mode rendering
 //
-
-void RenderImmediates(render_frame* Frame, 
-                      VkPipeline Pipeline, VkPipelineLayout PipelineLayout,
-                      VkDescriptorSet DescriptorSet);
-
 void PushRect(render_frame* Frame, 
                    v2 P1, v2 P2, 
                    v2 UV1, v2 UV2, 

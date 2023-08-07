@@ -119,26 +119,6 @@ void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color)
 // Immediate-mode rendering
 //
 
-void RenderImmediates(render_frame* Frame, 
-                      VkPipeline Pipeline, VkPipelineLayout PipelineLayout,
-                      VkDescriptorSet DescriptorSet)
-{
-    vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline);
-
-    vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PipelineLayout, 0, 1, &DescriptorSet, 0, nullptr);
-
-    VkDeviceSize VBOffset = 0;
-    vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Frame->Backend->VertexStack.Buffer, &VBOffset);
-
-    m4 Transform = M4(
-        2.0f / Frame->RenderWidth, 0.0f, 0.0f, -1.0f,
-        0.0f, 2.0f / Frame->RenderHeight, 0.0f, -1.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f);
-    vkCmdPushConstants(Frame->Backend->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Transform), &Transform);
-    vkCmdDrawIndirect(Frame->Backend->CmdBuffer, Frame->Backend->DrawBuffer.Buffer, 0, Frame->UIDrawCmdCount, sizeof(VkDrawIndirectCommand));
-}
-
 mmrect2 PushText(render_frame* Frame, const char* Text, const font* Font, 
                       f32 Size, v2 P, rgba8 Color, 
                       font_layout_type Layout /*= font_layout_type::Baseline*/)
