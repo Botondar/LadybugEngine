@@ -1,28 +1,7 @@
-#if 0
-lbfn void DEBUGRenderVBUsage(renderer* Renderer, v2 P, v2 Size)
-{
-    f32 Scale =  Size.x / Renderer->GeometryBuffer.MemorySize;
-    for (geometry_buffer_block* Block = Renderer->GeometryBuffer.FreeVertexBlocks.Next; 
-        Block != &Renderer->GeometryBuffer.FreeVertexBlocks; 
-        Block = Block->Next)
-    {
-        v2 P1 = { P.x + Scale * Block->ByteOffset, P.y };
-        v2 P2 = { P.x + Scale * (Block->ByteOffset + Block->ByteSize), P.y + Size.y };
-        v2 UV = { 0.0f, 0.0f };
-        PushRect(Renderer, P1, P2, UV, UV, PackRGBA8(0x00, 0xAA, 0x00));
-    }
 
-    for (geometry_buffer_block* Block = Renderer->GeometryBuffer.UsedVertexBlocks.Next; 
-        Block != &Renderer->GeometryBuffer.UsedVertexBlocks; 
-        Block = Block->Next)
-    {
-        v2 P1 = { P.x + Scale * Block->ByteOffset, P.y };
-        v2 P2 = { P.x + Scale * (Block->ByteOffset + Block->ByteSize), P.y + Size.y };
-        v2 UV = { 0.0f, 0.0f };
-        PushRect(Renderer, P1, P2, UV, UV, PackRGBA8(0xAA, 0x00, 0x00));
-    }
-}
-#endif
+internal void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color);
+internal mmrect2 PushText(render_frame* Frame, const char* Text, const font* Font, f32 Size, v2 P, rgba8 Color, font_layout_type Layout = font_layout_type::Baseline);
+internal mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Font, f32 Size, v2 P, rgba8 Color, font_layout_type Layout = font_layout_type::Baseline);
 
 lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
 {
@@ -303,4 +282,71 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
     }
 
     return(MouseInputUsed);
+}
+
+internal void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color)
+{
+    vertex_2d VertexData[] = 
+    {
+        { { P1.x, P1.y }, { UV1.x, UV1.y }, Color },
+        { { P2.x, P1.y }, { UV2.x, UV1.y }, Color },
+        { { P2.x, P2.y }, { UV2.x, UV2.y }, Color },
+        { { P1.x, P1.y }, { UV1.x, UV1.y }, Color },
+        { { P2.x, P2.y }, { UV2.x, UV2.y }, Color },
+        { { P1.x, P2.y }, { UV1.x, UV2.y }, Color },
+    };
+
+    DrawTriangleList2D(Frame, CountOf(VertexData), VertexData);
+}
+
+internal mmrect2 PushText(render_frame* Frame, const char* Text, const font* Font, 
+                          f32 Size, v2 P, rgba8 Color, 
+                          font_layout_type Layout /*= font_layout_type::Baseline*/)
+{
+    v2 CurrentP = P;
+    if (Layout == font_layout_type::Top)
+    {
+        CurrentP.y += Size * Font->Ascent;
+    }
+    else if (Layout == font_layout_type::Bottom)
+    {
+        CurrentP.y -= Size * Font->Descent;
+    }
+
+    for (const char* At = Text; *At; At++)
+    {
+        const font_glyph* Glyph = Font->Glyphs + Font->CharMapping[*At].GlyphIndex;
+        if (*At == '\n')
+        {
+            CurrentP.y += Size * Font->BaselineDistance;
+            CurrentP.x = P.x;
+        }
+        else
+        {
+            PushRect(Frame,
+                     CurrentP + Size * Glyph->P0,
+                     CurrentP + Size * Glyph->P1,
+                     Glyph->UV0, Glyph->UV1,
+                     Color);
+            CurrentP.x += Size * Glyph->AdvanceX;
+        }
+    }
+
+    // TODO(boti): there's no need to call GetTextRect here, we should just calculate this ourselves in the loop
+    mmrect2 Result = GetTextRect(Font, Text, Layout);
+    Result.Min *= Size;
+    Result.Max *= Size;
+    Result.Min += P;
+    Result.Max += P;
+    return Result;
+}
+
+internal mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Font, 
+                                    f32 Size, v2 P, rgba8 Color, 
+                                    font_layout_type Layout /*= font_layout_type::Baseline*/)
+{
+    f32 ShadowOffset = 0.075f;
+    PushText(Frame, Text, Font, Size, P + Size * ShadowOffset * v2{ 1.0f, 1.0f }, PackRGBA8(0x00, 0x00, 0x00), Layout);
+    mmrect2 Result = PushText(Frame, Text, Font, Size, P, Color, Layout);
+    return Result;
 }

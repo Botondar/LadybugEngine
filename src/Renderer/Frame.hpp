@@ -12,18 +12,6 @@ VkDescriptorSet PushImageDescriptor(render_frame* Frame,
 VkDescriptorSet PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, texture_id ID);
 
 //
-// Immediate-mode rendering
-//
-void PushRect(render_frame* Frame, 
-                   v2 P1, v2 P2, 
-                   v2 UV1, v2 UV2, 
-                   rgba8 Color);
-mmrect2 PushText(render_frame* Frame, const char* Text, const font* Font, 
-             f32 Size, v2 P, rgba8 Color, font_layout_type Layout = font_layout_type::Baseline);
-
-mmrect2 PushTextWithShadow(render_frame* Frame, const char* Text, const font* Font, f32 Size, v2 P, rgba8 Color, font_layout_type Layout = font_layout_type::Baseline);
-
-//
 // Rendering
 //
 void BeginPrepass(render_frame* Frame);
