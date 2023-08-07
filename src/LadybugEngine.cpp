@@ -131,7 +131,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 #if 1
         m4 Transform = YUpToZUp;
 #else
-        m4 Transform = M4(1e-2f, 0.0f, 0.0f, 5.0f,
+        m4 Transform = M4(1e-2f, 0.0f, 0.0f, 0.0f,
                           0.0f, 1e-2f, 0.0f, 0.0f,
                           0.0f, 0.0f, 1e-2f, 0.0f,
                           0.0f, 0.0f, 0.0f, 1.0f) * YUpToZUp;

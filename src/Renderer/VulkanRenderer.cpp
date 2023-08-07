@@ -1764,6 +1764,7 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
     Frame->JointCount = 0;
     Frame->Backend->JointBuffer = Renderer->PerFrameJointBuffers[FrameID];
     Frame->JointMapping = (m4*)Renderer->PerFrameJointBufferMappings[FrameID];
+    Frame->JointBufferAlignment = TruncateU64ToU32(VK.ConstantBufferAlignment) / sizeof(m4);
 
     Frame->SkinnedMeshVertexCount = 0;
     Frame->Backend->SkinnedMeshVB = Renderer->SkinningBuffers[FrameID];

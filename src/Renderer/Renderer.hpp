@@ -780,6 +780,8 @@ struct render_frame
     u32 UIVertexCount;
     u32 UIDrawCmdCount;
 
+    u32 JointBufferAlignment;
+
     draw_cmd DrawCmds[MaxDrawCmdCount];
     draw_cmd SkinnedDrawCmds[MaxSkinnedDrawCmdCount];
     skinning_cmd SkinningCmds[MaxSkinningCmdCount];
@@ -937,9 +939,6 @@ inline b32 DrawSkinnedMesh(render_frame* Frame,
     if ((Frame->SkinningCmdCount < Frame->MaxSkinningCmdCount) &&
         (Frame->SkinnedDrawCmdCount < Frame->MaxSkinnedDrawCmdCount))
     {
-        const u32 CBAlignment = (u32)VK.ConstantBufferAlignment;
-        const u32 JointBufferAlignment = CBAlignment / sizeof(m4);
-
         // TODO(boti): bounds checking
         u32 DstVertexOffset = Frame->SkinnedMeshVertexCount;
         Frame->SkinnedMeshVertexCount += VertexCount;
@@ -947,7 +946,7 @@ inline b32 DrawSkinnedMesh(render_frame* Frame,
         // TODO(boti): bounds checking
         memcpy(Frame->JointMapping + Frame->JointCount, Pose, JointCount * sizeof(m4));
         u32 JointBufferOffset = Frame->JointCount * sizeof(m4);
-        Frame->JointCount = Align(Frame->JointCount + JointCount, JointBufferAlignment);
+        Frame->JointCount = Align(Frame->JointCount + JointCount, Frame->JointBufferAlignment);
 
         Frame->SkinningCmds[Frame->SkinningCmdCount++] =
         {
