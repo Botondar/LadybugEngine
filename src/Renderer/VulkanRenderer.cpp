@@ -470,44 +470,6 @@ VkResult CreateRenderer(renderer* Renderer,
     
     // Per frame
     {
-        // Draw buffer
-        for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
-        {
-            VkBufferUsageFlags Usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-            umm Size = MiB(2);
-            Result = CreateAndAllocateBuffer(Usage, VK.SharedMemTypes, Size, 
-                                             &Renderer->DrawBuffers[i].Buffer, &Renderer->DrawBuffers[i].Memory);
-            if (Result == VK_SUCCESS)
-            {
-                Renderer->DrawBuffers[i].Size = Size;
-                Result = vkMapMemory(VK.Device, Renderer->DrawBuffers[i].Memory, 0, VK_WHOLE_SIZE, 0, &Renderer->DrawBuffers[i].Mapping);
-                ReturnOnFailure();
-            }
-            else
-            {
-                return Result;
-            }
-        }
-
-        // Vertex stack
-        for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
-        {
-            VkBufferUsageFlags Usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-            umm Size = MiB(8);
-            Result = CreateAndAllocateBuffer(Usage, VK.SharedMemTypes, Size, 
-                                             &Renderer->VertexStacks[i].Buffer, &Renderer->VertexStacks[i].Memory);
-            if (Result == VK_SUCCESS)
-            {
-                Renderer->VertexStacks[i].Size = Size;
-                Result = vkMapMemory(VK.Device, Renderer->VertexStacks[i].Memory, 0, VK_WHOLE_SIZE, 0, &Renderer->VertexStacks[i].Mapping);
-                ReturnOnFailure();
-            }
-            else
-            {
-                return Result;
-            }
-        }
-
         // BAR memory
         {
             u32 MemoryTypeIndex = 0;
@@ -536,6 +498,68 @@ VkResult CreateRenderer(renderer* Renderer,
             Renderer->BARMemoryByteOffset = Result + Size;
             return(Result);
         };
+
+        // Draw buffer
+        {
+            umm Size = MiB(1);
+            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+            {
+                VkBufferCreateInfo BufferInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .size = Size,
+                    .usage = VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                    .queueFamilyIndexCount = 0,
+                    .pQueueFamilyIndices = nullptr,
+                };
+                
+                Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->DrawBuffers[i].Buffer);
+                ReturnOnFailure();
+                VkMemoryRequirements MemoryRequirements = {};
+                vkGetBufferMemoryRequirements(VK.Device, Renderer->DrawBuffers[i].Buffer, &MemoryRequirements);
+
+                VkDeviceSize Offset = PushBARMemory(MemoryRequirements.size, MemoryRequirements.alignment);
+                Result = vkBindBufferMemory(VK.Device, Renderer->DrawBuffers[i].Buffer, Renderer->BARMemory, Offset);
+                ReturnOnFailure();
+
+                Renderer->DrawBuffers[i].Mapping = OffsetPtr(Renderer->BARMemoryMapping, Offset);
+                Renderer->Frames[i].MaxUIDrawCmdCount = Size / sizeof(draw_indirect_cmd);
+            }
+        }
+
+        // Vertex stack
+        {
+            umm Size = MiB(8);
+            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+            {
+                VkBufferUsageFlags Usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+                VkBufferCreateInfo BufferInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .size = Size,
+                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                    .queueFamilyIndexCount = 0,
+                    .pQueueFamilyIndices = nullptr,
+                };
+                Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->VertexStacks[i].Buffer);
+                ReturnOnFailure();
+                VkMemoryRequirements MemoryRequirements = {};
+                vkGetBufferMemoryRequirements(VK.Device, Renderer->VertexStacks[i].Buffer, &MemoryRequirements);
+
+                VkDeviceSize Offset = PushBARMemory(MemoryRequirements.size, MemoryRequirements.alignment);
+                Result = vkBindBufferMemory(VK.Device, Renderer->VertexStacks[i].Buffer, Renderer->BARMemory, Offset);
+                ReturnOnFailure();
+                Renderer->VertexStacks[i].Mapping = OffsetPtr(Renderer->BARMemoryMapping, Offset);
+                Renderer->Frames[i].MaxUIVertexCount = Size / sizeof(ui_vertex);
+            }
+        }
 
         // Per frame uniform data
         {

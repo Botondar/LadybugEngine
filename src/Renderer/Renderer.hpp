@@ -769,6 +769,9 @@ struct render_frame
     static constexpr u32 MaxDrawWidget3DCmdCount    = (1u << 16);
     static constexpr u32 MaxJointCount              = (1u << 17);
 
+    u32 MaxUIDrawCmdCount;
+    u32 MaxUIVertexCount;
+
     u32 DrawCmdCount;
     u32 SkinnedDrawCmdCount;
     u32 SkinningCmdCount;
@@ -816,6 +819,8 @@ inline b32 DrawWidget3D(render_frame* Frame,
                         u32 IndexOffset, u32 IndexCount,
                         m4 Transform, rgba8 Color);
 inline b32 AddLight(render_frame* Frame, light Light);
+
+inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, ui_vertex* VertexArray);
 
 inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
 inline rgba8 PackRGBA(v4 Color);
@@ -1007,5 +1012,28 @@ inline b32 AddLight(render_frame* Frame, light Light)
         Frame->Uniforms.Lights[Frame->Uniforms.LightCount++] = Light;
         Result = true;
     }
+    return(Result);
+}
+
+inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, ui_vertex* VertexArray)
+{
+    b32 Result = false;
+    if ((Frame->UIDrawCmdCount < Frame->MaxUIDrawCmdCount) &&
+        (Frame->UIVertexCount + VertexCount <= Frame->MaxUIVertexCount))
+    {
+        u32 VertexOffset = Frame->UIVertexCount;
+        Frame->UIVertexCount += VertexCount;
+
+        Frame->UIDrawCmds[Frame->UIDrawCmdCount++] = 
+        {
+            .VertexCount = VertexCount,
+            .InstanceCount = 1,
+            .VertexOffset = VertexOffset,
+            .InstanceOffset = 0,
+        };
+        memcpy(Frame->UIVertices + VertexOffset, VertexArray, VertexCount * sizeof(ui_vertex));
+        Result = true;
+    }
+
     return(Result);
 }

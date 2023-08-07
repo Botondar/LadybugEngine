@@ -99,6 +99,9 @@ void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color)
         { { P1.x, P2.y }, { UV1.x, UV2.y }, Color },
     };
 
+#if 1
+    DrawTriangleList2D(Frame, CountOf(VertexData), VertexData);
+#else
     if (BumpBuffer_(&Frame->Backend->DrawBuffer, sizeof(VkDrawIndirectCommand)) && 
         BumpBuffer_(&Frame->Backend->VertexStack, sizeof(VertexData)))
     {
@@ -113,6 +116,7 @@ void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color)
         memcpy(Frame->UIVertices + Frame->UIVertexCount, VertexData, sizeof(VertexData));
         Frame->UIVertexCount += CountOf(VertexData);
     }
+#endif
 }
 
 //
