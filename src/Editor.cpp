@@ -143,22 +143,36 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             {
                 Entity->DoAnimation = !Entity->DoAnimation;
             }
-    
+
+            // Gather the animations for the entity's skin
+            u32 AnimationCount = 0;
+            u32 AnimationIDs[9] = { 0 };
+            for (u32 AnimationIndex = 0; AnimationIndex < Assets->AnimationCount; AnimationIndex++)
+            {
+                animation* Animation = Assets->Animations + AnimationIndex;
+                if (Animation->SkinID == Entity->SkinID)
+                {
+                    AnimationIDs[AnimationCount++] = AnimationIndex;
+                    if (AnimationCount == CountOf(AnimationIDs))
+                    {
+                        break;
+                    }
+                }
+            }
+
             if (WasPressed(IO->Keys[SC_0]))
             {
                 Entity->CurrentAnimationID = 0;
                 Entity->AnimationCounter = 0.0f;
             }
+
             for (u32 Scancode = SC_1; Scancode <= SC_9; Scancode++)
             {
                 if (WasPressed(IO->Keys[Scancode]))
                 {
-                    u32 Index = Scancode - SC_1 + 1;
-                    if (Index < Game->Assets->AnimationCount)
-                    {
-                        Entity->CurrentAnimationID = Index;
-                        Entity->AnimationCounter = 0.0f;
-                    }
+                    u32 Index = Scancode - SC_1;
+                    Entity->CurrentAnimationID = AnimationIDs[Index];
+                    Entity->AnimationCounter = 0.0f;
                 }
             }
         }
