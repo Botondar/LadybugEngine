@@ -86,6 +86,13 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
             f32 IndicatorSize = 5.0f;
             PushRect(Frame, { PlayX - IndicatorSize, MinY }, { PlayX + IndicatorSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
 
+            for (u32 KeyFrameIndex = 0; KeyFrameIndex < Animation->KeyFrameCount; KeyFrameIndex++)
+            {
+                f32 Timestamp = Animation->KeyFrameTimestamps[KeyFrameIndex];
+                f32 X = MinX + ExtentX * (Timestamp / MaxTimestamp);
+                PushRect(Frame, { X - 0.5f, MinY }, { X + 0.5f, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0x00));
+            }
+
             if (PointRectOverlap(GameIO->Mouse.P, { { MinX, MinY}, { MaxX, MaxY } }))
             {
                 HotID = PlaybackID;
