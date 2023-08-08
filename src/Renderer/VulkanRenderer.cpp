@@ -1571,10 +1571,12 @@ geometry_buffer_allocation UploadVertexData(renderer* Renderer,
 
 texture_id PushTexture(renderer* Renderer, texture_flags Flags,
                        u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
-                       VkFormat Format, texture_swizzle Swizzle, 
+                       format InFormat, texture_swizzle Swizzle, 
                        const void* Data)
 {
     texture_id ID = { INVALID_INDEX_U32 };
+
+    VkFormat Format = FormatTable[InFormat];
 
     texture_manager* TextureManager = &Renderer->TextureManager;
     ID = CreateTexture2D(TextureManager, Flags, Width, Height, MipCount, ArrayCount, Format, Swizzle);

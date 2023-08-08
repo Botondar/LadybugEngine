@@ -1,7 +1,5 @@
 #pragma once
 
-inline bool IsValid(texture_id ID) { return ID.Value != U32_MAX; }
-
 struct texture_manager
 {
     static constexpr u32 MaxTextureCount = 1u << 18;

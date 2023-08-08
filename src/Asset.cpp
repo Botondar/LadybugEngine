@@ -48,14 +48,14 @@ lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scra
     // Default textures
     {
         u32 Value = 0xFFFFFFFFu;
-        texture_id Whiteness = PushTexture(Renderer, TextureFlag_None, 1, 1, 1, 1, VK_FORMAT_R8G8B8A8_SRGB, {}, &Value);
+        texture_id Whiteness = PushTexture(Renderer, TextureFlag_None, 1, 1, 1, 1, Format_R8G8B8A8_SRGB, {}, &Value);
 
         Assets->DefaultDiffuseID = Whiteness;
         Assets->DefaultMetallicRoughnessID = Whiteness;
     }
     {
         u16 Value = 0x8080u;
-        Assets->DefaultNormalID = PushTexture(Renderer, TextureFlag_None, 1, 1, 1, 1, VK_FORMAT_R8G8_UNORM, {}, &Value);
+        Assets->DefaultNormalID = PushTexture(Renderer, TextureFlag_None, 1, 1, 1, 1, Format_R8G8_UNorm, {}, &Value);
     }
 
     // Null skin
@@ -120,7 +120,7 @@ lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scra
         Assets->ParticleArrayID = PushTexture(
             Renderer, TextureFlag_Special,
             ParticleWidth, ParticleHeight, 1, ParticleCount, 
-            VK_FORMAT_R8_UNORM, { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
+            Format_R8_UNorm, { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
             Memory);
         if (!IsValid(Assets->ParticleArrayID))
         {
@@ -224,7 +224,7 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Rendere
 
             Assets->DefaultFontTextureID = PushTexture(Renderer, TextureFlag_None,
                                                        FontFile->Bitmap.Width, FontFile->Bitmap.Height, 1, 1,
-                                                       VK_FORMAT_R8_UNORM, 
+                                                       Format_R8_UNorm, 
                                                        {
                                                            .R = Swizzle_One,
                                                            .G = Swizzle_One,
@@ -363,30 +363,30 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 nvtt::OutputOptions OutputOptions;
 
                 nvtt::Format CompressFormat = nvtt::Format_RGB;
-                VkFormat Format = VK_FORMAT_UNDEFINED;
+                format Format = Format_Undefined;
                 switch (Type)
                 {
                     case texture_type::Diffuse:
                     {
                         if (AlphaMode == GLTF_ALPHA_MODE_OPAQUE)
                         {
-                            Format = VK_FORMAT_BC1_RGB_SRGB_BLOCK;
+                            Format = Format_BC1_RGB_SRGB;
                             CompressFormat = nvtt::Format_BC1;
                         }
                         else
                         {
-                            Format = VK_FORMAT_BC3_SRGB_BLOCK; 
+                            Format =  Format_BC3_SRGB; 
                             CompressFormat = nvtt::Format_BC3;
                         }
                     } break;
                     case texture_type::Normal:
                     {
-                        Format = VK_FORMAT_BC5_UNORM_BLOCK; 
+                        Format = Format_BC5_UNorm; 
                         CompressFormat = nvtt::Format_BC5;
                     } break;
                     case texture_type::Material:
                     {
-                        Format = VK_FORMAT_BC3_UNORM_BLOCK; 
+                        Format = Format_BC3_UNorm; 
                         CompressFormat = nvtt::Format_BC3;
                     } break;
                 }

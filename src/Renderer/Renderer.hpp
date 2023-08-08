@@ -3,8 +3,6 @@
 #include <LadybugLib/Core.hpp>
 #include <LadybugLib/Intrinsics.hpp>
 #include <LadybugLib/String.hpp>
-#include "Font.hpp"
-//#include "Platform.hpp"
 
 //
 // Config
@@ -449,6 +447,8 @@ struct texture_id
 {
     u32 Value;
 };
+inline bool IsValid(texture_id ID) { return ID.Value != U32_MAX; }
+
 
 // NOTE(boti): Normally textures get put into the bindless descriptor heap,
 // specifying a texture as "Special" prevents this, and it will be the user code's
@@ -764,6 +764,18 @@ struct render_frame
 
 renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena);
 
+geometry_buffer_allocation UploadVertexData(renderer* Renderer, 
+                                            u32 VertexCount, const vertex* VertexData,
+                                            u32 IndexCount, const vert_index* IndexData);
+texture_id PushTexture(renderer* Renderer, texture_flags Flags,
+                       u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
+                       format Format, texture_swizzle Swizzle,
+                       const void* Data);
+
+//
+// Frame rendering
+//
+
 render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHeight);
 void EndRenderFrame(render_frame* Frame);
 
@@ -786,15 +798,15 @@ inline b32 AddLight(render_frame* Frame, light Light);
 
 inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* VertexArray);
 
+//
+// Helpers
+//
 inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
 inline rgba8 PackRGBA(v4 Color);
 inline u32 GetMaxMipCount(u32 Width, u32 Height);
 inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFFFFFFu);
 
 #include "Renderer/Pipelines.hpp"
-
-// TODO(boti): remove this
-#include "VulkanRenderer.hpp"
 
 //
 // Implementation
