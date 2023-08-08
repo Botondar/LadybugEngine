@@ -32,6 +32,13 @@ struct animation_key_frame
     trs_transform JointTransforms[skin::MaxJointCount];
 };
 
+struct joint_mask
+{
+    u64 Bits[skin::MaxJointCount / 64];
+};
+
+inline b32 JointMaskIndexFromJointIndex(u32 JointIndex, u32* ArrayIndex, u32* BitIndex);
+
 struct animation
 {
     u32 SkinID;
@@ -40,7 +47,11 @@ struct animation
     f32 MaxTimestamp;
     f32* KeyFrameTimestamps;
     animation_key_frame* KeyFrames;
+
+    joint_mask ActiveJoints;
 };
+
+inline b32 IsJointActive(animation* Animation, u32 JointIndex);
 
 enum particle_texture : u32
 {
@@ -193,5 +204,29 @@ inline m4 TRSToM4(trs_transform Transform)
               0.0f, 0.0f, 0.0f, 1.0f);
 
     Result = T * R * S;
+    return(Result);
+}
+
+inline b32 JointMaskIndexFromJointIndex(u32 JointIndex, u32* ArrayIndex, u32* BitIndex)
+{
+    b32 Result = false;
+    if (JointIndex < skin::MaxJointCount)
+    {
+        *ArrayIndex = JointIndex / 64;
+        *BitIndex = JointIndex % 64;
+        Result = true;
+    }
+    return(Result);
+}
+
+inline b32 IsJointActive(animation* Animation, u32 JointIndex)
+{
+    b32 Result = false;
+    u32 ArrayIndex, BitIndex;
+    if (JointMaskIndexFromJointIndex(JointIndex, &ArrayIndex, &BitIndex))
+    {
+        u64 Mask = 1llu << BitIndex;
+        Result = (Animation->ActiveJoints.Bits[ArrayIndex] & Mask) != 0;
+    }
     return(Result);
 }

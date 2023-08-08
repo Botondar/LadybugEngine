@@ -84,6 +84,7 @@ lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scra
                 .Scale = { 1.0f, 1.0f, 1.0f },
             };
         }
+        NullAnimation->ActiveJoints = {};
     }
 
     // Particle textures
@@ -957,6 +958,12 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             AnimationAsset->KeyFrameTimestamps = PushArray<f32>(Assets->Arena, KeyFrameCount);
             AnimationAsset->KeyFrames = PushArray<animation_key_frame>(Assets->Arena, KeyFrameCount);
             memcpy(AnimationAsset->KeyFrameTimestamps, KeyFrameTimestamps, KeyFrameCount * sizeof(f32));
+
+            // TODO(boti): We need to rework the import here to actually figure out which joints are active
+            // during an animation and which ones aren't, and set the mask appropriately!
+            // Currently when a joint is missing from an animation, the bind-pose is broadcast through all key-frames
+            // of the animation.
+            memset(&AnimationAsset->ActiveJoints, 0xFF, sizeof(AnimationAsset->ActiveJoints));
 
             skin* SkinAsset = Assets->Skins + AnimationAsset->SkinID;
             for (u32 KeyFrameIndex = 0; KeyFrameIndex < KeyFrameCount; KeyFrameIndex++)
