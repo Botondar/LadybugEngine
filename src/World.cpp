@@ -279,7 +279,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     {
                         Entity->AnimationCounter += dt;
                         f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
-                        Entity->AnimationCounter = Modulo(Entity->AnimationCounter, LastKeyFrameTimestamp);
+                        Entity->AnimationCounter = Modulo0(Entity->AnimationCounter, LastKeyFrameTimestamp);
                     }
 
                     u32 KeyFrameIndex = 0;

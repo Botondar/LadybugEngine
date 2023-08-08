@@ -294,7 +294,7 @@ inline f32 Ln(f32 x) { return logf(x); }
 inline f32 Pow(f32 a, f32 b) { return powf(a, b); }
 inline f32 Ratio0(f32 Numerator, f32 Denominator);
 inline f32 Modulo(f32 x, f32 d) { return fmodf(x, d); }
-
+inline f32 Modulo0(f32 x, f32 d);
 
 template<typename T> inline constexpr 
 T Min(T a, T b);
@@ -645,6 +645,12 @@ inline f32 RandBetween(entropy32* Entropy, f32 Minimum, f32 Maximum)
 //
 // Math
 //
+
+inline f32 Modulo0(f32 x, f32 d)
+{
+    f32 Result = (d == 0.0f) ? 0.0f : Modulo(x, d);
+    return(Result);
+}
 
 inline f32 Ratio0(f32 Numerator, f32 Denominator)
 {
