@@ -262,13 +262,16 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
             if (Entity->Flags & EntityFlag_Skin)
             {
-                u32 JointCount = 0;
+                Assert(Entity->SkinID < Assets->SkinCount);
+                skin* Skin = Assets->Skins + Entity->SkinID;
                 m4 Pose[skin::MaxJointCount] = {};
+                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                {
+                    Pose[JointIndex] = TRSToM4(Skin->BindPose[JointIndex]);
+                }
 
                 // Animation
                 {
-                    skin* Skin = Assets->Skins + Entity->SkinID;
-                    JointCount = Skin->JointCount;
                     animation* Animation = Assets->Animations + Entity->CurrentAnimationID;
 
                     if (Entity->DoAnimation)
@@ -304,24 +307,24 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     animation_key_frame* NextFrame = Animation->KeyFrames + NextKeyFrameIndex;
                     for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
                     {
-                        trs_transform* CurrentTransform = CurrentFrame->JointTransforms + JointIndex;
-                        trs_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
-                        trs_transform Transform = 
+                        if (IsJointActive(Animation, JointIndex))
                         {
-                            .Rotation = Normalize(Lerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor)),
-                            .Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor),
-                            .Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor),
-                        };
+                            trs_transform* CurrentTransform = CurrentFrame->JointTransforms + JointIndex;
+                            trs_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
+                            trs_transform Transform = 
+                            {
+                                .Rotation = Normalize(Lerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor)),
+                                .Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor),
+                                .Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor),
+                            };
 
-                        m4 Matrix = TRSToM4(Transform);
+                            Pose[JointIndex] = TRSToM4(Transform);
+                        }
+
                         u32 ParentIndex = Skin->JointParents[JointIndex];
                         if (ParentIndex != U32_MAX)
                         {
-                            Pose[JointIndex] = Pose[ParentIndex] * Matrix;
-                        }
-                        else
-                        {
-                            Pose[JointIndex] = Matrix;
+                            Pose[JointIndex] = Pose[ParentIndex] * Pose[JointIndex];
                         }
                     }
 
@@ -335,7 +338,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
                 DrawSkinnedMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
                                 Entity->Transform, Assets->Materials[MaterialID],
-                                JointCount, Pose);
+                                Skin->JointCount, Pose);
             }
             else
             {
