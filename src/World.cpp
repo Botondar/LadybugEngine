@@ -271,72 +271,67 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     Pose[JointIndex] = TRSToM4(Skin->BindPose[JointIndex]);
                 }
 
-                // Animation
+                animation* Animation = Assets->Animations + Entity->CurrentAnimationID;
+                if (Entity->DoAnimation)
                 {
-                    animation* Animation = Assets->Animations + Entity->CurrentAnimationID;
-
-                    if (Entity->DoAnimation)
+                    Entity->AnimationCounter += dt;
+                    f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
+                    Entity->AnimationCounter = Modulo0(Entity->AnimationCounter, LastKeyFrameTimestamp);
+                }
+                
+                u32 KeyFrameIndex = 0;
+                {
+                    u32 MinIndex = 0;
+                    u32 MaxIndex = Animation->KeyFrameCount - 1;
+                    while (MinIndex <= MaxIndex)
                     {
-                        Entity->AnimationCounter += dt;
-                        f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
-                        Entity->AnimationCounter = Modulo0(Entity->AnimationCounter, LastKeyFrameTimestamp);
+                        u32 Index = (MinIndex + MaxIndex) / 2;
+                        f32 t = Animation->KeyFrameTimestamps[Index];
+                        if      (Entity->AnimationCounter < t) MaxIndex = Index - 1;
+                        else if (Entity->AnimationCounter > t) MinIndex = Index + 1;
+                        else break; 
                     }
-
-                    u32 KeyFrameIndex = 0;
+                    KeyFrameIndex = MinIndex == 0 ? 0 : MinIndex - 1;
+                }
+                
+                u32 NextKeyFrameIndex = (KeyFrameIndex + 1) % Animation->KeyFrameCount;
+                f32 Timestamp0 = Animation->KeyFrameTimestamps[KeyFrameIndex];
+                f32 Timestamp1 = Animation->KeyFrameTimestamps[NextKeyFrameIndex];
+                f32 KeyFrameDelta = Timestamp1 - Timestamp0;
+                f32 BlendStart = Entity->AnimationCounter - Timestamp0;
+                f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
+                
+                animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
+                animation_key_frame* NextFrame = Animation->KeyFrames + NextKeyFrameIndex;
+                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                {
+                    if (IsJointActive(Animation, JointIndex))
                     {
-                        u32 MinIndex = 0;
-                        u32 MaxIndex = Animation->KeyFrameCount - 1;
-                        while (MinIndex <= MaxIndex)
+                        trs_transform* CurrentTransform = CurrentFrame->JointTransforms + JointIndex;
+                        trs_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
+                        trs_transform Transform = 
                         {
-                            u32 Index = (MinIndex + MaxIndex) / 2;
-                            f32 t = Animation->KeyFrameTimestamps[Index];
-                            if      (Entity->AnimationCounter < t) MaxIndex = Index - 1;
-                            else if (Entity->AnimationCounter > t) MinIndex = Index + 1;
-                            else break; 
-                        }
-                        KeyFrameIndex = MinIndex == 0 ? 0 : MinIndex - 1;
+                            .Rotation = Normalize(Lerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor)),
+                            .Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor),
+                            .Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor),
+                        };
+                
+                        Pose[JointIndex] = TRSToM4(Transform);
                     }
-
-                    u32 NextKeyFrameIndex = (KeyFrameIndex + 1) % Animation->KeyFrameCount;
-                    f32 Timestamp0 = Animation->KeyFrameTimestamps[KeyFrameIndex];
-                    f32 Timestamp1 = Animation->KeyFrameTimestamps[NextKeyFrameIndex];
-                    f32 KeyFrameDelta = Timestamp1 - Timestamp0;
-                    f32 BlendStart = Entity->AnimationCounter - Timestamp0;
-                    f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
-
-                    animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
-                    animation_key_frame* NextFrame = Animation->KeyFrames + NextKeyFrameIndex;
-                    for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                
+                    u32 ParentIndex = Skin->JointParents[JointIndex];
+                    if (ParentIndex != U32_MAX)
                     {
-                        if (IsJointActive(Animation, JointIndex))
-                        {
-                            trs_transform* CurrentTransform = CurrentFrame->JointTransforms + JointIndex;
-                            trs_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
-                            trs_transform Transform = 
-                            {
-                                .Rotation = Normalize(Lerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor)),
-                                .Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor),
-                                .Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor),
-                            };
-
-                            Pose[JointIndex] = TRSToM4(Transform);
-                        }
-
-                        u32 ParentIndex = Skin->JointParents[JointIndex];
-                        if (ParentIndex != U32_MAX)
-                        {
-                            Pose[JointIndex] = Pose[ParentIndex] * Pose[JointIndex];
-                        }
-                    }
-
-                    // NOTE(boti): This _cannot_ be folded into the above loop, because the parent transforms must not contain
-                    // the inverse bind transform when propagating the transforms down the hierarchy
-                    for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
-                    {
-                        Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
+                        Pose[JointIndex] = Pose[ParentIndex] * Pose[JointIndex];
                     }
                 }
-
+                
+                // NOTE(boti): This _cannot_ be folded into the above loop, because the parent transforms must not contain
+                // the inverse bind transform when propagating the transforms down the hierarchy
+                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                {
+                    Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
+                }
                 DrawSkinnedMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
                                 Entity->Transform, Assets->Materials[MaterialID],
                                 Skin->JointCount, Pose);
