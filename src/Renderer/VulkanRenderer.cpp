@@ -1,5 +1,7 @@
 #include "VulkanRenderer.hpp"
 
+vulkan VK;
+
 //#define ReturnOnFailure() if (Result != VK_SUCCESS) return Result
 #define ReturnOnFailure() if (Result != VK_SUCCESS) return nullptr
 

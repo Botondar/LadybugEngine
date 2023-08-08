@@ -41,7 +41,6 @@ lbfn bool IntersectFrustum(const frustum* Frustum, const mmbox* Box)
     return Result;
 }
 
-vulkan VK;
 platform_api Platform;
 
 extern "C"
