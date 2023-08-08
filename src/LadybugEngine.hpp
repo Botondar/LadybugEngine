@@ -39,7 +39,7 @@ struct game_state
     memory_arena TotalArena;
     memory_arena TransientArena;
 
-    vulkan Vulkan;
+    //vulkan Vulkan;
     renderer* Renderer;
 
     u64 FrameID;

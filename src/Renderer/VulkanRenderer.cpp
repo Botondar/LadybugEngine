@@ -1,6 +1,7 @@
 #include "VulkanRenderer.hpp"
 
-#define ReturnOnFailure() if (Result != VK_SUCCESS) return Result
+//#define ReturnOnFailure() if (Result != VK_SUCCESS) return Result
+#define ReturnOnFailure() if (Result != VK_SUCCESS) return nullptr
 
 static VkFormat FormatTable[Format_Count] = 
 {
@@ -227,11 +228,13 @@ internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTy
 
 internal VkResult CreateComputeShader(const char* Path, memory_arena* TempArena, VkPipelineLayout PipelineLayout);
 
-VkResult CreateRenderer(renderer* Renderer, 
-                        memory_arena* Arena, 
-                        memory_arena* TempArena)
+renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
 {
-    VkResult Result = VK_SUCCESS;
+    renderer* Renderer = PushStruct<renderer>(Arena);
+    if (!Renderer) return nullptr;
+    VkResult Result = InitializeVulkan(&Renderer->Vulkan);
+    ReturnOnFailure();
+    VK = Renderer->Vulkan;
 
     {
         VkCommandPoolCreateInfo PoolInfo = 
@@ -289,7 +292,7 @@ VkResult CreateRenderer(renderer* Renderer,
     // Surface
     {
         Renderer->Surface = Platform.CreateVulkanSurface(VK.Instance);
-        if (!Renderer->Surface) return VK_ERROR_UNKNOWN;
+        if (!Renderer->Surface) return nullptr;
 
         constexpr u32 MaxSurfaceFormatCount = 32;
         u32 SurfaceFormatCount = MaxSurfaceFormatCount;
@@ -621,12 +624,12 @@ VkResult CreateRenderer(renderer* Renderer,
                     }
                     else
                     {
-                        return(Result);
+                        return(nullptr);
                     }
                 }
                 else
                 {
-                    return(Result);
+                    return(nullptr);
                 }
             }
         }
@@ -660,12 +663,12 @@ VkResult CreateRenderer(renderer* Renderer,
                     }
                     else
                     {
-                        return(Result);
+                        return(nullptr);
                     }
                 }
                 else
                 {
-                    return(Result);
+                    return(nullptr);
                 }
             }
         }
@@ -744,12 +747,12 @@ VkResult CreateRenderer(renderer* Renderer,
                         }
                         else
                         {
-                            return(Result);
+                            return(nullptr);
                         }
                     }
                     else
                     {
-                        return(Result);
+                        return(nullptr);
                     }
 
                     vkFreeMemory(VK.Device, Memory, nullptr);
@@ -761,7 +764,7 @@ VkResult CreateRenderer(renderer* Renderer,
             }
             else
             {
-                return(Result);
+                return(nullptr);
             }
 
             for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
@@ -837,7 +840,7 @@ VkResult CreateRenderer(renderer* Renderer,
             if (!BitScanForward(&MemoryTypeIndex, MemoryTypes))
             {
                 UnhandledError("No suitable memory type for shadow maps");
-                return VK_ERROR_INITIALIZATION_FAILED;
+                return(nullptr);
             }
 
             vkDestroyImage(VK.Device, DummyImage, nullptr);
@@ -890,7 +893,7 @@ VkResult CreateRenderer(renderer* Renderer,
         }
         else
         {
-            return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+            return(nullptr);
         }
         
         VkImageViewCreateInfo ViewInfo = 
@@ -1055,7 +1058,7 @@ VkResult CreateRenderer(renderer* Renderer,
                 }
                 else
                 {
-                    return VK_ERROR_INITIALIZATION_FAILED;
+                    return(nullptr);
                 }
             }
             else if (Info->Type == PipelineType_Graphics)
@@ -1097,7 +1100,7 @@ VkResult CreateRenderer(renderer* Renderer,
                     }
                     else
                     {
-                        return VK_ERROR_INITIALIZATION_FAILED;
+                        return(nullptr);
                     }
                 }
                 if (Info->EnabledStages & PipelineStage_PS)
@@ -1123,7 +1126,7 @@ VkResult CreateRenderer(renderer* Renderer,
                     }
                     else
                     {
-                        return VK_ERROR_INITIALIZATION_FAILED;
+                        return(nullptr);
                     }
                 }
 
@@ -1344,7 +1347,7 @@ VkResult CreateRenderer(renderer* Renderer,
         }
     }
 
-    return Result;
+    return(Renderer);
 }
 
 lbfn VkResult ResizeRenderTargets(renderer* Renderer)

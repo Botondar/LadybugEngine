@@ -65,6 +65,8 @@ struct backend_render_frame
 
 struct renderer
 {
+    vulkan Vulkan;
+
     VkSurfaceFormatKHR SurfaceFormat;
     VkSurfaceKHR Surface;
 
@@ -149,10 +151,6 @@ struct renderer
     render_frame Frames[MaxSwapchainImageCount];
     backend_render_frame BackendFrames[MaxSwapchainImageCount];
 };
-
-VkResult CreateRenderer(renderer* Renderer, 
-                        memory_arena* Arena, 
-                        memory_arena* TempArena);
 
 void BeginSceneRendering(render_frame* Frame);
 void EndSceneRendering(render_frame* Frame);

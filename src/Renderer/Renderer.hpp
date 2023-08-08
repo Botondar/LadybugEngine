@@ -752,6 +752,7 @@ struct render_frame
     frame_uniform_data Uniforms;
 };
 
+renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena);
 
 render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHeight);
 void EndRenderFrame(render_frame* Frame);
@@ -783,7 +784,7 @@ inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFF
 #include "Renderer/Pipelines.hpp"
 
 // TODO(boti): remove this
-//#include "VulkanRenderer.hpp"
+#include "VulkanRenderer.hpp"
 
 //
 // Implementation

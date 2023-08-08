@@ -64,7 +64,15 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         constexpr size_t TransientArenaSize = GiB(1);
         GameState->TransientArena = InitializeArena(TransientArenaSize, PushSize(&GameState->TotalArena, TransientArenaSize, 64));
 
-        if (InitializeVulkan(&GameState->Vulkan) == VK_SUCCESS)
+#if 1
+        GameState->Renderer = CreateRenderer(&GameState->TotalArena, &GameState->TransientArena);
+        if (!GameState->Renderer)
+        {
+            GameIO->bQuitRequested = true;
+            return;
+        }
+#else
+        if (InitializeVulkan(GameState->Vulkan) == VK_SUCCESS)
         {
             VK = GameState->Vulkan;
         }
@@ -80,6 +88,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             UnhandledError("Renderer initialization failed");
             GameIO->bQuitRequested = true;
         }
+#endif
 
         assets* Assets = GameState->Assets = PushStruct<assets>(&GameState->TotalArena);
         Assets->Arena = &GameState->TotalArena;
@@ -103,7 +112,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         World->Camera.Yaw = 0.5f * Pi;
     }
 
-    VK = GameState->Vulkan;
+    VK = GameState->Renderer->Vulkan;
 
     ResetArena(&GameState->TransientArena);
 
