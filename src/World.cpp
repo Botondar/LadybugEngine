@@ -271,6 +271,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     Pose[JointIndex] = TRSToM4(Skin->BindPose[JointIndex]);
                 }
 
+                Assert(Entity->CurrentAnimationID < Assets->AnimationCount);
                 animation* Animation = Assets->Animations + Entity->CurrentAnimationID;
                 if (Entity->DoAnimation)
                 {

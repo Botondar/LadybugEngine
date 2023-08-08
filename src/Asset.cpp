@@ -1197,32 +1197,23 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                         UnimplementedCodePath;
                     }
 
-                    u32 MeshID = BaseMeshIndex + MeshOffset;
-                    u32 SkinID = BaseSkinIndex + Node->SkinIndex;
-
-                    // NOTE(boti): set default animation (for debugging!!!)
-                    u32 AnimationID = U32_MAX;
-                    for (u32 AnimationIt = 0; AnimationIt < Assets->AnimationCount; AnimationIt++)
+                    for (u32 PrimitiveIndex = 0; PrimitiveIndex < Mesh->PrimitiveCount; PrimitiveIndex++)
                     {
-                        animation* Animation = Assets->Animations + AnimationIt;
-                        if (Animation->SkinID == SkinID)
+                        u32 MeshID = BaseMeshIndex + MeshOffset + PrimitiveIndex;
+                        u32 SkinID = BaseSkinIndex + Node->SkinIndex;
+                        u32 AnimationID = 0;
+
+                        World->Entities[World->EntityCount++] = 
                         {
-                            AnimationID = AnimationIt;
-                            break;
-                        }
+                            .Flags = EntityFlag_Mesh|EntityFlag_Skin,
+                            .Transform = NodeTransform,
+                            .MeshID = MeshID,
+                            .SkinID = SkinID,
+                            .CurrentAnimationID = AnimationID,
+                            .DoAnimation = false,
+                            .AnimationCounter = 0.0f,   
+                        };
                     }
-
-                    World->Entities[World->EntityCount++] = 
-                    {
-                        .Flags = EntityFlag_Mesh|EntityFlag_Skin,
-                        .Transform = NodeTransform,
-                        .MeshID = MeshID,
-                        .SkinID = SkinID,
-                        .CurrentAnimationID = AnimationID,
-                        .DoAnimation = true, // NOTE(boti): for debug, default should be false
-                        .AnimationCounter = 0.0f,
-                        
-                    };
                 }
             }
             else
