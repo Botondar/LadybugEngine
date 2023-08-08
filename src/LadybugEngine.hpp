@@ -1,9 +1,7 @@
 #pragma once
 
 /*
-- Render pass cleanup:
-    - Certain render passes (SSAO, Bloom, etc.) should have struct definitions that
-      contain their inputs/parameters, descriptor definitions, etc.
+TODO: list
 - Decals
 - Multiple lights/shadows
 - Visibility buffer rendering
