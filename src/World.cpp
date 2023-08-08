@@ -566,7 +566,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     {
         light* Light = World->AdHocLights + LightIndex;
         v3 dP = { RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy) };
-        dP = RandBetween(&World->EffectEntropy, 0.5f, 1.5f) * dP;
+        dP = RandBetween(&World->EffectEntropy, 1.5f, 4.5f) * dP;
         Light->P.xyz += dP * dt;
         Light->P.x = Clamp(Light->P.x, World->AdHocLightBounds.Min.x, World->AdHocLightBounds.Max.x);
         Light->P.y = Clamp(Light->P.y, World->AdHocLightBounds.Min.y, World->AdHocLightBounds.Max.y);
@@ -578,8 +578,8 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             Frame->Particles[Cmd->FirstParticle + LightIndex] = 
             {
                 .P = Light->P.xyz,
-                .TextureIndex = Particle_Star04,
-                .Color = { Light->E.x, Light->E.y, Light->E.z, 2.5f },
+                .TextureIndex = Particle_Star07,
+                .Color = { Light->E.x, Light->E.y, Light->E.z, 5.0f },
                 .HalfExtent = { 0.1f, 0.1f },
             };
         }
