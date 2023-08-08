@@ -157,6 +157,7 @@ struct assets
 
     u32 ArrowMeshID;
     u32 SphereMeshID;
+    u32 CubeMeshID;
 
     static constexpr u32 MaxMeshCount = 1u << 16;
     static constexpr u32 MaxMaterialCount = 1u << 14;

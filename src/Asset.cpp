@@ -1,3 +1,4 @@
+internal mesh CreateCubeMesh(memory_arena* Arena);
 internal mesh CreateSphereMesh(memory_arena* Arena);
 internal mesh CreateArrowMesh(memory_arena* Arena);
 
@@ -130,32 +131,26 @@ lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scra
 
     LoadDebugFont(Scratch, Assets, Renderer, "data/liberation-mono.lbfnt");
 
+    auto AddMesh = [Assets, Renderer](mesh Mesh) -> u32
+    {
+        u32 Result = U32_MAX;
+        if (Assets->MeshCount < Assets->MaxMeshCount)
+        {
+            geometry_buffer_allocation Allocation = UploadVertexData(Renderer, 
+                Mesh.VertexCount, Mesh.VertexData,
+                Mesh.IndexCount, Mesh.IndexData);
+            Result = Assets->MeshCount++;
+            Assets->Meshes[Result] = Allocation;
+            Assets->MeshBoxes[Result] = Mesh.Box;
+            Assets->MeshMaterialIndices[Result] = 0;
+        }
+        return(Result);
+    };
+
     // Default meshes
-    {
-        mesh ArrowMesh = CreateArrowMesh(Scratch);
-        geometry_buffer_allocation ArrowAllocation = UploadVertexData(Renderer,
-                                                                      ArrowMesh.VertexCount, ArrowMesh.VertexData, 
-                                                                      ArrowMesh.IndexCount, ArrowMesh.IndexData);
-
-        Assert(Assets->MeshCount < Assets->MaxMeshCount);
-        Assets->ArrowMeshID = Assets->MeshCount++;
-        Assets->Meshes[Assets->ArrowMeshID] = ArrowAllocation;
-        Assets->MeshBoxes[Assets->ArrowMeshID] = ArrowMesh.Box;
-        Assets->MeshMaterialIndices[Assets->ArrowMeshID] = 0;
-    }
-
-    {
-        mesh SphereMesh = CreateSphereMesh(Scratch);
-        geometry_buffer_allocation SphereAllocation = UploadVertexData(Renderer,
-                                                                       SphereMesh.VertexCount, SphereMesh.VertexData,
-                                                                       SphereMesh.IndexCount, SphereMesh.IndexData);
-
-        Assert(Assets->MeshCount < Assets->MaxMeshCount);
-        Assets->SphereMeshID = Assets->MeshCount++;
-        Assets->Meshes[Assets->SphereMeshID] = SphereAllocation;
-        Assets->MeshBoxes[Assets->SphereMeshID] = SphereMesh.Box;
-        Assets->MeshMaterialIndices[Assets->SphereMeshID] = 0;
-    }
+    Assets->ArrowMeshID = AddMesh(CreateArrowMesh(Scratch));
+    Assets->SphereMeshID = AddMesh(CreateSphereMesh(Scratch));
+    Assets->CubeMeshID = AddMesh(CreateCubeMesh(Scratch));
 
     return(Result);
 }
@@ -1203,6 +1198,66 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
     }
 }
 
+internal mesh CreateCubeMesh(memory_arena* Arena)
+{
+    mesh Result = {};
+    Result.Box = { { -1.0f, -1.0f, -1.0f }, { +1.0f, +1.0f, +1.0f } };
+
+    vertex VertexData[] = 
+    {
+        { { -1.0f, -1.0f, -1.0f }, { 0.0f, 0.0f, -1.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { +1.0f, -1.0f, -1.0f }, { 0.0f, 0.0f, -1.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { -1.0f, +1.0f, -1.0f }, { 0.0f, 0.0f, -1.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { +1.0f, +1.0f, -1.0f }, { 0.0f, 0.0f, -1.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+
+        { { -1.0f, -1.0f, +1.0f }, { 0.0f, 0.0f, +1.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { +1.0f, -1.0f, +1.0f }, { 0.0f, 0.0f, +1.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { -1.0f, +1.0f, +1.0f }, { 0.0f, 0.0f, +1.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { +1.0f, +1.0f, +1.0f }, { 0.0f, 0.0f, +1.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+
+        { { -1.0f, -1.0f, -1.0f }, { 0.0f, -1.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { +1.0f, -1.0f, -1.0f }, { 0.0f, -1.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { -1.0f, -1.0f, +1.0f }, { 0.0f, -1.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { +1.0f, -1.0f, +1.0f }, { 0.0f, -1.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+
+        { { -1.0f, +1.0f, -1.0f }, { 0.0f, +1.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { +1.0f, +1.0f, -1.0f }, { 0.0f, +1.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { -1.0f, +1.0f, +1.0f }, { 0.0f, +1.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { +1.0f, +1.0f, +1.0f }, { 0.0f, +1.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+
+        { { -1.0f, -1.0f, -1.0f }, { -1.0f, 0.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { -1.0f, +1.0f, -1.0f }, { -1.0f, 0.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { -1.0f, -1.0f, +1.0f }, { -1.0f, 0.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { -1.0f, +1.0f, +1.0f }, { -1.0f, 0.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+
+        { { +1.0f, -1.0f, -1.0f }, { +1.0f, 0.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { +1.0f, +1.0f, -1.0f }, { +1.0f, 0.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { +1.0f, -1.0f, +1.0f }, { +1.0f, 0.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+        { { +1.0f, +1.0f, +1.0f }, { +1.0f, 0.0f, 0.0f }, {}, {}, {}, {}, { PackRGBA8(0xFF, 0xFF, 0xFF) } },
+    };
+
+    constexpr u32 IndexCount = 6 * 6;
+    u32 IndexData[IndexCount] = {};
+    for (u32 Face = 0; Face < 6; Face += 6)
+    {
+        IndexData[6*Face + 0] = 4*Face + 0;
+        IndexData[6*Face + 1] = 4*Face + 1;
+        IndexData[6*Face + 2] = 4*Face + 3;
+        IndexData[6*Face + 3] = 4*Face + 0;
+        IndexData[6*Face + 4] = 4*Face + 3;
+        IndexData[6*Face + 5] = 4*Face + 2;
+    }
+
+    Result.VertexCount = CountOf(VertexData);
+    Result.VertexData = PushArray<vertex>(Arena, Result.VertexCount);
+    memcpy(Result.VertexData, VertexData, sizeof(VertexData));
+
+    Result.IndexCount = IndexCount;
+    Result.IndexData = PushArray<u32>(Arena, Result.IndexCount);
+    memcpy(Result.IndexData, IndexData, sizeof(IndexData));
+
+    return(Result);
+}
 
 internal mesh CreateSphereMesh(memory_arena* Arena)
 {
