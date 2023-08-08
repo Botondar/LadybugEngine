@@ -26,16 +26,6 @@ struct texture_manager
     VkImageView SpecialImageViews[MaxSpecialTextureCount];
 };
 
-// NOTE(boti): Normally textures get put into the bindless descriptor heap,
-// specifying a texture as "Special" prevents this, and it will be the user code's
-// responsibility to manage its descriptor
-typedef flags32 texture_flags;
-enum texture_flag_bits : texture_flags
-{
-    TextureFlag_None = 0,
-    TextureFlag_Special = (1 << 0),
-};
-
 format_byterate GetByteRate(VkFormat Format);
 u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate);
 

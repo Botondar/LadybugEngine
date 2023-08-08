@@ -450,6 +450,16 @@ struct texture_id
     u32 Value;
 };
 
+// NOTE(boti): Normally textures get put into the bindless descriptor heap,
+// specifying a texture as "Special" prevents this, and it will be the user code's
+// responsibility to manage its descriptor
+typedef flags32 texture_flags;
+enum texture_flag_bits : texture_flags
+{
+    TextureFlag_None = 0,
+    TextureFlag_Special = (1 << 0),
+};
+
 //
 // High-level renderer
 //
