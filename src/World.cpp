@@ -445,7 +445,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                             },
                             .ddP = { 0.5f, 0.2f, 0.0f },
                             .Color = { Color },
-                            .dColor = { 0.0f, 0.0f, 0.0f, -5.0f },
+                            .dColor = { -1.00f, -1.25f, -1.00f, -4.00f },
                             .TextureIndex = FirstTexture + (RandU32(&World->EffectEntropy) % TextureCount),
                         };
                     } break;
@@ -485,12 +485,19 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 {
                     if (Frame->ParticleCount < Frame->MaxParticleCount)
                     {
+                        v4 PColor = 
+                        {
+                            Max(Particle->Color.x, 0.0f),
+                            Max(Particle->Color.y, 0.0f),
+                            Max(Particle->Color.z, 0.0f),
+                            Max(Particle->Color.w, 0.0f),
+                        };
                         Cmd->ParticleCount++;
                         Frame->Particles[Frame->ParticleCount++] = 
                         {
                             .P = Particle->P,
                             .TextureIndex = Particle->TextureIndex,
-                            .Color = { Particle->Color.x, Particle->Color.y, Particle->Color.z, Max(Particle->Color.w, 0.0f) },
+                            .Color = PColor,
                             .HalfExtent = ParticleSystem->ParticleHalfExtent,
                         };
                     }
