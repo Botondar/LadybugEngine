@@ -207,7 +207,8 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
     else if (Game->Debug.SelectedMenuID == GPUMenuID)
     {
         renderer* Renderer = Game->Renderer;
-
+        // TODO(boti): Add the option to query this from the renderer/render frame
+#if 0
         TextLine("RenderTarget memory: %llu/%llu MB",
                      Renderer->RenderTargetHeap.Offset >> 20,
                      Renderer->RenderTargetHeap.MemorySize >> 20);
@@ -223,6 +224,7 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
         TextLine("Shadow memory: %llu/%llu MB",
                      Renderer->ShadowMemoryOffset >> 20,
                      Renderer->ShadowMemorySize >> 20);
+#endif
     }
     else if (Game->Debug.SelectedMenuID == PostProcessMenuID)
     {
