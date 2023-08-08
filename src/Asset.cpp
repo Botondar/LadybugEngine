@@ -58,6 +58,34 @@ lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scra
         Assets->DefaultNormalID = PushTexture(Renderer, TextureFlag_None, 1, 1, 1, 1, VK_FORMAT_R8G8_UNORM, {}, &Value);
     }
 
+    // Null skin
+    {
+        skin* NullSkin = Assets->Skins + Assets->SkinCount++;
+        NullSkin->JointCount = 0;
+    }
+
+    // Null animation
+    {
+
+        animation* NullAnimation = Assets->Animations + Assets->AnimationCount++;
+        NullAnimation->SkinID = 0;
+        NullAnimation->KeyFrameCount = 1;
+        NullAnimation->MinTimestamp = 0.0f;
+        NullAnimation->MaxTimestamp = 0.0f;
+        NullAnimation->KeyFrameTimestamps = PushArray<f32>(Assets->Arena, 1);
+        NullAnimation->KeyFrameTimestamps[0] = 0.0f;
+        NullAnimation->KeyFrames = PushArray<animation_key_frame>(Assets->Arena, 1);
+        for (u32 JointIndex = 0; JointIndex < skin::MaxJointCount; JointIndex++)
+        {
+            NullAnimation->KeyFrames[0].JointTransforms[JointIndex] = 
+            {
+                .Rotation = { 0.0f, 0.0f, 0.0f, 1.0f },
+                .Position = { 0.0f, 0.0f, 0.0f},
+                .Scale = { 1.0f, 1.0f, 1.0f },
+            };
+        }
+    }
+
     // Particle textures
     {
         // TODO(boti): For now we know that the texture pack we're using is 512x512, 

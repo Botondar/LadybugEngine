@@ -270,27 +270,30 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     skin* Skin = Assets->Skins + Entity->SkinID;
                     JointCount = Skin->JointCount;
                     animation* Animation = Assets->Animations + Entity->CurrentAnimationID;
-                    Assert(Animation->SkinID == Entity->SkinID);
+
                     if (Entity->DoAnimation)
                     {
                         Entity->AnimationCounter += dt;
                         f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
-                        while (Entity->AnimationCounter >= LastKeyFrameTimestamp)
-                        {
-                            Entity->AnimationCounter -= LastKeyFrameTimestamp;
-                        }
+                        Entity->AnimationCounter = Modulo(Entity->AnimationCounter, LastKeyFrameTimestamp);
                     }
 
-                    u32 NextKeyFrameIndex;
-                    for (NextKeyFrameIndex = 0; NextKeyFrameIndex < Animation->KeyFrameCount; NextKeyFrameIndex++)
+                    u32 KeyFrameIndex = 0;
                     {
-                        if (Entity->AnimationCounter < Animation->KeyFrameTimestamps[NextKeyFrameIndex])
+                        u32 MinIndex = 0;
+                        u32 MaxIndex = Animation->KeyFrameCount - 1;
+                        while (MinIndex <= MaxIndex)
                         {
-                            break;
+                            u32 Index = (MinIndex + MaxIndex) / 2;
+                            f32 t = Animation->KeyFrameTimestamps[Index];
+                            if      (Entity->AnimationCounter < t) MaxIndex = Index - 1;
+                            else if (Entity->AnimationCounter > t) MinIndex = Index + 1;
+                            else break; 
                         }
+                        KeyFrameIndex = MinIndex == 0 ? 0 : MinIndex - 1;
                     }
 
-                    u32 KeyFrameIndex = NextKeyFrameIndex - 1;
+                    u32 NextKeyFrameIndex = (KeyFrameIndex + 1) % Animation->KeyFrameCount;
                     f32 Timestamp0 = Animation->KeyFrameTimestamps[KeyFrameIndex];
                     f32 Timestamp1 = Animation->KeyFrameTimestamps[NextKeyFrameIndex];
                     f32 KeyFrameDelta = Timestamp1 - Timestamp0;
@@ -331,13 +334,13 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 }
 
                 DrawSkinnedMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
-                                  Entity->Transform, Assets->Materials[MaterialID],
-                                  JointCount, Pose);
+                                Entity->Transform, Assets->Materials[MaterialID],
+                                JointCount, Pose);
             }
             else
             {
                 DrawMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
-                           Entity->Transform, Assets->Materials[MaterialID]);
+                         Entity->Transform, Assets->Materials[MaterialID]);
             }
         }
 

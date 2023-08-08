@@ -460,18 +460,18 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                 UnhandledError("Missing channels from glTF animation");
             }
 
-            json_element* Samplers = GetElement(&Elem->Object, "samplers");
-            if (Samplers)
+            json_element* SamplersElem = GetElement(&Elem->Object, "samplers");
+            if (SamplersElem)
             {
-                Assert((Samplers->Type == json_element_type::Array) &&
-                       (Samplers->Array.ElementCount > 0));
+                Assert((SamplersElem->Type == json_element_type::Array) &&
+                       (SamplersElem->Array.ElementCount > 0));
 
                 Animation->SamplerCount = Channels->Array.ElementCount;
                 Animation->Samplers = PushArray<gltf_animation_sampler>(Arena, Animation->ChannelCount, MemPush_Clear);
 
                 for (u32 SamplerIndex = 0; SamplerIndex < Animation->SamplerCount; SamplerIndex++)
                 {
-                    json_element* Sampler = Samplers->Array.Elements + SamplerIndex;
+                    json_element* Sampler = SamplersElem->Array.Elements + SamplerIndex;
                     Assert(Sampler->Type == json_element_type::Object);
 
                     Animation->Samplers[SamplerIndex].InputAccessorIndex = ParseU32(GetElement(&Sampler->Object, "input"), GLTF_Required);
