@@ -64,31 +64,12 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         constexpr size_t TransientArenaSize = GiB(1);
         GameState->TransientArena = InitializeArena(TransientArenaSize, PushSize(&GameState->TotalArena, TransientArenaSize, 64));
 
-#if 1
         GameState->Renderer = CreateRenderer(&GameState->TotalArena, &GameState->TransientArena);
         if (!GameState->Renderer)
         {
             GameIO->bQuitRequested = true;
             return;
         }
-#else
-        if (InitializeVulkan(GameState->Vulkan) == VK_SUCCESS)
-        {
-            VK = GameState->Vulkan;
-        }
-        else
-        {
-            UnhandledError("Vulkan initialization failed");
-            GameIO->bQuitRequested = true;
-        }
-        
-        GameState->Renderer = PushStruct<renderer>(&GameState->TotalArena);
-        if (CreateRenderer(GameState->Renderer, &GameState->TotalArena, &GameState->TransientArena) != VK_SUCCESS)
-        {
-            UnhandledError("Renderer initialization failed");
-            GameIO->bQuitRequested = true;
-        }
-#endif
 
         assets* Assets = GameState->Assets = PushStruct<assets>(&GameState->TotalArena);
         Assets->Arena = &GameState->TotalArena;
