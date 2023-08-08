@@ -5,15 +5,6 @@
 //             Note that allocations will fail once you exceed the 256MiB limit.
 #define VB_DISABLE_SPARSE 1
 
-struct geometry_buffer_block
-{
-    u64 ByteSize;
-    u64 ByteOffset;
-
-    geometry_buffer_block* Next;
-    geometry_buffer_block* Prev;
-};
-
 struct geometry_memory
 {
 #if VB_DISABLE_SPARSE

@@ -463,6 +463,24 @@ constexpr format SHADOW_FORMAT = Format_D16; // TODO(boti): is this enough?
 // HACK(boti): The swapchain format is unknown at compile time, so we use this special value to refer to it
 constexpr format SWAPCHAIN_FORMAT = (format)0xFFFFFFFF;
 
+union frustum
+{
+    v4 Planes[6];
+    struct
+    {
+        v4 Left;
+        v4 Right;
+        v4 Top;
+        v4 Bottom;
+        v4 Near;
+        v4 Far;
+    };
+};
+
+//
+// Render API
+//
+
 struct ssao_params
 {
     f32 Intensity;
@@ -489,20 +507,6 @@ struct post_process_params
 {
     ssao_params SSAO;
     bloom_params Bloom;
-};
-
-union frustum
-{
-    v4 Planes[6];
-    struct
-    {
-        v4 Left;
-        v4 Right;
-        v4 Top;
-        v4 Bottom;
-        v4 Near;
-        v4 Far;
-    };
 };
 
 struct render_camera
@@ -641,9 +645,16 @@ struct draw_widget3d_cmd
     rgba8 Color;
 };
 
-//
-// Render API
-//
+struct geometry_buffer_block
+{
+    u64 ByteSize;
+    u64 ByteOffset;
+
+    geometry_buffer_block* Next;
+    geometry_buffer_block* Prev;
+};
+
+
 struct frame_uniform_data
 {
     m4 CameraTransform;
