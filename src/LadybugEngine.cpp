@@ -93,8 +93,6 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         World->Camera.Yaw = 0.5f * Pi;
     }
 
-    VK = GameState->Renderer->Vulkan;
-
     ResetArena(&GameState->TransientArena);
 
     if (GameIO->bIsMinimized)
