@@ -654,6 +654,11 @@ struct geometry_buffer_block
     geometry_buffer_block* Prev;
 };
 
+struct geometry_buffer_allocation
+{
+    geometry_buffer_block* VertexBlock;
+    geometry_buffer_block* IndexBlock;
+};
 
 struct frame_uniform_data
 {
@@ -778,7 +783,7 @@ inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFF
 #include "Renderer/Pipelines.hpp"
 
 // TODO(boti): remove this
-#include "VulkanRenderer.hpp"
+//#include "VulkanRenderer.hpp"
 
 //
 // Implementation
