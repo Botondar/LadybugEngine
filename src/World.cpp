@@ -264,6 +264,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             {
                 Assert(Entity->SkinID < Assets->SkinCount);
                 skin* Skin = Assets->Skins + Entity->SkinID;
+
                 m4 Pose[skin::MaxJointCount] = {};
                 for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
                 {
