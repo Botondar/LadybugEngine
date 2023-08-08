@@ -1238,7 +1238,7 @@ internal mesh CreateCubeMesh(memory_arena* Arena)
 
     constexpr u32 IndexCount = 6 * 6;
     u32 IndexData[IndexCount] = {};
-    for (u32 Face = 0; Face < 6; Face += 6)
+    for (u32 Face = 0; Face < 6; Face++)
     {
         IndexData[6*Face + 0] = 4*Face + 0;
         IndexData[6*Face + 1] = 4*Face + 1;
