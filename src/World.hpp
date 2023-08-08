@@ -112,6 +112,10 @@ struct game_world
     static constexpr u32 MaxParticleSystemCount = 512u;
     u32 ParticleSystemCount;
     particle_system ParticleSystems[MaxParticleSystemCount];
+
+    mmbox AdHocLightBounds;
+    static constexpr u32 AdHocLightCount = 64u;
+    light AdHocLights[AdHocLightCount];
 };
 
 lbfn u32 MakeParticleSystem(game_world* World, particle_system_type Type, entity_id ParentID, mmbox Bounds);

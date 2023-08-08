@@ -106,6 +106,32 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         World->LightProxyScale = 1e-1f;
         World->EffectEntropy = { 0x13370420 };
 
+        {
+            World->AdHocLightBounds = { { -7.5f, -4.0f, 4.0f }, { +7.5f, -2.75f, 6.0f } };
+            mmbox Bounds = World->AdHocLightBounds;
+            entropy32* R = &World->EffectEntropy;
+            for (u32 LightIndex = 0; LightIndex < World->AdHocLightCount; LightIndex++)
+            {
+                World->AdHocLights[LightIndex] = 
+                {
+                    .P = 
+                    { 
+                        RandBetween(R, Bounds.Min.x, Bounds.Max.x), 
+                        RandBetween(R, Bounds.Min.y, Bounds.Max.y), 
+                        RandBetween(R, Bounds.Min.z, Bounds.Max.z),
+                        1.0f 
+                    },
+                    .E = 
+                    { 
+                        RandBetween(R, 0.1f, 1.0f), 
+                        RandBetween(R, 0.1f, 1.0f), 
+                        RandBetween(R, 0.1f, 1.0f), 
+                        RandBetween(R, 0.4f, 0.8f),
+                    },
+                };
+            }
+        }
+
         m4 YUpToZUp = M4(1.0f, 0.0f, 0.0f, 0.0f,
                          0.0f, 0.0f, -1.0f, 0.0f,
                          0.0f, 1.0f, 0.0f, 0.0f,
@@ -185,7 +211,9 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
     f32 dt = IO->dt;
     
+    //
     // Camera update
+    //
     {
         camera* Camera = &World->Camera;
         v3 MoveDirection = {};
@@ -246,6 +274,9 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         Frame->Uniforms.SunL = World->SunL;
     }
 
+    //
+    // Entity update
+    //
     for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
     {
         entity* Entity = World->Entities + EntityIndex;
@@ -379,6 +410,9 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         }
     }
 
+    //
+    // Particle system update
+    //
     for (u32 ParticleSystemIndex = 0; ParticleSystemIndex < World->ParticleSystemCount; ParticleSystemIndex++)
     {
         particle_system* ParticleSystem = World->ParticleSystems + ParticleSystemIndex;
@@ -513,6 +547,41 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     }
                 }
             }
+        }
+    }
+
+    
+    particle_cmd* Cmd = nullptr;
+    if ((Frame->ParticleDrawCmdCount < Frame->MaxParticleDrawCmdCount) && 
+        (Frame->ParticleCount + World->AdHocLightCount <= Frame->MaxParticleCount))
+    {
+        Cmd = Frame->ParticleDrawCmds + Frame->ParticleDrawCmdCount++;
+        Cmd->FirstParticle = Frame->ParticleCount;
+        Cmd->ParticleCount = World->AdHocLightCount;
+        Cmd->Mode = Billboard_ViewAligned;
+
+        Frame->ParticleCount += World->AdHocLightCount;
+    }
+    for (u32 LightIndex = 0; LightIndex < World->AdHocLightCount; LightIndex++)
+    {
+        light* Light = World->AdHocLights + LightIndex;
+        v3 dP = { RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy) };
+        dP = RandBetween(&World->EffectEntropy, 0.5f, 1.5f) * dP;
+        Light->P.xyz += dP * dt;
+        Light->P.x = Clamp(Light->P.x, World->AdHocLightBounds.Min.x, World->AdHocLightBounds.Max.x);
+        Light->P.y = Clamp(Light->P.y, World->AdHocLightBounds.Min.y, World->AdHocLightBounds.Max.y);
+        Light->P.z = Clamp(Light->P.z, World->AdHocLightBounds.Min.z, World->AdHocLightBounds.Max.z);
+
+        AddLight(Frame, *Light);
+        if (Cmd)
+        {
+            Frame->Particles[Cmd->FirstParticle + LightIndex] = 
+            {
+                .P = Light->P.xyz,
+                .TextureIndex = Particle_Star04,
+                .Color = { Light->E.x, Light->E.y, Light->E.z, 2.5f },
+                .HalfExtent = { 0.1f, 0.1f },
+            };
         }
     }
 }
