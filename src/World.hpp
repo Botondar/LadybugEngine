@@ -40,8 +40,8 @@ struct particle
     v3 P;
     v3 dP;
     v3 ddP;
-    f32 Alpha;
-    f32 dAlpha;
+    v4 Color;
+    v4 dColor;
     u32 TextureIndex;
 };
 

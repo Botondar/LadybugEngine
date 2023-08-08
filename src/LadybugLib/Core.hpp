@@ -390,6 +390,8 @@ inline v4 operator*(v4 v, f32 s);
 inline v4 operator*(f32 s, v4 v);
 inline v4 operator+(v4 a, v4 b);
 inline v4 operator-(v4 a, v4 b);
+inline v4& operator+=(v4& a, v4 b);
+inline v4& operator-=(v4& a, v4 b);
 
 inline f32 Dot(v4 a, v4 b);
 inline v4 Normalize(v4 V);
@@ -921,6 +923,17 @@ inline v4 operator-(v4 a, v4 b)
 {
     v4 Result = { a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w };
     return Result;
+}
+
+inline v4& operator+=(v4& a, v4 b)
+{
+    a = a + b;
+    return(a);
+}
+inline v4& operator-=(v4& a, v4 b)
+{
+    a = a - b;
+    return(a);
 }
 
 inline f32 Dot(v4 a, v4 b)

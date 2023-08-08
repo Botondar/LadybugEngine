@@ -413,7 +413,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     case ParticleSystem_Magic:
                     {
                         v3 ParticleP = 
-                        { 
+                        {
                             RandBetween(&World->EffectEntropy, Bounds.Min.x, Bounds.Max.x), 
                             RandBetween(&World->EffectEntropy, Bounds.Min.y, Bounds.Max.y), 
                             Bounds.Min.z,
@@ -422,8 +422,8 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                         {
                             .P = BaseP + ParticleP,
                             .dP = { 0.0f, 0.0f, RandBetween(&World->EffectEntropy, 0.25f, 2.25f) },
-                            .Alpha = 1.0f,
-                            .dAlpha = 0.0f,
+                            .Color = Color,
+                            .dColor = { 0.0f, 0.0f, 0.0f, 0.0f },
                             .TextureIndex = Particle_Trace02,
                         };
                     } break;
@@ -444,8 +444,8 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                                 RandBetween(&World->EffectEntropy, 0.25f, 1.20f) 
                             },
                             .ddP = { 0.5f, 0.2f, 0.0f },
-                            .Alpha = 1.0f,
-                            .dAlpha = -1.25f,
+                            .Color = { Color },
+                            .dColor = { 0.0f, 0.0f, 0.0f, -5.0f },
                             .TextureIndex = FirstTexture + (RandU32(&World->EffectEntropy) % TextureCount),
                         };
                     } break;
@@ -468,7 +468,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             particle* Particle = ParticleSystem->Particles + It;
             Particle->P += Particle->dP * dt;
             Particle->dP += Particle->ddP * dt;
-            Particle->Alpha += Particle->dAlpha * dt;
+            Particle->Color += Particle->dColor * dt;
 
             b32 CullParticle = false;
             if (ParticleSystem->CullOutOfBoundsParticles)
@@ -486,12 +486,11 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     if (Frame->ParticleCount < Frame->MaxParticleCount)
                     {
                         Cmd->ParticleCount++;
-                        f32 Alpha = Max(Particle->Alpha, 0.0f);
                         Frame->Particles[Frame->ParticleCount++] = 
                         {
                             .P = Particle->P,
                             .TextureIndex = Particle->TextureIndex,
-                            .Color = { Color.x, Color.y, Color.z, Alpha * Color.w },
+                            .Color = { Particle->Color.x, Particle->Color.y, Particle->Color.z, Max(Particle->Color.w, 0.0f) },
                             .HalfExtent = ParticleSystem->ParticleHalfExtent,
                         };
                     }
