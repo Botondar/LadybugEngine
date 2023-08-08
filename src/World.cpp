@@ -251,21 +251,17 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         entity* Entity = World->Entities + EntityIndex;
         if (Entity->Flags & EntityFlag_Mesh)
         {
-            mmbox BoundingBox = Assets->MeshBoxes[Entity->MeshID];
-            geometry_buffer_allocation MeshAllocation = Assets->Meshes[Entity->MeshID];
-            u32 MaterialID = Assets->MeshMaterialIndices[Entity->MeshID];
-                
-            u32 VertexOffset = TruncateU64ToU32(MeshAllocation.VertexBlock->ByteOffset / sizeof(vertex));
-            u32 VertexCount = TruncateU64ToU32(MeshAllocation.VertexBlock->ByteSize / sizeof(vertex));
-            u32 IndexOffset = TruncateU64ToU32(MeshAllocation.IndexBlock->ByteOffset / sizeof(vert_index));
-            u32 IndexCount = TruncateU64ToU32(MeshAllocation.IndexBlock->ByteSize / sizeof(vert_index));
+            b32 DrawSkinned = false;
+            u32 JointCount = 0;
+            m4 Pose[skin::MaxJointCount] = {};
 
             if (Entity->Flags & EntityFlag_Skin)
             {
+                DrawSkinned = true;
+
                 Assert(Entity->SkinID < Assets->SkinCount);
                 skin* Skin = Assets->Skins + Entity->SkinID;
-
-                m4 Pose[skin::MaxJointCount] = {};
+                JointCount = Skin->JointCount;
                 for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
                 {
                     Pose[JointIndex] = TRSToM4(Skin->BindPose[JointIndex]);
@@ -333,14 +329,32 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 {
                     Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
                 }
-                DrawSkinnedMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
-                                Entity->Transform, Assets->Materials[MaterialID],
-                                Skin->JointCount, Pose);
+
             }
-            else
+
+            for (u32 PieceIndex = 0; PieceIndex < Entity->PieceCount; PieceIndex++)
             {
-                DrawMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
-                         Entity->Transform, Assets->Materials[MaterialID]);
+                entity_piece* Piece = Entity->Pieces + PieceIndex;
+                geometry_buffer_allocation MeshAllocation = Assets->Meshes[Piece->MeshID];
+                u32 MaterialID = Assets->MeshMaterialIndices[Piece->MeshID];
+                
+                u32 VertexOffset = TruncateU64ToU32(MeshAllocation.VertexBlock->ByteOffset / sizeof(vertex));
+                u32 VertexCount = TruncateU64ToU32(MeshAllocation.VertexBlock->ByteSize / sizeof(vertex));
+                u32 IndexOffset = TruncateU64ToU32(MeshAllocation.IndexBlock->ByteOffset / sizeof(vert_index));
+                u32 IndexCount = TruncateU64ToU32(MeshAllocation.IndexBlock->ByteSize / sizeof(vert_index));
+
+                if (DrawSkinned)
+                {
+                    DrawSkinnedMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
+                                    Entity->Transform, Assets->Materials[MaterialID],
+                                    JointCount, Pose);
+                }
+                else
+                {
+                    DrawMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
+                             Entity->Transform, Assets->Materials[MaterialID]);
+                }
+
             }
         }
 

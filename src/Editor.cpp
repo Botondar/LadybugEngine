@@ -109,7 +109,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
 
             if (HasFlag(Entity->Flags, EntityFlag_Mesh))
             {
-                mmbox Box = Assets->MeshBoxes[Entity->MeshID];
+                mmbox Box = Assets->MeshBoxes[Entity->Pieces[0].MeshID]; // HACK(boti)
                 v3 BoxP = 0.5f * (Box.Min + Box.Max);
                 v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
         

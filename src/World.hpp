@@ -17,13 +17,20 @@ enum entity_flag_bits : entity_flags
     EntityFlag_LightSource = (1u << 2),
 };
 
+struct entity_piece
+{
+    u32 MeshID;
+};
+
 struct entity
 {
     entity_flags Flags;
     m4 Transform;
 
     // EntityFlag_Mesh
-    u32 MeshID;
+    static constexpr u32 MaxPieceCount = 256;
+    u32 PieceCount;
+    entity_piece Pieces[MaxPieceCount];
 
     // EntityFlag_Skin
     u32 SkinID;

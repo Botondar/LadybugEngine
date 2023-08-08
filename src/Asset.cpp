@@ -1176,49 +1176,28 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 MeshOffset += GLTF.Meshes[i].PrimitiveCount;
             }
 
-            if (World->EntityCount + Mesh->PrimitiveCount <= World->MaxEntityCount)
+            if (World->EntityCount <= World->MaxEntityCount)
             {
-                if (Node->SkinIndex == U32_MAX)
-                {
-                    for (u32 PrimitiveIndex = 0; PrimitiveIndex < Mesh->PrimitiveCount; PrimitiveIndex++)
-                    {
-                        World->Entities[World->EntityCount++] = 
-                        {
-                            .Flags = EntityFlag_Mesh,
-                            .Transform = NodeTransform,
-                            .MeshID = BaseMeshIndex + (MeshOffset + PrimitiveIndex),
-                        };
-                    }
-                }
-                else
-                {
-                    if (Mesh->PrimitiveCount != 1)
-                    {
-                        UnimplementedCodePath;
-                    }
+                entity* Entity = World->Entities + World->EntityCount++;
+                Entity->Flags = EntityFlag_Mesh;
+                Entity->Transform = NodeTransform;
 
-                    for (u32 PrimitiveIndex = 0; PrimitiveIndex < Mesh->PrimitiveCount; PrimitiveIndex++)
-                    {
-                        u32 MeshID = BaseMeshIndex + MeshOffset + PrimitiveIndex;
-                        u32 SkinID = BaseSkinIndex + Node->SkinIndex;
-                        u32 AnimationID = 0;
-
-                        World->Entities[World->EntityCount++] = 
-                        {
-                            .Flags = EntityFlag_Mesh|EntityFlag_Skin,
-                            .Transform = NodeTransform,
-                            .MeshID = MeshID,
-                            .SkinID = SkinID,
-                            .CurrentAnimationID = AnimationID,
-                            .DoAnimation = false,
-                            .AnimationCounter = 0.0f,   
-                        };
-                    }
+                Assert(Mesh->PrimitiveCount <= Entity->MaxPieceCount);
+                Entity->PieceCount = Mesh->PrimitiveCount;
+                for (u32 Piece = 0; Piece < Entity->PieceCount; Piece++)
+                {
+                    Entity->Pieces[Piece] = { .MeshID = BaseMeshIndex + MeshOffset + Piece };
                 }
-            }
-            else
-            {
-                UnhandledError("Out of entity pool");
+
+                if (Node->SkinIndex != U32_MAX)
+                {
+                    Entity->Flags |= EntityFlag_Skin;
+                    Entity->SkinID = BaseSkinIndex + Node->SkinIndex;
+                    Entity->CurrentAnimationID = 0;
+                    Entity->DoAnimation = false;
+                    Entity->AnimationCounter = 0.0f;
+                }
+                Entity->LightEmission = {};
             }
         }
     }
