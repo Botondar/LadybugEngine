@@ -14,33 +14,6 @@
 #include "stb/stb_image.h"
 #pragma warning(pop)
 
-lbfn bool IntersectFrustum(const frustum* Frustum, const mmbox* Box)
-{
-    bool Result = true;
-
-    v3 HalfExtent = 0.5f * (Box->Max - Box->Min);
-    if (Dot(HalfExtent, HalfExtent) > 1e-6f)
-    {
-        v3 CenterP3 = 0.5f * (Box->Min + Box->Max);
-        v4 CenterP = { CenterP3.x, CenterP3.y, CenterP3.z, 1.0f };
-
-        for (u32 i = 0; i < 6; i++)
-        {
-            f32 EffectiveRadius = 
-                Abs(Frustum->Planes[i].x * HalfExtent.x) + 
-                Abs(Frustum->Planes[i].y * HalfExtent.y) +
-                Abs(Frustum->Planes[i].z * HalfExtent.z);
-
-            if (Dot(CenterP, Frustum->Planes[i]) < -EffectiveRadius)
-            {
-                Result = false;
-                break;
-            }
-        }
-    }
-    return Result;
-}
-
 platform_api Platform;
 
 extern "C"

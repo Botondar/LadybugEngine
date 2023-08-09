@@ -443,23 +443,6 @@ struct format_byterate
     b32 IsBlock;
 };
 
-struct texture_id
-{
-    u32 Value;
-};
-inline bool IsValid(texture_id ID) { return ID.Value != U32_MAX; }
-
-
-// NOTE(boti): Normally textures get put into the bindless descriptor heap,
-// specifying a texture as "Special" prevents this, and it will be the user code's
-// responsibility to manage its descriptor
-typedef flags32 texture_flags;
-enum texture_flag_bits : texture_flags
-{
-    TextureFlag_None = 0,
-    TextureFlag_Special = (1 << 0),
-};
-
 //
 // High-level renderer
 //
@@ -487,9 +470,29 @@ union frustum
     };
 };
 
+inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box);
+inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 P, f32 r);
+
 //
 // Render API
 //
+
+struct texture_id
+{
+    u32 Value;
+};
+inline bool IsValid(texture_id ID) { return ID.Value != U32_MAX; }
+
+
+// NOTE(boti): Normally textures get put into the bindless descriptor heap,
+// specifying a texture as "Special" prevents this, and it will be the user code's
+// responsibility to manage its descriptor
+typedef flags32 texture_flags;
+enum texture_flag_bits : texture_flags
+{
+    TextureFlag_None = 0,
+    TextureFlag_Special = (1 << 0),
+};
 
 struct ssao_params
 {
@@ -801,9 +804,6 @@ inline b32 AddLight(render_frame* Frame, light Light);
 
 inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* VertexArray);
 
-//
-// Helpers
-//
 inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
 inline rgba8 PackRGBA(v4 Color);
 inline u32 GetMaxMipCount(u32 Width, u32 Height);
@@ -884,9 +884,9 @@ inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount /*= 0xFF
 
 
 inline b32 DrawMesh(render_frame* Frame, 
-                      u32 VertexOffset, u32 VertexCount, 
-                      u32 IndexOffset, u32 IndexCount,
-                      m4 Transform, material Material)
+                    u32 VertexOffset, u32 VertexCount, 
+                    u32 IndexOffset, u32 IndexCount,
+                    m4 Transform, material Material)
 {
     b32 Result = false;
     if (Frame->DrawCmdCount < Frame->MaxDrawCmdCount)
@@ -910,10 +910,10 @@ inline b32 DrawMesh(render_frame* Frame,
 }
 
 inline b32 DrawSkinnedMesh(render_frame* Frame,
-                             u32 VertexOffset, u32 VertexCount,
-                             u32 IndexOffset, u32 IndexCount,
-                             m4 Transform, material Material,
-                             u32 JointCount, m4* Pose)
+                           u32 VertexOffset, u32 VertexCount,
+                           u32 IndexOffset, u32 IndexCount,
+                           m4 Transform, material Material,
+                           u32 JointCount, m4* Pose)
 {
     b32 Result = false;
 
@@ -1014,6 +1014,48 @@ inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* V
         Result = true;
     }
 
+    return(Result);
+}
+
+inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box)
+{
+    b32 Result = true;
+
+    v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
+    if (Dot(HalfExtent, HalfExtent) > 1e-6f)
+    {
+        v3 CenterP3 = 0.5f * (Box.Min + Box.Max);
+        v4 CenterP = { CenterP3.x, CenterP3.y, CenterP3.z, 1.0f };
+
+        for (u32 i = 0; i < 6; i++)
+        {
+            f32 EffectiveRadius = 
+                Abs(Frustum->Planes[i].x * HalfExtent.x) + 
+                Abs(Frustum->Planes[i].y * HalfExtent.y) +
+                Abs(Frustum->Planes[i].z * HalfExtent.z);
+
+            if (Dot(CenterP, Frustum->Planes[i]) < -EffectiveRadius)
+            {
+                Result = false;
+                break;
+            }
+        }
+    }
+    return(Result);
+}
+
+inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 Center, f32 r)
+{
+    b32 Result = true;
+    v4 P = { Center.x, Center.y, Center.z, 1.0f };
+    for (u32 i = 0; i < 6; i++)
+    {
+        if (Dot(Frustum->Planes[i], P) <= -r)
+        {
+            Result = false;
+            break;
+        }
+    }
     return(Result);
 }
 

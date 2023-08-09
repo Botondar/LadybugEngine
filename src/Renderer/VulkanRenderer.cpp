@@ -1886,39 +1886,27 @@ void EndRenderFrame(render_frame* Frame)
     renderer* Renderer = Frame->Renderer;
 
     {
-        constexpr f32 LuminanceThreshold = 1e-3f;
-        Frame->Uniforms.LightCount = Min(Frame->LightCount, Frame->Uniforms.MaxUniformLightCount);
-        for (u32 LightIndex = 0; LightIndex < Frame->Uniforms.LightCount; LightIndex++)
+        frustum Frustum = Frame->CameraFrustum;
+        constexpr f32 LuminanceThreshold = 5e-2f;
+        for (u32 LightIndex = 0; LightIndex < Frame->LightCount; LightIndex++)
         {
             light* Light = Frame->Lights + LightIndex;
-            Frame->Uniforms.Lights[LightIndex] = 
+
+            f32 L = Light->E.w * Max(Max(Light->E.x, Light->E.y), Light->E.z);
+            f32 R = Sqrt(Max((L / LuminanceThreshold), 0.0f));
+            if (IntersectFrustumSphere(&Frustum, Light->P.xyz, R))
             {
-                .P = Frame->Uniforms.ViewTransform * Light->P,
-                .E = Light->E,
-            };
+                Frame->Uniforms.Lights[Frame->Uniforms.LightCount++] = 
+                {
+                    .P = Frame->Uniforms.ViewTransform * Light->P,
+                    .E = Light->E,
+                };
 
-            // TODO(boti): Coarse light culling here
-#if 0
-            f32 MaxComponent = Max(Max(Light->E.x, Light->E.y), Light->E.z);
-            f32 E = MaxComponent * Light->E.w;
-            f32 SquareR = E / LuminanceThreshold;
-            f32 R = Sqrt(Max(SquareR, 0.0f));
-
-            v3 ViewP = TransformPoint(Frame->Uniforms.ViewTransform, Light->P.xyz);
-
-            v3 BoundingBox[] = 
-            {
-                ViewP + v3{ -R, -R, -R },
-                ViewP + v3{ +R, -R, -R },
-                ViewP + v3{ +R, +R, -R },
-                ViewP + v3{ -R, +R, -R },
-
-                ViewP + v3{ -R, -R, +R },
-                ViewP + v3{ +R, -R, +R },
-                ViewP + v3{ +R, +R, +R },
-                ViewP + v3{ -R, +R, +R },
-            };
-#endif
+                if (Frame->Uniforms.LightCount == Frame->Uniforms.MaxUniformLightCount)
+                {
+                    break;
+                }
+            }
         };
     }
 

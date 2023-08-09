@@ -30,8 +30,6 @@ TODO: list
 #include <cstdio>
 #include <cstdarg>
 
-lbfn bool IntersectFrustum(const frustum* Frustum, const mmbox* Box);
-
 struct game_state
 {
     memory_arena TotalArena;
