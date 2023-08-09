@@ -24,7 +24,6 @@ struct texture_manager
     VkImageView SpecialImageViews[MaxSpecialTextureCount];
 };
 
-format_byterate GetByteRate(VkFormat Format);
 u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate);
 
 bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes);

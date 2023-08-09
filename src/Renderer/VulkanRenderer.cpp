@@ -1582,7 +1582,7 @@ texture_id PushTexture(renderer* Renderer, texture_flags Flags,
     {
         VkImage Image = GetImage(TextureManager, ID);
 
-        format_byterate ByteRate = GetByteRate(Format);
+        format_byterate ByteRate = FormatByterateTable[Format];
         u64 MemorySize = GetMipChainSize(Width, Height, MipCount, ArrayCount, ByteRate);
 
         vulkan_buffer* StagingBuffer = &Renderer->StagingBuffer;
