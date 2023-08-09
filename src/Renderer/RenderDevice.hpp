@@ -50,4 +50,4 @@ struct vulkan
     VkPhysicalDeviceLimits Limits;
 };
 
-VkResult InitializeVulkan(vulkan* Vulkan);
+internal VkResult InitializeVulkan(vulkan* Vulkan);

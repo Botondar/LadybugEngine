@@ -1,4 +1,5 @@
-lbfn bool CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize)
+internal bool 
+CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize)
 {
     bool Result = false;
 
@@ -101,7 +102,8 @@ lbfn bool CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize)
     return Result;
 }
 
-lbfn render_target* PushRenderTarget(render_target_heap* Heap, VkFormat Format, VkImageUsageFlags Usage, u32 MaxMipCount /*= 1*/)
+internal render_target* 
+PushRenderTarget(render_target_heap* Heap, VkFormat Format, VkImageUsageFlags Usage, u32 MaxMipCount /*= 1*/)
 {
     render_target* Result = nullptr;
 
@@ -124,7 +126,8 @@ lbfn render_target* PushRenderTarget(render_target_heap* Heap, VkFormat Format, 
     return Result;
 }
 
-lbfn bool ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height)
+internal bool 
+ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height)
 {
     bool Result = true;
 
@@ -266,7 +269,5 @@ lbfn bool ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height)
             Result = false;
         }
     }
-
-
     return Result;
 }

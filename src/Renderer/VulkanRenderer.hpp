@@ -152,5 +152,5 @@ struct renderer
     backend_render_frame BackendFrames[MaxSwapchainImageCount];
 };
 
-void BeginSceneRendering(render_frame* Frame);
-void EndSceneRendering(render_frame* Frame);
+lbfn void BeginSceneRendering(render_frame* Frame);
+lbfn void EndSceneRendering(render_frame* Frame);

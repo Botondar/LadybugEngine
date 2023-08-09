@@ -63,7 +63,7 @@ internal bool CreateGeometryMemory(geometry_memory* Memory, geometry_buffer_type
     return Result;
 }
 
-lbfn bool CreateGeometryBuffer(u64 MaxBlockCount, memory_arena* Arena, geometry_buffer* GeometryBuffer)
+internal bool CreateGeometryBuffer(u64 MaxBlockCount, memory_arena* Arena, geometry_buffer* GeometryBuffer)
 {
     bool Result = false;
     *GeometryBuffer = {};
@@ -310,7 +310,7 @@ internal geometry_buffer_block* AllocateSubBuffer(geometry_memory* Memory, u64 A
     return Result;
 }
 
-lbfn geometry_buffer_allocation AllocateVertexBuffer(geometry_buffer* GB, u32 VertexCount, u32 IndexCount)
+internal geometry_buffer_allocation AllocateVertexBuffer(geometry_buffer* GB, u32 VertexCount, u32 IndexCount)
 {
     geometry_buffer_allocation Result = {};
 
@@ -329,7 +329,7 @@ lbfn geometry_buffer_allocation AllocateVertexBuffer(geometry_buffer* GB, u32 Ve
     return Result;
 }
 
-lbfn void DeallocateVertexBuffer(geometry_buffer* GB, geometry_buffer_allocation Allocation)
+internal void DeallocateVertexBuffer(geometry_buffer* GB, geometry_buffer_allocation Allocation)
 {
     if (Allocation.VertexBlock)
     {

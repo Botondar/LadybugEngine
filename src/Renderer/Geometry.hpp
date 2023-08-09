@@ -39,6 +39,6 @@ struct geometry_buffer
     geometry_memory IndexMemory;
 };
 
-lbfn bool CreateGeometryBuffer(u64 MaxBlockCount, memory_arena* Arena, geometry_buffer* Buffer);
-lbfn geometry_buffer_allocation AllocateVertexBuffer(geometry_buffer* GB, u32 VertexCount, u32 IndexCount);
-lbfn void DeallocateVertexBuffer(geometry_buffer* GB, geometry_buffer_allocation Allocation);
+internal bool CreateGeometryBuffer(u64 MaxBlockCount, memory_arena* Arena, geometry_buffer* Buffer);
+internal geometry_buffer_allocation AllocateVertexBuffer(geometry_buffer* GB, u32 VertexCount, u32 IndexCount);
+internal void DeallocateVertexBuffer(geometry_buffer* GB, geometry_buffer_allocation Allocation);

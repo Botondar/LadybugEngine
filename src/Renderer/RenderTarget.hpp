@@ -26,8 +26,8 @@ struct render_target_heap
     render_target RenderTargets[MaxRenderTargetCount];
 };
 
-lbfn bool CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize);
+internal bool CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize);
 
 // NOTE(boti): MaxMipCount = 0 means unlimited mips (up to resolution)
-lbfn render_target* PushRenderTarget(render_target_heap* Heap, VkFormat Format, VkImageUsageFlags Usage, u32 MaxMipCount = 1);
-lbfn bool ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height);
+internal render_target* PushRenderTarget(render_target_heap* Heap, VkFormat Format, VkImageUsageFlags Usage, u32 MaxMipCount = 1);
+internal bool ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height);

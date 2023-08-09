@@ -2,64 +2,7 @@
 
 constexpr u32 SpecialTextureBit = (1u << 31);
 
-format_byterate GetByteRate(VkFormat Format)
-{
-    format_byterate Result = { 0, 1, false };
-    switch (Format)
-    {
-        case VK_FORMAT_R8G8B8A8_SRGB:
-        case VK_FORMAT_R8G8B8A8_UNORM:
-        {
-            Result = { 4, 1, false };
-        } break;
-        case VK_FORMAT_R8G8_UINT:
-        case VK_FORMAT_R8G8_SINT:
-        case VK_FORMAT_R8G8_SRGB:
-        case VK_FORMAT_R8G8_UNORM:
-        case VK_FORMAT_R8G8_SNORM:
-        {
-            Result = { 2, 1, false };
-        } break;
-        
-        case VK_FORMAT_R8_UINT:
-        case VK_FORMAT_R8_SINT:
-        case VK_FORMAT_R8_UNORM:
-        case VK_FORMAT_R8_SNORM:
-        case VK_FORMAT_R8_SRGB:
-        {
-            Result = { 1, 1, false };
-        } break;
-        case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
-        case VK_FORMAT_BC1_RGB_UNORM_BLOCK:
-        case VK_FORMAT_BC1_RGBA_SRGB_BLOCK:
-        case VK_FORMAT_BC1_RGBA_UNORM_BLOCK:
-        case VK_FORMAT_BC4_UNORM_BLOCK:
-        case VK_FORMAT_BC4_SNORM_BLOCK:
-        {
-            Result = { 1, 2, true };
-        } break;
-        case VK_FORMAT_BC2_SRGB_BLOCK:
-        case VK_FORMAT_BC2_UNORM_BLOCK:
-        case VK_FORMAT_BC3_SRGB_BLOCK:
-        case VK_FORMAT_BC3_UNORM_BLOCK:
-        case VK_FORMAT_BC5_UNORM_BLOCK:
-        case VK_FORMAT_BC5_SNORM_BLOCK:
-        case VK_FORMAT_BC6H_UFLOAT_BLOCK:
-        case VK_FORMAT_BC6H_SFLOAT_BLOCK:
-        case VK_FORMAT_BC7_SRGB_BLOCK:
-        case VK_FORMAT_BC7_UNORM_BLOCK:
-        {
-            Result = { 1, 1, true };
-        } break;
-        default:
-        {
-            UnimplementedCodePath;
-        } break;
-    }
-    return Result;
-}
-
-u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate)
+internal u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate)
 {
     u64 Result = 0;
 
@@ -80,7 +23,7 @@ u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_
     return Result;
 }
 
-bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes)
+internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes)
 {
     VkResult Result = VK_SUCCESS;
 
@@ -209,7 +152,7 @@ bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTy
     return (Result == VK_SUCCESS);
 }
 
-VkImage GetImage(texture_manager* Manager, texture_id ID)
+internal VkImage GetImage(texture_manager* Manager, texture_id ID)
 {
     VkImage Result = VK_NULL_HANDLE;
     if (IsValid(ID))
@@ -227,7 +170,7 @@ VkImage GetImage(texture_manager* Manager, texture_id ID)
     return Result;
 }
 
-VkImageView GetImageView(texture_manager* Manager, texture_id ID)
+internal VkImageView GetImageView(texture_manager* Manager, texture_id ID)
 {
     VkImageView Result = VK_NULL_HANDLE;
     if (IsValid(ID))
@@ -245,9 +188,10 @@ VkImageView GetImageView(texture_manager* Manager, texture_id ID)
     return(Result);
 }
 
-texture_id CreateTexture2D(texture_manager* Manager, texture_flags Flags,
-                           u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
-                           VkFormat Format, texture_swizzle Swizzle)
+internal texture_id 
+CreateTexture2D(texture_manager* Manager, texture_flags Flags,
+                u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
+                VkFormat Format, texture_swizzle Swizzle)
 {
     texture_id Result = { U32_MAX };
     Assert(ArrayCount < VK.DeviceProps.limits.maxImageArrayLayers);

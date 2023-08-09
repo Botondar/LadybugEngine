@@ -1350,7 +1350,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
     return(Renderer);
 }
 
-lbfn VkResult ResizeRenderTargets(renderer* Renderer)
+internal VkResult ResizeRenderTargets(renderer* Renderer)
 {
     VkResult Result = VK_SUCCESS;
 
@@ -1582,7 +1582,7 @@ texture_id PushTexture(renderer* Renderer, texture_flags Flags,
     {
         VkImage Image = GetImage(TextureManager, ID);
 
-        format_byterate ByteRate = FormatByterateTable[Format];
+        format_byterate ByteRate = FormatByterateTable[InFormat];
         u64 MemorySize = GetMipChainSize(Width, Height, MipCount, ArrayCount, ByteRate);
 
         vulkan_buffer* StagingBuffer = &Renderer->StagingBuffer;
@@ -2554,7 +2554,7 @@ void SetRenderCamera(render_frame* Frame, const render_camera* Camera)
     Frame->Uniforms.CameraP = Camera->CameraTransform.P.xyz;
 }
 
-void BeginSceneRendering(render_frame* Frame)
+internal void BeginSceneRendering(render_frame* Frame)
 {
     // Shadow cascade setup
     {
@@ -2720,7 +2720,7 @@ void BeginSceneRendering(render_frame* Frame)
     }
 }
 
-void EndSceneRendering(render_frame* Frame)
+internal void EndSceneRendering(render_frame* Frame)
 {
     
 }
