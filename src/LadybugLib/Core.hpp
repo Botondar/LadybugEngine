@@ -471,9 +471,6 @@ inline void* PushSize(memory_arena* Arena,
                       const void* Data /*= nullptr*/)
 {
     void* Result = nullptr;
-
-    Assert(Arena);
-
     if (Size)
     {
         if ((Arena->Size - Arena->Used) >= Size)

@@ -33,7 +33,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
         GameState = Memory->GameState = PushStruct<game_state>(&BootstrapArena);
         GameState->TotalArena = BootstrapArena;
-        constexpr size_t TransientArenaSize = GiB(1);
+        constexpr size_t TransientArenaSize = MiB(512);
         GameState->TransientArena = InitializeArena(TransientArenaSize, PushSize(&GameState->TotalArena, TransientArenaSize, 64));
 
         GameState->Renderer = CreateRenderer(&GameState->TotalArena, &GameState->TransientArena);

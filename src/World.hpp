@@ -105,7 +105,7 @@ struct game_world
 
     entropy32 EffectEntropy; // NOTE(boti): for visual effects only
 
-    static constexpr u32 MaxEntityCount = (1u << 21);
+    static constexpr u32 MaxEntityCount = (1u << 18);
     u32 EntityCount;
     entity Entities[MaxEntityCount];
 
