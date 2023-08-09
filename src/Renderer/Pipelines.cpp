@@ -541,7 +541,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         {
             .Flags = RS_FrontCW,
             .Fill = Fill_Solid,
-            .CullFlags = Cull_Back, // TODO
+            .CullFlags = Cull_Back,
             .DepthBiasConstantFactor = 0.0f,
             .DepthBiasClamp = 0.0f,
             .DepthBiasSlopeFactor = 0.0f,
@@ -590,7 +590,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         {
             .Flags = RS_FrontCW,
             .Fill = Fill_Solid,
-            .CullFlags = Cull_Back, // TODO
+            .CullFlags = Cull_Back,
             .DepthBiasConstantFactor = 0.0f,
             .DepthBiasClamp = 0.0f,
             .DepthBiasSlopeFactor = 0.0f,

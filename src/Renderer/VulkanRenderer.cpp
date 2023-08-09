@@ -228,8 +228,6 @@ internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTy
     return Result;
 }
 
-internal VkResult CreateComputeShader(const char* Path, memory_arena* TempArena, VkPipelineLayout PipelineLayout);
-
 renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
 {
     renderer* Renderer = PushStruct<renderer>(Arena);
@@ -1725,20 +1723,6 @@ texture_id PushTexture(renderer* Renderer, texture_flags Flags,
 //
 // Rendering interface implementation
 //
-internal bool BumpBuffer_(vulkan_buffer* Buffer, size_t Size)
-{
-    bool Result = false;
-    if (Buffer->Offset + Size <= Buffer->Size)
-    {
-        Buffer->Offset += Size;
-        Result = true;
-    }
-    else
-    {
-        UnhandledError("Vulkan buffer full");
-    }
-    return Result;
-}
 
 render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHeight)
 {
