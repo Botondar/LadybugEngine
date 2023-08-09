@@ -1758,6 +1758,8 @@ render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHe
     Frame->Backend->UniformBuffer = Renderer->PerFrameUniformBuffers[FrameID];
     Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
 
+    Frame->LightCount = 0;
+
     Frame->Backend->Draw2DCmdBuffer = Renderer->PerFrameDraw2DCmdBuffers[FrameID];
     Frame->Backend->Vertex2DBuffer = Renderer->PerFrameVertex2DBuffers[FrameID];
 
@@ -1885,10 +1887,15 @@ void EndRenderFrame(render_frame* Frame)
 
     {
         constexpr f32 LuminanceThreshold = 1e-3f;
+        Frame->Uniforms.LightCount = Min(Frame->LightCount, Frame->Uniforms.MaxUniformLightCount);
         for (u32 LightIndex = 0; LightIndex < Frame->Uniforms.LightCount; LightIndex++)
         {
-            light* Light = Frame->Uniforms.Lights + LightIndex;
-            Light->P = Frame->Uniforms.ViewTransform * Light->P;
+            light* Light = Frame->Lights + LightIndex;
+            Frame->Uniforms.Lights[LightIndex] = 
+            {
+                .P = Frame->Uniforms.ViewTransform * Light->P,
+                .E = Light->E,
+            };
 
             // TODO(boti): Coarse light culling here
 #if 0

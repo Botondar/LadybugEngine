@@ -14,7 +14,7 @@ constexpr u32 R_MaxShadowCascadeCount       = 4;
 constexpr u32 R_ShadowResolution            = (1024 + 256);
 constexpr u64 R_VertexBufferMaxBlockCount   = (1llu << 18);
 constexpr u64 R_SkinningBufferSize          = MiB(128);
-constexpr u32 R_MaxLightCount               = 1024;
+constexpr u32 R_MaxLightCount               = (1u << 14);
 
 //
 // Limits
@@ -701,7 +701,8 @@ struct frame_uniform_data
     u32 LightCount;
     f32 Padding4;
 
-    light Lights[R_MaxLightCount];
+    static constexpr u32 MaxUniformLightCount = 1024;
+    light Lights[MaxUniformLightCount];
 };
 
 struct renderer;
@@ -735,6 +736,7 @@ struct render_frame
     u32 MaxDraw2DCmdCount;
     u32 MaxVertex2DCount;
 
+    u32 LightCount;
     u32 DrawCmdCount;
     u32 SkinnedDrawCmdCount;
     u32 SkinningCmdCount;
@@ -748,6 +750,7 @@ struct render_frame
 
     u32 JointBufferAlignment;
 
+    light Lights[R_MaxLightCount];
     draw_cmd DrawCmds[MaxDrawCmdCount];
     draw_cmd SkinnedDrawCmds[MaxSkinnedDrawCmdCount];
     skinning_cmd SkinningCmds[MaxSkinningCmdCount];
@@ -983,9 +986,9 @@ inline b32 DrawWidget3D(render_frame* Frame,
 inline b32 AddLight(render_frame* Frame, light Light)
 {
     b32 Result = false;
-    if (Frame->Uniforms.LightCount < R_MaxLightCount)
+    if (Frame->LightCount < R_MaxLightCount)
     {
-        Frame->Uniforms.Lights[Frame->Uniforms.LightCount++] = Light;
+        Frame->Lights[Frame->LightCount++] = Light;
         Result = true;
     }
     return(Result);

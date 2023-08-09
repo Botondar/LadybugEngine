@@ -114,7 +114,7 @@ struct game_world
     particle_system ParticleSystems[MaxParticleSystemCount];
 
     mmbox AdHocLightBounds;
-    static constexpr u32 AdHocLightCount = 64u;
+    static constexpr u32 AdHocLightCount = 256u;
     light AdHocLights[AdHocLightCount];
 };
 
