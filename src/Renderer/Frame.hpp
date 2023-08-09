@@ -1,5 +1,11 @@
 #pragma once
 
+/*
+    TODO(boti): 
+      The purpose of this file kind of got folded into the renderer when we decided
+    that most things should go through the frame, so maybe it's time to move these?
+*/
+
 internal VkDescriptorSet 
 PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayout Layout);
 
