@@ -297,10 +297,10 @@ void main()
     {
         vec3 L = PerFrame.Lights[i].P.xyz - P;
         vec3 E = PerFrame.Lights[i].E.xyz * PerFrame.Lights[i].E.w;
-        float d = length(L);
-        float InvD = 1.0 / d;
-        L = L * InvD;
-        E = E * (InvD*InvD);
+        float DistSq = dot(L, L);
+        float InvDistSq = 1.0 / DistSq;
+        L = L * sqrt(InvDistSq);
+        E = E * InvDistSq;
 
         float NdotL = max(dot(L, N), 0.0);
         vec3 Diffuse = DiffuseBase * NdotL;
