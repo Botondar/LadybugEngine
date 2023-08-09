@@ -126,7 +126,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                         RandBetween(R, 0.1f, 1.0f), 
                         RandBetween(R, 0.1f, 1.0f), 
                         RandBetween(R, 0.1f, 1.0f), 
-                        RandBetween(R, 0.2f, 0.6f),
+                        RandBetween(R, 0.1f, 0.4f),
                     },
                 };
             }
