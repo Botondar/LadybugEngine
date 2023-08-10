@@ -13,6 +13,7 @@ constexpr u32 R_MaxRenderTargetSizeX = 3840;
 constexpr u32 R_MaxRenderTargetSizeY = 2160;
 constexpr u32 R_MaxTileCountX = CeilDiv(R_MaxRenderTargetSizeX, R_TileSizeX);
 constexpr u32 R_MaxTileCountY = CeilDiv(R_MaxRenderTargetSizeY, R_TileSizeY);
+constexpr u32 R_MaxLightCountPerTile = 255;
 
 constexpr u64 R_RenderTargetMemorySize      = MiB(320);
 constexpr u64 R_TextureMemorySize           = MiB(1024llu);
@@ -534,6 +535,10 @@ struct render_camera
     m4 CameraTransform;
     m4 ViewTransform; // aka Inverse camera transform
 
+    // NOTE(boti): Projection transform is filled by the backend
+    m4 ProjectionTransform;
+    m4 InverseProjectionTransform;
+
     f32 FocalLength;
     f32 NearZ;
     f32 FarZ;
@@ -734,6 +739,7 @@ struct render_frame
 
     post_process_params PostProcess;
 
+    render_camera Camera;
     frustum CameraFrustum;
     v3 SunV; // World-space sun direction
 

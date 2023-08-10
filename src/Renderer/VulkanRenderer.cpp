@@ -1855,8 +1855,45 @@ void EndRenderFrame(render_frame* Frame)
 
     renderer* Renderer = Frame->Renderer;
 
+    u32 TileCountX = CeilDiv(Frame->RenderWidth, R_TileSizeX);
+    u32 TileCountY = CeilDiv(Frame->RenderHeight, R_TileSizeY);
     {
-        frustum Frustum = Frame->CameraFrustum;
+        f32 s = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
+        frustum CameraFrustum = Frame->CameraFrustum;
+
+        u32 TileCount = TileCountX*TileCountY;
+        frustum* TileFrustums = PushArray<frustum>(Frame->Arena, TileCount);
+        screen_tile* Tiles = PushArray<screen_tile>(Frame->Arena, TileCount);
+
+        // NOTE(boti): Because we're transforming planes, this is actually the inverse of what ClipToWorld would normally be.
+        // Through the loop we right-multiply to get the proper inverse-transpose.
+        m4 ClipToWorld = Frame->Camera.ProjectionTransform * Frame->Camera.ViewTransform;
+        for (u32 TileY = 0; TileY < TileCountY; TileY++)
+        {
+            for (u32 TileX = 0; TileX < TileCountX; TileX++)
+            {
+                u32 TileIndex = TileX + TileY*TileCountX;
+                Tiles[TileIndex].LightCount = 0;
+                frustum* Frustum = TileFrustums + TileIndex;
+
+                f32 MinX = (f32)(TileX * R_TileSizeX);
+                f32 MinY = (f32)(TileY * R_TileSizeY);
+                f32 MaxX = MinX + (f32)R_TileSizeX;
+                f32 MaxY = MinY + (f32)R_TileSizeY;
+                MinX = 2.0f * (MinX / Frame->RenderWidth) - 1.0f;
+                MinY = 2.0f * (MinY / Frame->RenderHeight) - 1.0f;
+                MaxX = 2.0f * (MaxX / Frame->RenderWidth) - 1.0f;
+                MaxY = 2.0f * (MaxY / Frame->RenderWidth) - 1.0f;
+                
+                Frustum->Left   = v4{ +1.0f, 0.0f, 0.0f, +MinX } * ClipToWorld;
+                Frustum->Right  = v4{ -1.0f, 0.0f, 0.0f, -MaxX } * ClipToWorld;
+                Frustum->Top    = v4{ 0.0f, +1.0f, 0.0f, +MinY } * ClipToWorld;
+                Frustum->Bottom = v4{ 0.0f, -1.0f, 0.0f, -MaxY } * ClipToWorld;
+                Frustum->Near   = v4{ 0.0f, 0.0f, +1.0f, 0.0f } * ClipToWorld;
+                Frustum->Far    = v4{ 0.0f, 0.0f, -1.0f, 1.0f } * ClipToWorld;
+            }
+        }
+
         constexpr f32 LuminanceThreshold = 3e-2f;
         for (u32 LightIndex = 0; LightIndex < Frame->LightCount; LightIndex++)
         {
@@ -1864,7 +1901,7 @@ void EndRenderFrame(render_frame* Frame)
 
             f32 L = Light->E.w * Max(Max(Light->E.x, Light->E.y), Light->E.z);
             f32 R = Sqrt(Max((L / LuminanceThreshold), 0.0f));
-            if (IntersectFrustumSphere(&Frustum, Light->P.xyz, R))
+            if (IntersectFrustumSphere(&CameraFrustum, Light->P.xyz, R))
             {
                 Frame->Uniforms.Lights[Frame->Uniforms.LightCount++] = 
                 {
@@ -1876,6 +1913,20 @@ void EndRenderFrame(render_frame* Frame)
                 {
                     break;
                 }
+
+#if 0
+                for (u32 TileIndex = 0; TileIndex < TileCount; TileIndex++)
+                {
+                    screen_tile* Tile = Tiles + TileIndex;
+                    if (Tile->LightCount < R_MaxLightCountPerTile)
+                    {
+                        if (IntersectFrustumSphere(TileFrustums + TileIndex, Light->P.xyz, R))
+                        {
+                            Tile->LightIndices[Tile->LightCount++] = LightIndex;
+                        }
+                    }
+                }
+#endif
             }
         };
     }
@@ -2471,24 +2522,32 @@ void EndRenderFrame(render_frame* Frame)
     vkQueuePresentKHR(VK.GraphicsQueue, &PresentInfo);
 }
 
-void SetRenderCamera(render_frame* Frame, const render_camera* Camera)
+void SetRenderCamera(render_frame* Frame, const render_camera* CameraIn)
 {
+    render_camera* Camera = &Frame->Camera;
+    *Camera = *CameraIn;
+
     f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
 
-    f32 InvZRange = 1.0f / (Camera->FarZ - Camera->NearZ);
-    m4 ProjectionTransform = M4(
-        Camera->FocalLength / AspectRatio, 0.0f, 0.0f, 0.0f,
-        0.0f, Camera->FocalLength, 0.0f, 0.0f,
-        0.0f, 0.0f, Camera->FarZ * InvZRange, -Camera->FarZ*Camera->NearZ * InvZRange,
+    f32 n = Camera->NearZ;
+    f32 f = Camera->FarZ;
+    f32 r = 1.0f / (f - n);
+    f32 s = AspectRatio;
+    f32 g = Camera->FocalLength;
+
+    Camera->ProjectionTransform = M4(
+        g / s, 0.0f, 0.0f, 0.0f,
+        0.0f, g, 0.0f, 0.0f,
+        0.0f, 0.0f, f * r, -f*n * r,
         0.0f, 0.0f, 1.0f, 0.0f);
+    Camera->InverseProjectionTransform = M4(
+        s / g, 0.0f,     0.0f,            0.0f,
+        0.0f,  1.0f / g, 0.0f,            0.0f,
+        0.0f,  0.0f,     0.0f,            1.0f,
+        0.0f,  0.0f,     1.0f / (-f*n*r), 1.0f / n);
 
     // Calculate camera frustum
     {
-        f32 s = AspectRatio;
-        f32 g = Camera->FocalLength;
-        f32 n = Camera->NearZ;
-        f32 f = Camera->FarZ;
-
         f32 g2 = g*g;
         f32 mx = 1.0f / Sqrt(g2 + s*s);
         f32 my = 1.0f / Sqrt(g2 + 1.0f);
@@ -2508,8 +2567,8 @@ void SetRenderCamera(render_frame* Frame, const render_camera* Camera)
 
     Frame->Uniforms.CameraTransform = Camera->CameraTransform;
     Frame->Uniforms.ViewTransform = Camera->ViewTransform;
-    Frame->Uniforms.ProjectionTransform = ProjectionTransform;
-    Frame->Uniforms.ViewProjectionTransform = ProjectionTransform * Camera->ViewTransform;
+    Frame->Uniforms.ProjectionTransform = Camera->ProjectionTransform;
+    Frame->Uniforms.ViewProjectionTransform = Camera->ProjectionTransform * Camera->ViewTransform;
 
     Frame->Uniforms.FocalLength = Camera->FocalLength;
     Frame->Uniforms.AspectRatio = AspectRatio;

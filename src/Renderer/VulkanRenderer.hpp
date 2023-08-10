@@ -21,6 +21,12 @@ struct vulkan_buffer
 
 extern vulkan VK;
 
+struct screen_tile
+{
+    u32 LightCount;
+    u32 LightIndices[R_MaxLightCountPerTile];
+};
+
 struct pipeline_with_layout
 {
     VkPipeline Pipeline;

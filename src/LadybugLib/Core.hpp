@@ -276,9 +276,20 @@ constexpr f32 EulerNumber = 2.71828182846f;
 constexpr f32 Log2_10 = 3.32192809488736234787f;
 constexpr f32 NOZ_Threshold = 1e-6f;
 
-inline constexpr u32 CeilDiv(u32 x, u32 y);
 
 inline constexpr f32 Abs(f32 x) { return x < 0.0f ? -x : x; }
+inline constexpr f32 Sgn(f32 x) 
+{ 
+    f32 Result = 0.0f;
+    if      (x < 0.0f) Result = -1.0f;
+    else if (x > 0.0f) Result = +1.0f;
+    return(Result);
+}
+
+inline f32 Ratio0(f32 Numerator, f32 Denominator);
+inline f32 Modulo(f32 x, f32 d) { return fmodf(x, d); }
+inline f32 Modulo0(f32 x, f32 d);
+inline constexpr u32 CeilDiv(u32 x, u32 y);
 
 inline f32 Floor(f32 x) { return floorf(x); }
 inline f32 Ceil(f32 x) { return ceilf(x); }
@@ -292,9 +303,6 @@ inline f32 Tan(f32 x) { return tanf(x); }
 
 inline f32 Ln(f32 x) { return logf(x); }
 inline f32 Pow(f32 a, f32 b) { return powf(a, b); }
-inline f32 Ratio0(f32 Numerator, f32 Denominator);
-inline f32 Modulo(f32 x, f32 d) { return fmodf(x, d); }
-inline f32 Modulo0(f32 x, f32 d);
 
 template<typename T> inline constexpr 
 T Min(T a, T b);
