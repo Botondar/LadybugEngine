@@ -170,6 +170,24 @@ internal VkShaderStageFlags PipelineStagesToVulkan(flags32 Stages)
     return(Result);
 }
 
+internal VkMemoryRequirements 
+GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInfo)
+{
+    VkMemoryRequirements Result = {};
+
+    VkMemoryRequirements2 MemoryRequirements = { VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2 };
+    VkDeviceBufferMemoryRequirements Query = 
+    {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS,
+        .pNext = nullptr,
+        .pCreateInfo = BufferInfo,
+    };
+    vkGetDeviceBufferMemoryRequirements(Device, &Query, &MemoryRequirements);
+    Result = MemoryRequirements.memoryRequirements;
+
+    return(Result);
+}
+
 internal VkResult ResizeRenderTargets(renderer* Renderer);
 
 internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTypes, size_t Size, 
@@ -773,6 +791,46 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
 
             Result = vkCreateDescriptorPool(VK.Device, &PoolInfo, nullptr, &Renderer->PerFrameDescriptorPool[i]);
             ReturnOnFailure();
+        }
+    }
+
+    // Light buffer
+    {
+        VkBufferCreateInfo BufferInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .size = R_MaxLightCount * sizeof(light),
+            .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
+        };
+
+        VkMemoryRequirements MemoryRequirements = GetBufferMemoryRequirements(VK.Device, &BufferInfo);
+        u32 MemoryTypes = MemoryRequirements.memoryTypeBits & VK.GPUMemTypes;
+        u32 MemoryTypeIndex = 0;
+        if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
+        {
+            VkMemoryAllocateInfo AllocInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .allocationSize = MemoryRequirements.size,
+                .memoryTypeIndex = MemoryTypeIndex,
+            };
+
+            Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->LightBufferMemory);
+            ReturnOnFailure();
+            Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->LightBuffer);
+            ReturnOnFailure();
+            Result = vkBindBufferMemory(VK.Device, Renderer->LightBuffer, Renderer->LightBufferMemory, 0);
+            ReturnOnFailure();
+        }
+        else
+        {
+            return(0);
         }
     }
 
@@ -1725,10 +1783,13 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
         Frame->Backend->ShadowCascadeViews[i] = Renderer->ShadowCascadeViews[i];
     }
 
+    Frame->LightCount = 0;
+
     Frame->Backend->UniformBuffer = Renderer->PerFrameUniformBuffers[FrameID];
     Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
 
-    Frame->LightCount = 0;
+    Frame->StagingBufferAt = 0;
+    Frame->Backend->StagingBuffer = Renderer->StagingBuffers[FrameID];
 
     Frame->Backend->Draw2DCmdBuffer = Renderer->PerFrameDraw2DCmdBuffers[FrameID];
     Frame->Backend->Vertex2DBuffer = Renderer->PerFrameVertex2DBuffers[FrameID];
@@ -1894,22 +1955,34 @@ void EndRenderFrame(render_frame* Frame)
             }
         }
 
-        constexpr f32 LuminanceThreshold = 3e-2f;
+        u32 LightBufferOffset = Frame->StagingBufferAt;
+        light* LightBuffer = nullptr;
+        if (Frame->StagingBufferAt + Frame->LightCount * sizeof(light) < Frame->StagingBufferSize)
+        {
+            LightBuffer = (light*)OffsetPtr(Frame->StagingBufferBase, LightBufferOffset);
+            Frame->StagingBufferAt += Frame->LightCount * sizeof(light);
+        }
+        else
+        {
+            UnimplementedCodePath;
+        }
+
         for (u32 LightIndex = 0; LightIndex < Frame->LightCount; LightIndex++)
         {
             light* Light = Frame->Lights + LightIndex;
 
             f32 L = Light->E.w * Max(Max(Light->E.x, Light->E.y), Light->E.z);
-            f32 R = Sqrt(Max((L / LuminanceThreshold), 0.0f));
+            f32 R = Sqrt(Max((L / R_LuminanceThreshold), 0.0f));
             if (IntersectFrustumSphere(&CameraFrustum, Light->P.xyz, R))
             {
-                Frame->Uniforms.Lights[Frame->Uniforms.LightCount++] = 
+                v4 P = Frame->Uniforms.ViewTransform * Light->P;
+                LightBuffer[Frame->Uniforms.LightCount++] = 
                 {
-                    .P = Frame->Uniforms.ViewTransform * Light->P,
+                    .P = P,
                     .E = Light->E,
                 };
 
-                if (Frame->Uniforms.LightCount == Frame->Uniforms.MaxUniformLightCount)
+                if (Frame->Uniforms.LightCount == R_MaxLightCount)
                 {
                     break;
                 }
@@ -1928,10 +2001,73 @@ void EndRenderFrame(render_frame* Frame)
                 }
 #endif
             }
+        }
+
+        VkBufferCopy LightBufferCopy = 
+        {
+            .srcOffset = LightBufferOffset,
+            .dstOffset = 0,
+            .size = Frame->Uniforms.LightCount * sizeof(light),
         };
+        VkBufferMemoryBarrier2 BeginBarriers[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+                .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = Renderer->LightBuffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE,
+            },
+        };
+        VkDependencyInfo BeginDependency = 
+        {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .bufferMemoryBarrierCount = CountOf(BeginBarriers),
+            .pBufferMemoryBarriers = BeginBarriers,
+        };
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependency);
+        vkCmdCopyBuffer(Frame->Backend->CmdBuffer, Frame->Backend->StagingBuffer, Renderer->LightBuffer, 1, &LightBufferCopy);
+
+        VkBufferMemoryBarrier2 EndBarriers[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = Renderer->LightBuffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE,
+            },
+        };
+        VkDependencyInfo EndDependency = 
+        {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .bufferMemoryBarrierCount = CountOf(EndBarriers),
+            .pBufferMemoryBarriers = EndBarriers,
+        };
+
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &EndDependency);
     }
 
     BeginSceneRendering(Frame);
+
+    VkDescriptorSet LightBufferDescriptorSet = PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_StructuredBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                                                    Renderer->LightBuffer, 0, VK_WHOLE_SIZE);
 
     VkDescriptorSet OcclusionDescriptorSet = PushImageDescriptor(
         Frame,
@@ -2109,6 +2245,7 @@ void EndRenderFrame(render_frame* Frame)
             OcclusionDescriptorSet,
             StructureBufferDescriptorSet,
             ShadowDescriptorSet,
+            LightBufferDescriptorSet,
         };
 
         VkViewport ShadowViewport = 

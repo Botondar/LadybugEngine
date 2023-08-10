@@ -148,6 +148,9 @@ struct renderer
     void* StagingMemoryMapping;
     VkBuffer StagingBuffers[MaxSwapchainImageCount];
 
+    VkDeviceMemory LightBufferMemory;
+    VkBuffer LightBuffer;
+
     VkSemaphore ImageAcquiredSemaphores[MaxSwapchainImageCount];
     VkFence ImageAcquiredFences[MaxSwapchainImageCount];
     VkFence RenderFinishedFences[MaxSwapchainImageCount];

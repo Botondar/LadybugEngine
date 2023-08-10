@@ -502,6 +502,22 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
             },
         },
     },
+
+    [SetLayout_StructuredBuffer] = 
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = Descriptor_StorageBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_PS|PipelineStage_CS,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
 };
 
 const pipeline_info PipelineInfos[Pipeline_Count] = 
@@ -516,7 +532,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Layout = 
         {
             .PushConstantRangeCount = 1,
-            .DescriptorSetCount = 6,
+            .DescriptorSetCount = 7,
             .PushConstantRanges = 
             {
                 { 
@@ -533,6 +549,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
                 SetLayout_SampledRenderTargetPS, // Occlusion buffer
                 SetLayout_SampledRenderTargetPS, // Structure buffer
                 SetLayout_ShadowPS, // Shadow map
+                SetLayout_StructuredBuffer, // LightBuffer
             },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,

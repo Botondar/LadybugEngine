@@ -54,6 +54,10 @@ layout(set = 1, binding = 0) uniform texture2D Textures[];
 layout(set = 3, binding = 0) uniform sampler2D OcclusionBuffer;
 layout(set = 4, binding = 0) uniform sampler2D StructureBuffer;
 layout(set = 5, binding = 0) uniform sampler2DArrayShadow ShadowSampler;
+layout(set = 6, binding = 0, scalar) buffer LightBuffer
+{
+    light Lights[];
+};
 
 layout(location = 0) in vec3 P;
 layout(location = 1) in vec2 TexCoord;
@@ -295,21 +299,18 @@ void main()
 
     for (uint i = 0; i < PerFrame.LightCount; i++)
     {
-        vec3 L = PerFrame.Lights[i].P.xyz - P;
-        vec3 E = PerFrame.Lights[i].E.xyz * PerFrame.Lights[i].E.w;
+        vec3 L = Lights[i].P.xyz - P;
+        vec3 E = Lights[i].E.xyz * Lights[i].E.w;
         float DistSq = dot(L, L);
         float InvDistSq = 1.0 / DistSq;
         L = L * sqrt(InvDistSq);
         E = E * InvDistSq;
 
-        // NOTE(boti): This threshold should be kept in sync with the
-        // one used for light culling.
-        // Although technically incorrect, this makes it so that the lighting
+        // NOTE(boti): Although technically incorrect, this makes it so that the lighting
         // stays consistent as the camera view changes
-        const float Threshold = 3e-2;
-        if (E.x < Threshold &&
-            E.y < Threshold &&
-            E.z < Threshold)
+        if (E.x < R_LuminanceThreshold &&
+            E.y < R_LuminanceThreshold &&
+            E.z < R_LuminanceThreshold)
         {
             E = vec3(0.0);
         }

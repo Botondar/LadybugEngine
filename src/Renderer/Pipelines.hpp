@@ -33,6 +33,7 @@ enum descriptor_set_layout : u32
     SetLayout_ParticleBuffer,
     SetLayout_PoseTransform,
     SetLayout_Skinning, 
+    SetLayout_StructuredBuffer,
 
     SetLayout_Count,
 };

@@ -14,10 +14,24 @@
 #define m3 mat3
 #define m4 mat4
 
+// TODO(boti): Create a shared header between the C++ and the shaders
+// NOTE(boti): These constants need to be kept in sync with the ones Renderer.hpp
+#define R_TileSizeX 16
+#define R_TileSizeY 16
+#define R_MaxLightCountPerTile 255
+#define R_LuminanceThreshold 3e-2
+#define R_MaxLightCount 16384
+
 struct light
 {
     vec4 P;
     vec4 E;
+};
+
+struct screen_tile
+{
+    uint LightCount;
+    uint LightIndices[R_MaxLightCountPerTile];
 };
 
 struct per_frame
@@ -45,7 +59,6 @@ struct per_frame
     vec2 ScreenSize;
 
     uint LightCount;
-    light Lights[1024];
 };
 
 struct material
