@@ -2,9 +2,6 @@
 
 #include <vulkan/vulkan.h>
 
-//
-// Buffers
-//
 struct vulkan_buffer
 {
     size_t Size;
@@ -55,6 +52,7 @@ struct backend_render_frame
     VkImageView ShadowMapView;
     VkImageView ShadowCascadeViews[R_MaxShadowCascadeCount];
 
+    VkBuffer StagingBuffer;
     VkBuffer UniformBuffer;
     VkBuffer ParticleBuffer;
     VkBuffer JointBuffer;
@@ -122,6 +120,7 @@ struct renderer
     void* BARMemoryMapping;
 
     // NOTE(boti): These are all allocated from BAR memory
+    // TODO(boti): These memory mappings should probably just be stored in render_frame directly
     VkBuffer PerFrameUniformBuffers[MaxSwapchainImageCount];
     void* PerFrameUniformBufferMappings[MaxSwapchainImageCount];
     VkBuffer PerFrameJointBuffers[MaxSwapchainImageCount];
@@ -135,6 +134,10 @@ struct renderer
 
     VkDeviceMemory SkinningMemory;
     VkBuffer SkinningBuffers[MaxSwapchainImageCount];
+
+    VkDeviceMemory StagingMemory;
+    void* StagingMemoryMapping;
+    VkBuffer StagingBuffers[MaxSwapchainImageCount];
 
     VkSemaphore ImageAcquiredSemaphores[MaxSwapchainImageCount];
     VkFence ImageAcquiredFences[MaxSwapchainImageCount];

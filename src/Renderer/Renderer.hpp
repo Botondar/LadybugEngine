@@ -728,6 +728,14 @@ struct render_frame
     frustum CameraFrustum;
     v3 SunV; // World-space sun direction
 
+    // TODO(boti): currently there's a renderer and a per-frame
+    // staging buffer, because assets are uploaded through
+    // the renderer directly.
+    // In the future assets loading should probably be done through the frame as well
+    umm StagingBufferSize;
+    umm StagingBufferAt;
+    void* StagingBufferBase;
+
     static constexpr u32 MaxDrawCmdCount            = (1u << 22);
     static constexpr u32 MaxSkinnedDrawCmdCount     = (1u << 20);
     static constexpr u32 MaxSkinningCmdCount        = MaxSkinnedDrawCmdCount;

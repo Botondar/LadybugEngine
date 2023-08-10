@@ -473,6 +473,66 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
     
     // Per frame
     {
+        // Per-frame staging buffer
+        {
+            VkBufferCreateInfo BufferInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .size = MiB(128),
+                .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                .queueFamilyIndexCount = 0,
+                .pQueueFamilyIndices = nullptr,
+            };
+
+            VkDeviceBufferMemoryRequirements Query = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS,
+                .pNext = nullptr,
+                .pCreateInfo = &BufferInfo,
+            };
+            VkMemoryRequirements2 MemoryRequirements = { VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2 };
+            vkGetDeviceBufferMemoryRequirements(VK.Device, &Query, &MemoryRequirements);
+            VkMemoryRequirements* Requirements = &MemoryRequirements.memoryRequirements;
+            Assert((Requirements->alignment & BufferInfo.size) == 0);
+
+            u32 MemoryType = 0;
+            u8 ScanResult = BitScanForward(&MemoryType, Requirements->memoryTypeBits & VK.SharedMemTypes);
+            if (ScanResult)
+            {
+                VkMemoryAllocateInfo AllocInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                    .pNext = nullptr,
+                    .allocationSize = Renderer->SwapchainImageCount * BufferInfo.size,
+                    .memoryTypeIndex = MemoryType,
+                };
+                Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->StagingMemory);
+                ReturnOnFailure();
+
+                Result = vkMapMemory(VK.Device, Renderer->StagingMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->StagingMemoryMapping);
+                for (u32 FrameIndex = 0; FrameIndex < Renderer->SwapchainImageCount; FrameIndex++)
+                {
+                    Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->StagingBuffers[FrameIndex]);
+                    ReturnOnFailure();
+
+                    umm Offset = FrameIndex * BufferInfo.size;
+                    Result = vkBindBufferMemory(VK.Device, Renderer->StagingBuffers[FrameIndex], Renderer->StagingMemory, Offset);
+                    ReturnOnFailure();
+
+                    Renderer->Frames[FrameIndex].StagingBufferBase = OffsetPtr(Renderer->StagingMemoryMapping, Offset);
+                    Renderer->Frames[FrameIndex].StagingBufferSize = BufferInfo.size;
+                    Renderer->Frames[FrameIndex].StagingBufferAt = 0;
+                }
+            }
+            else
+            {
+                return(0);
+            }
+        }
+
         // BAR memory
         {
             u32 MemoryTypeIndex = 0;
