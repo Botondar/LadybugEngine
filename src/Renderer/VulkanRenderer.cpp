@@ -442,7 +442,6 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
                 &Renderer->StagingBuffer.Buffer, &Renderer->StagingBuffer.Memory)) == VK_SUCCESS)
         {
             Renderer->StagingBuffer.Size = MemorySize;
-            
             Result = vkMapMemory(VK.Device, Renderer->StagingBuffer.Memory, 
                                  0, Renderer->StagingBuffer.Size, 0, 
                                  &Renderer->StagingBuffer.Mapping);
