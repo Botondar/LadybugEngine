@@ -77,7 +77,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         GameIO->dt = 0.0f;
     }
 
-    render_frame* RenderFrame = BeginRenderFrame(GameState->Renderer, GameIO->OutputWidth, GameIO->OutputHeight);
+    render_frame* RenderFrame = BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputWidth, GameIO->OutputHeight);
     RenderFrame->ImmediateTextureID = GameState->Assets->DefaultFontTextureID;
     RenderFrame->ParticleTextureID = GameState->Assets->ParticleArrayID;
 

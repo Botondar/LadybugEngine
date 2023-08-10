@@ -1693,11 +1693,12 @@ texture_id PushTexture(renderer* Renderer, texture_flags Flags,
 // Rendering interface implementation
 //
 
-render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHeight)
+render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 OutputWidth, u32 OutputHeight)
 {
     u32 FrameID = (u32)(Renderer->CurrentFrameID++ % Renderer->SwapchainImageCount);
     render_frame* Frame = Renderer->Frames + FrameID;
     Frame->Renderer = Renderer;
+    Frame->Arena = Arena;
 
     Frame->Backend->SwapchainImageIndex = INVALID_INDEX_U32;
     Frame->FrameID = FrameID;

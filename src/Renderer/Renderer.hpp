@@ -723,6 +723,8 @@ struct render_frame
     renderer* Renderer;
     backend_render_frame* Backend;
 
+    memory_arena* Arena;
+
     u32 FrameID;
     u32 RenderWidth;
     u32 RenderHeight;
@@ -797,7 +799,9 @@ texture_id PushTexture(renderer* Renderer, texture_flags Flags,
 // Frame rendering
 //
 
-render_frame* BeginRenderFrame(renderer* Renderer, u32 OutputWidth, u32 OutputHeight);
+render_frame* 
+BeginRenderFrame(renderer* Renderer, memory_arena* arena,
+                 u32 OutputWidth, u32 OutputHeight);
 void EndRenderFrame(render_frame* Frame);
 
 void SetRenderCamera(render_frame* Frame, const render_camera* Camera);
