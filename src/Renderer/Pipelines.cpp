@@ -532,7 +532,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Layout = 
         {
             .PushConstantRangeCount = 1,
-            .DescriptorSetCount = 7,
+            .DescriptorSetCount = 8,
             .PushConstantRanges = 
             {
                 { 
@@ -550,6 +550,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
                 SetLayout_SampledRenderTargetPS, // Structure buffer
                 SetLayout_ShadowPS, // Shadow map
                 SetLayout_StructuredBuffer, // LightBuffer
+                SetLayout_StructuredBuffer, // TileBuffer
             },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,

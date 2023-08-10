@@ -151,6 +151,9 @@ struct renderer
     VkDeviceMemory LightBufferMemory;
     VkBuffer LightBuffer;
 
+    VkDeviceMemory TileMemory;
+    VkBuffer TileBuffer;
+
     VkSemaphore ImageAcquiredSemaphores[MaxSwapchainImageCount];
     VkFence ImageAcquiredFences[MaxSwapchainImageCount];
     VkFence RenderFinishedFences[MaxSwapchainImageCount];

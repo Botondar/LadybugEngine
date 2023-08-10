@@ -714,6 +714,8 @@ struct frame_uniform_data
     f32 Padding2;
 
     v2 ScreenSize;
+    u32 TileCountX;
+    u32 TileCountY;
 
     u32 LightCount;
     f32 Padding4;

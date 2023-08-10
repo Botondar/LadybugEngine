@@ -54,10 +54,18 @@ layout(set = 1, binding = 0) uniform texture2D Textures[];
 layout(set = 3, binding = 0) uniform sampler2D OcclusionBuffer;
 layout(set = 4, binding = 0) uniform sampler2D StructureBuffer;
 layout(set = 5, binding = 0) uniform sampler2DArrayShadow ShadowSampler;
-layout(set = 6, binding = 0, scalar) buffer LightBuffer
+
+layout(set = 6, binding = 0, scalar) 
+readonly buffer LightBuffer
 {
     light Lights[];
 };
+layout(set = 7, binding = 0, scalar)
+readonly buffer TileBuffer
+{
+    screen_tile Tiles[];
+};
+
 
 layout(location = 0) in vec3 P;
 layout(location = 1) in vec2 TexCoord;
@@ -297,10 +305,15 @@ void main()
         Lo += Shadow * (Diffuse + Specular) * PerFrame.SunL;
     }
 
-    for (uint i = 0; i < PerFrame.LightCount; i++)
+    uint TileX = uint(gl_FragCoord.x) / R_TileSizeX;
+    uint TileY = uint(gl_FragCoord.y) / R_TileSizeY;
+    uint TileIndex = TileX + TileY * PerFrame.TileCount.x;
+
+    for (uint i = 0; i < Tiles[TileIndex].LightCount; i++)
     {
-        vec3 L = Lights[i].P.xyz - P;
-        vec3 E = Lights[i].E.xyz * Lights[i].E.w;
+        uint LightIndex = Tiles[TileIndex].LightIndices[i];
+        vec3 L = Lights[LightIndex].P.xyz - P;
+        vec3 E = Lights[LightIndex].E.xyz * Lights[LightIndex].E.w;
         float DistSq = dot(L, L);
         float InvDistSq = 1.0 / DistSq;
         L = L * sqrt(InvDistSq);
