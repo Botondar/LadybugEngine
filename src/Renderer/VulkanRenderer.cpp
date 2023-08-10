@@ -1856,7 +1856,7 @@ void EndRenderFrame(render_frame* Frame)
 
     {
         frustum Frustum = Frame->CameraFrustum;
-        constexpr f32 LuminanceThreshold = 5e-2f;
+        constexpr f32 LuminanceThreshold = 3e-2f;
         for (u32 LightIndex = 0; LightIndex < Frame->LightCount; LightIndex++)
         {
             light* Light = Frame->Lights + LightIndex;

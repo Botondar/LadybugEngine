@@ -302,6 +302,18 @@ void main()
         L = L * sqrt(InvDistSq);
         E = E * InvDistSq;
 
+        // NOTE(boti): This threshold should be kept in sync with the
+        // one used for light culling.
+        // Although technically incorrect, this makes it so that the lighting
+        // stays consistent as the camera view changes
+        const float Threshold = 3e-2;
+        if (E.x < Threshold &&
+            E.y < Threshold &&
+            E.z < Threshold)
+        {
+            E = vec3(0.0);
+        }
+
         float NdotL = max(dot(L, N), 0.0);
         vec3 Diffuse = DiffuseBase * NdotL;
 
