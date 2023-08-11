@@ -20,16 +20,19 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
         font_layout_type Layout = font_layout_type::Top;
         f32 FrameTimeSize = 24.0f;
 
-        constexpr size_t BuffSize = 128;
+        constexpr size_t BuffSize = 256;
         char Buff[BuffSize];
+
+        f32 CurrentY = 0.0f;
 
         snprintf(Buff, BuffSize, "%.2fms", 1000.0f * GameIO->dt);
         mmrect2 Rect = GetTextRect(Font, Buff, Layout);
         Rect.Min *= FrameTimeSize;
         Rect.Max *= FrameTimeSize;
         f32 Width = Rect.Max.x - Rect.Min.x;
-        v2 P = { (f32)Frame->RenderWidth - Width, 0.0f };
+        v2 P = { (f32)Frame->RenderWidth - Width, CurrentY };
         PushTextWithShadow(Frame, Buff, Font, FrameTimeSize, P,  DefaultForegroundColor, Layout);
+        CurrentY += FrameTimeSize * Font->BaselineDistance;
 
         const char* DeviceName = GetDeviceName(Frame->Renderer);
         f32 DeviceNameSize = 20.0f;
@@ -37,8 +40,17 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
         Rect.Min *= DeviceNameSize;
         Rect.Max *= DeviceNameSize;
         Width = Rect.Max.x - Rect.Min.x;
-        P = { (f32)Frame->RenderWidth - Width, FrameTimeSize * Font->BaselineDistance };
+        P = { (f32)Frame->RenderWidth - Width, CurrentY };
         PushTextWithShadow(Frame, DeviceName, Font, DeviceNameSize, P, DefaultForegroundColor, Layout);
+        CurrentY += DeviceNameSize * Font->BaselineDistance;
+
+        snprintf(Buff, BuffSize, "Rendering@%ux%u", Frame->RenderWidth, Frame->RenderHeight);
+        Rect = GetTextRect(Font, Buff, Layout);
+        Rect.Min *= DeviceNameSize;
+        Rect.Max *= DeviceNameSize;
+        Width = Rect.Max.x - Rect.Min.x;
+        P = { (f32)Frame->RenderWidth - Width, CurrentY };
+        PushTextWithShadow(Frame, Buff, Font, DeviceNameSize, P, DefaultForegroundColor, Layout);
     }
 
     if (WasPressed(GameIO->Keys[SC_Backtick]))
