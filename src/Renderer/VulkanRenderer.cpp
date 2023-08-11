@@ -2725,6 +2725,31 @@ void EndRenderFrame(render_frame* Frame)
         .pResults = nullptr,
     };
     vkQueuePresentKHR(VK.GraphicsQueue, &PresentInfo);
+
+    // Collect stats
+    {
+        render_stats* Stats = &Frame->Stats;
+        Stats->EntryCount = 0;
+
+        auto AddEntry = [Stats](const char* Name, umm UsedSize, umm TotalSize) -> b32
+        {
+            b32 Result = false;
+            if (Stats->EntryCount < Stats->MaxEntryCount)
+            {
+                render_stat_entry* Entry = Stats->Entries + Stats->EntryCount++;
+                Entry->Name = Name;
+                Entry->UsedSize = UsedSize;
+                Entry->AllocationSize = TotalSize;
+            }
+            return(Result);
+        };
+
+        AddEntry("RenderTarget", Renderer->RenderTargetHeap.Offset, Renderer->RenderTargetHeap.MemorySize);
+        AddEntry("VertexBuffer", Renderer->GeometryBuffer.VertexMemory.MemoryInUse, Renderer->GeometryBuffer.VertexMemory.MemorySize);
+        AddEntry("IndexBuffer", Renderer->GeometryBuffer.IndexMemory.MemoryInUse, Renderer->GeometryBuffer.IndexMemory.MemorySize);
+        AddEntry("Texture", Renderer->TextureManager.MemoryOffset, Renderer->TextureManager.MemorySize);
+        AddEntry("Shadow", Renderer->ShadowMemoryOffset, Renderer->ShadowMemorySize);
+    }
 }
 
 void SetRenderCamera(render_frame* Frame, const render_camera* CameraIn)

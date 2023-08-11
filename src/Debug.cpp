@@ -206,25 +206,12 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
     }
     else if (Game->Debug.SelectedMenuID == GPUMenuID)
     {
-        renderer* Renderer = Game->Renderer;
-        // TODO(boti): Add the option to query this from the renderer/render frame
-#if 0
-        TextLine("RenderTarget memory: %llu/%llu MB",
-                     Renderer->RenderTargetHeap.Offset >> 20,
-                     Renderer->RenderTargetHeap.MemorySize >> 20);
-        TextLine("VertexBuffer memory: %llu/%llu MB",
-                     Renderer->GeometryBuffer.VertexMemory.MemoryInUse >> 20,
-                     Renderer->GeometryBuffer.VertexMemory.MemorySize >> 20);
-        TextLine("IndexBuffer memory: %llu/%llu MB",
-                     Renderer->GeometryBuffer.IndexMemory.MemoryInUse >> 20,
-                     Renderer->GeometryBuffer.IndexMemory.MemorySize >> 20);
-        TextLine("Texture memory: %llu/%llu MB",
-                     Renderer->TextureManager.MemoryOffset >> 20,
-                     Renderer->TextureManager.MemorySize >> 20);
-        TextLine("Shadow memory: %llu/%llu MB",
-                     Renderer->ShadowMemoryOffset >> 20,
-                     Renderer->ShadowMemorySize >> 20);
-#endif
+        render_stats* Stats = &Frame->Stats;
+        for (u32 Index = 0; Index < Stats->EntryCount; Index++)
+        {
+            render_stat_entry* Entry = Stats->Entries + Index;
+            TextLine("%s memory: %llu/%llu MB", Entry->Name, Entry->UsedSize >> 20, Entry->AllocationSize >> 20);
+        }
     }
     else if (Game->Debug.SelectedMenuID == PostProcessMenuID)
     {

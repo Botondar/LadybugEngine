@@ -360,7 +360,6 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 {
                     Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
                 }
-
             }
 
             for (u32 PieceIndex = 0; PieceIndex < Entity->PieceCount; PieceIndex++)

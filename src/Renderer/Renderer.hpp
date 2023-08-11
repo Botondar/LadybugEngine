@@ -724,12 +724,27 @@ struct frame_uniform_data
 struct renderer;
 struct backend_render_frame;
 
+struct render_stat_entry
+{
+    const char* Name;
+    umm UsedSize;
+    umm AllocationSize;
+};
+
+struct render_stats
+{
+    static constexpr u32 MaxEntryCount = 1024u;
+    u32 EntryCount;
+    render_stat_entry Entries[MaxEntryCount];
+};
+
 struct render_frame
 {
     renderer* Renderer;
     backend_render_frame* Backend;
+    memory_arena* Arena; // NOTE(boti): filled by the game
 
-    memory_arena* Arena;
+    render_stats Stats;
 
     u32 FrameID;
     u32 RenderWidth;
