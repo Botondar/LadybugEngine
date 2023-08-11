@@ -23,10 +23,10 @@ void main()
 
     for (uint iy = 0; iy < 2; iy++)
     {
-        float y = 2.0 * iy - 0.5;
+        float y = 2.0 * iy;
         for (uint ix = 0; ix < 2; ix++)
         {
-            float x = 2.0 * ix - 0.5;
+            float x = 2.0 * ix;
 
             vec2 SampleP = P + vec2(x, y);
             Sample.x = textureLod(OcclusionBuffer, SampleP, 0).x;
