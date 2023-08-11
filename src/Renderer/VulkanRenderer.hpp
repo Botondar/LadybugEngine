@@ -149,9 +149,11 @@ struct renderer
     VkBuffer StagingBuffers[MaxSwapchainImageCount];
 
     VkDeviceMemory LightBufferMemory;
+    umm LightBufferMemorySize;
     VkBuffer LightBuffer;
 
     VkDeviceMemory TileMemory;
+    umm TileMemorySize;
     VkBuffer TileBuffer;
 
     VkSemaphore ImageAcquiredSemaphores[MaxSwapchainImageCount];

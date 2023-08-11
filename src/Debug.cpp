@@ -207,6 +207,8 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
     else if (Game->Debug.SelectedMenuID == GPUMenuID)
     {
         render_stats* Stats = &Frame->Stats;
+
+        TextLine("Total memory usage: %llu/%llu MB", Stats->TotalMemoryUsed >> 20, Stats->TotalMemoryAllocated >> 20);
         for (u32 Index = 0; Index < Stats->EntryCount; Index++)
         {
             render_stat_entry* Entry = Stats->Entries + Index;

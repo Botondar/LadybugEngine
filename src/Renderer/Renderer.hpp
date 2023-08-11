@@ -733,6 +733,9 @@ struct render_stat_entry
 
 struct render_stats
 {
+    umm TotalMemoryUsed;
+    umm TotalMemoryAllocated;
+
     static constexpr u32 MaxEntryCount = 1024u;
     u32 EntryCount;
     render_stat_entry Entries[MaxEntryCount];

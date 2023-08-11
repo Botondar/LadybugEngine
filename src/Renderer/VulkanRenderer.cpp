@@ -827,6 +827,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
             ReturnOnFailure();
             Result = vkBindBufferMemory(VK.Device, Renderer->LightBuffer, Renderer->LightBufferMemory, 0);
             ReturnOnFailure();
+            Renderer->LightBufferMemorySize = MemoryRequirements.size;
         }
         else
         {
@@ -867,6 +868,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
             ReturnOnFailure();
             Result = vkBindBufferMemory(VK.Device, Renderer->TileBuffer, Renderer->TileMemory, 0);
             ReturnOnFailure();
+            Renderer->TileMemorySize = MemoryRequirements.size;
         }
         else
         {
@@ -2729,11 +2731,17 @@ void EndRenderFrame(render_frame* Frame)
     // Collect stats
     {
         render_stats* Stats = &Frame->Stats;
+        Stats->TotalMemoryUsed = 0;
+        Stats->TotalMemoryAllocated = 0;
         Stats->EntryCount = 0;
 
         auto AddEntry = [Stats](const char* Name, umm UsedSize, umm TotalSize) -> b32
         {
             b32 Result = false;
+
+            Stats->TotalMemoryUsed += UsedSize;
+            Stats->TotalMemoryAllocated += TotalSize;
+
             if (Stats->EntryCount < Stats->MaxEntryCount)
             {
                 render_stat_entry* Entry = Stats->Entries + Stats->EntryCount++;
@@ -2745,10 +2753,14 @@ void EndRenderFrame(render_frame* Frame)
         };
 
         AddEntry("RenderTarget", Renderer->RenderTargetHeap.Offset, Renderer->RenderTargetHeap.MemorySize);
+        AddEntry("BAR", Renderer->BARMemoryByteOffset, Renderer->BARMemoryByteSize);
         AddEntry("VertexBuffer", Renderer->GeometryBuffer.VertexMemory.MemoryInUse, Renderer->GeometryBuffer.VertexMemory.MemorySize);
         AddEntry("IndexBuffer", Renderer->GeometryBuffer.IndexMemory.MemoryInUse, Renderer->GeometryBuffer.IndexMemory.MemorySize);
         AddEntry("Texture", Renderer->TextureManager.MemoryOffset, Renderer->TextureManager.MemorySize);
         AddEntry("Shadow", Renderer->ShadowMemoryOffset, Renderer->ShadowMemorySize);
+        AddEntry("Staging", Frame->StagingBufferAt, Frame->StagingBufferSize);
+        AddEntry("LightBuffer", Frame->LightCount * sizeof(light), Renderer->LightBufferMemorySize);
+        AddEntry("TileBuffer", TileCountX * TileCountY * sizeof(screen_tile), Renderer->TileMemorySize);
     }
 }
 
