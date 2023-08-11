@@ -319,15 +319,6 @@ void main()
         L = L * sqrt(InvDistSq);
         E = E * InvDistSq;
 
-        // NOTE(boti): Although technically incorrect, this makes it so that the lighting
-        // stays consistent as the camera view changes
-        if (E.x < R_LuminanceThreshold &&
-            E.y < R_LuminanceThreshold &&
-            E.z < R_LuminanceThreshold)
-        {
-            //E = vec3(0.0);
-        }
-
         float NdotL = max(dot(L, N), 0.0);
         vec3 Diffuse = DiffuseBase * NdotL;
 
