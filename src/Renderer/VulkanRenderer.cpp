@@ -1976,50 +1976,6 @@ void EndRenderFrame(render_frame* Frame)
             UnimplementedCodePath;
         }
 
-        u32 TileCount = TileCountX*TileCountY;
-        umm TileMemorySize = sizeof(screen_tile) * TileCountX * TileCountY;
-        u32 TileBufferOffset = Frame->StagingBufferAt;
-        screen_tile* Tiles = nullptr;
-        if (Frame->StagingBufferAt + TileMemorySize < Frame->StagingBufferSize)
-        {
-            Tiles = (screen_tile*)OffsetPtr(Frame->StagingBufferBase, TileBufferOffset);
-            Frame->StagingBufferAt += TileMemorySize;
-        }
-        else
-        {
-            UnimplementedCodePath;
-        }
-
-        frustum* TileFrustums = PushArray<frustum>(Frame->Arena, TileCount);
-        // NOTE(boti): This is the inverse transpose because we're transforming planes
-        m4 ClipToWorld = Frame->Camera.ProjectionTransform * Frame->Camera.ViewTransform;
-        for (u32 TileY = 0; TileY < TileCountY; TileY++)
-        {
-            for (u32 TileX = 0; TileX < TileCountX; TileX++)
-            {
-                u32 TileIndex = TileX + TileY*TileCountX;
-                Tiles[TileIndex].LightCount = 0;
-
-                frustum* Frustum = TileFrustums + TileIndex;
-
-                f32 MinX = (f32)(TileX * R_TileSizeX);
-                f32 MinY = (f32)(TileY * R_TileSizeY);
-                f32 MaxX = MinX + (f32)R_TileSizeX;
-                f32 MaxY = MinY + (f32)R_TileSizeY;
-                MinX = 2.0f * (MinX / Frame->RenderWidth) - 1.0f;
-                MinY = 2.0f * (MinY / Frame->RenderHeight) - 1.0f;
-                MaxX = 2.0f * (MaxX / Frame->RenderWidth) - 1.0f;
-                MaxY = 2.0f * (MaxY / Frame->RenderHeight) - 1.0f;
-
-                Frustum->Left   = v4{ +1.0f, 0.0f, 0.0f, -MinX } * ClipToWorld;
-                Frustum->Right  = v4{ -1.0f, 0.0f, 0.0f, +MaxX } * ClipToWorld;
-                Frustum->Top    = v4{ 0.0f, +1.0f, 0.0f, -MinY } * ClipToWorld;
-                Frustum->Bottom = v4{ 0.0f, -1.0f, 0.0f, +MaxY } * ClipToWorld;
-                Frustum->Near   = v4{ 0.0f, 0.0f, +1.0f, 0.0f } * ClipToWorld;
-                Frustum->Far    = v4{ 0.0f, 0.0f, -1.0f, 1.0f } * ClipToWorld;
-            }
-        }
-
         for (u32 LightIndex = 0; LightIndex < Frame->LightCount; LightIndex++)
         {
             light* Light = Frame->Lights + LightIndex;
@@ -2040,18 +1996,6 @@ void EndRenderFrame(render_frame* Frame)
                 {
                     break;
                 }
-
-                for (u32 TileIndex = 0; TileIndex < TileCount; TileIndex++)
-                {
-                    screen_tile* Tile = Tiles + TileIndex;
-                    if (Tile->LightCount < R_MaxLightCountPerTile)
-                    {
-                        if (IntersectFrustumSphere(TileFrustums + TileIndex, Light->P.xyz, R))
-                        {
-                            Tile->LightIndices[Tile->LightCount++] = DstIndex;
-                        }
-                    }
-                }
             }
         }
 
@@ -2070,13 +2014,72 @@ void EndRenderFrame(render_frame* Frame)
                 .offset = 0,
                 .size = VK_WHOLE_SIZE,
             },
+        };
+        VkDependencyInfo BeginDependency = 
+        {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .bufferMemoryBarrierCount = CountOf(BeginBarriers),
+            .pBufferMemoryBarriers = BeginBarriers,
+        };
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependency);
+
+        VkBufferCopy LightBufferCopy = 
+        {
+            .srcOffset = LightBufferOffset,
+            .dstOffset = 0,
+            .size = Frame->Uniforms.LightCount * sizeof(light),
+        };
+        vkCmdCopyBuffer(Frame->Backend->CmdBuffer, Frame->Backend->StagingBuffer, Renderer->LightBuffer, 1, &LightBufferCopy);
+
+        VkBufferMemoryBarrier2 EndBarriers[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = Renderer->LightBuffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE,
+            },
+        };
+        VkDependencyInfo EndDependency = 
+        {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .bufferMemoryBarrierCount = CountOf(EndBarriers),
+            .pBufferMemoryBarriers = EndBarriers,
+        };
+        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &EndDependency);
+    }
+
+    BeginSceneRendering(Frame);
+
+    VkDescriptorSet LightBufferDescriptorSet = PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_StructuredBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                                                    Renderer->LightBuffer, 0, VK_WHOLE_SIZE);
+    VkDescriptorSet TileBufferDescriptorSet = PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_StructuredBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                                                   Renderer->TileBuffer, 0, VK_WHOLE_SIZE);
+
+    // Light binning
+    {
+        VkBufferMemoryBarrier2 BeginBarriers[] = 
+        {
             {
                 .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                 .pNext = nullptr,
                 .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
                 .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .buffer = Renderer->TileBuffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE,
@@ -2090,47 +2093,33 @@ void EndRenderFrame(render_frame* Frame)
             .bufferMemoryBarrierCount = CountOf(BeginBarriers),
             .pBufferMemoryBarriers = BeginBarriers,
         };
-
         vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependency);
 
-        VkBufferCopy LightBufferCopy = 
-        {
-            .srcOffset = LightBufferOffset,
-            .dstOffset = 0,
-            .size = Frame->Uniforms.LightCount * sizeof(light),
-        };
-        vkCmdCopyBuffer(Frame->Backend->CmdBuffer, Frame->Backend->StagingBuffer, Renderer->LightBuffer, 1, &LightBufferCopy);
+        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_LightBinning];
+        vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
 
-        VkBufferCopy TileBufferCopy = 
+        VkDescriptorSet DescriptorSets[] = 
         {
-            .srcOffset = TileBufferOffset,
-            .dstOffset = 0,
-            .size = TileMemorySize,
+            Frame->Backend->UniformDescriptorSet,
+            LightBufferDescriptorSet,
+            TileBufferDescriptorSet,
         };
-        vkCmdCopyBuffer(Frame->Backend->CmdBuffer, Frame->Backend->StagingBuffer, Renderer->TileBuffer, 1, &TileBufferCopy);
+        vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout, 
+                                0, CountOf(DescriptorSets), DescriptorSets, 0, nullptr);
+
+        vkCmdDispatch(Frame->Backend->CmdBuffer, CeilDiv(TileCountX, 32), TileCountY, 1);
 
         VkBufferMemoryBarrier2 EndBarriers[] = 
         {
             {
                 .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                 .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
                 .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
                 .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Renderer->LightBuffer,
-                .offset = 0,
-                .size = VK_WHOLE_SIZE,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
                 .buffer = Renderer->TileBuffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE,
@@ -2144,16 +2133,8 @@ void EndRenderFrame(render_frame* Frame)
             .bufferMemoryBarrierCount = CountOf(EndBarriers),
             .pBufferMemoryBarriers = EndBarriers,
         };
-
         vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &EndDependency);
     }
-
-    BeginSceneRendering(Frame);
-
-    VkDescriptorSet LightBufferDescriptorSet = PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_StructuredBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                                                    Renderer->LightBuffer, 0, VK_WHOLE_SIZE);
-    VkDescriptorSet TileBufferDescriptorSet = PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_StructuredBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                                                   Renderer->TileBuffer, 0, VK_WHOLE_SIZE);
 
     VkDescriptorSet OcclusionDescriptorSet = PushImageDescriptor(
         Frame,

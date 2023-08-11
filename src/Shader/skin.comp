@@ -2,6 +2,8 @@
 
 #include "common.glsli"
 
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
 struct vertex
 {
     v3 P;
@@ -18,8 +20,6 @@ struct vertex_skin
     v4 Weights;
     u8vec4 Joints;
 };
-
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 layout(push_constant) uniform PushConstants
 {

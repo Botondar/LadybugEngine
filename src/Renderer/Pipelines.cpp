@@ -1049,4 +1049,21 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         },
         .EnabledStages = PipelineStage_CS,
     },
+    [Pipeline_LightBinning] =
+    {
+        .Name = "light_bin",
+        .Type = PipelineType_Compute,
+        .Layout = 
+        {
+            .PushConstantRangeCount = 0,
+            .DescriptorSetCount = 3,
+            .PushConstantRanges = {},
+            .DescriptorSets = 
+            {
+                SetLayout_PerFrameUniformData,
+                SetLayout_StructuredBuffer, // light buffer
+                SetLayout_StructuredBuffer, // tile buffer
+            },
+        },
+    },
 };

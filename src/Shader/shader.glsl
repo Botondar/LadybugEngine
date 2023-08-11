@@ -325,7 +325,7 @@ void main()
             E.y < R_LuminanceThreshold &&
             E.z < R_LuminanceThreshold)
         {
-            E = vec3(0.0);
+            //E = vec3(0.0);
         }
 
         float NdotL = max(dot(L, N), 0.0);

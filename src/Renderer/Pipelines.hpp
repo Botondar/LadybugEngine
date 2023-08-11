@@ -55,6 +55,7 @@ enum pipeline : u32
     Pipeline_SSAOBlur,
     Pipeline_Quad,
     Pipeline_Skinning,
+    Pipeline_LightBinning,
 
     Pipeline_Count,
 };
