@@ -811,6 +811,7 @@ struct render_frame
 };
 
 renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena);
+const char* GetDeviceName(renderer* Renderer);
 
 geometry_buffer_allocation UploadVertexData(renderer* Renderer, 
                                             u32 VertexCount, const vertex* VertexData,

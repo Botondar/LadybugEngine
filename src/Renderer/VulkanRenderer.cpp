@@ -246,6 +246,12 @@ internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTy
     return Result;
 }
 
+const char* GetDeviceName(renderer* Renderer)
+{
+    const char* Result = Renderer->Vulkan.DeviceProps.deviceName;
+    return(Result);
+}
+
 renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
 {
     renderer* Renderer = PushStruct<renderer>(Arena);

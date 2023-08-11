@@ -30,6 +30,15 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
         f32 Width = Rect.Max.x - Rect.Min.x;
         v2 P = { (f32)Frame->RenderWidth - Width, 0.0f };
         PushTextWithShadow(Frame, Buff, Font, FrameTimeSize, P,  DefaultForegroundColor, Layout);
+
+        const char* DeviceName = GetDeviceName(Frame->Renderer);
+        f32 DeviceNameSize = 20.0f;
+        Rect = GetTextRect(Font, DeviceName, Layout);
+        Rect.Min *= DeviceNameSize;
+        Rect.Max *= DeviceNameSize;
+        Width = Rect.Max.x - Rect.Min.x;
+        P = { (f32)Frame->RenderWidth - Width, FrameTimeSize * Font->BaselineDistance };
+        PushTextWithShadow(Frame, DeviceName, Font, DeviceNameSize, P, DefaultForegroundColor, Layout);
     }
 
     if (WasPressed(GameIO->Keys[SC_Backtick]))
