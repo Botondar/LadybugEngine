@@ -137,6 +137,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                          0.0f, 1.0f, 0.0f, 0.0f,
                          0.0f, 0.0f, 0.0f, 1.0f);
         // Sponza scene
+#if 1
         {
             m4 Transform = YUpToZUp;
             DEBUGLoadTestScene(Scratch, Assets, World, Frame->Renderer,
@@ -195,6 +196,14 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 }
             }
         }
+#else
+        // Bathroom scene
+        {
+            m4 Transform = YUpToZUp;
+            DEBUGLoadTestScene(Scratch, Assets, World, Frame->Renderer,
+                               "data/Scenes/Bathroom/Bathroom.gltf", Transform);
+        }
+#endif
 
         // Animated fox
         {
