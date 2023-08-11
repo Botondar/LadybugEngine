@@ -1981,7 +1981,10 @@ void EndRenderFrame(render_frame* Frame)
             .dstOffset = 0,
             .size = Frame->Uniforms.LightCount * sizeof(light),
         };
-        vkCmdCopyBuffer(Frame->Backend->CmdBuffer, Frame->Backend->StagingBuffer, Renderer->LightBuffer, 1, &LightBufferCopy);
+        if (LightBufferCopy.size > 0)
+        {
+            vkCmdCopyBuffer(Frame->Backend->CmdBuffer, Frame->Backend->StagingBuffer, Renderer->LightBuffer, 1, &LightBufferCopy);
+        }
 
         VkBufferMemoryBarrier2 EndBarriers[] = 
         {
