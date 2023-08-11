@@ -765,7 +765,7 @@ struct render_frame
     // TODO(boti): currently there's a renderer and a per-frame
     // staging buffer, because assets are uploaded through
     // the renderer directly.
-    // In the future assets loading should probably be done through the frame as well
+    // In the future asset loading should probably be done through the frame as well
     umm StagingBufferSize;
     umm StagingBufferAt;
     void* StagingBufferBase;
@@ -964,13 +964,13 @@ inline b32 DrawSkinnedMesh(render_frame* Frame,
     b32 Result = false;
 
     if ((Frame->SkinningCmdCount < Frame->MaxSkinningCmdCount) &&
-        (Frame->SkinnedDrawCmdCount < Frame->MaxSkinnedDrawCmdCount))
+        (Frame->SkinnedDrawCmdCount < Frame->MaxSkinnedDrawCmdCount) &&
+        (Frame->SkinnedMeshVertexCount + VertexCount <= Frame->MaxSkinnedVertexCount) &&
+        (Frame->JointCount + JointCount <= Frame->MaxJointCount))
     {
-        // TODO(boti): bounds checking
         u32 DstVertexOffset = Frame->SkinnedMeshVertexCount;
         Frame->SkinnedMeshVertexCount += VertexCount;
 
-        // TODO(boti): bounds checking
         memcpy(Frame->JointMapping + Frame->JointCount, Pose, JointCount * sizeof(m4));
         u32 JointBufferOffset = Frame->JointCount * sizeof(m4);
         Frame->JointCount = Align(Frame->JointCount + JointCount, Frame->JointBufferAlignment);
@@ -996,7 +996,6 @@ inline b32 DrawSkinnedMesh(render_frame* Frame,
             .Transform = Transform,
             .Material = Material,
         };
-
         Result = true;
     }
 
