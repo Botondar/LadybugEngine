@@ -666,106 +666,6 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
                                    Renderer->SwapchainImageCount, BufferSizePerFrame, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         }
 
-        // Skinned mesh buffers
-        {
-            VkBuffer Buffers[renderer::MaxSwapchainImageCount] = {};
-            u32 MemoryTypes = VK.GPUMemTypes;
-            u64 Alignment = 0;
-
-            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
-            {
-                VkBufferCreateInfo BufferInfo = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .size = R_SkinningBufferSize,
-                    .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-                    .queueFamilyIndexCount = 0,
-                    .pQueueFamilyIndices = nullptr,
-                };
-
-                Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Buffers[i]);
-                if (Result == VK_SUCCESS)
-                {
-                    VkMemoryRequirements MemoryRequirements = {};
-                    vkGetBufferMemoryRequirements(VK.Device, Buffers[i], &MemoryRequirements);
-                    MemoryTypes &= MemoryRequirements.memoryTypeBits;
-                    Alignment = Max(Alignment, MemoryRequirements.alignment);
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            if (Result == VK_SUCCESS)
-            {
-                u32 MemoryTypeIndex;
-                if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
-                {
-                    VkMemoryAllocateInfo AllocInfo = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                        .pNext = nullptr,
-                        .allocationSize = (u64)R_SkinningBufferSize * Renderer->SwapchainImageCount,
-                        .memoryTypeIndex = MemoryTypeIndex,
-                    };
-                    VkDeviceMemory Memory = VK_NULL_HANDLE;
-                    Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Memory);
-                    if (Result == VK_SUCCESS)
-                    {
-                        b32 AllocationFailed = false;
-                        for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
-                        {
-                            u64 Offset = (u64)i * R_SkinningBufferSize;
-                            Assert((Offset & (Alignment - 1)) == 0);
-                            Result = vkBindBufferMemory(VK.Device, Buffers[i], Memory, Offset);
-                            if (Result != VK_SUCCESS)
-                            {
-                                break;
-                            }
-                        }
-
-                        if (Result == VK_SUCCESS)
-                        {
-                            Renderer->SkinningMemory = Memory;
-                            Memory = VK_NULL_HANDLE;
-                            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
-                            {
-                                Renderer->SkinningBuffers[i] = Buffers[i];
-                                Buffers[i] = VK_NULL_HANDLE;
-                            }
-                        }
-                        else
-                        {
-                            return(nullptr);
-                        }
-                    }
-                    else
-                    {
-                        return(nullptr);
-                    }
-
-                    vkFreeMemory(VK.Device, Memory, nullptr);
-                }
-                else
-                {
-                    UnhandledError("No suitable memory type for skinning buffer");
-                }
-            }
-            else
-            {
-                return(nullptr);
-            }
-
-            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
-            {
-                vkDestroyBuffer(VK.Device, Buffers[i], nullptr);
-            }
-        }
-
         // Per frame descriptors
         for (u32 i = 0; i < 2; i++)
         {
@@ -800,6 +700,47 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         }
     }
 
+    // Skinning buffer
+    {
+        VkBufferCreateInfo BufferInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .size = R_SkinningBufferSize,
+            .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
+        };
+
+        VkMemoryRequirements MemoryRequirements = GetBufferMemoryRequirements(VK.Device, &BufferInfo);
+        u32 MemoryTypes = MemoryRequirements.memoryTypeBits & VK.GPUMemTypes;
+        u32 MemoryTypeIndex = 0;
+        if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
+        {
+            VkMemoryAllocateInfo AllocInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .allocationSize = MemoryRequirements.size,
+                .memoryTypeIndex = MemoryTypeIndex,
+            };
+
+            Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->SkinningMemory);
+            ReturnOnFailure();
+            Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->SkinningBuffer);
+            ReturnOnFailure();
+            Result = vkBindBufferMemory(VK.Device, Renderer->SkinningBuffer, Renderer->SkinningMemory, 0);
+            ReturnOnFailure();
+            Renderer->SkinningMemorySize = MemoryRequirements.size;
+        }
+        else
+        {
+            return(0);
+        }
+    }
+    
     // Light buffer
     {
         VkBufferCreateInfo BufferInfo = 
@@ -840,7 +781,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
             return(0);
         }
     }
-    
+
     // Tile buffer
     {
         VkBufferCreateInfo BufferInfo = 
@@ -1862,8 +1803,9 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
     Frame->JointMapping = (m4*)Renderer->PerFrameJointBufferMappings[FrameID];
     Frame->JointBufferAlignment = TruncateU64ToU32(VK.ConstantBufferAlignment) / sizeof(m4);
 
+    Frame->MaxSkinnedVertexCount = TruncateU64ToU32(R_SkinningBufferSize / sizeof(vertex));
     Frame->SkinnedMeshVertexCount = 0;
-    Frame->Backend->SkinnedMeshVB = Renderer->SkinningBuffers[FrameID];
+    Frame->Backend->SkinnedMeshVB = Renderer->SkinningBuffer;
 
     Frame->DrawWidget3DCmdCount = 0;
 

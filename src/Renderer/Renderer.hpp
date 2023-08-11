@@ -778,6 +778,7 @@ struct render_frame
     static constexpr u32 MaxDrawWidget3DCmdCount    = (1u << 16);
     static constexpr u32 MaxJointCount              = (1u << 17);
 
+    u32 MaxSkinnedVertexCount;
     u32 MaxDraw2DCmdCount;
     u32 MaxVertex2DCount;
 

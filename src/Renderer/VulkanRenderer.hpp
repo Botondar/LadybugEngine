@@ -138,22 +138,20 @@ struct renderer
     VkBuffer PerFrameVertex2DBuffers[MaxSwapchainImageCount];
     void* PerFrameVertex2DMappings[MaxSwapchainImageCount];
 
-    // TODO(boti): this probably doesn't need to be duplicated among frames
-    // because the GPU timelines don't actually overlap.
-    // In the same vein, using this as a ring-buffer should work.
-    VkDeviceMemory SkinningMemory;
-    VkBuffer SkinningBuffers[MaxSwapchainImageCount];
-
     VkDeviceMemory StagingMemory;
     void* StagingMemoryMapping;
     VkBuffer StagingBuffers[MaxSwapchainImageCount];
 
-    VkDeviceMemory LightBufferMemory;
+    umm SkinningMemorySize;
+    VkDeviceMemory SkinningMemory;
+    VkBuffer SkinningBuffer;
+
     umm LightBufferMemorySize;
+    VkDeviceMemory LightBufferMemory;
     VkBuffer LightBuffer;
 
-    VkDeviceMemory TileMemory;
     umm TileMemorySize;
+    VkDeviceMemory TileMemory;
     VkBuffer TileBuffer;
 
     VkSemaphore ImageAcquiredSemaphores[MaxSwapchainImageCount];
