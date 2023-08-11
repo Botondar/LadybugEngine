@@ -1991,8 +1991,7 @@ void EndRenderFrame(render_frame* Frame)
         }
 
         frustum* TileFrustums = PushArray<frustum>(Frame->Arena, TileCount);
-        // NOTE(boti): Because we're transforming planes, this is actually the inverse of what ClipToWorld would normally be.
-        // Through the loop we right-multiply to get the proper inverse-transpose.
+        // NOTE(boti): This is the inverse transpose because we're transforming planes
         m4 ClipToWorld = Frame->Camera.ProjectionTransform * Frame->Camera.ViewTransform;
         for (u32 TileY = 0; TileY < TileCountY; TileY++)
         {
@@ -2000,6 +1999,7 @@ void EndRenderFrame(render_frame* Frame)
             {
                 u32 TileIndex = TileX + TileY*TileCountX;
                 Tiles[TileIndex].LightCount = 0;
+
                 frustum* Frustum = TileFrustums + TileIndex;
 
                 f32 MinX = (f32)(TileX * R_TileSizeX);
@@ -2009,12 +2009,12 @@ void EndRenderFrame(render_frame* Frame)
                 MinX = 2.0f * (MinX / Frame->RenderWidth) - 1.0f;
                 MinY = 2.0f * (MinY / Frame->RenderHeight) - 1.0f;
                 MaxX = 2.0f * (MaxX / Frame->RenderWidth) - 1.0f;
-                MaxY = 2.0f * (MaxY / Frame->RenderWidth) - 1.0f;
-                
-                Frustum->Left   = v4{ +1.0f, 0.0f, 0.0f, +MinX } * ClipToWorld;
-                Frustum->Right  = v4{ -1.0f, 0.0f, 0.0f, -MaxX } * ClipToWorld;
-                Frustum->Top    = v4{ 0.0f, +1.0f, 0.0f, +MinY } * ClipToWorld;
-                Frustum->Bottom = v4{ 0.0f, -1.0f, 0.0f, -MaxY } * ClipToWorld;
+                MaxY = 2.0f * (MaxY / Frame->RenderHeight) - 1.0f;
+
+                Frustum->Left   = v4{ +1.0f, 0.0f, 0.0f, -MinX } * ClipToWorld;
+                Frustum->Right  = v4{ -1.0f, 0.0f, 0.0f, +MaxX } * ClipToWorld;
+                Frustum->Top    = v4{ 0.0f, +1.0f, 0.0f, -MinY } * ClipToWorld;
+                Frustum->Bottom = v4{ 0.0f, -1.0f, 0.0f, +MaxY } * ClipToWorld;
                 Frustum->Near   = v4{ 0.0f, 0.0f, +1.0f, 0.0f } * ClipToWorld;
                 Frustum->Far    = v4{ 0.0f, 0.0f, -1.0f, 1.0f } * ClipToWorld;
             }
@@ -2029,7 +2029,8 @@ void EndRenderFrame(render_frame* Frame)
             if (IntersectFrustumSphere(&CameraFrustum, Light->P.xyz, R))
             {
                 v4 P = Frame->Uniforms.ViewTransform * Light->P;
-                LightBuffer[Frame->Uniforms.LightCount++] = 
+                u32 DstIndex = Frame->Uniforms.LightCount++;
+                LightBuffer[DstIndex] = 
                 {
                     .P = P,
                     .E = Light->E,
@@ -2040,7 +2041,6 @@ void EndRenderFrame(render_frame* Frame)
                     break;
                 }
 
-#if 1
                 for (u32 TileIndex = 0; TileIndex < TileCount; TileIndex++)
                 {
                     screen_tile* Tile = Tiles + TileIndex;
@@ -2048,11 +2048,10 @@ void EndRenderFrame(render_frame* Frame)
                     {
                         if (IntersectFrustumSphere(TileFrustums + TileIndex, Light->P.xyz, R))
                         {
-                            Tile->LightIndices[Tile->LightCount++] = LightIndex;
+                            Tile->LightIndices[Tile->LightCount++] = DstIndex;
                         }
                     }
                 }
-#endif
             }
         }
 
