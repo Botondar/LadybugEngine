@@ -25,15 +25,15 @@ void main()
     vec3 SrcColor = textureLod(Input, SampleP, 0).rgb;
     if (P.x < OutputSize.x && P.y < OutputSize.y)
     {
-        vec3 a = textureLod(PrevMip, SampleP + vec2( -RX, -RY), 0).rgb;
+        vec3 a = textureLod(PrevMip, SampleP + vec2(-RX, -RY), 0).rgb;
         vec3 b = textureLod(PrevMip, SampleP + vec2(0.0, -RY), 0).rgb;
-        vec3 c = textureLod(PrevMip, SampleP + vec2( +RX, -RY), 0).rgb;
-        vec3 d = textureLod(PrevMip, SampleP + vec2( -RX, 0.0), 0).rgb;
+        vec3 c = textureLod(PrevMip, SampleP + vec2(+RX, -RY), 0).rgb;
+        vec3 d = textureLod(PrevMip, SampleP + vec2(-RX, 0.0), 0).rgb;
         vec3 e = textureLod(PrevMip, SampleP + vec2(0.0, 0.0), 0).rgb;
-        vec3 f = textureLod(PrevMip, SampleP + vec2( +RX, 0.0), 0).rgb;
-        vec3 g = textureLod(PrevMip, SampleP + vec2( -RX, +RY), 0).rgb;
+        vec3 f = textureLod(PrevMip, SampleP + vec2(+RX, 0.0), 0).rgb;
+        vec3 g = textureLod(PrevMip, SampleP + vec2(-RX, +RY), 0).rgb;
         vec3 h = textureLod(PrevMip, SampleP + vec2(0.0, +RY), 0).rgb;
-        vec3 i = textureLod(PrevMip, SampleP + vec2( +RX, +RY), 0).rgb;
+        vec3 i = textureLod(PrevMip, SampleP + vec2(+RX, +RY), 0).rgb;
 
         vec3 BlurColor = 
             e * (4.0 / 16.0) +
