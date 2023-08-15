@@ -82,60 +82,6 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
     u32 CurrentID = 1;
     u32 HotID = 0;
 
-    if (IsValid(Game->Editor.SelectedEntityID))
-    {
-        entity* Entity = Game->World->Entities + Game->Editor.SelectedEntityID.Value;
-        if (HasFlag(Entity->Flags, EntityFlag_Skin))
-        {
-            u32 PlaybackID = CurrentID++;
-
-            v2 ScreenExtent = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
-            f32 OutlineSize = 1.0f;
-            f32 MinX = 0.1f * ScreenExtent.x;
-            f32 MaxX = 0.9f * ScreenExtent.x;
-            f32 MaxY = ScreenExtent.y - 60.0f;
-            f32 MinY = ScreenExtent.y - 140.0f;
-            PushRect(Frame, { MinX, MinY - OutlineSize }, { MaxX, MinY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
-            PushRect(Frame, { MinX, MaxY - OutlineSize }, { MaxX, MaxY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
-            PushRect(Frame, { MinX - OutlineSize, MinY}, { MinX + OutlineSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
-            PushRect(Frame, { MaxX - OutlineSize, MinY}, { MaxX + OutlineSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
-
-            animation* Animation = Game->Assets->Animations + Entity->CurrentAnimationID;
-            f32 MaxTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
-            f32 ExtentX = (MaxX - MinX);
-            f32 PlayX = MinX + ExtentX * Entity->AnimationCounter / MaxTimestamp;
-            f32 IndicatorSize = 5.0f;
-            PushRect(Frame, { PlayX - IndicatorSize, MinY }, { PlayX + IndicatorSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
-
-            for (u32 KeyFrameIndex = 0; KeyFrameIndex < Animation->KeyFrameCount; KeyFrameIndex++)
-            {
-                f32 Timestamp = Animation->KeyFrameTimestamps[KeyFrameIndex];
-                f32 X = MinX + ExtentX * (Timestamp / MaxTimestamp);
-                PushRect(Frame, { X - 0.5f, MinY }, { X + 0.5f, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0x00));
-            }
-
-            if (PointRectOverlap(GameIO->Mouse.P, { { MinX, MinY}, { MaxX, MaxY } }))
-            {
-                HotID = PlaybackID;
-                if (WasPressed(GameIO->Keys[SC_MouseLeft]))
-                {
-                    Game->Debug.ActiveMenuID = PlaybackID;
-                }
-            }
-
-            if (Game->Debug.ActiveMenuID == PlaybackID)
-            {
-                Entity->AnimationCounter = Clamp(MaxTimestamp * (GameIO->Mouse.P.x - MinX) / ExtentX, 0.0f, MaxTimestamp);
-                MouseInputUsed = true;
-
-                if (GameIO->Keys[SC_MouseLeft].bIsDown == false)
-                {
-                    Game->Debug.ActiveMenuID = 0;
-                }
-            }
-        }
-    }
-
     auto ResetX = [&]() { CurrentP.x = StartP.x; };
 
     auto DoButton = [&](const char* Text) -> u32
@@ -273,7 +219,7 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
                 MouseInputUsed = true;
             }
 
-            if ((IsHot && (Game->Debug.ActiveMenuID == INVALID_INDEX_U32)) ||
+            if ((IsHot && (Game->Debug.ActiveMenuID == 0)) ||
                 Game->Debug.ActiveMenuID == CurrentID)
             {
                 TextColor = PackRGBA8(0xFF, 0xFF, 0x00, 0xFF);
@@ -298,6 +244,60 @@ lbfn b32 DoDebugUI(game_state* Game, game_io* GameIO, render_frame* Frame)
                   ssao_params::DefaultMaxDistance, 1e-3f, 10.0f, 1e-3f);
         F32Slider("SSAO tangent tau", &Game->PostProcessParams.SSAO.TangentTau, 
                   ssao_params::DefaultTangentTau, 0.0f, 1.0f, 1e-3f);
+    }
+
+    if (IsValid(Game->Editor.SelectedEntityID))
+    {
+        entity* Entity = Game->World->Entities + Game->Editor.SelectedEntityID.Value;
+        if (HasFlag(Entity->Flags, EntityFlag_Skin))
+        {
+            u32 PlaybackID = CurrentID++;
+
+            v2 ScreenExtent = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
+            f32 OutlineSize = 1.0f;
+            f32 MinX = 0.1f * ScreenExtent.x;
+            f32 MaxX = 0.9f * ScreenExtent.x;
+            f32 MaxY = ScreenExtent.y - 60.0f;
+            f32 MinY = ScreenExtent.y - 140.0f;
+            PushRect(Frame, { MinX, MinY - OutlineSize }, { MaxX, MinY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+            PushRect(Frame, { MinX, MaxY - OutlineSize }, { MaxX, MaxY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+            PushRect(Frame, { MinX - OutlineSize, MinY}, { MinX + OutlineSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+            PushRect(Frame, { MaxX - OutlineSize, MinY}, { MaxX + OutlineSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+
+            animation* Animation = Game->Assets->Animations + Entity->CurrentAnimationID;
+            f32 MaxTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
+            f32 ExtentX = (MaxX - MinX);
+            f32 PlayX = MinX + ExtentX * Entity->AnimationCounter / MaxTimestamp;
+            f32 IndicatorSize = 5.0f;
+            PushRect(Frame, { PlayX - IndicatorSize, MinY }, { PlayX + IndicatorSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+
+            for (u32 KeyFrameIndex = 0; KeyFrameIndex < Animation->KeyFrameCount; KeyFrameIndex++)
+            {
+                f32 Timestamp = Animation->KeyFrameTimestamps[KeyFrameIndex];
+                f32 X = MinX + ExtentX * (Timestamp / MaxTimestamp);
+                PushRect(Frame, { X - 0.5f, MinY }, { X + 0.5f, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0x00));
+            }
+
+            if (PointRectOverlap(GameIO->Mouse.P, { { MinX, MinY}, { MaxX, MaxY } }))
+            {
+                HotID = PlaybackID;
+                if (WasPressed(GameIO->Keys[SC_MouseLeft]))
+                {
+                    Game->Debug.ActiveMenuID = PlaybackID;
+                }
+            }
+
+            if (Game->Debug.ActiveMenuID == PlaybackID)
+            {
+                Entity->AnimationCounter = Clamp(MaxTimestamp * (GameIO->Mouse.P.x - MinX) / ExtentX, 0.0f, MaxTimestamp);
+                MouseInputUsed = true;
+
+                if (GameIO->Keys[SC_MouseLeft].bIsDown == false)
+                {
+                    Game->Debug.ActiveMenuID = 0;
+                }
+            }
+        }
     }
 
     return(MouseInputUsed);
