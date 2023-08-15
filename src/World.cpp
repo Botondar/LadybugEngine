@@ -106,6 +106,17 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         World->LightProxyScale = 1e-1f;
         World->EffectEntropy = { 0x13370420 };
 
+        Assert(World->EntityCount == 0);
+        // Null entity
+        World->Entities[World->EntityCount++] = 
+        {
+            .Flags = EntityFlag_None,
+            .Transform = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                            0.0f, 1.0f, 0.0f, 0.0f,
+                            0.0f, 0.0f, 1.0f, 0.0f,
+                            0.0f, 0.0f, 0.0f, 1.0f),
+        };
+
         {
             World->AdHocLightBounds = { { -7.5f, -4.0f, 4.0f }, { +7.5f, -2.75f, 6.0f } };
             mmbox Bounds = World->AdHocLightBounds;
@@ -357,7 +368,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     }
                 
                     u32 ParentIndex = Skin->JointParents[JointIndex];
-                    if (ParentIndex != U32_MAX)
+                    if (ParentIndex != JointIndex)
                     {
                         Pose[JointIndex] = Pose[ParentIndex] * Pose[JointIndex];
                     }

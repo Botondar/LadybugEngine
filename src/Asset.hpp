@@ -18,6 +18,7 @@ struct trs_transform
 
 inline m4 TRSToM4(trs_transform Transform);
 
+// NOTE(boti): Skin joints must not precede their parents in the array
 struct skin
 {
     static constexpr u32 MaxJointCount = 256;

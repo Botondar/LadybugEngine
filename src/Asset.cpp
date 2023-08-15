@@ -454,7 +454,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             if (SrcMaterial->BaseColorTexture.TextureIndex != U32_MAX)
             {
                 texture_id* Texture = TextureTable + SrcMaterial->BaseColorTexture.TextureIndex;
-                if (Texture->Value == INVALID_INDEX_U32)
+                if (!IsValid(*Texture))
                 {
                     *Texture = LoadAndUploadTexture(SrcMaterial->BaseColorTexture.TextureIndex, texture_type::Diffuse, SrcMaterial->AlphaMode);
                 }
@@ -463,7 +463,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             if (SrcMaterial->NormalTexture.TextureIndex != U32_MAX)
             {
                 texture_id* Texture = TextureTable + SrcMaterial->NormalTexture.TextureIndex;
-                if (Texture->Value == INVALID_INDEX_U32)
+                if (!IsValid(*Texture))
                 {
                     *Texture = LoadAndUploadTexture(SrcMaterial->NormalTexture.TextureIndex, texture_type::Normal, SrcMaterial->AlphaMode);
                 }
@@ -472,7 +472,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             if (SrcMaterial->MetallicRoughnessTexture.TextureIndex != U32_MAX)
             {
                 texture_id* Texture = TextureTable + SrcMaterial->MetallicRoughnessTexture.TextureIndex;
-                if (Texture->Value == INVALID_INDEX_U32)
+                if (!IsValid(*Texture))
                 {
                     *Texture = LoadAndUploadTexture(SrcMaterial->MetallicRoughnessTexture.TextureIndex, texture_type::Material, SrcMaterial->AlphaMode);
                 }
@@ -813,7 +813,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 // NOTE(boti): We clear the joints here to later verify that the joint node has a single parent
                 for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
                 {
-                    SkinAsset->JointParents[JointIndex] = U32_MAX;
+                    SkinAsset->JointParents[JointIndex] = 0;
                 }
 
                 // Build the joint hierarchy
@@ -830,12 +830,13 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                         {
                             if (Skin->JointIndices[JointIt] == ChildIndex)
                             {
-                                Verify(SkinAsset->JointParents[JointIt] == U32_MAX);
+                                if (JointIndex >= JointIt)
+                                {
+                                    // TODO(boti): Reorder the joints so that children don't precede their parents
+                                    UnimplementedCodePath;
+                                }
+                                Verify(SkinAsset->JointParents[JointIt] == 0);
                                 SkinAsset->JointParents[JointIt] = JointIndex;
-
-                                // NOTE(boti): It makes thing easier if the joints are in order,
-                                // so we currently only handle that case
-                                Assert(JointIndex < JointIt);
                                 break;
                             }
                         }

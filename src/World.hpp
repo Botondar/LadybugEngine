@@ -127,6 +127,6 @@ lbfn void UpdateAndRenderWorld(game_world* World, struct assets* Assets, render_
 //
 inline b32 IsValid(entity_id ID)
 {
-    b32 Result = (ID.Value != U32_MAX);
+    b32 Result = (ID.Value != 0);
     return(Result);
 }

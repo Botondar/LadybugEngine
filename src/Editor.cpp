@@ -47,7 +47,7 @@ internal line AntiProjectTo(line Line, v3 P)
 lbfn void InitEditor(game_state* Game, memory_arena* Arena)
 {
     Game->Editor.IsEnabled = false;
-    Game->Editor.SelectedEntityID = { INVALID_INDEX_U32 };
+    Game->Editor.SelectedEntityID = { 0 };
     Game->Editor.Gizmo.Type = Gizmo_Translate;
     Game->Editor.Gizmo.Selection = INVALID_INDEX_U32;
 }
@@ -99,7 +99,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
     // Intersect the ray with the scene
     if (WasPressed(IO->Keys[SC_MouseRight]))
     {
-        entity_id SelectedEntityID = { U32_MAX };
+        entity_id SelectedEntityID = { 0 };
 
         f32 tMax = 1e7f;
         for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
