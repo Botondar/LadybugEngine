@@ -190,7 +190,7 @@ vec3 CalculateAtmosphere(vec3 SrcColor)
     vec3 EndP = P * vec3(1.0, 1.0, 0.99);
     vec3 V = normalize(P);
     
-    const float g = 0.8;
+    const float g = 0.76;
     const float g2 = g*g;
     float CosTheta = dot(V, PerFrame.SunV);
 
@@ -201,12 +201,12 @@ vec3 CalculateAtmosphere(vec3 SrcColor)
     PhaseOut = PhaseOut*PhaseOut*PhaseOut;
     PhaseOut = 1.0 - PhaseOut;
 
-    vec3 OutScatter = Result * PhaseOut * length(P);
-    Result -= OutScatter;
+    //vec3 OutScatter = Result * PhaseOut * length(P);
+    //Result -= OutScatter;
 
     float RayleighPhase = 0.059683103 * (1.0 + CosTheta); // constant is 3 / 16pi
     const vec3 BetaR0 = vec3(3.8e-6, 13.5e-6, 33.1e-6);
-    const vec3 BetaM0 = vec3(21e-6);
+    const vec3 BetaM0 = vec3(21e-4);
 
     // TODO(boti): Our weight values are incorrect !!!
     float Delta = AtmosphereNoise(0.5 * gl_FragCoord.xy);
@@ -239,8 +239,10 @@ vec3 CalculateAtmosphere(vec3 SrcColor)
 
 
     float Norm = P.z / (StepCount + 1.0);
-    InScatter = 0.1 * InScatter * PhaseIn * Norm;
+    InScatter = InScatter * PhaseIn * Norm;
 
+    float OutScatter = exp(-PhaseOut * length(P));
+    Result = Result * OutScatter;
     Result += PerFrame.SunL * InScatter;
 
     Result = max(Result, vec3(0.0));
@@ -335,10 +337,22 @@ void main()
         Lo += (Diffuse + Specular) * E;
     }
 
-    vec3 Ambient = 3e-1 * Albedo.rgb * ScreenSpaceOcclusion;
+    float AmbientFactor = 3e-1;
+    vec3 Ambient = AmbientFactor * Albedo.rgb * ScreenSpaceOcclusion;
     Lo += Ambient + Material.Emissive;
 
-    Lo = CalculateAtmosphere(Lo);
+    {
+        const vec3 BetaR0 = 10000.0 * vec3(3.8e-6, 13.5e-6, 33.1e-6);
+        const vec3 BetaM0 = vec3(21e-4);
+
+        vec3 La = vec3(AmbientFactor);
+        float Distance = length(P);
+        vec3 fMie = exp(-BetaM0 * Distance);
+        vec3 fRayleigh = exp(-BetaR0 * Distance);
+        Lo = Lo + (BetaR0) * (1.0 - exp(-0.05 * Distance));
+        //Lo = CalculateAtmosphere(Lo);
+    }
+    
 
     Out0 = vec4(Lo, 1.0);
 }

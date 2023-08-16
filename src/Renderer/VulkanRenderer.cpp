@@ -1794,59 +1794,11 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
 
     Frame->DrawWidget3DCmdCount = 0;
 
-    vkWaitForFences(VK.Device, 1, &Frame->Backend->ImageAcquiredFence, VK_TRUE, UINT64_MAX);
-    vkResetFences(VK.Device, 1, &Frame->Backend->ImageAcquiredFence);
-
-    if (OutputWidth != Renderer->SurfaceExtent.width ||
-        OutputHeight != Renderer->SurfaceExtent.height)
-    {
-        ResizeRenderTargets(Renderer);
-    }
-
-    for (;;)
-    {
-        VkResult ImageAcquireResult = vkAcquireNextImageKHR(VK.Device, Renderer->Swapchain, 0, 
-                                                            Frame->Backend->ImageAcquiredSemaphore, 
-                                                            Frame->Backend->ImageAcquiredFence, 
-                                                            &Frame->Backend->SwapchainImageIndex);
-        if (ImageAcquireResult == VK_SUCCESS || 
-            ImageAcquireResult == VK_TIMEOUT ||
-            ImageAcquireResult == VK_NOT_READY)
-        {
-            Assert(Frame->Backend->SwapchainImageIndex != INVALID_INDEX_U32);
-            break;
-        }
-        else if (ImageAcquireResult == VK_SUBOPTIMAL_KHR ||
-                 ImageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR)
-        {
-            ResizeRenderTargets(Renderer);
-        }
-        else
-        {
-            UnhandledError("vkAcquireNextImage error");
-            return nullptr;
-        }
-    }
-
     Frame->RenderWidth = Renderer->SurfaceExtent.width;
     Frame->RenderHeight = Renderer->SurfaceExtent.height;
-    Frame->Backend->SwapchainImage = Renderer->SwapchainImages[Frame->Backend->SwapchainImageIndex];
-    Frame->Backend->SwapchainImageView = Renderer->SwapchainImageViews[Frame->Backend->SwapchainImageIndex];
-
-    vkResetDescriptorPool(VK.Device, Frame->Backend->DescriptorPool, 0);
-    Frame->Backend->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrameUniformData]);
-
+    
     Frame->Uniforms = {};
     Frame->Uniforms.ScreenSize = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
-
-    VkCommandBufferBeginInfo CmdBufferBegin = 
-    {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .pNext = nullptr,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        .pInheritanceInfo = nullptr,
-    };
-    vkBeginCommandBuffer(Frame->Backend->CmdBuffer, &CmdBufferBegin);
 
     return(Frame);
 }
@@ -1890,6 +1842,57 @@ void EndRenderFrame(render_frame* Frame)
     };
 
     renderer* Renderer = Frame->Renderer;
+
+    vkResetDescriptorPool(VK.Device, Frame->Backend->DescriptorPool, 0);
+    Frame->Backend->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrameUniformData]);
+
+    vkWaitForFences(VK.Device, 1, &Frame->Backend->ImageAcquiredFence, VK_TRUE, UINT64_MAX);
+    vkResetFences(VK.Device, 1, &Frame->Backend->ImageAcquiredFence);
+
+    if (Frame->RenderWidth != Renderer->SurfaceExtent.width ||
+        Frame->RenderHeight != Renderer->SurfaceExtent.height)
+    {
+        ResizeRenderTargets(Renderer);
+    }
+
+    for (;;)
+    {
+        VkResult ImageAcquireResult = vkAcquireNextImageKHR(VK.Device, Renderer->Swapchain, 0, 
+                                                            Frame->Backend->ImageAcquiredSemaphore, 
+                                                            Frame->Backend->ImageAcquiredFence, 
+                                                            &Frame->Backend->SwapchainImageIndex);
+        if (ImageAcquireResult == VK_SUCCESS || 
+            ImageAcquireResult == VK_TIMEOUT ||
+            ImageAcquireResult == VK_NOT_READY)
+        {
+            Assert(Frame->Backend->SwapchainImageIndex != INVALID_INDEX_U32);
+            break;
+        }
+        else if (ImageAcquireResult == VK_SUBOPTIMAL_KHR ||
+            ImageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR)
+        {
+            ResizeRenderTargets(Renderer);
+            Frame->RenderWidth = Renderer->SurfaceExtent.width;
+            Frame->RenderHeight = Renderer->SurfaceExtent.height;
+        }
+        else
+        {
+            UnhandledError("vkAcquireNextImage error");
+            return;
+        }
+    }
+    Frame->Backend->SwapchainImage = Renderer->SwapchainImages[Frame->Backend->SwapchainImageIndex];
+    Frame->Backend->SwapchainImageView = Renderer->SwapchainImageViews[Frame->Backend->SwapchainImageIndex];
+
+
+    VkCommandBufferBeginInfo CmdBufferBegin = 
+    {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = nullptr,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pInheritanceInfo = nullptr,
+    };
+    vkBeginCommandBuffer(Frame->Backend->CmdBuffer, &CmdBufferBegin);
 
     u32 TileCountX = CeilDiv(Frame->RenderWidth, R_TileSizeX);
     u32 TileCountY = CeilDiv(Frame->RenderHeight, R_TileSizeY);
