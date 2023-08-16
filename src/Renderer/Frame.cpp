@@ -304,12 +304,12 @@ RenderSSAO(render_frame* Frame,
             .pNext = nullptr,
             .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
             .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
             .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .srcQueueFamilyIndex = VK.GraphicsQueueIdx,
+            .dstQueueFamilyIndex = VK.ComputeQueueIdx,
             .image = Frame->Backend->StructureBuffer->Image,
             .subresourceRange = 
             {
@@ -405,8 +405,8 @@ RenderSSAO(render_frame* Frame,
             .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
             .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .srcQueueFamilyIndex = VK.GraphicsQueueIdx,
+            .dstQueueFamilyIndex = VK.ComputeQueueIdx,
             .image = Frame->Backend->OcclusionBuffers[0]->Image,
             .subresourceRange = 
             {
@@ -541,8 +541,8 @@ RenderSSAO(render_frame* Frame,
                 .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
                 .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .srcQueueFamilyIndex = VK.GraphicsQueueIdx,
+                .dstQueueFamilyIndex = VK.ComputeQueueIdx,
                 .image = Frame->Backend->OcclusionBuffers[1]->Image,
                 .subresourceRange = 
                 {
@@ -639,8 +639,8 @@ internal void BeginForwardPass(render_frame* Frame)
             .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .srcQueueFamilyIndex = VK.ComputeQueueIdx,
+            .dstQueueFamilyIndex = VK.GraphicsQueueIdx,
             .image = Frame->Backend->OcclusionBuffers[1]->Image,
             .subresourceRange = 
             {
