@@ -10,12 +10,14 @@ struct vulkan
     VkDevice Device;
 
     VkQueue GraphicsQueue;
+    VkQueue ComputeQueue;
     VkQueue TransferQueue;
 
     //
     // Constants
     //
     u32 GraphicsQueueIdx;
+    u32 ComputeQueueIdx;
     u32 TransferQueueIdx;
 
     u32 GPUMemTypes;

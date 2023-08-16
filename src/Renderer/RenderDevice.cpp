@@ -201,8 +201,9 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
 
             Vulkan->QueueFamilyCount = Vulkan->MaxQueueFamilyCount;
             vkGetPhysicalDeviceQueueFamilyProperties(Vulkan->PhysicalDevice, &Vulkan->QueueFamilyCount, Vulkan->QueueFamilies);
-            Vulkan->GraphicsQueueIdx = ~0u;
-            Vulkan->TransferQueueIdx = ~0u;
+            Vulkan->GraphicsQueueIdx = VK_QUEUE_FAMILY_IGNORED;
+            Vulkan->ComputeQueueIdx = VK_QUEUE_FAMILY_IGNORED;
+            Vulkan->TransferQueueIdx = VK_QUEUE_FAMILY_IGNORED;
             for (u32 i = 0; i < Vulkan->QueueFamilyCount; i++)
             {
                 const VkQueueFamilyProperties* Props = Vulkan->QueueFamilies + i;
@@ -215,6 +216,11 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                 {
                     Vulkan->GraphicsQueueIdx = i;
                 }
+                else if ((Flags & VK_QUEUE_COMPUTE_BIT) &&
+                         !(Flags & VK_QUEUE_GRAPHICS_BIT))
+                {
+                    Vulkan->ComputeQueueIdx = i;
+                }
                 else if ((Flags & VK_QUEUE_TRANSFER_BIT) && 
                          (Flags & VK_QUEUE_SPARSE_BINDING_BIT) && 
                          !(Flags & VK_QUEUE_GRAPHICS_BIT) && 
@@ -223,11 +229,19 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                     Vulkan->TransferQueueIdx = i;
                 }
             }
-            Assert(Vulkan->GraphicsQueueIdx != ~0u);
-            Assert(Vulkan->TransferQueueIdx != ~0u);
+            Assert(Vulkan->GraphicsQueueIdx != VK_QUEUE_FAMILY_IGNORED);
+            Assert(Vulkan->TransferQueueIdx != VK_QUEUE_FAMILY_IGNORED);
+
+            u32 ComputeQueueIdx = 0;
+            u32 GraphicsQueueCount = 1;
+            if (Vulkan->ComputeQueueIdx == VK_QUEUE_FAMILY_IGNORED)
+            {
+                Vulkan->ComputeQueueIdx = Vulkan->GraphicsQueueIdx;
+                ComputeQueueIdx = 1;
+                GraphicsQueueCount = 2;
+            }
 
             f32 QueuePriorityMax = 1.0f;
-
             VkDeviceQueueCreateInfo QueueInfos[] = 
             {
                 // Graphics
@@ -236,7 +250,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                     .pNext = nullptr,
                     .flags = 0,
                     .queueFamilyIndex = Vulkan->GraphicsQueueIdx,
-                    .queueCount = 1,
+                    .queueCount = GraphicsQueueCount,
                     .pQueuePriorities = &QueuePriorityMax,
                 },
                 // Transfer
@@ -248,14 +262,25 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                     .queueCount = 1,
                     .pQueuePriorities = &QueuePriorityMax,
                 },
+                // Compute
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .queueFamilyIndex = Vulkan->ComputeQueueIdx,
+                    .queueCount = 1,
+                    .pQueuePriorities = &QueuePriorityMax,
+                },
             };
+            u32 QueueInfoCount = (Vulkan->ComputeQueueIdx == Vulkan->GraphicsQueueIdx) ? 
+                CountOf(QueueInfos) - 1 : CountOf(QueueInfos);
 
             VkDeviceCreateInfo DeviceInfo = 
             {
                 .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
                 .pNext = &Vulkan->DeviceFeatures,
                 .flags = 0,
-                .queueCreateInfoCount = CountOf(QueueInfos),
+                .queueCreateInfoCount = QueueInfoCount,
                 .pQueueCreateInfos = QueueInfos,
                 .enabledLayerCount = 0,
                 .ppEnabledLayerNames = nullptr,
@@ -268,6 +293,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
             if (Result == VK_SUCCESS)
             {
                 vkGetDeviceQueue(Vulkan->Device, Vulkan->GraphicsQueueIdx, 0, &Vulkan->GraphicsQueue);
+                vkGetDeviceQueue(Vulkan->Device, Vulkan->ComputeQueueIdx, ComputeQueueIdx, &Vulkan->ComputeQueue);
                 vkGetDeviceQueue(Vulkan->Device, Vulkan->TransferQueueIdx, 0, &Vulkan->TransferQueue);
             }
             else
