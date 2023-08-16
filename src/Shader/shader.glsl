@@ -181,6 +181,22 @@ float AtmosphereNoise(vec2 P)
     return Result;
 }
 
+// NOTE(boti): g2 is g*g
+float PhaseMie(in float g, in float g2, in float CosTheta)
+{
+    const float OneOver4Pi = 0.07957747;
+#if 1
+    float a = 1.0 + g2 - 2*g*CosTheta;
+    float Denom = sqrt(a) * a;
+
+    float Phase = OneOver4Pi * (1.0 - g2) / Denom;
+#else
+    float a = (1.0 - g) / (sqrt(1 + g2 - 2.0 * g * CosTheta));
+    float Phase = OneOver4Pi * a*a*a;
+#endif
+    return(Phase);
+}
+
 vec3 CalculateAtmosphere(vec3 SrcColor)
 {
     vec3 Result = SrcColor;
@@ -190,29 +206,22 @@ vec3 CalculateAtmosphere(vec3 SrcColor)
     vec3 EndP = P * vec3(1.0, 1.0, 0.99);
     vec3 V = normalize(P);
     
-    const float g = 0.76;
-    const float g2 = g*g;
     float CosTheta = dot(V, PerFrame.SunV);
 
-    float PhaseIn = (1.0 - g) / sqrt(1.0 + g2 - 2*g*CosTheta);
-    PhaseIn = PhaseIn*PhaseIn*PhaseIn;
-
-    float PhaseOut = (1.0 - g) / sqrt(1.0 + g2 - 2*g*1.0);
-    PhaseOut = PhaseOut*PhaseOut*PhaseOut;
-    PhaseOut = 1.0 - PhaseOut;
-
-    //vec3 OutScatter = Result * PhaseOut * length(P);
-    //Result -= OutScatter;
+    const float g = 0.76;
+    const float g2 = g*g;
+    float PhaseIn = PhaseMie(g, g2, CosTheta);
+    float PhaseOut = 1.0 - PhaseMie(g, g2, 1.0);
 
     float RayleighPhase = 0.059683103 * (1.0 + CosTheta); // constant is 3 / 16pi
     const vec3 BetaR0 = vec3(3.8e-6, 13.5e-6, 33.1e-6);
     const vec3 BetaM0 = vec3(21e-4);
 
-    // TODO(boti): Our weight values are incorrect !!!
     float Delta = AtmosphereNoise(0.5 * gl_FragCoord.xy);
     float InScatter = 0.0;
     uint CascadeIndex = 0;
     float Weight = StepDistribution;
+    float dW = 2.0 * (1.0 - StepDistribution) / float(StepCount);
     int i;
     for (i = 0; i < StepCount; i++)
     {
@@ -234,16 +243,17 @@ vec3 CalculateAtmosphere(vec3 SrcColor)
         float Shadow = texture(ShadowSampler, ShadowCoord);
 
         InScatter += Weight * Shadow;
-        Weight += 2.0 * (1.0 - StepDistribution) / float(StepCount);
+        Weight += dW;
     }
 
 
     float Norm = P.z / (StepCount + 1.0);
-    InScatter = InScatter * PhaseIn * Norm;
+    InScatter *= PhaseIn * Norm;
 
-    float OutScatter = exp(-PhaseOut * length(P));
-    Result = Result * OutScatter;
-    Result += PerFrame.SunL * InScatter;
+    Result += 0.05 * PerFrame.SunL * InScatter;
+
+    //float OutScatter = exp(-PhaseOut * BetaM0.x * length(P));
+    //Result = Result * (1.0 - OutScatter);
 
     Result = max(Result, vec3(0.0));
     return Result;
@@ -342,15 +352,26 @@ void main()
     Lo += Ambient + Material.Emissive;
 
     {
-        const vec3 BetaR0 = 10000.0 * vec3(3.8e-6, 13.5e-6, 33.1e-6);
-        const vec3 BetaM0 = vec3(21e-4);
-
+#if 0
         vec3 La = vec3(AmbientFactor);
+
+        const vec3 BetaR0 = vec3(3.8e-6, 13.5e-6, 33.1e-6);
+        const vec3 BetaM0 = vec3(21e-4);
         float Distance = length(P);
-        vec3 fMie = exp(-BetaM0 * Distance);
-        vec3 fRayleigh = exp(-BetaR0 * Distance);
-        Lo = Lo + (BetaR0) * (1.0 - exp(-0.05 * Distance));
-        //Lo = CalculateAtmosphere(Lo);
+
+        const float g = 0.76;
+        const float g2 = g*g;
+        float Denom0 = 1.0 + g2 + 2*g/* * 1.0*/;
+        float Denom = sqrt(Denom0) * Denom0;;
+        float PhaseMieOut = 1.0 - 0.07957747 * ((1.0 - g) / Denom);
+
+        // NOTE(boti): BetaM0 is the scattering coefficient of Mie scattering
+        // 1.1111 * BetaM0 is the full extinction
+        vec3 fMie = vec3(exp(-1.1111 * BetaM0 * (PhaseMieOut * Distance)));
+        Lo = Lo * fMie + La * (vec3(1.0) - fMie);
+#else
+        Lo = CalculateAtmosphere(Lo);
+#endif
     }
     
 
