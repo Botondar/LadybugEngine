@@ -619,18 +619,6 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
             return(Result);
         };
 
-        // Draw buffer
-        {
-            umm Size = MiB(1);
-            Result = PushBARBuffer(Renderer->PerFrameDraw2DCmdBuffers, Renderer->PerFrameDraw2DCmdBufferMappings,
-                                   Renderer->SwapchainImageCount, Size, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
-            ReturnOnFailure();
-            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
-            {
-                Renderer->Frames[i].MaxDraw2DCmdCount = Size / sizeof(draw_indirect_cmd);
-            }
-        }
-
         // Vertex stack
         {
             umm Size = MiB(8);
@@ -1780,11 +1768,8 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
     Frame->StagingBufferAt = 0;
     Frame->Backend->StagingBuffer = Renderer->StagingBuffers[FrameID];
 
-    Frame->Backend->Draw2DCmdBuffer = Renderer->PerFrameDraw2DCmdBuffers[FrameID];
     Frame->Backend->Vertex2DBuffer = Renderer->PerFrameVertex2DBuffers[FrameID];
 
-    Frame->Draw2DCmdCount = 0;
-    Frame->Draw2DCmds = (draw_indirect_cmd*)Renderer->PerFrameDraw2DCmdBufferMappings[FrameID];
     Frame->Vertex2DCount = 0;
     Frame->Vertex2DArray = (vertex_2d*)Renderer->PerFrameVertex2DMappings[FrameID];
 
@@ -2601,7 +2586,7 @@ void EndRenderFrame(render_frame* Frame)
 
             vkCmdPushConstants(Frame->Backend->CmdBuffer, UIPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
                                0, sizeof(OrthoTransform), &OrthoTransform);
-            vkCmdDrawIndirect(Frame->Backend->CmdBuffer, Frame->Backend->Draw2DCmdBuffer, 0, Frame->Draw2DCmdCount, sizeof(VkDrawIndirectCommand));
+            vkCmdDraw(Frame->Backend->CmdBuffer, Frame->Vertex2DCount, 1, 0, 0);
         }
 
         vkCmdEndRendering(Frame->Backend->CmdBuffer);

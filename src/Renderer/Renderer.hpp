@@ -7,8 +7,8 @@
 //
 // Config
 //
-constexpr u32 R_TileSizeX = 8;
-constexpr u32 R_TileSizeY = 8;
+constexpr u32 R_TileSizeX = 16;
+constexpr u32 R_TileSizeY = 16;
 constexpr u32 R_MaxRenderTargetSizeX = 3840;
 constexpr u32 R_MaxRenderTargetSizeY = 2160;
 constexpr u32 R_MaxTileCountX = CeilDiv(R_MaxRenderTargetSizeX, R_TileSizeX);
@@ -779,7 +779,6 @@ struct render_frame
     static constexpr u32 MaxJointCount              = (1u << 17);
 
     u32 MaxSkinnedVertexCount;
-    u32 MaxDraw2DCmdCount;
     u32 MaxVertex2DCount;
 
     u32 LightCount;
@@ -792,7 +791,6 @@ struct render_frame
     u32 SkinnedMeshVertexCount;
     u32 DrawWidget3DCmdCount;
     u32 Vertex2DCount;
-    u32 Draw2DCmdCount;
 
     u32 JointBufferAlignment;
 
@@ -805,7 +803,6 @@ struct render_frame
     render_particle* Particles;
     m4* JointMapping;
     vertex_2d* Vertex2DArray;
-    draw_indirect_cmd* Draw2DCmds;
 
     void* UniformData; // GPU-backed frame_uniform_data
     frame_uniform_data Uniforms;
@@ -1042,20 +1039,11 @@ inline b32 AddLight(render_frame* Frame, light Light)
 inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* VertexArray)
 {
     b32 Result = false;
-    if ((Frame->Draw2DCmdCount < Frame->MaxDraw2DCmdCount) &&
-        (Frame->Vertex2DCount + VertexCount <= Frame->MaxVertex2DCount))
+    if (Frame->Vertex2DCount + VertexCount <= Frame->MaxVertex2DCount)
     {
         u32 VertexOffset = Frame->Vertex2DCount;
-        Frame->Vertex2DCount += VertexCount;
-
-        Frame->Draw2DCmds[Frame->Draw2DCmdCount++] = 
-        {
-            .VertexCount = VertexCount,
-            .InstanceCount = 1,
-            .VertexOffset = VertexOffset,
-            .InstanceOffset = 0,
-        };
         memcpy(Frame->Vertex2DArray + VertexOffset, VertexArray, VertexCount * sizeof(vertex_2d));
+        Frame->Vertex2DCount += VertexCount;
         Result = true;
     }
 

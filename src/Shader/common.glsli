@@ -16,8 +16,8 @@
 
 // TODO(boti): Create a shared header between the C++ and the shaders
 // NOTE(boti): These constants need to be kept in sync with the ones Renderer.hpp
-#define R_TileSizeX 8
-#define R_TileSizeY 8
+#define R_TileSizeX 16
+#define R_TileSizeY 16
 #define R_MaxLightCountPerTile 255
 #define R_LuminanceThreshold 3e-2
 #define R_MaxLightCount 16384
