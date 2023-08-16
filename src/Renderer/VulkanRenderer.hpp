@@ -2,6 +2,11 @@
 
 #include <vulkan/vulkan.h>
 
+//
+// TODO(boti): Rework the relationship between SwapchainImageCount and the number of 
+// frames in flight, we're in a mess right now
+//
+
 struct vulkan_buffer
 {
     size_t Size;
@@ -36,12 +41,18 @@ struct pipeline_with_layout
 struct backend_render_frame
 {
     VkCommandPool CmdPool;
-    VkCommandBuffer CmdBuffer;
+    static constexpr u32 MaxCmdBufferCount = 16;
+    u32 CmdBufferAt;
+    VkCommandBuffer CmdBuffers[MaxCmdBufferCount];
+
+    VkCommandPool ComputeCmdPool;
+    VkCommandBuffer ComputeCmdBuffer;
 
     VkDescriptorPool DescriptorPool;
     VkDescriptorSet UniformDescriptorSet;
 
     VkSemaphore ImageAcquiredSemaphore;
+    VkSemaphore PrepassFinishedSemaphore;
     VkFence ImageAcquiredFence;
     VkFence RenderFinishedFence;
 
@@ -114,7 +125,10 @@ struct renderer
     // Per frame stuff
     // 
     VkCommandPool CmdPools[2];
-    VkCommandBuffer CmdBuffers[2];
+    VkCommandBuffer CmdBuffers[2][backend_render_frame::MaxCmdBufferCount];
+
+    VkCommandPool ComputeCmdPools[2];
+    VkCommandBuffer ComputeCmdBuffers[2];
 
     static constexpr u32 MaxPerFrameDescriptorSetCount = 1024;
     VkDescriptorPool PerFrameDescriptorPool[2];
@@ -167,5 +181,4 @@ struct renderer
     backend_render_frame BackendFrames[MaxSwapchainImageCount];
 };
 
-lbfn void BeginSceneRendering(render_frame* Frame);
-lbfn void EndSceneRendering(render_frame* Frame);
+lbfn void SetupSceneRendering(render_frame* Frame);

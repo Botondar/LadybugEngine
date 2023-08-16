@@ -268,35 +268,6 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
             .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
             .queueFamilyIndex = VK.GraphicsQueueIdx,
         };
-        Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->CmdPools[0]);
-        ReturnOnFailure();
-
-        Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->CmdPools[1]);
-        ReturnOnFailure();
-
-        VkCommandBufferAllocateInfo BufferInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .commandPool = Renderer->CmdPools[0],
-            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            .commandBufferCount = 1,
-        };
-        Result = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->CmdBuffers[0]);
-        ReturnOnFailure();
-        BufferInfo.commandPool = Renderer->CmdPools[1];
-        Result = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->CmdBuffers[1]);
-        ReturnOnFailure();
-    }
-
-    {
-        VkCommandPoolCreateInfo PoolInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-            .queueFamilyIndex = VK.GraphicsQueueIdx,
-        };
         Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->TransferCmdPool);
         ReturnOnFailure();
 
@@ -371,6 +342,58 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         };
         Result = vkCreateSemaphore(VK.Device, &ImageAcquiredSemaphoreInfo, nullptr, &Renderer->ImageAcquiredSemaphores[i]);
         ReturnOnFailure();
+
+        // Graphics command pool + buffers
+        {
+            VkCommandPoolCreateInfo PoolInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .queueFamilyIndex = VK.GraphicsQueueIdx,
+            };
+            Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->CmdPools[i]);
+            ReturnOnFailure();
+        
+            for (u32 BufferIndex = 0; BufferIndex < backend_render_frame::MaxCmdBufferCount; BufferIndex++)
+            {
+                VkCommandBufferAllocateInfo BufferInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                    .pNext = nullptr,
+                    .commandPool = Renderer->CmdPools[i],
+                    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                    .commandBufferCount = 1,
+                };
+                Result = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->CmdBuffers[i][BufferIndex]);
+                ReturnOnFailure();
+            }
+        }
+        
+        // Compute command pool + buffers
+        {
+            VkCommandPoolCreateInfo PoolInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .queueFamilyIndex = VK.ComputeQueueIdx,
+            };
+            Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->ComputeCmdPools[i]);
+            ReturnOnFailure();
+        
+            VkCommandBufferAllocateInfo BufferInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .commandPool = Renderer->ComputeCmdPools[i],
+                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandBufferCount = 1,
+            };
+            Result = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->ComputeCmdBuffers[i]);
+            ReturnOnFailure();
+        }
+        
     }
 
     // Create samplers
@@ -1743,12 +1766,13 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
     Frame->Backend->RenderFinishedFence = Renderer->RenderFinishedFences[FrameID];
 
     Frame->Backend->CmdPool = Renderer->CmdPools[FrameID];
-    Frame->Backend->CmdBuffer = Renderer->CmdBuffers[FrameID];
-
-    vkWaitForFences(VK.Device, 1, &Frame->Backend->RenderFinishedFence, VK_TRUE, UINT64_MAX);
-    vkResetFences(VK.Device, 1, &Frame->Backend->RenderFinishedFence);
-
-    vkResetCommandPool(VK.Device, Frame->Backend->CmdPool, 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
+    Frame->Backend->CmdBufferAt = 0;
+    for (u32 Index = 0; Index < Frame->Backend->MaxCmdBufferCount; Index++)
+    {
+        Frame->Backend->CmdBuffers[Index] = Renderer->CmdBuffers[FrameID][Index];
+    }
+    Frame->Backend->ComputeCmdPool = Renderer->ComputeCmdPools[FrameID];
+    Frame->Backend->ComputeCmdBuffer = Renderer->ComputeCmdBuffers[FrameID];
 
     Frame->Backend->DescriptorPool = Renderer->PerFrameDescriptorPool[FrameID];    
 
@@ -1800,16 +1824,22 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
     Frame->Uniforms = {};
     Frame->Uniforms.ScreenSize = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
 
+    vkWaitForFences(VK.Device, 1, &Frame->Backend->RenderFinishedFence, VK_TRUE, UINT64_MAX);
+    vkResetFences(VK.Device, 1, &Frame->Backend->RenderFinishedFence);
+
+    vkResetCommandPool(VK.Device, Frame->Backend->CmdPool, 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
+    vkResetCommandPool(VK.Device, Frame->Backend->ComputeCmdPool, 0);
+
     return(Frame);
 }
 
 void EndRenderFrame(render_frame* Frame)
 {
-    auto DrawMeshes = [](render_frame* Frame, VkPipelineLayout PipelineLayout)
+    auto DrawMeshes = [](render_frame* Frame, VkCommandBuffer CmdBuffer, VkPipelineLayout PipelineLayout)
     {
         const VkDeviceSize ZeroOffset = 0;
-        vkCmdBindIndexBuffer(Frame->Backend->CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
-        vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Frame->Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
+        vkCmdBindIndexBuffer(CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
+        vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &Frame->Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
 
         for (u32 CmdIndex = 0; CmdIndex < Frame->DrawCmdCount; CmdIndex++)
         {
@@ -1820,13 +1850,13 @@ void EndRenderFrame(render_frame* Frame)
                 .Material = Cmd->Material,
             };
 
-            vkCmdPushConstants(Frame->Backend->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+            vkCmdPushConstants(CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                0, sizeof(PushConstants), &PushConstants);
-            vkCmdDrawIndexed(Frame->Backend->CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
+            vkCmdDrawIndexed(CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
 
         }
 
-        vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Frame->Backend->SkinnedMeshVB, &ZeroOffset);
+        vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &Frame->Backend->SkinnedMeshVB, &ZeroOffset);
         for (u32 CmdIndex = 0; CmdIndex < Frame->SkinnedDrawCmdCount; CmdIndex++)
         {
             draw_cmd* Cmd = Frame->SkinnedDrawCmds + CmdIndex;
@@ -1835,13 +1865,14 @@ void EndRenderFrame(render_frame* Frame)
                 .Transform = Cmd->Transform,
                 .Material = Cmd->Material,
             };
-            vkCmdPushConstants(Frame->Backend->CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+            vkCmdPushConstants(CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                0, sizeof(PushConstants), &PushConstants);
-            vkCmdDrawIndexed(Frame->Backend->CmdBuffer, Cmd->Base.IndexCount, 1, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, 0);
+            vkCmdDrawIndexed(CmdBuffer, Cmd->Base.IndexCount, 1, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, 0);
         }
     };
 
     renderer* Renderer = Frame->Renderer;
+    VkCommandBuffer CmdBuffer = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
 
     vkResetDescriptorPool(VK.Device, Frame->Backend->DescriptorPool, 0);
     Frame->Backend->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrameUniformData]);
@@ -1894,7 +1925,7 @@ void EndRenderFrame(render_frame* Frame)
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
         .pInheritanceInfo = nullptr,
     };
-    vkBeginCommandBuffer(Frame->Backend->CmdBuffer, &CmdBufferBegin);
+    vkBeginCommandBuffer(CmdBuffer, &CmdBufferBegin);
 
     u32 TileCountX = CeilDiv(Frame->RenderWidth, R_TileSizeX);
     u32 TileCountY = CeilDiv(Frame->RenderHeight, R_TileSizeY);
@@ -1963,7 +1994,7 @@ void EndRenderFrame(render_frame* Frame)
             .bufferMemoryBarrierCount = CountOf(BeginBarriers),
             .pBufferMemoryBarriers = BeginBarriers,
         };
-        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependency);
+        vkCmdPipelineBarrier2(CmdBuffer, &BeginDependency);
 
         VkBufferCopy LightBufferCopy = 
         {
@@ -1973,7 +2004,7 @@ void EndRenderFrame(render_frame* Frame)
         };
         if (LightBufferCopy.size > 0)
         {
-            vkCmdCopyBuffer(Frame->Backend->CmdBuffer, Frame->Backend->StagingBuffer, Renderer->LightBuffer, 1, &LightBufferCopy);
+            vkCmdCopyBuffer(CmdBuffer, Frame->Backend->StagingBuffer, Renderer->LightBuffer, 1, &LightBufferCopy);
         }
 
         VkBufferMemoryBarrier2 EndBarriers[] = 
@@ -2000,10 +2031,10 @@ void EndRenderFrame(render_frame* Frame)
             .bufferMemoryBarrierCount = CountOf(EndBarriers),
             .pBufferMemoryBarriers = EndBarriers,
         };
-        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &EndDependency);
+        vkCmdPipelineBarrier2(CmdBuffer, &EndDependency);
     }
 
-    BeginSceneRendering(Frame);
+    SetupSceneRendering(Frame);
 
     VkDescriptorSet LightBufferDescriptorSet = PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_StructuredBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                                                     Renderer->LightBuffer, 0, VK_WHOLE_SIZE);
@@ -2095,8 +2126,8 @@ void EndRenderFrame(render_frame* Frame)
         vkUpdateDescriptorSets(VK.Device, CountOf(DescriptorWrites), DescriptorWrites, 0, nullptr);
 
         pipeline_with_layout SkinningPipeline = Renderer->Pipelines[Pipeline_Skinning];
-        vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Pipeline);
-        vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
+        vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Pipeline);
+        vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
                                 0, 1, &SkinningBuffersDescriptorSet,
                                 0, nullptr);
 
@@ -2125,12 +2156,12 @@ void EndRenderFrame(render_frame* Frame)
             .bufferMemoryBarrierCount = CountOf(BeginBarriers),
             .pBufferMemoryBarriers = BeginBarriers,
         };
-        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependencies);
+        vkCmdPipelineBarrier2(CmdBuffer, &BeginDependencies);
 
         for (u32 SkinningCmdIndex = 0; SkinningCmdIndex < Frame->SkinningCmdCount; SkinningCmdIndex++)
         {
             skinning_cmd* Cmd = Frame->SkinningCmds + SkinningCmdIndex;
-            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
+            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
                                     1, 1, &JointDescriptorSet,
                                     1, &Cmd->PoseOffset);
 
@@ -2140,12 +2171,12 @@ void EndRenderFrame(render_frame* Frame)
                 Cmd->DstVertexOffset,
                 Cmd->VertexCount,
             };
-            vkCmdPushConstants(Frame->Backend->CmdBuffer, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
+            vkCmdPushConstants(CmdBuffer, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
                                0, sizeof(PushConstants), PushConstants);
 
 
             constexpr u32 SkinningGroupSize = 64;
-            vkCmdDispatch(Frame->Backend->CmdBuffer, CeilDiv(Cmd->VertexCount, SkinningGroupSize), 1, 1);
+            vkCmdDispatch(CmdBuffer, CeilDiv(Cmd->VertexCount, SkinningGroupSize), 1, 1);
         }
 
         VkBufferMemoryBarrier2 EndBarriers[] =
@@ -2173,7 +2204,7 @@ void EndRenderFrame(render_frame* Frame)
             .bufferMemoryBarrierCount = CountOf(EndBarriers),
             .pBufferMemoryBarriers = EndBarriers,
         };
-        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &EndDependencies);
+        vkCmdPipelineBarrier2(CmdBuffer, &EndDependencies);
     }
 
     {
@@ -2189,20 +2220,31 @@ void EndRenderFrame(render_frame* Frame)
             TileBufferDescriptorSet,
         };
 
-        vkCmdSetViewport(Frame->Backend->CmdBuffer, 0, 1, &FrameViewport);
-        vkCmdSetScissor(Frame->Backend->CmdBuffer, 0, 1, &FrameScissor);
-        BeginPrepass(Frame);
+        vkCmdSetViewport(CmdBuffer, 0, 1, &FrameViewport);
+        vkCmdSetScissor(CmdBuffer, 0, 1, &FrameScissor);
+        BeginPrepass(Frame, CmdBuffer);
         {
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Prepass];
-            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
+            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                     0, 3, DescriptorSets,
                                     0, nullptr);
-            DrawMeshes(Frame, Pipeline.Layout);
+            DrawMeshes(Frame, CmdBuffer, Pipeline.Layout);
         }
-        EndPrepass(Frame);
+        EndPrepass(Frame, CmdBuffer);
 
-        RenderSSAO(Frame,
+#if 0
+        VkCommandBufferBeginInfo ComputeBegin = 
+        {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .pInheritanceInfo = nullptr,
+
+        };
+        vkBeginCommandBuffer(Frame->Backend->ComputeCmdBuffer, &ComputeBegin);        
+#endif
+        RenderSSAO(Frame, CmdBuffer,
                    Frame->PostProcess.SSAO,
                    Renderer->Pipelines[Pipeline_SSAO].Pipeline, 
                    Renderer->Pipelines[Pipeline_SSAO].Layout, 
@@ -2237,10 +2279,10 @@ void EndRenderFrame(render_frame* Frame)
                 .bufferMemoryBarrierCount = CountOf(BeginBarriers),
                 .pBufferMemoryBarriers = BeginBarriers,
             };
-            vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependency);
+            vkCmdPipelineBarrier2(CmdBuffer, &BeginDependency);
 
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_LightBinning];
-            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
+            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
 
             VkDescriptorSet BinningDescriptorSets[] = 
             {
@@ -2248,10 +2290,10 @@ void EndRenderFrame(render_frame* Frame)
                 LightBufferDescriptorSet,
                 TileBufferDescriptorSet,
             };
-            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout, 
+            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout, 
                                     0, CountOf(BinningDescriptorSets), BinningDescriptorSets, 0, nullptr);
 
-            vkCmdDispatch(Frame->Backend->CmdBuffer, CeilDiv(TileCountX, 32), TileCountY, 1);
+            vkCmdDispatch(CmdBuffer, CeilDiv(TileCountX, 32), TileCountY, 1);
 
             VkBufferMemoryBarrier2 EndBarriers[] = 
             {
@@ -2277,8 +2319,11 @@ void EndRenderFrame(render_frame* Frame)
                 .bufferMemoryBarrierCount = CountOf(EndBarriers),
                 .pBufferMemoryBarriers = EndBarriers,
             };
-            vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &EndDependency);
+            vkCmdPipelineBarrier2(CmdBuffer, &EndDependency);
         }
+#if 0
+        vkEndCommandBuffer(Frame->Backend->ComputeCmdBuffer);
+#endif
 
         VkViewport ShadowViewport = 
         {
@@ -2294,46 +2339,46 @@ void EndRenderFrame(render_frame* Frame)
             .offset = { 0, 0 },
             .extent = { R_ShadowResolution, R_ShadowResolution },
         };
-        vkCmdSetViewport(Frame->Backend->CmdBuffer, 0, 1, &ShadowViewport);
-        vkCmdSetScissor(Frame->Backend->CmdBuffer, 0, 1, &ShadowScissor);
+        vkCmdSetViewport(CmdBuffer, 0, 1, &ShadowViewport);
+        vkCmdSetScissor(CmdBuffer, 0, 1, &ShadowScissor);
         for (u32 Cascade = 0; Cascade < R_MaxShadowCascadeCount; Cascade++)
         {
-            BeginCascade(Frame, Cascade);
+            BeginCascade(Frame, CmdBuffer, Cascade);
 
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Shadow];
-            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdPushConstants(Frame->Backend->CmdBuffer, Pipeline.Layout,
+            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+            vkCmdPushConstants(CmdBuffer, Pipeline.Layout,
                                VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                sizeof(push_constants), sizeof(u32), &Cascade);
-            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
+            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
                                     0, 3, DescriptorSets, 0, nullptr);
-            DrawMeshes(Frame, Pipeline.Layout);
+            DrawMeshes(Frame, CmdBuffer, Pipeline.Layout);
 
-            EndCascade(Frame);
+            EndCascade(Frame, CmdBuffer);
         }
 
-        vkCmdSetViewport(Frame->Backend->CmdBuffer, 0, 1, &FrameViewport);
-        vkCmdSetScissor(Frame->Backend->CmdBuffer, 0, 1, &FrameScissor);
-        BeginForwardPass(Frame);
+        vkCmdSetViewport(CmdBuffer, 0, 1, &FrameViewport);
+        vkCmdSetScissor(CmdBuffer, 0, 1, &FrameScissor);
+        BeginForwardPass(Frame, CmdBuffer);
         {
 
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Simple];
-            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
+            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                     0, CountOf(DescriptorSets), DescriptorSets,
                                     0, nullptr);
 
-            DrawMeshes(Frame, Pipeline.Layout);
+            DrawMeshes(Frame, CmdBuffer, Pipeline.Layout);
 
             // Render sky
 #if 1
             {
                 pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
-                vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
-                vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Layout, 
+                vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
+                vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Layout, 
                                         0, 1, &Frame->Backend->UniformDescriptorSet, 
                                         0, nullptr);
-                vkCmdDraw(Frame->Backend->CmdBuffer, 3, 1, 0, 0);
+                vkCmdDraw(CmdBuffer, 3, 1, 0, 0);
             }
 #endif
 
@@ -2372,8 +2417,8 @@ void EndRenderFrame(render_frame* Frame)
                 };
 
                 pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
-                vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
-                vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
+                vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
+                vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
                                         0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
                                         0, nullptr);
 
@@ -2382,17 +2427,16 @@ void EndRenderFrame(render_frame* Frame)
                     particle_cmd* Cmd = Frame->ParticleDrawCmds + CmdIndex;
                     u32 VertexCount = 6 * Cmd->ParticleCount;
                     u32 FirstVertex = 6 * Cmd->FirstParticle;
-                    vkCmdPushConstants(Frame->Backend->CmdBuffer, ParticlePipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
+                    vkCmdPushConstants(CmdBuffer, ParticlePipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
                                        0, sizeof(Cmd->Mode), &Cmd->Mode);
-                    vkCmdDraw(Frame->Backend->CmdBuffer, VertexCount, 1, FirstVertex, 0);
+                    vkCmdDraw(CmdBuffer, VertexCount, 1, FirstVertex, 0);
                 }
             }
         }
-        EndForwardPass(Frame);
+        EndForwardPass(Frame, CmdBuffer);
     }
-    EndSceneRendering(Frame);
 
-    RenderBloom(Frame,
+    RenderBloom(Frame, CmdBuffer,
                 Frame->PostProcess.Bloom,
                 Frame->Backend->HDRRenderTargets[0],
                 Frame->Backend->HDRRenderTargets[1],
@@ -2443,7 +2487,7 @@ void EndRenderFrame(render_frame* Frame)
             .imageMemoryBarrierCount = CountOf(BeginBarriers),
             .pImageMemoryBarriers = BeginBarriers,
         };
-        vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &BeginDependencyInfo); 
+        vkCmdPipelineBarrier2(CmdBuffer, &BeginDependencyInfo); 
 
         VkRenderingAttachmentInfo ColorAttachment = 
         {
@@ -2484,13 +2528,13 @@ void EndRenderFrame(render_frame* Frame)
             .pDepthAttachment = &DepthAttachment,
             .pStencilAttachment = nullptr,
         };
-        vkCmdBeginRendering(Frame->Backend->CmdBuffer, &RenderingInfo);
+        vkCmdBeginRendering(CmdBuffer, &RenderingInfo);
         
         // Blit
         {
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Blit];
-            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdPushConstants(Frame->Backend->CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_FRAGMENT_BIT, 
+            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+            vkCmdPushConstants(CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_FRAGMENT_BIT, 
                                0, sizeof(f32), &Frame->PostProcess.Bloom.Strength);
 
             VkDescriptorSet BlitDescriptorSet = VK_NULL_HANDLE;
@@ -2543,20 +2587,20 @@ void EndRenderFrame(render_frame* Frame)
             };
             vkUpdateDescriptorSets(VK.Device, CountOf(SetWrites), SetWrites, 0, nullptr);
 
-            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
+            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
                                     0, 1, &BlitDescriptorSet, 0, nullptr);
-            vkCmdDraw(Frame->Backend->CmdBuffer, 3, 1, 0, 0);
+            vkCmdDraw(CmdBuffer, 3, 1, 0, 0);
         }
 
         // 3D widget render
         {
             const VkDeviceSize ZeroOffset = 0;
-            vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
-            vkCmdBindIndexBuffer(Frame->Backend->CmdBuffer, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
+            vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
+            vkCmdBindIndexBuffer(CmdBuffer, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
 
             pipeline_with_layout GizmoPipeline = Renderer->Pipelines[Pipeline_Gizmo];
-            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
-            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
+            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
+            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
                                     0, 1, &Frame->Backend->UniformDescriptorSet, 
                                     0, nullptr);
 
@@ -2564,24 +2608,24 @@ void EndRenderFrame(render_frame* Frame)
             {
                 draw_widget3d_cmd* Cmd = Frame->DrawWidget3DCmds + CmdIndex;
 
-                vkCmdPushConstants(Frame->Backend->CmdBuffer, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                vkCmdPushConstants(CmdBuffer, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                    0, sizeof(Cmd->Transform), &Cmd->Transform);
-                vkCmdPushConstants(Frame->Backend->CmdBuffer, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                vkCmdPushConstants(CmdBuffer, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                    sizeof(Cmd->Transform), sizeof(Cmd->Color), &Cmd->Color);
-                vkCmdDrawIndexed(Frame->Backend->CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceCount);
+                vkCmdDrawIndexed(CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceCount);
             }
         }
 
         {
             VkDeviceSize ZeroOffset = 0;
-            vkCmdBindVertexBuffers(Frame->Backend->CmdBuffer, 0, 1, &Frame->Backend->Vertex2DBuffer, &ZeroOffset);
+            vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &Frame->Backend->Vertex2DBuffer, &ZeroOffset);
 
             pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
             VkDescriptorSetLayout SetLayout = Frame->Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS];
             VkDescriptorSet ImmediateDescriptorSet = PushImageDescriptor(Frame, SetLayout, Frame->ImmediateTextureID);
 
-            vkCmdBindPipeline(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Pipeline);
-            vkCmdBindDescriptorSets(Frame->Backend->CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Layout, 
+            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Pipeline);
+            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Layout, 
                                     0, 1, &ImmediateDescriptorSet, 0, nullptr);
 
             m4 OrthoTransform = M4(2.0f / Frame->RenderWidth, 0.0f, 0.0f, -1.0f,
@@ -2589,12 +2633,12 @@ void EndRenderFrame(render_frame* Frame)
                                    0.0f, 0.0f, 1.0f, 0.0f,
                                    0.0f, 0.0f, 0.0f, 1.0f);
 
-            vkCmdPushConstants(Frame->Backend->CmdBuffer, UIPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
+            vkCmdPushConstants(CmdBuffer, UIPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
                                0, sizeof(OrthoTransform), &OrthoTransform);
-            vkCmdDraw(Frame->Backend->CmdBuffer, Frame->Vertex2DCount, 1, 0, 0);
+            vkCmdDraw(CmdBuffer, Frame->Vertex2DCount, 1, 0, 0);
         }
 
-        vkCmdEndRendering(Frame->Backend->CmdBuffer);
+        vkCmdEndRendering(CmdBuffer);
     }
 
     VkImageMemoryBarrier2 EndBarriers[] = 
@@ -2636,11 +2680,12 @@ void EndRenderFrame(render_frame* Frame)
         .imageMemoryBarrierCount = CountOf(EndBarriers),
         .pImageMemoryBarriers = EndBarriers,
     };
-    vkCmdPipelineBarrier2(Frame->Backend->CmdBuffer, &EndDependencyInfo);
+    vkCmdPipelineBarrier2(CmdBuffer, &EndDependencyInfo);
 
-    vkEndCommandBuffer(Frame->Backend->CmdBuffer);
+    vkEndCommandBuffer(CmdBuffer);
 
     VkPipelineStageFlags WaitDstStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
     VkSubmitInfo SubmitInfo = 
     {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -2649,7 +2694,7 @@ void EndRenderFrame(render_frame* Frame)
         .pWaitSemaphores = &Frame->Backend->ImageAcquiredSemaphore,
         .pWaitDstStageMask = &WaitDstStage,
         .commandBufferCount = 1,
-        .pCommandBuffers = &Frame->Backend->CmdBuffer,
+        .pCommandBuffers = &CmdBuffer,
         .signalSemaphoreCount = 0,
         .pSignalSemaphores = nullptr,
     };
@@ -2761,7 +2806,7 @@ void SetRenderCamera(render_frame* Frame, const render_camera* CameraIn)
     Frame->Uniforms.CameraP = Camera->CameraTransform.P.xyz;
 }
 
-internal void BeginSceneRendering(render_frame* Frame)
+internal void SetupSceneRendering(render_frame* Frame)
 {
     // Shadow cascade setup
     {
@@ -2938,9 +2983,4 @@ internal void BeginSceneRendering(render_frame* Frame)
          };
          vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
     }
-}
-
-internal void EndSceneRendering(render_frame* Frame)
-{
-    
 }

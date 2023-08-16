@@ -27,17 +27,18 @@ PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, texture_i
 //
 // Rendering
 //
-internal void BeginPrepass(render_frame* Frame);
-internal void EndPrepass(render_frame* Frame);
+internal void BeginPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer);
+internal void EndPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer);
 
-internal void BeginCascade(render_frame* Frame, u32 CascadeIndex);
-internal void EndCascade(render_frame* Frame);
+internal void BeginCascade(render_frame* Frame, VkCommandBuffer CmdBuffer, u32 CascadeIndex);
+internal void EndCascade(render_frame* Frame, VkCommandBuffer CmdBuffer);
 
-internal void BeginForwardPass(render_frame* Frame);
-internal void EndForwardPass(render_frame* Frame);
+internal void BeginForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer);
+internal void EndForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer);
 
 internal void RenderSSAO(
     render_frame* Frame,
+    VkCommandBuffer CmdBuffer,
     ssao_params Params,
     VkPipeline Pipeline, VkPipelineLayout PipelineLayout,
     VkDescriptorSetLayout SetLayout,
@@ -46,6 +47,7 @@ internal void RenderSSAO(
 
 internal void 
 RenderBloom(render_frame* Frame,
+            VkCommandBuffer CmdBuffer,
             bloom_params Params,
             render_target* SrcRT,
             render_target* DstRT,
