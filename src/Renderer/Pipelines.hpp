@@ -1,5 +1,7 @@
 #pragma once
 
+// TODO(boti): clean up the mess around samplers and descriptor set layouts
+
 enum sampler : u32
 {
     Sampler_None = 0,

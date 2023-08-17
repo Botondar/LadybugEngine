@@ -39,6 +39,7 @@ struct per_frame
     mat4 CameraTransform;
     mat4 View;
     mat4 Projection;
+    mat4 InverseProjection;
     mat4 ViewProjection;
 
     mat4 CascadeViewProjection;

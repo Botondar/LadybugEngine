@@ -5,7 +5,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
     const char* RequiredInstanceLayers[] = 
     {
         "VK_LAYER_KHRONOS_synchronization2",
-        "VK_LAYER_KHRONOS_validation",
+        //"VK_LAYER_KHRONOS_validation",
     };
 
     const char* RequiredInstanceExtensions[] = 

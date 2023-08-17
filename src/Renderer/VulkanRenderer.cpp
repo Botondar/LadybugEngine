@@ -2339,6 +2339,7 @@ void EndRenderFrame(render_frame* Frame)
             Frame->Backend->UniformDescriptorSet,
             LightBufferDescriptorSet,
             TileBufferDescriptorSet,
+            StructureBufferDescriptorSet,
         };
         vkCmdBindDescriptorSets(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout, 
                                 0, CountOf(BinningDescriptorSets), BinningDescriptorSets, 0, nullptr);
@@ -2981,6 +2982,7 @@ void SetRenderCamera(render_frame* Frame, const render_camera* CameraIn)
     Frame->Uniforms.CameraTransform = Camera->CameraTransform;
     Frame->Uniforms.ViewTransform = Camera->ViewTransform;
     Frame->Uniforms.ProjectionTransform = Camera->ProjectionTransform;
+    Frame->Uniforms.InverseProjectionTransform = Camera->InverseProjectionTransform;
     Frame->Uniforms.ViewProjectionTransform = Camera->ProjectionTransform * Camera->ViewTransform;
 
     Frame->Uniforms.FocalLength = Camera->FocalLength;

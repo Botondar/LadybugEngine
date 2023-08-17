@@ -1056,13 +1056,14 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Layout = 
         {
             .PushConstantRangeCount = 0,
-            .DescriptorSetCount = 3,
+            .DescriptorSetCount = 4,
             .PushConstantRanges = {},
             .DescriptorSets = 
             {
                 SetLayout_PerFrameUniformData,
                 SetLayout_StructuredBuffer, // light buffer
                 SetLayout_StructuredBuffer, // tile buffer
+                SetLayout_SampledRenderTargetNormalized_PS_CS, // Structure buffer
             },
         },
     },

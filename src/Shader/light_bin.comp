@@ -22,6 +22,8 @@ buffer TileBuffer
     screen_tile Tiles[];
 };
 
+layout(set = 3, binding = 0) uniform sampler2D StructureBuffer;
+
 struct frustum
 {
     v4 Planes[6];
@@ -47,10 +49,31 @@ void main()
     if (gl_GlobalInvocationID.x < PerFrame.TileCount.x)
     {
         uint TileIndex = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * PerFrame.TileCount.x;
-        float MinX = float(gl_GlobalInvocationID.x) * R_TileSizeX;
-        float MinY = float(gl_GlobalInvocationID.y) * R_TileSizeY;
-        float MaxX = MinX + R_TileSizeX;
-        float MaxY = MinY + R_TileSizeY;
+        uint uMinX = gl_GlobalInvocationID.x * R_TileSizeX;
+        uint uMinY = gl_GlobalInvocationID.y * R_TileSizeY;
+        uint uMaxX = uMinX + R_TileSizeX;
+        uint uMaxY = uMinY + R_TileSizeY;
+
+        float MinDepth = 1.0;
+        float MaxDepth = 0.0;
+        for (uint Y = 0; Y < R_TileSizeY; Y++)
+        {
+            for (uint X = 0; X < R_TileSizeX; X++)
+            {
+                vec2 Depth2 = texelFetch(StructureBuffer, ivec2(uMinX + X, uMinY + Y), 0).zw;
+                float Depth = Depth2.x + Depth2.y;
+
+                vec2 ProjDepth = mat2(PerFrame.Projection[2].zw, PerFrame.Projection[3].zw) * vec2(Depth, 1.0);
+                Depth = ProjDepth.x / ProjDepth.y;
+                MinDepth = min(Depth, MinDepth);
+                MaxDepth = max(Depth, MaxDepth);
+            }
+        }
+
+        float MinX = float(uMinX);
+        float MinY = float(uMinY);
+        float MaxX = float(uMaxX);
+        float MaxY = float(uMaxY);
         MinX = 2.0 * (MinX / PerFrame.ScreenSize.x) - 1.0;
         MinY = 2.0 * (MinY / PerFrame.ScreenSize.y) - 1.0;
         MaxX = 2.0 * (MaxX / PerFrame.ScreenSize.x) - 1.0;
@@ -61,8 +84,8 @@ void main()
         Frustum.Planes[1] = v4(-1.0, 0.0, 0.0, +MaxX) * PerFrame.Projection;
         Frustum.Planes[2] = v4( 0.0, +1.0, 0.0, -MinY) * PerFrame.Projection;
         Frustum.Planes[3] = v4( 0.0, -1.0, 0.0, +MaxY) * PerFrame.Projection;
-        Frustum.Planes[4] = v4( 0.0, 0.0, +1.0, 0.0) * PerFrame.Projection;
-        Frustum.Planes[5] = v4( 0.0, 0.0, -1.0, 1.0) * PerFrame.Projection;
+        Frustum.Planes[4] = v4( 0.0, 0.0, +1.0, MinDepth) * PerFrame.Projection;
+        Frustum.Planes[5] = v4( 0.0, 0.0, -1.0, MaxDepth) * PerFrame.Projection;
 
         uint LightCount = 0;
         for (uint LightIndex = 0; LightIndex < PerFrame.LightCount; LightIndex++)

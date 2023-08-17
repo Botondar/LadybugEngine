@@ -692,6 +692,7 @@ struct frame_uniform_data
     m4 CameraTransform;
     m4 ViewTransform;
     m4 ProjectionTransform;
+    m4 InverseProjectionTransform;
     m4 ViewProjectionTransform;
 
     m4 CascadeViewProjection;
