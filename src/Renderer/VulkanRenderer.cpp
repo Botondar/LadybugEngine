@@ -2259,6 +2259,39 @@ void EndRenderFrame(render_frame* Frame)
 
     vkEndCommandBuffer(PrepassCmd);
 
+    u64 PrepassCounter = ++Renderer->TimelineSemaphoreCounter;
+    VkCommandBufferSubmitInfo PrepassCmdBuffers[] = 
+    {
+        {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .pNext = nullptr,
+            .commandBuffer = PrepassCmd,
+            .deviceMask = 0,
+        },
+    };
+    VkSemaphoreSubmitInfo PrepassSignals[] = 
+    {
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .pNext = nullptr,
+            .semaphore = Renderer->TimelineSemaphore,
+            .value = PrepassCounter,
+            .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+        },
+    };
+    VkSubmitInfo2 SubmitPrepass = 
+    {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .pNext = nullptr,
+        .waitSemaphoreInfoCount = 0,
+        .pWaitSemaphoreInfos = nullptr,
+        .commandBufferInfoCount = CountOf(PrepassCmdBuffers),
+        .pCommandBufferInfos = PrepassCmdBuffers,
+        .signalSemaphoreInfoCount = CountOf(PrepassSignals),
+        .pSignalSemaphoreInfos = PrepassSignals,
+    };
+    vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitPrepass, nullptr);
+
     vkBeginCommandBuffer(PreLightCmd, &CmdBufferBegin);
 
     RenderSSAO(Frame, PreLightCmd,
@@ -2341,6 +2374,50 @@ void EndRenderFrame(render_frame* Frame)
 
     vkEndCommandBuffer(PreLightCmd);
 
+    u64 PreLightCounter = ++Renderer->ComputeTimelineSemaphoreCounter;
+    VkCommandBufferSubmitInfo PreLightCmdBuffers[] = 
+    {
+        {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .pNext = nullptr,
+            .commandBuffer = PreLightCmd,
+            .deviceMask = 0,
+        },
+    };
+    VkSemaphoreSubmitInfo PreLightWaits[] = 
+    {
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .pNext = nullptr,
+            .semaphore = Renderer->TimelineSemaphore,
+            .value = PrepassCounter,
+            .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+        },
+    };
+    VkSemaphoreSubmitInfo PreLightSignals[] = 
+    {
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .pNext = nullptr,
+            .semaphore = Renderer->ComputeTimelineSemaphore,
+            .value = PreLightCounter,
+            .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+        },
+    };
+    VkSubmitInfo2 SubmitPreLight = 
+    {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .pNext = nullptr,
+        .flags = 0,
+        .waitSemaphoreInfoCount = CountOf(PreLightWaits),
+        .pWaitSemaphoreInfos = PreLightWaits,
+        .commandBufferInfoCount = CountOf(PreLightCmdBuffers),
+        .pCommandBufferInfos = PreLightCmdBuffers,
+        .signalSemaphoreInfoCount = CountOf(PreLightSignals),
+        .pSignalSemaphoreInfos = PreLightSignals,
+    };
+    vkQueueSubmit2(VK.ComputeQueue, 1, &SubmitPreLight, nullptr);
+
     vkBeginCommandBuffer(ShadowCmd, &CmdBufferBegin);
     VkViewport ShadowViewport = 
     {
@@ -2374,6 +2451,50 @@ void EndRenderFrame(render_frame* Frame)
         EndCascade(Frame, ShadowCmd);
     }
     vkEndCommandBuffer(ShadowCmd);
+
+    u64 ShadowCounter = ++Renderer->TimelineSemaphoreCounter;
+    VkCommandBufferSubmitInfo ShadowCmdBuffers[] = 
+    {
+        {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .pNext = nullptr,
+            .commandBuffer = ShadowCmd,
+            .deviceMask = 0,
+        },
+    };
+    VkSemaphoreSubmitInfo ShadowWaits[] = 
+    {
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .pNext = nullptr,
+            .semaphore = Renderer->TimelineSemaphore,
+            .value = PrepassCounter,
+            .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+        },
+    };
+    VkSemaphoreSubmitInfo ShadowSignals[] = 
+    {
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .pNext = nullptr,
+            .semaphore = Renderer->TimelineSemaphore,
+            .value = ShadowCounter,
+            .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+        },
+    };
+    VkSubmitInfo2 SubmitShadow = 
+    {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .pNext = nullptr,
+        .flags = 0,
+        .waitSemaphoreInfoCount = CountOf(ShadowWaits),
+        .pWaitSemaphoreInfos = ShadowWaits,
+        .commandBufferInfoCount = CountOf(ShadowCmdBuffers),
+        .pCommandBufferInfos = ShadowCmdBuffers,
+        .signalSemaphoreInfoCount = CountOf(ShadowSignals),
+        .pSignalSemaphoreInfos = ShadowSignals,
+    };
+    vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitShadow, nullptr);
 
     vkBeginCommandBuffer(RenderCmd, &CmdBufferBegin);
     vkCmdSetViewport(RenderCmd, 0, 1, &FrameViewport);
@@ -2705,129 +2826,6 @@ void EndRenderFrame(render_frame* Frame)
 
     // Submit + Present
     {
-        VkPipelineStageFlags TopOfPipe = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-
-        u64 PrepassCounter = ++Renderer->TimelineSemaphoreCounter;
-        VkCommandBufferSubmitInfo PrepassCmdBuffers[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-                .pNext = nullptr,
-                .commandBuffer = PrepassCmd,
-                .deviceMask = 0,
-            },
-        };
-        VkSemaphoreSubmitInfo PrepassSignals[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .pNext = nullptr,
-                .semaphore = Renderer->TimelineSemaphore,
-                .value = PrepassCounter,
-                .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-            },
-        };
-        VkSubmitInfo2 SubmitPrepass = 
-        {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-            .pNext = nullptr,
-            .waitSemaphoreInfoCount = 0,
-            .pWaitSemaphoreInfos = nullptr,
-            .commandBufferInfoCount = CountOf(PrepassCmdBuffers),
-            .pCommandBufferInfos = PrepassCmdBuffers,
-            .signalSemaphoreInfoCount = CountOf(PrepassSignals),
-            .pSignalSemaphoreInfos = PrepassSignals,
-        };
-        vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitPrepass, nullptr);
-
-        u64 PreLightCounter = ++Renderer->ComputeTimelineSemaphoreCounter;
-        VkCommandBufferSubmitInfo PreLightCmdBuffers[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-                .pNext = nullptr,
-                .commandBuffer = PreLightCmd,
-                .deviceMask = 0,
-            },
-        };
-        VkSemaphoreSubmitInfo PreLightWaits[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .pNext = nullptr,
-                .semaphore = Renderer->TimelineSemaphore,
-                .value = PrepassCounter,
-                .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-            },
-        };
-        VkSemaphoreSubmitInfo PreLightSignals[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .pNext = nullptr,
-                .semaphore = Renderer->ComputeTimelineSemaphore,
-                .value = PreLightCounter,
-                .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-            },
-        };
-        VkSubmitInfo2 SubmitPreLight = 
-        {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-            .pNext = nullptr,
-            .flags = 0,
-            .waitSemaphoreInfoCount = CountOf(PreLightWaits),
-            .pWaitSemaphoreInfos = PreLightWaits,
-            .commandBufferInfoCount = CountOf(PreLightCmdBuffers),
-            .pCommandBufferInfos = PreLightCmdBuffers,
-            .signalSemaphoreInfoCount = CountOf(PreLightSignals),
-            .pSignalSemaphoreInfos = PreLightSignals,
-        };
-        vkQueueSubmit2(VK.ComputeQueue, 1, &SubmitPreLight, nullptr);
-
-        u64 ShadowCounter = ++Renderer->TimelineSemaphoreCounter;
-        VkCommandBufferSubmitInfo ShadowCmdBuffers[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-                .pNext = nullptr,
-                .commandBuffer = ShadowCmd,
-                .deviceMask = 0,
-            },
-        };
-        VkSemaphoreSubmitInfo ShadowWaits[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .pNext = nullptr,
-                .semaphore = Renderer->TimelineSemaphore,
-                .value = PrepassCounter,
-                .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
-            },
-        };
-        VkSemaphoreSubmitInfo ShadowSignals[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .pNext = nullptr,
-                .semaphore = Renderer->TimelineSemaphore,
-                .value = ShadowCounter,
-                .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-            },
-        };
-        VkSubmitInfo2 SubmitShadow = 
-        {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-            .pNext = nullptr,
-            .flags = 0,
-            .waitSemaphoreInfoCount = CountOf(ShadowWaits),
-            .pWaitSemaphoreInfos = ShadowWaits,
-            .commandBufferInfoCount = CountOf(ShadowCmdBuffers),
-            .pCommandBufferInfos = ShadowCmdBuffers,
-            .signalSemaphoreInfoCount = CountOf(ShadowSignals),
-            .pSignalSemaphoreInfos = ShadowSignals,
-        };
-        vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitShadow, nullptr);
-
         u64 RenderCounter = ++Renderer->TimelineSemaphoreCounter;
         Frame->Backend->FrameFinishedCounter  = RenderCounter;
         VkCommandBufferSubmitInfo RenderCmdBuffers[] = 
