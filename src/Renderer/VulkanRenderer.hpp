@@ -51,10 +51,10 @@ struct backend_render_frame
     VkDescriptorPool DescriptorPool;
     VkDescriptorSet UniformDescriptorSet;
 
-    VkSemaphore ImageAcquiredSemaphore;
-    VkSemaphore PrepassFinishedSemaphore;
     VkFence ImageAcquiredFence;
-    VkFence RenderFinishedFence;
+    VkSemaphore ImageAcquiredSemaphore;
+
+    u64 FrameFinishedCounter;
 
     u32 SwapchainImageIndex;
     VkImage SwapchainImage;
@@ -167,7 +167,8 @@ struct renderer
 
     VkSemaphore ImageAcquiredSemaphores[MaxSwapchainImageCount];
     VkFence ImageAcquiredFences[MaxSwapchainImageCount];
-    VkFence RenderFinishedFences[MaxSwapchainImageCount];
+    VkSemaphore TimelineSemaphore;
+    u64 TimelineSemaphoreCounter;
 
     //
     // Pipelines, pipeline layouts and associated descriptor set layouts

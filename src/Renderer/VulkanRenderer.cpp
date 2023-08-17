@@ -325,23 +325,31 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         Result = vkCreateFence(VK.Device, &ImageFenceInfo, nullptr, &Renderer->ImageAcquiredFences[i]);
         ReturnOnFailure();
 
-        VkFenceCreateInfo RenderFenceInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-        };
-        Result = vkCreateFence(VK.Device, &RenderFenceInfo, nullptr, &Renderer->RenderFinishedFences[i]);
-        ReturnOnFailure();
-
-        VkSemaphoreCreateInfo ImageAcquiredSemaphoreInfo = 
+        VkSemaphoreCreateInfo SemaphoreInfo = 
         {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
         };
-        Result = vkCreateSemaphore(VK.Device, &ImageAcquiredSemaphoreInfo, nullptr, &Renderer->ImageAcquiredSemaphores[i]);
+        Result = vkCreateSemaphore(VK.Device, &SemaphoreInfo, nullptr, &Renderer->ImageAcquiredSemaphores[i]);
         ReturnOnFailure();
+
+        VkSemaphoreTypeCreateInfo SemaphoreTypeInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+            .pNext = nullptr,
+            .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+            .initialValue = 0,
+        };
+        VkSemaphoreCreateInfo TimelineSemaphoreInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+            .pNext = &SemaphoreTypeInfo,
+            .flags = 0,
+        };
+        Result = vkCreateSemaphore(VK.Device, &TimelineSemaphoreInfo, nullptr, &Renderer->TimelineSemaphore);
+        ReturnOnFailure();
+        Renderer->TimelineSemaphoreCounter = 0;
 
         // Graphics command pool + buffers
         {
@@ -515,7 +523,6 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         Result = VK_ERROR_INITIALIZATION_FAILED;
         ReturnOnFailure();
     }
-
     
     // Per frame
     {
@@ -1761,9 +1768,8 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
     Frame->Backend->SwapchainImageIndex = INVALID_INDEX_U32;
     Frame->FrameID = FrameID;
 
-    Frame->Backend->ImageAcquiredSemaphore = Renderer->ImageAcquiredSemaphores[FrameID];
     Frame->Backend->ImageAcquiredFence = Renderer->ImageAcquiredFences[FrameID];
-    Frame->Backend->RenderFinishedFence = Renderer->RenderFinishedFences[FrameID];
+    Frame->Backend->ImageAcquiredSemaphore = Renderer->ImageAcquiredSemaphores[FrameID];
 
     Frame->Backend->CmdPool = Renderer->CmdPools[FrameID];
     Frame->Backend->CmdBufferAt = 0;
@@ -1824,8 +1830,18 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
     Frame->Uniforms = {};
     Frame->Uniforms.ScreenSize = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
 
-    vkWaitForFences(VK.Device, 1, &Frame->Backend->RenderFinishedFence, VK_TRUE, UINT64_MAX);
-    vkResetFences(VK.Device, 1, &Frame->Backend->RenderFinishedFence);
+    VkSemaphoreWaitInfo WaitInfo = 
+    {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .semaphoreCount = 1,
+        .pSemaphores = &Renderer->TimelineSemaphore,
+        .pValues = &Frame->Backend->FrameFinishedCounter,
+    };
+    vkWaitSemaphores(VK.Device, &WaitInfo, U64_MAX);
+    //vkWaitForFences(VK.Device, 1, &Frame->Backend->RenderFinishedFence, VK_TRUE, UINT64_MAX);
+    //vkResetFences(VK.Device, 1, &Frame->Backend->RenderFinishedFence);
 
     vkResetCommandPool(VK.Device, Frame->Backend->CmdPool, 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
     vkResetCommandPool(VK.Device, Frame->Backend->ComputeCmdPool, 0);
@@ -1872,7 +1888,12 @@ void EndRenderFrame(render_frame* Frame)
     };
 
     renderer* Renderer = Frame->Renderer;
-    VkCommandBuffer CmdBuffer = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
+    // NOTE(boti): This is currently also the initial transfer and skinning cmd buffer
+    VkCommandBuffer PrepassCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
+    VkCommandBuffer RenderCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
+    // NOTE(boti): Light binning, SSAO
+    VkCommandBuffer PreLightCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
+    VkCommandBuffer ShadowCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
 
     vkResetDescriptorPool(VK.Device, Frame->Backend->DescriptorPool, 0);
     Frame->Backend->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrameUniformData]);
@@ -1925,7 +1946,7 @@ void EndRenderFrame(render_frame* Frame)
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
         .pInheritanceInfo = nullptr,
     };
-    vkBeginCommandBuffer(CmdBuffer, &CmdBufferBegin);
+    vkBeginCommandBuffer(PrepassCmd, &CmdBufferBegin);
 
     u32 TileCountX = CeilDiv(Frame->RenderWidth, R_TileSizeX);
     u32 TileCountY = CeilDiv(Frame->RenderHeight, R_TileSizeY);
@@ -1994,7 +2015,7 @@ void EndRenderFrame(render_frame* Frame)
             .bufferMemoryBarrierCount = CountOf(BeginBarriers),
             .pBufferMemoryBarriers = BeginBarriers,
         };
-        vkCmdPipelineBarrier2(CmdBuffer, &BeginDependency);
+        vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
 
         VkBufferCopy LightBufferCopy = 
         {
@@ -2004,7 +2025,7 @@ void EndRenderFrame(render_frame* Frame)
         };
         if (LightBufferCopy.size > 0)
         {
-            vkCmdCopyBuffer(CmdBuffer, Frame->Backend->StagingBuffer, Renderer->LightBuffer, 1, &LightBufferCopy);
+            vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->LightBuffer, 1, &LightBufferCopy);
         }
 
         VkBufferMemoryBarrier2 EndBarriers[] = 
@@ -2031,7 +2052,7 @@ void EndRenderFrame(render_frame* Frame)
             .bufferMemoryBarrierCount = CountOf(EndBarriers),
             .pBufferMemoryBarriers = EndBarriers,
         };
-        vkCmdPipelineBarrier2(CmdBuffer, &EndDependency);
+        vkCmdPipelineBarrier2(PrepassCmd, &EndDependency);
     }
 
     SetupSceneRendering(Frame);
@@ -2126,8 +2147,8 @@ void EndRenderFrame(render_frame* Frame)
         vkUpdateDescriptorSets(VK.Device, CountOf(DescriptorWrites), DescriptorWrites, 0, nullptr);
 
         pipeline_with_layout SkinningPipeline = Renderer->Pipelines[Pipeline_Skinning];
-        vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Pipeline);
-        vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
+        vkCmdBindPipeline(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Pipeline);
+        vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
                                 0, 1, &SkinningBuffersDescriptorSet,
                                 0, nullptr);
 
@@ -2156,12 +2177,12 @@ void EndRenderFrame(render_frame* Frame)
             .bufferMemoryBarrierCount = CountOf(BeginBarriers),
             .pBufferMemoryBarriers = BeginBarriers,
         };
-        vkCmdPipelineBarrier2(CmdBuffer, &BeginDependencies);
+        vkCmdPipelineBarrier2(PrepassCmd, &BeginDependencies);
 
         for (u32 SkinningCmdIndex = 0; SkinningCmdIndex < Frame->SkinningCmdCount; SkinningCmdIndex++)
         {
             skinning_cmd* Cmd = Frame->SkinningCmds + SkinningCmdIndex;
-            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
+            vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
                                     1, 1, &JointDescriptorSet,
                                     1, &Cmd->PoseOffset);
 
@@ -2171,12 +2192,12 @@ void EndRenderFrame(render_frame* Frame)
                 Cmd->DstVertexOffset,
                 Cmd->VertexCount,
             };
-            vkCmdPushConstants(CmdBuffer, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
+            vkCmdPushConstants(PrepassCmd, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
                                0, sizeof(PushConstants), PushConstants);
 
 
             constexpr u32 SkinningGroupSize = 64;
-            vkCmdDispatch(CmdBuffer, CeilDiv(Cmd->VertexCount, SkinningGroupSize), 1, 1);
+            vkCmdDispatch(PrepassCmd, CeilDiv(Cmd->VertexCount, SkinningGroupSize), 1, 1);
         }
 
         VkBufferMemoryBarrier2 EndBarriers[] =
@@ -2204,239 +2225,233 @@ void EndRenderFrame(render_frame* Frame)
             .bufferMemoryBarrierCount = CountOf(EndBarriers),
             .pBufferMemoryBarriers = EndBarriers,
         };
-        vkCmdPipelineBarrier2(CmdBuffer, &EndDependencies);
+        vkCmdPipelineBarrier2(PrepassCmd, &EndDependencies);
     }
 
+    const VkDescriptorSet DescriptorSets[] = 
     {
-        const VkDescriptorSet DescriptorSets[] = 
+        Renderer->TextureManager.DescriptorSets[0], // Samplers
+        Renderer->TextureManager.DescriptorSets[1], // Images
+        Frame->Backend->UniformDescriptorSet,
+        OcclusionDescriptorSet,
+        StructureBufferDescriptorSet,
+        ShadowDescriptorSet,
+        LightBufferDescriptorSet,
+        TileBufferDescriptorSet,
+    };
+
+    vkCmdSetViewport(PrepassCmd, 0, 1, &FrameViewport);
+    vkCmdSetScissor(PrepassCmd, 0, 1, &FrameScissor);
+    BeginPrepass(Frame, PrepassCmd);
+    {
+        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Prepass];
+        vkCmdBindPipeline(PrepassCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+        vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
+                                0, 3, DescriptorSets,
+                                0, nullptr);
+        DrawMeshes(Frame, PrepassCmd, Pipeline.Layout);
+    }
+    EndPrepass(Frame, PrepassCmd);
+
+    vkEndCommandBuffer(PrepassCmd);
+
+    vkBeginCommandBuffer(PreLightCmd, &CmdBufferBegin);
+
+    RenderSSAO(Frame, PreLightCmd,
+               Frame->PostProcess.SSAO,
+               Renderer->Pipelines[Pipeline_SSAO].Pipeline, 
+               Renderer->Pipelines[Pipeline_SSAO].Layout, 
+               Renderer->SetLayouts[SetLayout_SSAO],
+               Renderer->Pipelines[Pipeline_SSAOBlur].Pipeline, 
+               Renderer->Pipelines[Pipeline_SSAOBlur].Layout, 
+               Renderer->SetLayouts[SetLayout_SSAOBlur]);
+
+    // Light binning
+    {
+        VkBufferMemoryBarrier2 BeginBarriers[] = 
         {
-            Renderer->TextureManager.DescriptorSets[0], // Samplers
-            Renderer->TextureManager.DescriptorSets[1], // Images
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+                .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = Renderer->TileBuffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE,
+            },
+        };
+        VkDependencyInfo BeginDependency = 
+        {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .bufferMemoryBarrierCount = CountOf(BeginBarriers),
+            .pBufferMemoryBarriers = BeginBarriers,
+        };
+        vkCmdPipelineBarrier2(PreLightCmd, &BeginDependency);
+
+        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_LightBinning];
+        vkCmdBindPipeline(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
+
+        VkDescriptorSet BinningDescriptorSets[] = 
+        {
             Frame->Backend->UniformDescriptorSet,
-            OcclusionDescriptorSet,
-            StructureBufferDescriptorSet,
-            ShadowDescriptorSet,
             LightBufferDescriptorSet,
             TileBufferDescriptorSet,
         };
+        vkCmdBindDescriptorSets(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout, 
+                                0, CountOf(BinningDescriptorSets), BinningDescriptorSets, 0, nullptr);
 
-        vkCmdSetViewport(CmdBuffer, 0, 1, &FrameViewport);
-        vkCmdSetScissor(CmdBuffer, 0, 1, &FrameScissor);
-        BeginPrepass(Frame, CmdBuffer);
-        {
-            pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Prepass];
-            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
-                                    0, 3, DescriptorSets,
-                                    0, nullptr);
-            DrawMeshes(Frame, CmdBuffer, Pipeline.Layout);
-        }
-        EndPrepass(Frame, CmdBuffer);
+        vkCmdDispatch(PreLightCmd, CeilDiv(TileCountX, 32), TileCountY, 1);
 
-#if 0
-        VkCommandBufferBeginInfo ComputeBegin = 
+        VkBufferMemoryBarrier2 EndBarriers[] = 
         {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = Renderer->TileBuffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE,
+            },
+        };
+        VkDependencyInfo EndDependency = 
+        {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
             .pNext = nullptr,
-            .flags = 0,
-            .pInheritanceInfo = nullptr,
-
+            .dependencyFlags = 0,
+            .bufferMemoryBarrierCount = CountOf(EndBarriers),
+            .pBufferMemoryBarriers = EndBarriers,
         };
-        vkBeginCommandBuffer(Frame->Backend->ComputeCmdBuffer, &ComputeBegin);        
-#endif
-        RenderSSAO(Frame, CmdBuffer,
-                   Frame->PostProcess.SSAO,
-                   Renderer->Pipelines[Pipeline_SSAO].Pipeline, 
-                   Renderer->Pipelines[Pipeline_SSAO].Layout, 
-                   Renderer->SetLayouts[SetLayout_SSAO],
-                   Renderer->Pipelines[Pipeline_SSAOBlur].Pipeline, 
-                   Renderer->Pipelines[Pipeline_SSAOBlur].Layout, 
-                   Renderer->SetLayouts[SetLayout_SSAOBlur]);
-
-        // Light binning
-        {
-            VkBufferMemoryBarrier2 BeginBarriers[] = 
-            {
-                {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-                    .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .buffer = Renderer->TileBuffer,
-                    .offset = 0,
-                    .size = VK_WHOLE_SIZE,
-                },
-            };
-            VkDependencyInfo BeginDependency = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .pNext = nullptr,
-                .dependencyFlags = 0,
-                .bufferMemoryBarrierCount = CountOf(BeginBarriers),
-                .pBufferMemoryBarriers = BeginBarriers,
-            };
-            vkCmdPipelineBarrier2(CmdBuffer, &BeginDependency);
-
-            pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_LightBinning];
-            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
-
-            VkDescriptorSet BinningDescriptorSets[] = 
-            {
-                Frame->Backend->UniformDescriptorSet,
-                LightBufferDescriptorSet,
-                TileBufferDescriptorSet,
-            };
-            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout, 
-                                    0, CountOf(BinningDescriptorSets), BinningDescriptorSets, 0, nullptr);
-
-            vkCmdDispatch(CmdBuffer, CeilDiv(TileCountX, 32), TileCountY, 1);
-
-            VkBufferMemoryBarrier2 EndBarriers[] = 
-            {
-                {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .buffer = Renderer->TileBuffer,
-                    .offset = 0,
-                    .size = VK_WHOLE_SIZE,
-                },
-            };
-            VkDependencyInfo EndDependency = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .pNext = nullptr,
-                .dependencyFlags = 0,
-                .bufferMemoryBarrierCount = CountOf(EndBarriers),
-                .pBufferMemoryBarriers = EndBarriers,
-            };
-            vkCmdPipelineBarrier2(CmdBuffer, &EndDependency);
-        }
-#if 0
-        vkEndCommandBuffer(Frame->Backend->ComputeCmdBuffer);
-#endif
-
-        VkViewport ShadowViewport = 
-        {
-            .x = 0.0f,
-            .y = 0.0f,
-            .width = (f32)R_ShadowResolution,
-            .height = (f32)R_ShadowResolution,
-            .minDepth = 0.0f,
-            .maxDepth = 1.0f,
-        };
-        VkRect2D ShadowScissor = 
-        {
-            .offset = { 0, 0 },
-            .extent = { R_ShadowResolution, R_ShadowResolution },
-        };
-        vkCmdSetViewport(CmdBuffer, 0, 1, &ShadowViewport);
-        vkCmdSetScissor(CmdBuffer, 0, 1, &ShadowScissor);
-        for (u32 Cascade = 0; Cascade < R_MaxShadowCascadeCount; Cascade++)
-        {
-            BeginCascade(Frame, CmdBuffer, Cascade);
-
-            pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Shadow];
-            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdPushConstants(CmdBuffer, Pipeline.Layout,
-                               VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                               sizeof(push_constants), sizeof(u32), &Cascade);
-            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
-                                    0, 3, DescriptorSets, 0, nullptr);
-            DrawMeshes(Frame, CmdBuffer, Pipeline.Layout);
-
-            EndCascade(Frame, CmdBuffer);
-        }
-
-        vkCmdSetViewport(CmdBuffer, 0, 1, &FrameViewport);
-        vkCmdSetScissor(CmdBuffer, 0, 1, &FrameScissor);
-        BeginForwardPass(Frame, CmdBuffer);
-        {
-
-            pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Simple];
-            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
-                                    0, CountOf(DescriptorSets), DescriptorSets,
-                                    0, nullptr);
-
-            DrawMeshes(Frame, CmdBuffer, Pipeline.Layout);
-
-            // Render sky
-#if 1
-            {
-                pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
-                vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
-                vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Layout, 
-                                        0, 1, &Frame->Backend->UniformDescriptorSet, 
-                                        0, nullptr);
-                vkCmdDraw(CmdBuffer, 3, 1, 0, 0);
-            }
-#endif
-
-            // Particles
-            {
-                VkImageView ParticleView = GetImageView(&Renderer->TextureManager, Frame->ParticleTextureID);
-                VkDescriptorSet TextureSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS]);
-                VkDescriptorImageInfo DescriptorImage = 
-                {
-                    .sampler = Renderer->Samplers[Sampler_Default],
-                    .imageView = ParticleView,
-                    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                };
-                VkWriteDescriptorSet TextureWrite = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                    .pNext = nullptr,
-                    .dstSet = TextureSet,
-                    .dstBinding = 0,
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                    .pImageInfo = &DescriptorImage,
-                };
-                vkUpdateDescriptorSets(VK.Device, 1, &TextureWrite, 0, nullptr);
-
-                VkDescriptorSet ParticleBufferDescriptor = 
-                    PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_ParticleBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                                         Frame->Backend->ParticleBuffer, 0, VK_WHOLE_SIZE);
-                VkDescriptorSet ParticleDescriptorSets[] = 
-                {
-                    Frame->Backend->UniformDescriptorSet,
-                    ParticleBufferDescriptor,
-                    StructureBufferDescriptorSet,
-                    TextureSet,
-                };
-
-                pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
-                vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
-                vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
-                                        0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
-                                        0, nullptr);
-
-                for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
-                {
-                    particle_cmd* Cmd = Frame->ParticleDrawCmds + CmdIndex;
-                    u32 VertexCount = 6 * Cmd->ParticleCount;
-                    u32 FirstVertex = 6 * Cmd->FirstParticle;
-                    vkCmdPushConstants(CmdBuffer, ParticlePipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
-                                       0, sizeof(Cmd->Mode), &Cmd->Mode);
-                    vkCmdDraw(CmdBuffer, VertexCount, 1, FirstVertex, 0);
-                }
-            }
-        }
-        EndForwardPass(Frame, CmdBuffer);
+        vkCmdPipelineBarrier2(PreLightCmd, &EndDependency);
     }
 
-    RenderBloom(Frame, CmdBuffer,
+    vkEndCommandBuffer(PreLightCmd);
+
+    vkBeginCommandBuffer(ShadowCmd, &CmdBufferBegin);
+    VkViewport ShadowViewport = 
+    {
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = (f32)R_ShadowResolution,
+        .height = (f32)R_ShadowResolution,
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+    VkRect2D ShadowScissor = 
+    {
+        .offset = { 0, 0 },
+        .extent = { R_ShadowResolution, R_ShadowResolution },
+    };
+    vkCmdSetViewport(ShadowCmd, 0, 1, &ShadowViewport);
+    vkCmdSetScissor(ShadowCmd, 0, 1, &ShadowScissor);
+    for (u32 Cascade = 0; Cascade < R_MaxShadowCascadeCount; Cascade++)
+    {
+        BeginCascade(Frame, ShadowCmd, Cascade);
+
+        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Shadow];
+        vkCmdBindPipeline(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+        vkCmdPushConstants(ShadowCmd, Pipeline.Layout,
+                           VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                           sizeof(push_constants), sizeof(u32), &Cascade);
+        vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
+                                0, 3, DescriptorSets, 0, nullptr);
+        DrawMeshes(Frame, ShadowCmd, Pipeline.Layout);
+
+        EndCascade(Frame, ShadowCmd);
+    }
+    vkEndCommandBuffer(ShadowCmd);
+
+    vkBeginCommandBuffer(RenderCmd, &CmdBufferBegin);
+    vkCmdSetViewport(RenderCmd, 0, 1, &FrameViewport);
+    vkCmdSetScissor(RenderCmd, 0, 1, &FrameScissor);
+    BeginForwardPass(Frame, RenderCmd);
+    {
+
+        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Simple];
+        vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+        vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
+                                0, CountOf(DescriptorSets), DescriptorSets,
+                                0, nullptr);
+
+        DrawMeshes(Frame, RenderCmd, Pipeline.Layout);
+
+        // Render sky
+#if 1
+        {
+            pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
+            vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
+            vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Layout, 
+                                    0, 1, &Frame->Backend->UniformDescriptorSet, 
+                                    0, nullptr);
+            vkCmdDraw(RenderCmd, 3, 1, 0, 0);
+        }
+#endif
+
+        // Particles
+        {
+            VkImageView ParticleView = GetImageView(&Renderer->TextureManager, Frame->ParticleTextureID);
+            VkDescriptorSet TextureSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS]);
+            VkDescriptorImageInfo DescriptorImage = 
+            {
+                .sampler = Renderer->Samplers[Sampler_Default],
+                .imageView = ParticleView,
+                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            };
+            VkWriteDescriptorSet TextureWrite = 
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = TextureSet,
+                .dstBinding = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .pImageInfo = &DescriptorImage,
+            };
+            vkUpdateDescriptorSets(VK.Device, 1, &TextureWrite, 0, nullptr);
+
+            VkDescriptorSet ParticleBufferDescriptor = 
+                PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_ParticleBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                                     Frame->Backend->ParticleBuffer, 0, VK_WHOLE_SIZE);
+            VkDescriptorSet ParticleDescriptorSets[] = 
+            {
+                Frame->Backend->UniformDescriptorSet,
+                ParticleBufferDescriptor,
+                StructureBufferDescriptorSet,
+                TextureSet,
+            };
+
+            pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
+            vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
+            vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
+                                    0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
+                                    0, nullptr);
+
+            for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
+            {
+                particle_cmd* Cmd = Frame->ParticleDrawCmds + CmdIndex;
+                u32 VertexCount = 6 * Cmd->ParticleCount;
+                u32 FirstVertex = 6 * Cmd->FirstParticle;
+                vkCmdPushConstants(RenderCmd, ParticlePipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
+                                   0, sizeof(Cmd->Mode), &Cmd->Mode);
+                vkCmdDraw(RenderCmd, VertexCount, 1, FirstVertex, 0);
+            }
+        }
+    }
+    EndForwardPass(Frame, RenderCmd);
+    
+
+    RenderBloom(Frame, RenderCmd,
                 Frame->PostProcess.Bloom,
                 Frame->Backend->HDRRenderTargets[0],
                 Frame->Backend->HDRRenderTargets[1],
@@ -2487,7 +2502,7 @@ void EndRenderFrame(render_frame* Frame)
             .imageMemoryBarrierCount = CountOf(BeginBarriers),
             .pImageMemoryBarriers = BeginBarriers,
         };
-        vkCmdPipelineBarrier2(CmdBuffer, &BeginDependencyInfo); 
+        vkCmdPipelineBarrier2(RenderCmd, &BeginDependencyInfo); 
 
         VkRenderingAttachmentInfo ColorAttachment = 
         {
@@ -2528,13 +2543,13 @@ void EndRenderFrame(render_frame* Frame)
             .pDepthAttachment = &DepthAttachment,
             .pStencilAttachment = nullptr,
         };
-        vkCmdBeginRendering(CmdBuffer, &RenderingInfo);
+        vkCmdBeginRendering(RenderCmd, &RenderingInfo);
         
         // Blit
         {
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Blit];
-            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdPushConstants(CmdBuffer, Pipeline.Layout, VK_SHADER_STAGE_FRAGMENT_BIT, 
+            vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+            vkCmdPushConstants(RenderCmd, Pipeline.Layout, VK_SHADER_STAGE_FRAGMENT_BIT, 
                                0, sizeof(f32), &Frame->PostProcess.Bloom.Strength);
 
             VkDescriptorSet BlitDescriptorSet = VK_NULL_HANDLE;
@@ -2587,20 +2602,20 @@ void EndRenderFrame(render_frame* Frame)
             };
             vkUpdateDescriptorSets(VK.Device, CountOf(SetWrites), SetWrites, 0, nullptr);
 
-            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
+            vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
                                     0, 1, &BlitDescriptorSet, 0, nullptr);
-            vkCmdDraw(CmdBuffer, 3, 1, 0, 0);
+            vkCmdDraw(RenderCmd, 3, 1, 0, 0);
         }
 
         // 3D widget render
         {
             const VkDeviceSize ZeroOffset = 0;
-            vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
-            vkCmdBindIndexBuffer(CmdBuffer, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
+            vkCmdBindVertexBuffers(RenderCmd, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
+            vkCmdBindIndexBuffer(RenderCmd, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
 
             pipeline_with_layout GizmoPipeline = Renderer->Pipelines[Pipeline_Gizmo];
-            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
-            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
+            vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
+            vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
                                     0, 1, &Frame->Backend->UniformDescriptorSet, 
                                     0, nullptr);
 
@@ -2608,24 +2623,24 @@ void EndRenderFrame(render_frame* Frame)
             {
                 draw_widget3d_cmd* Cmd = Frame->DrawWidget3DCmds + CmdIndex;
 
-                vkCmdPushConstants(CmdBuffer, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                vkCmdPushConstants(RenderCmd, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                    0, sizeof(Cmd->Transform), &Cmd->Transform);
-                vkCmdPushConstants(CmdBuffer, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                vkCmdPushConstants(RenderCmd, GizmoPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                    sizeof(Cmd->Transform), sizeof(Cmd->Color), &Cmd->Color);
-                vkCmdDrawIndexed(CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceCount);
+                vkCmdDrawIndexed(RenderCmd, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceCount);
             }
         }
 
         {
             VkDeviceSize ZeroOffset = 0;
-            vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &Frame->Backend->Vertex2DBuffer, &ZeroOffset);
+            vkCmdBindVertexBuffers(RenderCmd, 0, 1, &Frame->Backend->Vertex2DBuffer, &ZeroOffset);
 
             pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
             VkDescriptorSetLayout SetLayout = Frame->Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS];
             VkDescriptorSet ImmediateDescriptorSet = PushImageDescriptor(Frame, SetLayout, Frame->ImmediateTextureID);
 
-            vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Pipeline);
-            vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Layout, 
+            vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Pipeline);
+            vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Layout, 
                                     0, 1, &ImmediateDescriptorSet, 0, nullptr);
 
             m4 OrthoTransform = M4(2.0f / Frame->RenderWidth, 0.0f, 0.0f, -1.0f,
@@ -2633,12 +2648,12 @@ void EndRenderFrame(render_frame* Frame)
                                    0.0f, 0.0f, 1.0f, 0.0f,
                                    0.0f, 0.0f, 0.0f, 1.0f);
 
-            vkCmdPushConstants(CmdBuffer, UIPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
+            vkCmdPushConstants(RenderCmd, UIPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT, 
                                0, sizeof(OrthoTransform), &OrthoTransform);
-            vkCmdDraw(CmdBuffer, Frame->Vertex2DCount, 1, 0, 0);
+            vkCmdDraw(RenderCmd, Frame->Vertex2DCount, 1, 0, 0);
         }
 
-        vkCmdEndRendering(CmdBuffer);
+        vkCmdEndRendering(RenderCmd);
     }
 
     VkImageMemoryBarrier2 EndBarriers[] = 
@@ -2680,39 +2695,200 @@ void EndRenderFrame(render_frame* Frame)
         .imageMemoryBarrierCount = CountOf(EndBarriers),
         .pImageMemoryBarriers = EndBarriers,
     };
-    vkCmdPipelineBarrier2(CmdBuffer, &EndDependencyInfo);
+    vkCmdPipelineBarrier2(RenderCmd, &EndDependencyInfo);
 
-    vkEndCommandBuffer(CmdBuffer);
+    vkEndCommandBuffer(RenderCmd);
 
-    VkPipelineStageFlags WaitDstStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-
-    VkSubmitInfo SubmitInfo = 
+    // Submit + Present
     {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .pNext = nullptr,
-        .waitSemaphoreCount= 1,
-        .pWaitSemaphores = &Frame->Backend->ImageAcquiredSemaphore,
-        .pWaitDstStageMask = &WaitDstStage,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &CmdBuffer,
-        .signalSemaphoreCount = 0,
-        .pSignalSemaphores = nullptr,
-    };
+        VkPipelineStageFlags TopOfPipe = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
-    vkQueueSubmit(VK.GraphicsQueue, 1, &SubmitInfo, Frame->Backend->RenderFinishedFence);
+        u64 PrepassCounter = ++Renderer->TimelineSemaphoreCounter;
+        VkCommandBufferSubmitInfo PrepassCmdBuffers[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                .pNext = nullptr,
+                .commandBuffer = PrepassCmd,
+                .deviceMask = 0,
+            },
+        };
+        VkSemaphoreSubmitInfo PrepassSignals[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = Renderer->TimelineSemaphore,
+                .value = PrepassCounter,
+                .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            },
+        };
+        VkSubmitInfo2 SubmitPrepass = 
+        {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+            .pNext = nullptr,
+            .waitSemaphoreInfoCount = 0,
+            .pWaitSemaphoreInfos = nullptr,
+            .commandBufferInfoCount = CountOf(PrepassCmdBuffers),
+            .pCommandBufferInfos = PrepassCmdBuffers,
+            .signalSemaphoreInfoCount = CountOf(PrepassSignals),
+            .pSignalSemaphoreInfos = PrepassSignals,
+        };
+        vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitPrepass, nullptr);
 
-    VkPresentInfoKHR PresentInfo = 
-    {
-        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-        .pNext = nullptr,
-        .waitSemaphoreCount = 0,
-        .pWaitSemaphores = nullptr,
-        .swapchainCount = 1,
-        .pSwapchains = &Frame->Renderer->Swapchain,
-        .pImageIndices = &Frame->Backend->SwapchainImageIndex,
-        .pResults = nullptr,
-    };
-    vkQueuePresentKHR(VK.GraphicsQueue, &PresentInfo);
+        u64 PreLightCounter = ++Renderer->TimelineSemaphoreCounter;
+        VkCommandBufferSubmitInfo PreLightCmdBuffers[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                .pNext = nullptr,
+                .commandBuffer = PreLightCmd,
+                .deviceMask = 0,
+            },
+        };
+        VkSemaphoreSubmitInfo PreLightWaits[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = Renderer->TimelineSemaphore,
+                .value = PrepassCounter,
+                .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+            },
+        };
+        VkSemaphoreSubmitInfo PreLightSignals[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = Renderer->TimelineSemaphore,
+                .value = PreLightCounter,
+                .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            },
+        };
+        VkSubmitInfo2 SubmitPreLight = 
+        {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+            .pNext = nullptr,
+            .flags = 0,
+            .waitSemaphoreInfoCount = CountOf(PreLightWaits),
+            .pWaitSemaphoreInfos = PreLightWaits,
+            .commandBufferInfoCount = CountOf(PreLightCmdBuffers),
+            .pCommandBufferInfos = PreLightCmdBuffers,
+            .signalSemaphoreInfoCount = CountOf(PreLightSignals),
+            .pSignalSemaphoreInfos = PreLightSignals,
+        };
+        vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitPreLight, nullptr);
+
+        u64 ShadowCounter = ++Renderer->TimelineSemaphoreCounter;
+        VkCommandBufferSubmitInfo ShadowCmdBuffers[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                .pNext = nullptr,
+                .commandBuffer = ShadowCmd,
+                .deviceMask = 0,
+            },
+        };
+        VkSemaphoreSubmitInfo ShadowWaits[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = Renderer->TimelineSemaphore,
+                .value = PreLightCounter,
+                .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+            },
+        };
+        VkSemaphoreSubmitInfo ShadowSignals[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = Renderer->TimelineSemaphore,
+                .value = ShadowCounter,
+                .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            },
+        };
+        VkSubmitInfo2 SubmitShadow = 
+        {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+            .pNext = nullptr,
+            .flags = 0,
+            .waitSemaphoreInfoCount = CountOf(ShadowWaits),
+            .pWaitSemaphoreInfos = ShadowWaits,
+            .commandBufferInfoCount = CountOf(ShadowCmdBuffers),
+            .pCommandBufferInfos = ShadowCmdBuffers,
+            .signalSemaphoreInfoCount = CountOf(ShadowSignals),
+            .pSignalSemaphoreInfos = ShadowSignals,
+        };
+        vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitShadow, nullptr);
+
+        u64 RenderCounter = ++Renderer->TimelineSemaphoreCounter;
+        Frame->Backend->FrameFinishedCounter  = RenderCounter;
+        VkCommandBufferSubmitInfo RenderCmdBuffers[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                .pNext = nullptr,
+                .commandBuffer = RenderCmd,
+                .deviceMask = 0,
+            },
+        };
+        VkSemaphoreSubmitInfo RenderWaits[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = Renderer->TimelineSemaphore,
+                .value = ShadowCounter,
+                .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = Frame->Backend->ImageAcquiredSemaphore,
+                .value = 0,
+                .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+            },
+        };
+        VkSemaphoreSubmitInfo RenderSignals[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = Renderer->TimelineSemaphore,
+                .value = RenderCounter,
+                .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            },
+        };
+        VkSubmitInfo2 SubmitRender = 
+        {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+            .pNext = nullptr,
+            .flags = 0,
+            .waitSemaphoreInfoCount = CountOf(RenderWaits),
+            .pWaitSemaphoreInfos = RenderWaits,
+            .commandBufferInfoCount = CountOf(RenderCmdBuffers),
+            .pCommandBufferInfos = RenderCmdBuffers,
+            .signalSemaphoreInfoCount = CountOf(RenderSignals),
+            .pSignalSemaphoreInfos = RenderSignals,
+        };
+        vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitRender, nullptr);
+
+        VkPresentInfoKHR PresentInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .pNext = nullptr,
+            .waitSemaphoreCount = 0,
+            .pWaitSemaphores = nullptr,
+            .swapchainCount = 1,
+            .pSwapchains = &Frame->Renderer->Swapchain,
+            .pImageIndices = &Frame->Backend->SwapchainImageIndex,
+            .pResults = nullptr,
+        };
+        vkQueuePresentKHR(VK.GraphicsQueue, &PresentInfo);
+    }
 
     // Collect stats
     {
