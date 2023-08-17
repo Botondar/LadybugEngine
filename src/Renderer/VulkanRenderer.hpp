@@ -169,6 +169,8 @@ struct renderer
     VkFence ImageAcquiredFences[MaxSwapchainImageCount];
     VkSemaphore TimelineSemaphore;
     u64 TimelineSemaphoreCounter;
+    VkSemaphore ComputeTimelineSemaphore;
+    u64 ComputeTimelineSemaphoreCounter;
 
     //
     // Pipelines, pipeline layouts and associated descriptor set layouts

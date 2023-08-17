@@ -351,6 +351,10 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         ReturnOnFailure();
         Renderer->TimelineSemaphoreCounter = 0;
 
+        Result = vkCreateSemaphore(VK.Device, &TimelineSemaphoreInfo, nullptr, &Renderer->ComputeTimelineSemaphore);
+        ReturnOnFailure();
+        Renderer->ComputeTimelineSemaphoreCounter = 0;
+
         // Graphics command pool + buffers
         {
             VkCommandPoolCreateInfo PoolInfo = 
@@ -1892,7 +1896,7 @@ void EndRenderFrame(render_frame* Frame)
     VkCommandBuffer PrepassCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
     VkCommandBuffer RenderCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
     // NOTE(boti): Light binning, SSAO
-    VkCommandBuffer PreLightCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
+    VkCommandBuffer PreLightCmd = Frame->Backend->ComputeCmdBuffer;
     VkCommandBuffer ShadowCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
 
     vkResetDescriptorPool(VK.Device, Frame->Backend->DescriptorPool, 0);
@@ -2736,7 +2740,7 @@ void EndRenderFrame(render_frame* Frame)
         };
         vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitPrepass, nullptr);
 
-        u64 PreLightCounter = ++Renderer->TimelineSemaphoreCounter;
+        u64 PreLightCounter = ++Renderer->ComputeTimelineSemaphoreCounter;
         VkCommandBufferSubmitInfo PreLightCmdBuffers[] = 
         {
             {
@@ -2761,7 +2765,7 @@ void EndRenderFrame(render_frame* Frame)
             {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .pNext = nullptr,
-                .semaphore = Renderer->TimelineSemaphore,
+                .semaphore = Renderer->ComputeTimelineSemaphore,
                 .value = PreLightCounter,
                 .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
             },
@@ -2778,7 +2782,7 @@ void EndRenderFrame(render_frame* Frame)
             .signalSemaphoreInfoCount = CountOf(PreLightSignals),
             .pSignalSemaphoreInfos = PreLightSignals,
         };
-        vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitPreLight, nullptr);
+        vkQueueSubmit2(VK.ComputeQueue, 1, &SubmitPreLight, nullptr);
 
         u64 ShadowCounter = ++Renderer->TimelineSemaphoreCounter;
         VkCommandBufferSubmitInfo ShadowCmdBuffers[] = 
@@ -2796,7 +2800,7 @@ void EndRenderFrame(render_frame* Frame)
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .pNext = nullptr,
                 .semaphore = Renderer->TimelineSemaphore,
-                .value = PreLightCounter,
+                .value = PrepassCounter,
                 .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
             },
         };
@@ -2842,6 +2846,13 @@ void EndRenderFrame(render_frame* Frame)
                 .pNext = nullptr,
                 .semaphore = Renderer->TimelineSemaphore,
                 .value = ShadowCounter,
+                .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .semaphore = Renderer->ComputeTimelineSemaphore,
+                .value = PreLightCounter,
                 .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
             },
             {
