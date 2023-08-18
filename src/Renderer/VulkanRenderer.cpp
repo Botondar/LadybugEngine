@@ -1895,8 +1895,6 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
         .pValues = &Frame->Backend->FrameFinishedCounter,
     };
     vkWaitSemaphores(VK.Device, &WaitInfo, U64_MAX);
-    //vkWaitForFences(VK.Device, 1, &Frame->Backend->RenderFinishedFence, VK_TRUE, UINT64_MAX);
-    //vkResetFences(VK.Device, 1, &Frame->Backend->RenderFinishedFence);
 
     vkResetCommandPool(VK.Device, Frame->Backend->CmdPool, 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
     vkResetCommandPool(VK.Device, Frame->Backend->ComputeCmdPool, 0);

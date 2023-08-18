@@ -85,19 +85,15 @@ void main()
         uint DepthSliceMask = 0;
         for (uint Index = 0; Index < R_TileSizeX*R_TileSizeY; Index++)
         {
-            float Depth = InvDepthRange * (Depths[Index] - DepthOffset);
+            float Depth = clamp(InvDepthRange * (Depths[Index] - DepthOffset), 0.0, 1.0);
             uint DepthSlice = uint(floor(32.0 * Depth));
             DepthSliceMask |= 1 << DepthSlice;
         }
 
-        float MinX = float(uMinX);
-        float MinY = float(uMinY);
-        float MaxX = float(uMaxX);
-        float MaxY = float(uMaxY);
-        MinX = 2.0 * (MinX / PerFrame.ScreenSize.x) - 1.0;
-        MinY = 2.0 * (MinY / PerFrame.ScreenSize.y) - 1.0;
-        MaxX = 2.0 * (MaxX / PerFrame.ScreenSize.x) - 1.0;
-        MaxY = 2.0 * (MaxY / PerFrame.ScreenSize.y) - 1.0;
+        float MinX = 2.0 * (float(uMinX) / PerFrame.ScreenSize.x) - 1.0;
+        float MinY = 2.0 * (float(uMinY) / PerFrame.ScreenSize.y) - 1.0;
+        float MaxX = 2.0 * (float(uMaxX) / PerFrame.ScreenSize.x) - 1.0;
+        float MaxY = 2.0 * (float(uMaxY) / PerFrame.ScreenSize.y) - 1.0;
 
         // TODO(boti): construct the frustum in view-space directly, so that we don't
         // have to keep track of the Min/Max depth in clip space
@@ -120,6 +116,7 @@ void main()
             float R = sqrt(max(L / R_LuminanceThreshold, 0.0));
             if (IntersectFrustumSphere(Frustum, P.xyz, R))
             {
+                const float Epsilon = 1e-1;
                 float MaxZ = clamp(InvDepthRange * (P.z + R - DepthOffset), 0.0, 1.0);
                 float MinZ = clamp(InvDepthRange * (P.z - R - DepthOffset), 0.0, 1.0);
 

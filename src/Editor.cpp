@@ -30,8 +30,6 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
     assets* Assets = Game->Assets;
     font* Font = &Assets->DefaultFont;
 
-    b32 MouseInputUsed = false;
-
     if (WasPressed(IO->Keys[SC_Backtick]))
     {
         Editor->IsEnabled = !Editor->IsEnabled;
@@ -128,7 +126,6 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             if (WasPressed(IO->Keys[SC_MouseLeft]))
             {
                 Editor->ActiveMenuID = CurrentID;
-                MouseInputUsed = true;
             }
 
             if (Editor->ActiveMenuID == 0)
@@ -144,7 +141,6 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         else if (Editor->ActiveMenuID == CurrentID)
         {
             CurrentColor = ActiveBackgroundColor;
-            MouseInputUsed = true;
         }
         PushRect(Frame, Rect.Min, Rect.Max, { 0.0f, 0.0f, }, { 0.0f, 0.0f }, CurrentColor);
         CurrentP.x += Margin;
@@ -197,7 +193,20 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
 
     if (Editor->SelectedMenuID == CPUMenuID)
     {
-
+        for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
+        {
+            constexpr size_t BufferSize = 256;
+            char Buffer[BufferSize];
+            snprintf(Buffer, BufferSize, "Select Entity%03u", EntityIndex);
+            u32 SelectButtonID = DoButton(Buffer);
+            if (SelectButtonID == HotID && WasPressed(IO->Keys[SC_MouseLeft]))
+            {
+                Editor->SelectedEntityID = { EntityIndex };
+            }
+            CurrentP.x = StartP.x;
+            CurrentP.y += TextSize;
+            
+        }
     }
     else if (Editor->SelectedMenuID == GPUMenuID)
     {
@@ -219,7 +228,6 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             if (ResetButtonID == HotID && WasPressed(IO->Keys[SC_MouseLeft]))
             {
                 *Value = DefaultValue;
-                MouseInputUsed = true;
             }
 
             constexpr size_t BuffSize = 128;
@@ -244,7 +252,6 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             {
                 *Value += Step * IO->Mouse.dP.x;
                 *Value = Clamp(*Value, MinValue, MaxValue);
-                MouseInputUsed = true;
             }
 
             if ((IsHot && (Editor->ActiveMenuID == 0)) ||
@@ -272,60 +279,6 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
                   ssao_params::DefaultMaxDistance, 1e-3f, 10.0f, 1e-3f);
         F32Slider("SSAO tangent tau", &Game->PostProcessParams.SSAO.TangentTau, 
                   ssao_params::DefaultTangentTau, 0.0f, 1.0f, 1e-3f);
-    }
-
-    if (IsValid(Game->Editor.SelectedEntityID))
-    {
-        entity* Entity = Game->World->Entities + Game->Editor.SelectedEntityID.Value;
-        if (HasFlag(Entity->Flags, EntityFlag_Skin))
-        {
-            u32 PlaybackID = CurrentID++;
-
-            v2 ScreenExtent = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
-            f32 OutlineSize = 1.0f;
-            f32 MinX = 0.1f * ScreenExtent.x;
-            f32 MaxX = 0.9f * ScreenExtent.x;
-            f32 MaxY = ScreenExtent.y - 60.0f;
-            f32 MinY = ScreenExtent.y - 140.0f;
-            PushRect(Frame, { MinX, MinY - OutlineSize }, { MaxX, MinY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
-            PushRect(Frame, { MinX, MaxY - OutlineSize }, { MaxX, MaxY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
-            PushRect(Frame, { MinX - OutlineSize, MinY}, { MinX + OutlineSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
-            PushRect(Frame, { MaxX - OutlineSize, MinY}, { MaxX + OutlineSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
-
-            animation* Animation = Game->Assets->Animations + Entity->CurrentAnimationID;
-            f32 MaxTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
-            f32 ExtentX = (MaxX - MinX);
-            f32 PlayX = MinX + ExtentX * Entity->AnimationCounter / MaxTimestamp;
-            f32 IndicatorSize = 5.0f;
-            PushRect(Frame, { PlayX - IndicatorSize, MinY }, { PlayX + IndicatorSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
-
-            for (u32 KeyFrameIndex = 0; KeyFrameIndex < Animation->KeyFrameCount; KeyFrameIndex++)
-            {
-                f32 Timestamp = Animation->KeyFrameTimestamps[KeyFrameIndex];
-                f32 X = MinX + ExtentX * (Timestamp / MaxTimestamp);
-                PushRect(Frame, { X - 0.5f, MinY }, { X + 0.5f, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0x00));
-            }
-
-            if (PointRectOverlap(IO->Mouse.P, { { MinX, MinY}, { MaxX, MaxY } }))
-            {
-                HotID = PlaybackID;
-                if (WasPressed(IO->Keys[SC_MouseLeft]))
-                {
-                    Editor->ActiveMenuID = PlaybackID;
-                }
-            }
-
-            if (Editor->ActiveMenuID == PlaybackID)
-            {
-                Entity->AnimationCounter = Clamp(MaxTimestamp * (IO->Mouse.P.x - MinX) / ExtentX, 0.0f, MaxTimestamp);
-                MouseInputUsed = true;
-
-                if (IO->Keys[SC_MouseLeft].bIsDown == false)
-                {
-                    Editor->ActiveMenuID = 0;
-                }
-            }
-        }
     }
 
     // TODO(boti): This shouldn't be done this way, 
@@ -431,6 +384,51 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
                     u32 Index = Scancode - SC_1;
                     Entity->CurrentAnimationID = AnimationIDs[Index];
                     Entity->AnimationCounter = 0.0f;
+                }
+            }
+
+            u32 PlaybackID = CurrentID++;
+            
+            v2 ScreenExtent = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
+            f32 OutlineSize = 1.0f;
+            f32 MinX = 0.1f * ScreenExtent.x;
+            f32 MaxX = 0.9f * ScreenExtent.x;
+            f32 MaxY = ScreenExtent.y - 60.0f;
+            f32 MinY = ScreenExtent.y - 140.0f;
+            PushRect(Frame, { MinX, MinY - OutlineSize }, { MaxX, MinY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+            PushRect(Frame, { MinX, MaxY - OutlineSize }, { MaxX, MaxY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+            PushRect(Frame, { MinX - OutlineSize, MinY}, { MinX + OutlineSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+            PushRect(Frame, { MaxX - OutlineSize, MinY}, { MaxX + OutlineSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+            
+            animation* Animation = Game->Assets->Animations + Entity->CurrentAnimationID;
+            f32 MaxTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
+            f32 ExtentX = (MaxX - MinX);
+            f32 PlayX = MinX + ExtentX * Entity->AnimationCounter / MaxTimestamp;
+            f32 IndicatorSize = 5.0f;
+            PushRect(Frame, { PlayX - IndicatorSize, MinY }, { PlayX + IndicatorSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
+            
+            for (u32 KeyFrameIndex = 0; KeyFrameIndex < Animation->KeyFrameCount; KeyFrameIndex++)
+            {
+                f32 Timestamp = Animation->KeyFrameTimestamps[KeyFrameIndex];
+                f32 X = MinX + ExtentX * (Timestamp / MaxTimestamp);
+                PushRect(Frame, { X - 0.5f, MinY }, { X + 0.5f, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0x00));
+            }
+            
+            if (PointRectOverlap(IO->Mouse.P, { { MinX, MinY}, { MaxX, MaxY } }))
+            {
+                HotID = PlaybackID;
+                if (WasPressed(IO->Keys[SC_MouseLeft]))
+                {
+                    Editor->ActiveMenuID = PlaybackID;
+                }
+            }
+            
+            if (Editor->ActiveMenuID == PlaybackID)
+            {
+                Entity->AnimationCounter = Clamp(MaxTimestamp * (IO->Mouse.P.x - MinX) / ExtentX, 0.0f, MaxTimestamp);
+                if (IO->Keys[SC_MouseLeft].bIsDown == false)
+                {
+                    Editor->ActiveMenuID = 0;
                 }
             }
         }
