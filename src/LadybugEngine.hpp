@@ -20,7 +20,6 @@ TODO: list
 
 #include "Font.hpp"
 #include "World.hpp"
-#include "Debug.hpp"
 #include "Editor.hpp"
 #include "Asset.hpp"
 
@@ -40,7 +39,6 @@ struct game_state
 
     u64 FrameID;
 
-    debug_state Debug;
     editor_state Editor;
 
     post_process_params PostProcessParams;

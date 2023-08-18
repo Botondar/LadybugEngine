@@ -2,7 +2,6 @@
 
 #include "LadybugLib/LBLibBuild.cpp"
 
-#include "Debug.cpp"
 #include "Font.cpp"
 #include "Asset.cpp"
 #include "World.cpp"
@@ -104,12 +103,6 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     if (GameIO->Keys[SC_LeftAlt].bIsDown && GameIO->Keys[SC_F4].bIsDown)
     {
         GameIO->bQuitRequested = true;
-    }
-
-    if (DoDebugUI(GameState, GameIO, RenderFrame))
-    {
-        GameIO->Mouse.dP = { 0.0f, 0.0f };
-        GameIO->Keys[SC_MouseLeft].TransitionFlags = 0;
     }
     
     UpdateEditor(GameState, GameIO, RenderFrame);

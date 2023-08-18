@@ -34,6 +34,8 @@ struct gizmo
 struct editor_state
 {
     b32 IsEnabled;
+    u32 SelectedMenuID;
+    u32 ActiveMenuID;
 
     entity_id SelectedEntityID;
     gizmo Gizmo;
