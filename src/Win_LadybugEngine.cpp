@@ -314,6 +314,11 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     }
     else
     {
+        DWORD ErrorCode = GetLastError();
+        constexpr DWORD MaxErrorLength = 1024;
+        wchar_t ErrorString[MaxErrorLength];
+        FormatMessageW(FORMAT_MESSAGE_FROM_HMODULE|FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, ErrorCode, 0, ErrorString, MaxErrorLength, nullptr);
+        MessageBoxW(nullptr, ErrorString, L"LadybugEngine", MB_OK|MB_ICONERROR);
         return 1;
     }
 
@@ -518,6 +523,11 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
 
             SetWindowTextW(WinWindow, Buff);
         }
+    }
+
+    if (GameIO.QuitMessage)
+    {
+        MessageBoxA(nullptr, GameIO.QuitMessage, "LadybugEngine", MB_OK|MB_ICONERROR);
     }
 
     return(0);

@@ -207,6 +207,7 @@ struct game_io
     bool bQuitRequested;
     bool bIsMinimized;
     bool bHasDroppedFile;
+    const char* QuitMessage;
 
     platform_mouse Mouse;
     platform_input_key Keys[ScanCode_Count];

@@ -40,6 +40,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         if (!GameState->Renderer)
         {
             GameIO->bQuitRequested = true;
+            GameIO->QuitMessage = "Renderer creation failed";
             return;
         }
 
