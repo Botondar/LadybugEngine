@@ -57,19 +57,23 @@ void main()
         mat2 ProjectZ = mat2(PerFrame.Projection[2].zw, PerFrame.Projection[3].zw);
 
         float Depths[R_TileSizeX*R_TileSizeY];
-        float MinDepth = 1.0;
+        float MinDepth = 1e9;
         float MaxDepth = 0.0;
+        float MinDepthClipSpace = 1.0;
+        float MaxDepthClipSpace = 0.0;
         for (uint Y = 0; Y < R_TileSizeY; Y++)
         {
             for (uint X = 0; X < R_TileSizeX; X++)
             {
                 vec2 Depth2 = texelFetch(StructureBuffer, ivec2(uMinX + X, uMinY + Y), 0).zw;
                 float Depth = Depth2.x + Depth2.y;
+                MinDepth = min(Depth, MinDepth);
+                MaxDepth = max(Depth, MaxDepth);
 
                 vec2 ProjDepth2 = ProjectZ * vec2(Depth, 1.0);
                 float ProjDepth = ProjDepth2.x / ProjDepth2.y;
-                MinDepth = min(ProjDepth, MinDepth);
-                MaxDepth = max(ProjDepth, MaxDepth);
+                MinDepthClipSpace = min(ProjDepth, MinDepthClipSpace);
+                MaxDepthClipSpace = max(ProjDepth, MaxDepthClipSpace);
 
                 uint Index = X + Y*R_TileSizeX;
                 Depths[Index] = ProjDepth;
@@ -81,7 +85,7 @@ void main()
         uint DepthSliceMask = 0;
         for (uint Index = 0; Index < R_TileSizeX*R_TileSizeY; Index++)
         {
-            float Depth = InvDepthRange * (Depths[Index] - MinDepth);
+            float Depth = InvDepthRange * (Depths[Index] - DepthOffset);
             uint DepthSlice = uint(floor(32.0 * Depth));
             DepthSliceMask |= 1 << DepthSlice;
         }
@@ -95,13 +99,15 @@ void main()
         MaxX = 2.0 * (MaxX / PerFrame.ScreenSize.x) - 1.0;
         MaxY = 2.0 * (MaxY / PerFrame.ScreenSize.y) - 1.0;
 
+        // TODO(boti): construct the frustum in view-space directly, so that we don't
+        // have to keep track of the Min/Max depth in clip space
         frustum Frustum;
         Frustum.Planes[0] = v4(+1.0, 0.0, 0.0, -MinX) * PerFrame.Projection;
         Frustum.Planes[1] = v4(-1.0, 0.0, 0.0, +MaxX) * PerFrame.Projection;
         Frustum.Planes[2] = v4( 0.0, +1.0, 0.0, -MinY) * PerFrame.Projection;
         Frustum.Planes[3] = v4( 0.0, -1.0, 0.0, +MaxY) * PerFrame.Projection;
-        Frustum.Planes[4] = v4( 0.0, 0.0, +1.0, 0.0/*-MinDepth*/) * PerFrame.Projection;
-        Frustum.Planes[5] = v4( 0.0, 0.0, -1.0, 1.0/*+MaxDepth*/) * PerFrame.Projection;
+        Frustum.Planes[4] = v4( 0.0, 0.0, +1.0, -MinDepthClipSpace) * PerFrame.Projection;
+        Frustum.Planes[5] = v4( 0.0, 0.0, -1.0, +MaxDepthClipSpace) * PerFrame.Projection;
 
         uint LightCount = 0;
         for (uint LightIndex = 0; LightIndex < PerFrame.LightCount; LightIndex++)
@@ -114,10 +120,8 @@ void main()
             float R = sqrt(max(L / R_LuminanceThreshold, 0.0));
             if (IntersectFrustumSphere(Frustum, P.xyz, R))
             {
-                vec2 ProjMaxZ = ProjectZ * vec2(P.z + R, 1.0);
-                vec2 ProjMinZ = ProjectZ * vec2(P.z - R, 1.0);
-                float MaxZ = clamp(InvDepthRange * ((ProjMaxZ.x / ProjMaxZ.y) - DepthOffset), 0.0, 1.0);
-                float MinZ = clamp(InvDepthRange * ((ProjMinZ.x / ProjMinZ.y) - DepthOffset), 0.0, 1.0);
+                float MaxZ = clamp(InvDepthRange * (P.z + R - DepthOffset), 0.0, 1.0);
+                float MinZ = clamp(InvDepthRange * (P.z - R - DepthOffset), 0.0, 1.0);
 
                 uint MaxSlice = uint(floor(32.0 * MaxZ));
                 uint MinSlice = uint(floor(32.0 * MinZ));
