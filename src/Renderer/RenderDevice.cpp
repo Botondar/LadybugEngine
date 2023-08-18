@@ -17,7 +17,6 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
     const char* RequiredDeviceExtensions[] = 
     {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_EXTENSION_NAME,
     };
 
     VkApplicationInfo AppInfo = 
