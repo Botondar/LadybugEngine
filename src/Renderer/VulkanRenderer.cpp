@@ -2334,12 +2334,32 @@ void EndRenderFrame(render_frame* Frame)
         pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_LightBinning];
         vkCmdBindPipeline(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
 
+        VkDescriptorSet StructureBufferSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTextureCS]);
+        VkDescriptorImageInfo DescriptorImage = 
+        {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = Frame->Backend->StructureBuffer->View,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        VkWriteDescriptorSet DescriptorWrite = 
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+            .dstSet = StructureBufferSet,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = &DescriptorImage,
+        };
+        vkUpdateDescriptorSets(VK.Device, 1, &DescriptorWrite, 0, nullptr);
+
         VkDescriptorSet BinningDescriptorSets[] = 
         {
             Frame->Backend->UniformDescriptorSet,
             LightBufferDescriptorSet,
             TileBufferDescriptorSet,
-            StructureBufferDescriptorSet,
+            StructureBufferSet,
         };
         vkCmdBindDescriptorSets(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout, 
                                 0, CountOf(BinningDescriptorSets), BinningDescriptorSets, 0, nullptr);
@@ -3021,19 +3041,20 @@ internal void SetupSceneRendering(render_frame* Frame)
         m4 SunView = AffineOrthonormalInverse(SunTransform);
         m4 CameraToSun = SunView * Frame->Uniforms.CameraTransform;
     
-        f32 Splits[] = { 5.0f, 10.0f, 20.0f, 40.0f };
+        f32 SplitFactor = 0.15f;
+        f32 Splits[] = { 1.5f, 4.0f, 8.0f, 30.0f };
         f32 NdTable[] = 
         { 
             0.0f,
-            0.8f * Splits[0],
-            0.8f * Splits[1],
-            0.8f * Splits[2],
+            (1.0f - SplitFactor) * Splits[0],
+            (1.0f - SplitFactor) * Splits[1],
+            (1.0f - SplitFactor) * Splits[2],
         };
         f32 FdTable[] = 
         { 
-            1.2f * Splits[0], 
-            1.2f * Splits[1],
-            1.2f * Splits[2], 
+            (1.0f + SplitFactor) * Splits[0], 
+            (1.0f + SplitFactor) * Splits[1],
+            (1.0f + SplitFactor) * Splits[2],
             Splits[3], 
         };
         static_assert(CountOf(NdTable) == R_MaxShadowCascadeCount);

@@ -518,6 +518,22 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
             },
         },
     },
+
+    [SetLayout_SingleCombinedTextureCS] =
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = Descriptor_ImageSampler,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_CS,
+                .ImmutableSampler = Sampler_RenderTargetNormalized,
+            },
+        },
+    },
 };
 
 const pipeline_info PipelineInfos[Pipeline_Count] = 
@@ -1063,7 +1079,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
                 SetLayout_PerFrameUniformData,
                 SetLayout_StructuredBuffer, // light buffer
                 SetLayout_StructuredBuffer, // tile buffer
-                SetLayout_SampledRenderTargetNormalized_PS_CS, // Structure buffer
+                SetLayout_SingleCombinedTextureCS, // Structure buffer
             },
         },
     },
