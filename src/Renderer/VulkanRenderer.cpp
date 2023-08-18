@@ -246,6 +246,63 @@ internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTy
     return Result;
 }
 
+internal b32 
+PushBuffer(gpu_memory_arena* Arena, VkDeviceSize Size, VkBufferUsageFlags Usage, VkBuffer* Buffer, void** Mapping /*= nullptr*/)
+{
+    b32 Result = false;
+
+    VkBufferCreateInfo Info = 
+    {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .size = Size,
+        .usage = Usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = nullptr,
+    };
+
+    VkDeviceBufferMemoryRequirements Query = 
+    {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS,
+        .pNext = nullptr,
+        .pCreateInfo = &Info,
+    };
+
+    VkMemoryRequirements2 MemoryRequirements = { VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2 };
+    vkGetDeviceBufferMemoryRequirements(VK.Device, &Query, &MemoryRequirements);
+    VkMemoryRequirements* Requirements = &MemoryRequirements.memoryRequirements;
+
+    if ((Requirements->memoryTypeBits & (1 << Arena->MemoryTypeIndex)) != 0)
+    {
+        u64 MemoryOffset = Align(Arena->MemoryAt, Requirements->alignment);
+        if ((MemoryOffset + Requirements->size) <= Arena->Size)
+        {
+            VkResult ErrorCode = vkCreateBuffer(VK.Device, &Info, nullptr, Buffer);
+            if (ErrorCode == VK_SUCCESS)
+            {
+                ErrorCode = vkBindBufferMemory(VK.Device, *Buffer, Arena->Memory, MemoryOffset);
+                if (ErrorCode == VK_SUCCESS)
+                {
+                    Arena->MemoryAt = MemoryOffset + Requirements->size;
+                    if (Mapping)
+                    {
+                        *Mapping = OffsetPtr(Arena->Mapping, MemoryOffset);
+                    }
+                    Result = true;
+                }
+            }
+        }
+        else
+        {
+            UnimplementedCodePath;
+        }
+    }
+
+    return(Result);
+}
+
 const char* GetDeviceName(renderer* Renderer)
 {
     const char* Result = Renderer->Vulkan.DeviceProps.deviceName;
@@ -595,97 +652,91 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
             u32 MemoryTypeIndex = 0;
             BitScanForward(&MemoryTypeIndex, VK.BARMemTypes);
             
-            Renderer->BARMemoryByteSize = MiB(64);
+            u64 MemorySize = MiB(64);
             VkMemoryAllocateInfo AllocInfo = 
             {
                 .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
                 .pNext = nullptr,
-                .allocationSize = Renderer->BARMemoryByteSize,
+                .allocationSize = MemorySize,
                 .memoryTypeIndex = MemoryTypeIndex,
             };
-            Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->BARMemory);
+            VkDeviceMemory Memory = VK_NULL_HANDLE;
+            Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Memory);
             ReturnOnFailure();
-            Result = vkMapMemory(VK.Device, Renderer->BARMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->BARMemoryMapping);
+            void* Mapping = nullptr;
+            Result = vkMapMemory(VK.Device, Memory, 0, VK_WHOLE_SIZE, 0, &Mapping);
             ReturnOnFailure();
 
-            Renderer->BARMemoryByteOffset = 0;
-        }
-
-        auto PushBARMemory = [Renderer](VkDeviceSize Size, VkDeviceSize Alignment) -> VkDeviceSize
-        {
-            VkDeviceSize Result = Align(Renderer->BARMemoryByteOffset, Alignment);
-            Assert(Result + Size <= Renderer->BARMemoryByteSize);
-            Renderer->BARMemoryByteOffset = Result + Size;
-            return(Result);
-        };
-
-        auto PushBARBuffer = 
-        [Renderer, PushBARMemory]
-        (VkBuffer* Buffers, void** Mappings, u32 Count, VkDeviceSize Size, VkBufferUsageFlags Usage) -> VkResult
-        {
-            VkResult Result = VK_SUCCESS;
-
-            VkBufferCreateInfo BufferInfo = 
+            Renderer->BARMemory = 
             {
-                .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .size = Size,
-                .usage = Usage,
-                .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-                .queueFamilyIndexCount = 0,
-                .pQueueFamilyIndices = nullptr,
+                .Memory = Memory,
+                .Size = MemorySize,
+                .MemoryAt = 0,
+                .MemoryTypeIndex = MemoryTypeIndex,
+                .Mapping = Mapping,
             };
-
-            for (u32 Index = 0; Index < Count; Index++)
-            {
-                Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, Buffers + Index);
-                if (Result != VK_SUCCESS) break;
-
-                VkMemoryRequirements MemoryRequirements = {};
-                vkGetBufferMemoryRequirements(VK.Device, Buffers[Index], &MemoryRequirements);
-                VkDeviceSize Offset = PushBARMemory(MemoryRequirements.size, MemoryRequirements.alignment);
-                Result = vkBindBufferMemory(VK.Device, Buffers[Index], Renderer->BARMemory, Offset);
-                if (Result != VK_SUCCESS) break;
-
-                Mappings[Index] = OffsetPtr(Renderer->BARMemoryMapping, Offset);
-            }
-            return(Result);
-        };
+        }
 
         // Vertex stack
         {
             umm Size = MiB(8);
-            PushBARBuffer(Renderer->PerFrameVertex2DBuffers, Renderer->PerFrameVertex2DMappings,
-                          Renderer->SwapchainImageCount, Size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
-            ReturnOnFailure();
             for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
             {
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, Size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+                           Renderer->PerFrameVertex2DBuffers + i, 
+                           Renderer->PerFrameVertex2DMappings + i);
                 Renderer->Frames[i].MaxVertex2DCount = Size / sizeof(vertex_2d);
+                if (!PushResult)
+                {
+                    return(0);
+                }
+            }
+        }
+
+        // Joint buffers
+        {
+            u64 BufferSizePerFrame = render_frame::MaxJointCount * sizeof(m4);
+            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+            {
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSizePerFrame, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                            Renderer->PerFrameJointBuffers + i, 
+                                            Renderer->PerFrameJointBufferMappings + i);
+                if (!PushResult)
+                {
+                    return(0);
+                }
+            }
+        }
+
+        // Particle buffers
+        {
+            u64 BufferSizePerFrame = render_frame::MaxParticleCount * sizeof(render_particle);
+            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+            {
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSizePerFrame, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                            Renderer->PerFrameParticleBuffers + i, 
+                                            Renderer->PerFrameParticleBufferMappings + i);
+                if (!PushResult)
+                {
+                    return(0);
+                }
             }
         }
 
         // Per frame uniform data
         {
             constexpr u64 BufferSize = KiB(64);
-            Result = PushBARBuffer(Renderer->PerFrameUniformBuffers, Renderer->PerFrameUniformBufferMappings,
-                                   Renderer->SwapchainImageCount, BufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+            {
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSize,  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                            Renderer->PerFrameUniformBuffers + i,
+                                            Renderer->PerFrameUniformBufferMappings + i);
+                if (!PushResult)
+                {
+                    return(0);
+                }
+            }
             ReturnOnFailure();
-        }
-
-        // Joint buffers
-        {
-            u64 BufferSizePerFrame = render_frame::MaxJointCount * sizeof(m4);
-            Result = PushBARBuffer(Renderer->PerFrameJointBuffers, Renderer->PerFrameJointBufferMappings,
-                                   Renderer->SwapchainImageCount, BufferSizePerFrame, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-            ReturnOnFailure();
-        }
-
-        // Particle buffers
-        {
-            u64 BufferSizePerFrame = render_frame::MaxParticleCount * sizeof(render_particle);
-            Result = PushBARBuffer(Renderer->PerFrameParticleBuffers, Renderer->PerFrameParticleBufferMappings,
-                                   Renderer->SwapchainImageCount, BufferSizePerFrame, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
         }
 
         // Per frame descriptors
@@ -2944,8 +2995,8 @@ void EndRenderFrame(render_frame* Frame)
             return(Result);
         };
 
+        AddEntry("BAR", Renderer->BARMemory.MemoryAt, Renderer->BARMemory.Size);
         AddEntry("RenderTarget", Renderer->RenderTargetHeap.Offset, Renderer->RenderTargetHeap.MemorySize);
-        AddEntry("BAR", Renderer->BARMemoryByteOffset, Renderer->BARMemoryByteSize);
         AddEntry("VertexBuffer", Renderer->GeometryBuffer.VertexMemory.MemoryInUse, Renderer->GeometryBuffer.VertexMemory.MemorySize);
         AddEntry("IndexBuffer", Renderer->GeometryBuffer.IndexMemory.MemoryInUse, Renderer->GeometryBuffer.IndexMemory.MemorySize);
         AddEntry("Texture", Renderer->TextureManager.MemoryOffset, Renderer->TextureManager.MemorySize);

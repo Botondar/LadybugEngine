@@ -17,6 +17,22 @@ struct vulkan_buffer
     void* Mapping;
 };
 
+struct gpu_memory_arena
+{
+    VkDeviceMemory Memory;
+    u64 Size;
+    u64 MemoryAt;
+    u32 MemoryTypeIndex;
+    void* Mapping;
+};
+
+internal b32 
+PushBuffer(gpu_memory_arena* Arena, 
+           VkDeviceSize Size, 
+           VkBufferUsageFlags Usage, 
+           VkBuffer* Buffer, 
+           void** Mapping = nullptr);
+
 #include "Renderer/RenderDevice.hpp"
 #include "Renderer/RenderTarget.hpp"
 #include "Renderer/Geometry.hpp"
@@ -100,6 +116,15 @@ struct renderer
     geometry_buffer GeometryBuffer;
     texture_manager TextureManager;
 
+#if 1
+    gpu_memory_arena BARMemory;
+#else
+    VkDeviceSize BARMemoryByteSize;
+    VkDeviceSize BARMemoryByteOffset;
+    VkDeviceMemory BARMemory;
+    void* BARMemoryMapping;
+#endif
+
     struct render_debug
     {
         u64 ResizeCount;
@@ -132,11 +157,6 @@ struct renderer
 
     static constexpr u32 MaxPerFrameDescriptorSetCount = 1024;
     VkDescriptorPool PerFrameDescriptorPool[2];
-
-    VkDeviceSize BARMemoryByteSize;
-    VkDeviceSize BARMemoryByteOffset;
-    VkDeviceMemory BARMemory;
-    void* BARMemoryMapping;
 
     // NOTE(boti): These are all allocated from BAR memory
     // TODO(boti): These memory mappings should probably just be stored in render_frame directly
