@@ -374,8 +374,8 @@ void main()
 #endif
     }
     
-
     Out0 = vec4(Lo, 1.0);
+    //Out0 = vec4(5.0 * vec3(Tiles[TileIndex].LightCount / 255.0), 1.0);
 }
 
 #endif

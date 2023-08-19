@@ -42,6 +42,13 @@ bool IntersectFrustumSphere(in frustum Frustum, in v3 Center, in float R)
     return true;
 }
 
+bool IntersectAABBSphere(v3 P, v3 HalfExtent, v3 C, float R)
+{
+    v3 dP = max(v3(0.0), abs(P - C) - HalfExtent);
+    bool Result = dot(dP, dP) <= R*R;
+    return(Result);
+}
+
 void main()
 {
     // NOTE(boti): Technically we'd need a y-check here but this compute shader
@@ -76,7 +83,7 @@ void main()
                 MaxDepthClipSpace = max(ProjDepth, MaxDepthClipSpace);
 
                 uint Index = X + Y*R_TileSizeX;
-                Depths[Index] = ProjDepth;
+                Depths[Index] = Depth;
             }
         }
 
@@ -95,6 +102,15 @@ void main()
         float MaxX = 2.0 * (float(uMaxX) / PerFrame.ScreenSize.x) - 1.0;
         float MaxY = 2.0 * (float(uMaxY) / PerFrame.ScreenSize.y) - 1.0;
 
+#if 1
+        v4 MinP = PerFrame.InverseProjection * v4(MinX, MinY, MinDepthClipSpace, 1.0);
+        v4 MaxP = PerFrame.InverseProjection * v4(MaxX, MaxY, MaxDepthClipSpace, 1.0);
+        MinP.xyz /= MinP.w;
+        MaxP.xyz /= MaxP.w;
+
+        v3 BoxP = 0.5 * (MaxP.xyz + MinP.xyz);
+        v3 HalfExtent = 0.5 * (MaxP.xyz - MinP.xyz);
+#else
         // TODO(boti): construct the frustum in view-space directly, so that we don't
         // have to keep track of the Min/Max depth in clip space
         frustum Frustum;
@@ -104,7 +120,7 @@ void main()
         Frustum.Planes[3] = v4( 0.0, -1.0, 0.0, +MaxY) * PerFrame.Projection;
         Frustum.Planes[4] = v4( 0.0, 0.0, +1.0, -MinDepthClipSpace) * PerFrame.Projection;
         Frustum.Planes[5] = v4( 0.0, 0.0, -1.0, +MaxDepthClipSpace) * PerFrame.Projection;
-
+#endif
         uint LightCount = 0;
         for (uint LightIndex = 0; LightIndex < PerFrame.LightCount; LightIndex++)
         {
@@ -114,17 +130,17 @@ void main()
             v4 E = Lights[LightIndex].E;
             float L = E.w * max(E.z, max(E.y, E.x));
             float R = sqrt(max(L / R_LuminanceThreshold, 0.0));
-            if (IntersectFrustumSphere(Frustum, P.xyz, R))
+
+            //if (IntersectFrustumSphere(Frustum, P.xyz, R))
+            if (IntersectAABBSphere(BoxP, HalfExtent, P.xyz, R))
             {
-                const float Epsilon = 1e-1;
                 float MaxZ = clamp(InvDepthRange * (P.z + R - DepthOffset), 0.0, 1.0);
                 float MinZ = clamp(InvDepthRange * (P.z - R - DepthOffset), 0.0, 1.0);
 
                 uint MaxSlice = uint(floor(32.0 * MaxZ));
                 uint MinSlice = uint(floor(32.0 * MinZ));
 
-                uint Mask = (0xFFFFFFFF >> (31 - MaxSlice - MinSlice)) << MinSlice;
-
+                uint Mask = (0xFFFFFFFFu >> (31 - (MaxSlice - MinSlice))) << MinSlice;
                 if ((DepthSliceMask & Mask) != 0)
                 {
                     Tiles[TileIndex].LightIndices[LightCount++] = LightIndex;

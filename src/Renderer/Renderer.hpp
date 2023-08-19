@@ -15,7 +15,7 @@ constexpr u32 R_MaxTileCountX = CeilDiv(R_MaxRenderTargetSizeX, R_TileSizeX);
 constexpr u32 R_MaxTileCountY = CeilDiv(R_MaxRenderTargetSizeY, R_TileSizeY);
 constexpr u32 R_MaxLightCountPerTile = 255;
 
-constexpr f32 R_LuminanceThreshold = 3e-2f;
+constexpr f32 R_LuminanceThreshold = 1e-2f;
 
 constexpr u64 R_RenderTargetMemorySize      = MiB(320);
 constexpr u64 R_TextureMemorySize           = MiB(1024llu);

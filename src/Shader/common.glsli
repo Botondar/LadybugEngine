@@ -19,7 +19,7 @@
 #define R_TileSizeX 16
 #define R_TileSizeY 16
 #define R_MaxLightCountPerTile 255
-#define R_LuminanceThreshold 3e-2
+#define R_LuminanceThreshold 1e-2
 #define R_MaxLightCount 16384
 
 struct light
