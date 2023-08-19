@@ -2722,7 +2722,7 @@ void EndRenderFrame(render_frame* Frame)
             .resolveImageView = VK_NULL_HANDLE,
             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-            .clearValue = { .depthStencil = { 1.0f, 0 } },
+            .clearValue = { .depthStencil = { 0.0f, 0 } },
         };
 
         VkRenderingInfo RenderingInfo = 
