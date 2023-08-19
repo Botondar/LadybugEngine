@@ -24,24 +24,6 @@ buffer TileBuffer
 
 layout(set = 3, binding = 0) uniform sampler2D StructureBuffer;
 
-struct frustum
-{
-    v4 Planes[6];
-};
-
-bool IntersectFrustumSphere(in frustum Frustum, in v3 Center, in float R)
-{
-    v4 P = v4(Center, 1.0);
-    for (uint i = 0; i < 6; i++)
-    {
-        if (dot(Frustum.Planes[i], P) <= -R)
-        {
-            return false;
-        }
-    }
-    return true;
-}
-
 bool IntersectAABBSphere(v3 P, v3 HalfExtent, v3 C, float R)
 {
     v3 dP = max(v3(0.0), abs(P - C) - HalfExtent);
@@ -51,8 +33,6 @@ bool IntersectAABBSphere(v3 P, v3 HalfExtent, v3 C, float R)
 
 void main()
 {
-    // NOTE(boti): Technically we'd need a y-check here but this compute shader
-    // is laid out in rows, so we don't have to do that
     if (gl_GlobalInvocationID.x < PerFrame.TileCount.x)
     {
         uint TileIndex = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * PerFrame.TileCount.x;
@@ -102,25 +82,16 @@ void main()
         float MaxX = 2.0 * (float(uMaxX) / PerFrame.ScreenSize.x) - 1.0;
         float MaxY = 2.0 * (float(uMaxY) / PerFrame.ScreenSize.y) - 1.0;
 
-#if 1
-        v4 MinP = PerFrame.InverseProjection * v4(MinX, MinY, MinDepthClipSpace, 1.0);
-        v4 MaxP = PerFrame.InverseProjection * v4(MaxX, MaxY, MaxDepthClipSpace, 1.0);
-        MinP.xyz /= MinP.w;
-        MaxP.xyz /= MaxP.w;
+        v4 P0 = PerFrame.InverseProjection * v4(MinX, MinY, MinDepthClipSpace, 1.0);
+        v4 P1 = PerFrame.InverseProjection * v4(MaxX, MaxY, MaxDepthClipSpace, 1.0);
+        P0.xyz /= P0.w;
+        P1.xyz /= P1.w;
+        v3 MinP = min(P0.xyz, P1.xyz);
+        v3 MaxP = max(P0.xyz, P1.xyz);
 
-        v3 BoxP = 0.5 * (MaxP.xyz + MinP.xyz);
-        v3 HalfExtent = 0.5 * (MaxP.xyz - MinP.xyz);
-#else
-        // TODO(boti): construct the frustum in view-space directly, so that we don't
-        // have to keep track of the Min/Max depth in clip space
-        frustum Frustum;
-        Frustum.Planes[0] = v4(+1.0, 0.0, 0.0, -MinX) * PerFrame.Projection;
-        Frustum.Planes[1] = v4(-1.0, 0.0, 0.0, +MaxX) * PerFrame.Projection;
-        Frustum.Planes[2] = v4( 0.0, +1.0, 0.0, -MinY) * PerFrame.Projection;
-        Frustum.Planes[3] = v4( 0.0, -1.0, 0.0, +MaxY) * PerFrame.Projection;
-        Frustum.Planes[4] = v4( 0.0, 0.0, +1.0, -MinDepthClipSpace) * PerFrame.Projection;
-        Frustum.Planes[5] = v4( 0.0, 0.0, -1.0, +MaxDepthClipSpace) * PerFrame.Projection;
-#endif
+        v3 BoxP = 0.5 * (MaxP + MinP);
+        v3 HalfExtent = 0.5 * (MaxP - MinP);
+
         uint LightCount = 0;
         for (uint LightIndex = 0; LightIndex < PerFrame.LightCount; LightIndex++)
         {
@@ -131,7 +102,6 @@ void main()
             float L = E.w * max(E.z, max(E.y, E.x));
             float R = sqrt(max(L / R_LuminanceThreshold, 0.0));
 
-            //if (IntersectFrustumSphere(Frustum, P.xyz, R))
             if (IntersectAABBSphere(BoxP, HalfExtent, P.xyz, R))
             {
                 float MaxZ = clamp(InvDepthRange * (P.z + R - DepthOffset), 0.0, 1.0);
