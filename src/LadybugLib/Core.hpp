@@ -333,6 +333,11 @@ union v3
 {
     f32 E[3];
     struct { f32 x, y, z; };
+    struct 
+    { 
+        v2 xy;
+        f32 Ignored0_;
+    };
 };
 
 union v4
