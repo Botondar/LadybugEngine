@@ -27,6 +27,8 @@ void main()
 
 #elif defined(FS)
 
+layout(set = 1, binding = 0) uniform sampler2DArrayShadow ShadowSampler;
+
 layout(location = 0) in vec2 UV;
 
 layout(location = 0) out vec4 Out0;
@@ -92,10 +94,11 @@ void main()
     vec3 V = normalize(vec3(2.0 * UV - vec2(1.0), 1.0) * vec3(PerFrame.AspectRatio / PerFrame.FocalLength, 1.0 / PerFrame.FocalLength, 1.0));
     //V = V * mat3(PerFrame.View);
 #if 1
-    vec3 Color = CIEClearSky(V, false);
+    vec3 Color = CIEClearSky(V, true);
 #else
     vec3 Color = TraceAtmosphere(V);
 #endif
+    Color += 0.05 * PerFrame.SunL * CalculateAtmosphere(PerFrame.FarZ * V, PerFrame, ShadowSampler);
 
     Out0 = vec4(Color, 1.0);
 }

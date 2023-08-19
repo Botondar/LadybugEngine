@@ -167,3 +167,92 @@ vec3 StructureDecode(in vec4 Structure)
     vec3 Result = vec3(Structure.xy, Structure.z + Structure.w);
     return Result;
 }
+
+//
+// Atmosphere
+//
+
+#if defined(FS)
+float AtmosphereSampleDistribution(float m, float t)
+{
+    float Result = (1.0 - m) * t*t + m*t;
+    return Result;
+}
+
+float AtmosphereNoise(vec2 P)
+{
+    vec3 P3 = fract(P.xyx * 0.1031);
+    P3 += dot(P3, P3.yzx + vec3(33.33));
+    float Result = abs(fract((P3.x + P3.y) * P3.z));
+    return Result;
+}
+
+// NOTE(boti): g2 is g*g
+float PhaseMie(in float g, in float g2, in float CosTheta)
+{
+    const float OneOver4Pi = 0.07957747;
+#if 1
+    float a = 1.0 + g2 - 2*g*CosTheta;
+    float Denom = sqrt(a) * a;
+
+    float Phase = OneOver4Pi * (1.0 - g2) / Denom;
+#else
+    float a = (1.0 - g) / (sqrt(1 + g2 - 2.0 * g * CosTheta));
+    float Phase = OneOver4Pi * a*a*a;
+#endif
+    return(Phase);
+}
+
+float CalculateAtmosphere(v3 P, per_frame PerFrame, sampler2DArrayShadow ShadowMap)
+{
+    const int StepCount = 32;
+    const float StepDistribution = 0.25;
+
+    v3 EndP = P * v3(1.0, 1.0, 0.999);
+    v3 V = normalize(P);
+    
+    float CosTheta = dot(V, PerFrame.SunV);
+
+    const float g = 0.85;//0.76;
+    const float g2 = g*g;
+    float PhaseIn = PhaseMie(g, g2, CosTheta);
+    float PhaseOut = 1.0 - PhaseMie(g, g2, 1.0);
+
+    float RayleighPhase = 0.059683103 * (1.0 + CosTheta); // constant is 3 / 16pi
+    const vec3 BetaR0 = vec3(3.8e-6, 13.5e-6, 33.1e-6);
+    const vec3 BetaM0 = vec3(21e-4);
+
+    float Delta = AtmosphereNoise(0.5 * gl_FragCoord.xy);
+    float InScatter = 0.0;
+    uint CascadeIndex = 0;
+    float Weight = StepDistribution;
+    float dW = 2.0 * (1.0 - StepDistribution) / float(StepCount);
+
+    mat4 CameraToShadow = PerFrame.CascadeViewProjection * PerFrame.CameraTransform;
+    for (int i = 0; i < StepCount; i++)
+    {
+        float t = (i + Delta) / float(StepCount);
+        t = AtmosphereSampleDistribution(StepDistribution, t);
+        vec3 CurrentP = t * EndP;
+        while ((CascadeIndex < 3) && (CurrentP.z > PerFrame.CascadeMaxDistances[CascadeIndex]))
+        {
+            CascadeIndex++;
+        }
+
+        vec3 ShadowP = TransformPoint(CameraToShadow, CurrentP);
+        if (CascadeIndex > 0)
+        {
+            ShadowP = PerFrame.CascadeScales[CascadeIndex - 1] * ShadowP + PerFrame.CascadeOffsets[CascadeIndex - 1];
+        }
+        vec4 ShadowCoord = vec4(0.5 * ShadowP.xy + vec2(0.5), float(CascadeIndex), ShadowP.z);
+        float Shadow = texture(ShadowMap, ShadowCoord);
+
+        InScatter += Weight * Shadow;
+        Weight += dW;
+    }
+
+    float Norm = P.z / (StepCount + 1.0);
+    float Result = InScatter * PhaseIn * Norm;
+    return Result;
+}
+#endif

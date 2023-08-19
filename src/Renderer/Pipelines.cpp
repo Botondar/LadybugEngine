@@ -744,9 +744,13 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Layout = 
         {
             .PushConstantRangeCount = 0,
-            .DescriptorSetCount = 1,
+            .DescriptorSetCount = 2,
             .PushConstantRanges = {},
-            .DescriptorSets = { SetLayout_PerFrameUniformData },
+            .DescriptorSets = 
+            { 
+                SetLayout_PerFrameUniformData,
+                SetLayout_ShadowPS,
+            },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = InputState_vertex,

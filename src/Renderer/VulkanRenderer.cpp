@@ -2585,8 +2585,13 @@ void EndRenderFrame(render_frame* Frame)
         {
             pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
+            VkDescriptorSet Sets[] = 
+            {
+                Frame->Backend->UniformDescriptorSet,
+                ShadowDescriptorSet,
+            };
             vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Layout, 
-                                    0, 1, &Frame->Backend->UniformDescriptorSet, 
+                                    0, CountOf(Sets), Sets,
                                     0, nullptr);
             vkCmdDraw(RenderCmd, 3, 1, 0, 0);
         }
