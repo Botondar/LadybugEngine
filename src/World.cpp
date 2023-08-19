@@ -242,15 +242,6 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         if (IO->Keys[SC_D].bIsDown) { MoveDirection.x += 1.0f; }
         if (IO->Keys[SC_A].bIsDown) { MoveDirection.x -= 1.0f; }
 
-        if (IO->Keys[SC_Left].bIsDown)
-        {
-            Camera->Yaw += 1e-1f * dt;
-        }
-        if (IO->Keys[SC_Right].bIsDown)
-        {
-            Camera->Yaw -= 1e-1f * dt;
-        }
-
         if (IO->Keys[SC_MouseLeft].bIsDown)
         {
             constexpr f32 MouseTurnSpeed = 1e-2f;
