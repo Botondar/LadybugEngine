@@ -20,7 +20,7 @@ layout(location = 0) out vec2 UV;
 
 void main()
 {
-    vec4 P = vec4(VertexData[gl_VertexIndex], 1.0, 1.0);
+    vec4 P = vec4(VertexData[gl_VertexIndex], 0.0, 1.0);
     UV = 0.5 * P.xy + vec2(0.5);
     gl_Position = P;
 }

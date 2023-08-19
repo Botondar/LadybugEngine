@@ -632,7 +632,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .DepthStencilState = 
         {
             .Flags = DS_DepthTestEnable|DS_DepthWriteEnable,
-            .DepthCompareOp = Compare_LessEqual,
+            .DepthCompareOp = Compare_GreaterEqual,
             .MinDepthBounds = 0.0f,
             .MaxDepthBounds = 1.0f,
         },
@@ -725,7 +725,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .DepthStencilState = 
         {
             .Flags = DS_DepthTestEnable|DS_DepthWriteEnable,
-            .DepthCompareOp = Compare_LessEqual,
+            .DepthCompareOp = Compare_GreaterEqual,
             .MinDepthBounds = 0.0f,
             .MaxDepthBounds = 0.0f,
         },
@@ -762,7 +762,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .DepthStencilState = 
         {
             .Flags = DS_DepthTestEnable,
-            .DepthCompareOp = Compare_LessEqual,
+            .DepthCompareOp = Compare_GreaterEqual,
             .MinDepthBounds = 0.0f,
             .MaxDepthBounds = 1.0f,
         },
@@ -1018,7 +1018,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .DepthStencilState = 
         {
             .Flags = DS_DepthTestEnable,
-            .DepthCompareOp = Compare_Less,
+            .DepthCompareOp = Compare_Greater,
             .MinDepthBounds = 0.0f,
             .MaxDepthBounds = 1.0f,
         },

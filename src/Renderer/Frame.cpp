@@ -188,7 +188,7 @@ internal void BeginPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer)
         .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = { .depthStencil = { 1.0f, 0 } },
+        .clearValue = { .depthStencil = { 0.0f, 0 } },
     };
 
     VkRenderingInfo RenderingInfo = 

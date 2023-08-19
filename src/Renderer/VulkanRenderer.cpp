@@ -3018,6 +3018,18 @@ void SetRenderCamera(render_frame* Frame, const render_camera* CameraIn)
     f32 s = AspectRatio;
     f32 g = Camera->FocalLength;
 
+#if 1
+    Camera->ProjectionTransform = M4(
+        g / s, 0.0f, 0.0f, 0.0f,
+        0.0f, g, 0.0f, 0.0f,
+        0.0f, 0.0f, -n*r, n*f*r,
+        0.0f, 0.0f, 1.0f, 0.0f);
+    Camera->InverseProjectionTransform = M4(
+        s / g,  0.0f,       0.0f,           0.0f,
+        0.0f,   1.0f / g,   0.0f,           0.0f,
+        0.0f,   0.0f,       0.0f,           1.0f,
+        0.0f,   0.0f,       1.0f / (n*f*r), 1.0f / f);
+#else
     Camera->ProjectionTransform = M4(
         g / s, 0.0f, 0.0f, 0.0f,
         0.0f, g, 0.0f, 0.0f,
@@ -3028,6 +3040,7 @@ void SetRenderCamera(render_frame* Frame, const render_camera* CameraIn)
         0.0f,  1.0f / g, 0.0f,            0.0f,
         0.0f,  0.0f,     0.0f,            1.0f,
         0.0f,  0.0f,     1.0f / (-f*n*r), 1.0f / n);
+#endif
 
     // Calculate camera frustum
     {

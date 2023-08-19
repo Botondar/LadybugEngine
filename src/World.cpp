@@ -137,7 +137,6 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                         RandBetween(R, 0.1f, 1.0f), 
                         RandBetween(R, 0.1f, 1.0f), 
                         RandBetween(R, 0.1f, 1.0f), 
-                        //RandBetween(R, 0.01f, 0.01f),
                         RandBetween(R, 0.1f, 0.3f),
                     },
                 };
@@ -585,7 +584,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     for (u32 LightIndex = 0; LightIndex < World->AdHocLightCount; LightIndex++)
     {
         light* Light = World->AdHocLights + LightIndex;
-#if 0
+#if 1
         v3 dP = { RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy) };
         dP = RandBetween(&World->EffectEntropy, 1.5f, 4.5f) * dP;
 #else
