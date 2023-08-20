@@ -11,6 +11,34 @@ internal u32 GLTFTypeElementCounts[GLTF_TYPE_COUNT] =
     [GLTF_MAT4]   = 16,
 };
 
+lbfn u32 GLTFGetDefaultStride(gltf_accessor* Accessor)
+{
+    u32 ComponentSize = 0;
+    switch (Accessor->ComponentType)
+    {
+        case GLTF_UBYTE:
+        case GLTF_SBYTE:
+        {
+            ComponentSize = 1;
+        } break;
+        case GLTF_USHORT:
+        case GLTF_SSHORT:
+        {
+            ComponentSize = 2;
+        } break;
+        case GLTF_UINT:
+        case GLTF_SINT:
+        case GLTF_FLOAT:
+        {
+            ComponentSize = 4;
+        } break;
+        InvalidDefaultCase;
+    }
+
+    u32 Result = ComponentSize * GLTFTypeElementCounts[Accessor->Type];
+    return(Result);
+}
+
 enum gltf_elem_flags : flags32
 {
     GLTF_Flags_None = 0,

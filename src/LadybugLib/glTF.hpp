@@ -271,6 +271,8 @@ struct gltf
 
 lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena);
 
+lbfn u32 GLTFGetDefaultStride(gltf_accessor* Accessor);
+
 struct gltf_iterator
 {
     gltf* GLTF;
@@ -291,5 +293,5 @@ struct gltf_iterator
 };
 
 lbfn gltf_iterator MakeGLTFAttribIterator(gltf* GLTF, 
-                                              gltf_accessor* Accessor, 
-                                              buffer* Buffers);
+                                          gltf_accessor* Accessor, 
+                                          buffer* Buffers);

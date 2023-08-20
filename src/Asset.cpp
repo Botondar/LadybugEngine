@@ -241,6 +241,7 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Rendere
     RestoreArena(Arena, Checkpoint);
 }
 
+// TODO(boti): There seem to be multiple places in here that might not handle the case where the buffer view stride is 0
 // TODO(boti): remove the renderer from here
 internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_world* World, renderer* Renderer, const char* ScenePath, m4 BaseTransform)
 {
@@ -567,6 +568,11 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 buffer* JointsBuffer = Buffers + JointsView->BufferIndex;
                 Verify(JointsAccessor->ByteOffset + JointsView->Offset + VertexCount * JointsView->Stride <= JointsBuffer->Size);
                 void* JointsAt = OffsetPtr(JointsBuffer->Data, JointsView->Offset + JointsAccessor->ByteOffset);
+                u32 JointsStride = JointsView->Stride;
+                if (JointsStride == 0)
+                {
+                    JointsStride = GLTFGetDefaultStride(JointsAccessor);
+                }
 
                 Verify(WeightsAccessor->BufferView < GLTF.BufferViewCount);
                 gltf_buffer_view* WeightsView = GLTF.BufferViews + WeightsAccessor->BufferView;
@@ -574,6 +580,11 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 buffer* WeightsBuffer = Buffers + WeightsView->BufferIndex;
                 Verify(WeightsAccessor->ByteOffset + WeightsView->Offset + VertexCount * WeightsView->Stride <= WeightsBuffer->Size);
                 void* WeightsAt = OffsetPtr(WeightsBuffer->Data, WeightsView->Offset + WeightsAccessor->ByteOffset);
+                u32 WeightsStride = WeightsView->Stride;
+                if (WeightsStride == 0)
+                {
+                    WeightsStride = GLTFGetDefaultStride(WeightsAccessor);
+                }
 
                 if (WeightsAccessor->ComponentType != GLTF_FLOAT)
                 {
@@ -613,8 +624,8 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
                     Vertex->Weights = *(v4*)WeightsAt;
 
-                    JointsAt = OffsetPtr(JointsAt, JointsView->Stride);
-                    WeightsAt = OffsetPtr(WeightsAt, WeightsView->Stride);
+                    JointsAt = OffsetPtr(JointsAt, JointsStride);
+                    WeightsAt = OffsetPtr(WeightsAt, WeightsStride);
                 }
             }
 
@@ -912,13 +923,19 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             gltf_buffer_view* View = GLTF.BufferViews + TimestampAccessor->BufferView;
             buffer* Buffer = Buffers + View->BufferIndex;
 
+            u32 Stride = View->Stride;
+            if (Stride == 0)
+            {
+                Stride = GLTFGetDefaultStride(TimestampAccessor);
+            }
+
             void* At = OffsetPtr(Buffer->Data, View->Offset + TimestampAccessor->ByteOffset);
             u32 Count = TimestampAccessor->Count;
             while (Count--)
             {
                 f32 Timestamp = *(f32*)At;
                 Assert(Timestamp >= 0.0f);
-                At = OffsetPtr(At, View->Stride);
+                At = OffsetPtr(At, Stride);
                 
                 b32 AlreadyExists = false;
                 for (u32 KeyFrameIndex = 0; KeyFrameIndex < KeyFrameCount; KeyFrameIndex++)
@@ -999,11 +1016,21 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                     gltf_buffer_view* TimestampView = GLTF.BufferViews + TimestampAccessor->BufferView;
                     buffer* TimestampBuffer = Buffers + TimestampView->BufferIndex;
                     void* SamplerTimestampAt = OffsetPtr(TimestampBuffer->Data, TimestampView->Offset + TimestampAccessor->ByteOffset);
+                    u32 TimestampStride = TimestampView->Stride;
+                    if (TimestampStride == 0)
+                    {
+                        TimestampStride = GLTFGetDefaultStride(TimestampAccessor);
+                    }
 
                     gltf_buffer_view* TransformView = GLTF.BufferViews + TransformAccessor->BufferView;
                     buffer* TransformBuffer = Buffers + TransformView->BufferIndex;
                     void* SamplerTransformAt = OffsetPtr(TransformBuffer->Data, TransformView->Offset + TransformAccessor->ByteOffset);
-                    
+                    u32 TransformStride = TransformView->Stride;
+                    if (TransformStride == 0)
+                    {
+                        TransformStride = GLTFGetDefaultStride(TimestampAccessor);
+                    }
+
                     Verify(TimestampAccessor->Count > 0);
                     Verify(TimestampAccessor->Count == TransformAccessor->Count);
                     switch (Channel->Target.Path)
@@ -1046,8 +1073,8 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                         f32 CurrentTime = AnimationAsset->KeyFrameTimestamps[KeyFrameIndex];
                         while (Timestamp < CurrentTime)
                         {
-                            SamplerTimestampAt = OffsetPtr(SamplerTimestampAt, TimestampView->Stride);
-                            SamplerTransformAt = OffsetPtr(SamplerTransformAt, TransformView->Stride);
+                            SamplerTimestampAt = OffsetPtr(SamplerTimestampAt, TimestampStride);
+                            SamplerTransformAt = OffsetPtr(SamplerTransformAt, TransformStride);
                             Timestamp = *(f32*)SamplerTimestampAt;
                         }
 
