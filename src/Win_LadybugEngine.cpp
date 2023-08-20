@@ -256,11 +256,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
         return (DWORD)-1;
     }
 
-    constexpr int InitialWindowWidth = 1920;
-    constexpr int InitialWindowHeight = 1080;
     game_io GameIO = {};
-    GameIO.OutputWidth = InitialWindowWidth;
-    GameIO.OutputHeight = InitialWindowHeight;
 
     // Create window
     {
@@ -272,6 +268,32 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
 
         int MonitorWidth = MonitorInfo.rcMonitor.right - MonitorInfo.rcMonitor.left;
         int MonitorHeight = MonitorInfo.rcMonitor.bottom - MonitorInfo.rcMonitor.top;
+
+        int InitialWindowWidth = 1280;
+        int InitialWindowHeight = 720;
+        if (MonitorWidth < 1280 || MonitorHeight < 720)
+        {
+            MessageBoxA(nullptr, "Tiny monitor", "LadybugEngine", MB_OK|MB_ICONERROR);
+            return((DWORD)-1);
+        }
+        else if (MonitorWidth <= 1600 || MonitorHeight <= 900)
+        {
+            InitialWindowWidth = 1280;
+            InitialWindowHeight = 720;
+        }
+        else if (MonitorWidth <= 1920 || MonitorHeight <= 1080)
+        {
+            InitialWindowWidth = 1600;
+            InitialWindowHeight = 900;
+        }
+        else if (MonitorWidth <= 2560 || MonitorHeight <= 1440)
+        {
+            InitialWindowWidth = 1920;
+            InitialWindowHeight = 1080;
+        }
+
+        GameIO.OutputWidth = InitialWindowWidth;
+        GameIO.OutputHeight = InitialWindowHeight;
 
         RECT WindowRect;
         WindowRect.left = (MonitorWidth - InitialWindowWidth) / 2;
@@ -319,7 +341,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
         wchar_t ErrorString[MaxErrorLength];
         FormatMessageW(FORMAT_MESSAGE_FROM_HMODULE|FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, ErrorCode, 0, ErrorString, MaxErrorLength, nullptr);
         MessageBoxW(nullptr, ErrorString, L"LadybugEngine", MB_OK|MB_ICONERROR);
-        return 1;
+        return (DWORD)-1;
     }
 
     game_memory GameMemory = {};
