@@ -81,19 +81,18 @@ void main()
 {
     vec3 Sample = textureLod(Texture, TexCoord, 0).rgb;
     vec3 SampleBloom = textureLod(BloomTexture, TexCoord, 0).rgb;
-
-    //float BloomStrength = 0.25;
     Sample = mix(Sample, SampleBloom, BloomStrength);
 
     float Exposure = 0.55;
+    vec3 Exposed = Sample * Exposure;
 #if 0
-    Sample = vec3(1.0) - exp(-Sample * Exposure);
+    Exposed = vec3(1.0) - exp(-Exposed);
 #elif 0
-    Sample = Sample / (vec3(1.0) + Sample);
+    Exposed = Exposed / (vec3(1.0) + Exposed);
 #elif 1
-    Sample = ACESFilm2(Exposure * Sample);
+    Exposed = ACESFilm2(Exposed);
 #endif
-    Out0 = vec4(Sample, 1.0);
+    Out0 = vec4(Exposed, 1.0);
 }
 
 #endif
