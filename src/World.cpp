@@ -257,7 +257,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         v3 Right = CameraTransform.X.xyz;
 
         constexpr f32 MoveSpeed = 1.0f;
-        f32 SpeedMul = IO->Keys[SC_LeftShift].bIsDown ? 2.5f : 1.0f;
+        f32 SpeedMul = IO->Keys[SC_LeftShift].bIsDown ? 3.5f : 2.0f;
         Camera->P += (Right * MoveDirection.x + Forward * MoveDirection.z) * SpeedMul * MoveSpeed * dt;
 
         if (IO->Keys[SC_Space].bIsDown) { Camera->P.z += SpeedMul * MoveSpeed * dt; }
