@@ -208,9 +208,11 @@ float CalculateAtmosphere(v3 P, per_frame PerFrame, sampler2DArrayShadow ShadowM
     const int StepCount = 32;
     const float StepDistribution = 0.25;
 
-    v3 EndP = P * v3(1.0, 1.0, 0.999);
+    //v3 EndP = P * v3(1.0, 1.0, 0.999);
+    float MaxDistance = 8.0;
     v3 V = normalize(P);
-    
+    v3 EndP = MaxDistance * V;
+
     float CosTheta = dot(V, PerFrame.SunV);
 
     const float g = 0.85;//0.76;
@@ -234,6 +236,11 @@ float CalculateAtmosphere(v3 P, per_frame PerFrame, sampler2DArrayShadow ShadowM
         float t = (i + Delta) / float(StepCount);
         t = AtmosphereSampleDistribution(StepDistribution, t);
         vec3 CurrentP = t * EndP;
+        if (CurrentP.z >= P.z)
+        {
+            break;
+        }
+
         while ((CascadeIndex < 3) && (CurrentP.z > PerFrame.CascadeMaxDistances[CascadeIndex]))
         {
             CascadeIndex++;
@@ -251,7 +258,7 @@ float CalculateAtmosphere(v3 P, per_frame PerFrame, sampler2DArrayShadow ShadowM
         Weight += dW;
     }
 
-    float Norm = P.z / (StepCount + 1.0);
+    float Norm = MaxDistance / (StepCount + 1.0);
     float Result = InScatter * PhaseIn * Norm;
     return Result;
 }
