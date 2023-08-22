@@ -848,10 +848,14 @@ inline b32 AddLight(render_frame* Frame, light Light);
 
 inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* VertexArray);
 
+//
+// Helpers
+//
 inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
 inline rgba8 PackRGBA(v4 Color);
 inline u32 GetMaxMipCount(u32 Width, u32 Height);
 inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFFFFFFu);
+inline u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate);
 
 #include "Renderer/Pipelines.hpp"
 
@@ -926,6 +930,26 @@ inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount /*= 0xFF
     return Result;
 }
 
+inline u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate)
+{
+    u64 Result = 0;
+
+    for (u32 Mip = 0; Mip < MipCount; Mip++)
+    {
+        u32 CurrentWidth = Max(Width >> Mip, 1u);
+        u32 CurrentHeight = Max(Height >> Mip, 1u);
+        if (ByteRate.IsBlock)
+        {
+            CurrentWidth = Align(CurrentWidth, 4u);
+            CurrentHeight = Align(CurrentHeight, 4u);
+        }
+
+        Result += ((u64)CurrentWidth * (u64)CurrentHeight * ByteRate.Numerator) / ByteRate.Denominator;
+    }
+    Result *= ArrayCount;
+
+    return Result;
+}
 
 inline b32 DrawMesh(render_frame* Frame, 
                     u32 VertexOffset, u32 VertexCount, 

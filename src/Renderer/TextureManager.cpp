@@ -2,27 +2,6 @@
 
 constexpr u32 SpecialTextureBit = (1u << 31);
 
-internal u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate)
-{
-    u64 Result = 0;
-
-    for (u32 Mip = 0; Mip < MipCount; Mip++)
-    {
-        u32 CurrentWidth = Max(Width >> Mip, 1u);
-        u32 CurrentHeight = Max(Height >> Mip, 1u);
-        if (ByteRate.IsBlock)
-        {
-            CurrentWidth = Align(CurrentWidth, 4u);
-            CurrentHeight = Align(CurrentHeight, 4u);
-        }
-
-        Result += ((u64)CurrentWidth * (u64)CurrentHeight * ByteRate.Numerator) / ByteRate.Denominator;
-    }
-    Result *= ArrayCount;
-
-    return Result;
-}
-
 internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes)
 {
     VkResult Result = VK_SUCCESS;
