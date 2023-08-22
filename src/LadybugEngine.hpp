@@ -23,7 +23,13 @@ TODO: list
 #include "Editor.hpp"
 #include "Asset.hpp"
 
-#include <stb/stb_image.h>
+#define STB_IMAGE_STATIC
+#define STB_IMAGE_RESIZE_STATIC
+#define STB_DXT_STATIC
+#include "stb/stb_image.h"
+#include "stb/stb_image_resize.h"
+#include "stb/stb_dxt.h"
+
 
 // snprintf
 #include <cstdio>

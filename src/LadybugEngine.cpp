@@ -8,18 +8,13 @@
 #include "Editor.cpp"
 
 #define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_STATIC
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#define STB_DXT_IMPLEMENTATION
 #pragma warning(push)
 #pragma warning(disable:4244)
 #include "stb/stb_image.h"
 #pragma warning(pop)
-
-#define STB_IMAGE_RESIZE_IMPLEMENTATION
-#define STB_IMAGE_RESIZE_STATIC
 #include "stb/stb_image_resize.h"
-
-#define STB_DXT_IMPLEMENTATION
-#define STB_DXT_STATIC
 #include "stb/stb_dxt.h"
 
 platform_api Platform;
