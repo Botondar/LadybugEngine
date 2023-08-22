@@ -761,6 +761,27 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
     for (u32 SkinIndex = 0; SkinIndex < GLTF.SkinCount; SkinIndex++)
     {
         gltf_skin* Skin = GLTF.Skins + SkinIndex;
+        Assert(Skin->JointCount > 0);
+        m4 ParentTransform = M4(
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f);
+
+        u32 RootJointNodeIndex = Skin->JointIndices[0];
+        // NOTE(boti): Verify that the first joint node is actually the root
+        for (u32 JointIndex = 1; JointIndex < Skin->JointCount; JointIndex++)
+        {
+            gltf_node* JointNode = GLTF.Nodes + Skin->JointIndices[JointIndex];
+            for (u32 ChildIndex = 0; ChildIndex < JointNode->ChildrenCount; ChildIndex++)
+            {
+                if (RootJointNodeIndex == JointNode->Children[ChildIndex])
+                {
+                    UnimplementedCodePath;
+                }
+            }
+        }
+
         Verify(Skin->InverseBindMatricesAccessorIndex < GLTF.AccessorCount);
         gltf_accessor* Accessor = GLTF.Accessors + Skin->InverseBindMatricesAccessorIndex;
         gltf_buffer_view* View  = GLTF.BufferViews + Accessor->BufferView;
@@ -776,21 +797,20 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             if (Skin->JointCount <= skin::MaxJointCount)
             {
                 SkinAsset->JointCount = Skin->JointCount;
-                u32 Stride = View->Stride ? View->Stride : sizeof(m4);
+                u32 InverseBindMatrixStride = View->Stride ? View->Stride : sizeof(m4);
+                void* InverseBindMatrixAt = OffsetPtr(Buffer->Data, View->Offset + Accessor->ByteOffset);
 
+                // NOTE(boti): We clear the joints here to later verify that the joint node has a single parent
+                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
                 {
-                    u8* SrcAt = (u8*)Buffer->Data + View->Offset + Accessor->ByteOffset;
-                    m4* DstAt = SkinAsset->InverseBindMatrices;
-                    u32 Count = SkinAsset->JointCount;
-                    while (Count--)
-                    {
-                        *DstAt++ = *(m4*)SrcAt;
-                        SrcAt += Stride;
-                    }
+                    SkinAsset->JointParents[JointIndex] = 0;
                 }
 
                 for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
                 {
+                    m4 InverseBindTransform = *(m4*)InverseBindMatrixAt;
+                    InverseBindMatrixAt = OffsetPtr(InverseBindMatrixAt, InverseBindMatrixStride);
+                    SkinAsset->InverseBindMatrices[JointIndex] = InverseBindTransform;
                     u32 NodeIndex = Skin->JointIndices[JointIndex];
                     if (NodeIndex < GLTF.NodeCount)
                     {
@@ -806,51 +826,34 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                         }
                         else
                         {
-                            // TODO(boti): Decompose the matrix here?
-                            SkinAsset->BindPose[JointIndex] = 
+                            SkinAsset->BindPose[JointIndex] = M4ToTRS(Node->Transform);
+                        }
+
+                        // Build the joint hierarchy
+                        // TODO(boti): We need to handle the case where the joints don't form a closed hierarchy 
+                        // (i.e. bones are parented to nodes not part of the skeleton)
+                        for (u32 ChildIt = 0; ChildIt < Node->ChildrenCount; ChildIt++)
+                        {
+                            u32 ChildIndex = Node->Children[ChildIt];
+                            for (u32 JointIt = 0; JointIt < Skin->JointCount; JointIt++)
                             {
-                                .Rotation = { 0.0f, 0.0f, 0.0f, 1.0f },
-                                .Position = { 0.0f, 0.0f, 0.0f },
-                                .Scale = { 1.0f, 1.0f, 1.0f },
-                            };
+                                if (Skin->JointIndices[JointIt] == ChildIndex)
+                                {
+                                    if (JointIndex >= JointIt)
+                                    {
+                                        // TODO(boti): Reorder the joints so that children don't precede their parents
+                                        UnimplementedCodePath;
+                                    }
+                                    Verify(SkinAsset->JointParents[JointIt] == 0);
+                                    SkinAsset->JointParents[JointIt] = JointIndex;
+                                    break;
+                                }
+                            }
                         }
                     }
                     else
                     {
                         UnhandledError("Invalid joint node index in glTF skin");
-                    }
-                }
-
-                // NOTE(boti): We clear the joints here to later verify that the joint node has a single parent
-                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
-                {
-                    SkinAsset->JointParents[JointIndex] = 0;
-                }
-
-                // Build the joint hierarchy
-                // TODO(boti): We need to handle the case where the joints don't form a closed hierarchy 
-                // (i.e. bones are parented to nodes not part of the skeleton)
-                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
-                {
-                    u32 NodeIndex = Skin->JointIndices[JointIndex];
-                    gltf_node* Node = GLTF.Nodes + NodeIndex;
-                    for (u32 ChildIt = 0; ChildIt < Node->ChildrenCount; ChildIt++)
-                    {
-                        u32 ChildIndex = Node->Children[ChildIt];
-                        for (u32 JointIt = 0; JointIt < Skin->JointCount; JointIt++)
-                        {
-                            if (Skin->JointIndices[JointIt] == ChildIndex)
-                            {
-                                if (JointIndex >= JointIt)
-                                {
-                                    // TODO(boti): Reorder the joints so that children don't precede their parents
-                                    UnimplementedCodePath;
-                                }
-                                Verify(SkinAsset->JointParents[JointIt] == 0);
-                                SkinAsset->JointParents[JointIt] = JointIndex;
-                                break;
-                            }
-                        }
                     }
                 }
             }
@@ -972,12 +975,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             AnimationAsset->KeyFrames = PushArray<animation_key_frame>(Assets->Arena, KeyFrameCount);
             memcpy(AnimationAsset->KeyFrameTimestamps, KeyFrameTimestamps, KeyFrameCount * sizeof(f32));
 
-            // TODO(boti): We need to rework the import here to actually figure out which joints are active
-            // during an animation and which ones aren't, and set the mask appropriately!
-            // Currently when a joint is missing from an animation, the bind-pose is broadcast through all key-frames
-            // of the animation.
-            memset(&AnimationAsset->ActiveJoints, 0xFF, sizeof(AnimationAsset->ActiveJoints));
-
+            memset(&AnimationAsset->ActiveJoints, 0x00, sizeof(AnimationAsset->ActiveJoints));
             skin* SkinAsset = Assets->Skins + AnimationAsset->SkinID;
             for (u32 KeyFrameIndex = 0; KeyFrameIndex < KeyFrameCount; KeyFrameIndex++)
             {
@@ -1000,6 +998,15 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                     if (NodeIndex == Skin->JointIndices[JointIt])
                     {
                         JointIndex = JointIt;
+                        u32 ArrayIndex, BitIndex;
+                        if (JointMaskIndexFromJointIndex(JointIndex, &ArrayIndex, &BitIndex))
+                        {
+                            AnimationAsset->ActiveJoints.Bits[ArrayIndex] |= (1 << BitIndex);
+                        }
+                        else
+                        {
+                            UnhandledError("Invalid joint index");
+                        }
                         break;
                     }
                 }
@@ -1028,7 +1035,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                     u32 TransformStride = TransformView->Stride;
                     if (TransformStride == 0)
                     {
-                        TransformStride = GLTFGetDefaultStride(TimestampAccessor);
+                        TransformStride = GLTFGetDefaultStride(TransformAccessor);
                     }
 
                     Verify(TimestampAccessor->Count > 0);

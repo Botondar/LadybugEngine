@@ -17,6 +17,7 @@ struct trs_transform
 };
 
 inline m4 TRSToM4(trs_transform Transform);
+inline trs_transform M4ToTRS(m4 M);
 
 // NOTE(boti): Skin joints must not precede their parents in the array
 struct skin
@@ -24,6 +25,7 @@ struct skin
     static constexpr u32 MaxJointCount = 256;
     u32 JointCount;
     m4 InverseBindMatrices[MaxJointCount];
+    // NOTE(boti): The bind-pose transforms are all parent-relative and not global
     trs_transform BindPose[MaxJointCount];
     u32 JointParents[MaxJointCount];
 };
@@ -206,6 +208,60 @@ inline m4 TRSToM4(trs_transform Transform)
               0.0f, 0.0f, 0.0f, 1.0f);
 
     Result = T * R * S;
+    return(Result);
+}
+
+inline trs_transform M4ToTRS(m4 M)
+{
+    trs_transform Result = {};
+
+    Result.Position = M.P.xyz;
+    Result.Scale.x = Sqrt(Dot(M.X.xyz, M.X.xyz));
+    Result.Scale.y = Sqrt(Dot(M.Y.xyz, M.Y.xyz));
+    Result.Scale.z = Sqrt(Dot(M.Z.xyz, M.Z.xyz));
+    v3 X = M.X.xyz * (1.0f / Result.Scale.x);
+    v3 Y = M.Y.xyz * (1.0f / Result.Scale.y);
+    v3 Z = M.Z.xyz * (1.0f / Result.Scale.z);
+
+    // NOTE(boti): Enable this assert to check whether the matrix does reflection or not
+#if 0
+    f32 Det = X.x * (Y.y*Z.z - Y.z*Z.y) - Y.x * (X.y*Z.z - X.z*Z.y) + Z.x * (X.y*Y.z - X.z*Y.y);
+    Assert(Det > 0.0f);
+#endif
+
+    f32 Sum = X.x + Y.y + Z.z;
+    if (Sum > 0.0f)
+    {
+        Result.Rotation.w = 0.5f * Sqrt(Sum + 1.0f);
+        f32 f = 0.25f / Result.Rotation.w;
+        Result.Rotation.x = f * (Y.z - Z.y);
+        Result.Rotation.y = f * (Z.x - X.z);
+        Result.Rotation.z = f * (X.y - Y.x);
+    }
+    else if ((X.x > Y.y) && (X.x > Z.z))
+    {
+        Result.Rotation.x = 0.5f * Sqrt(X.x - Y.y - Z.z + 1.0f);
+        f32 f = 0.25f / Result.Rotation.x;
+        Result.Rotation.x = f * (X.y + Y.x);
+        Result.Rotation.y = f * (Y.z + Z.y);
+        Result.Rotation.w = f * (Z.x - X.z);
+    }
+    else if (Y.y > Z.z)
+    {
+        Result.Rotation.y = 0.5f * Sqrt(Y.y - X.x - Z.z + 1.0f);
+        f32 f = 0.25f / Result.Rotation.y;
+        Result.Rotation.x = f * (X.y + Y.x);
+        Result.Rotation.z = f * (Y.z + Z.y);
+        Result.Rotation.w = f * (Z.x - X.z);
+    }
+    else
+    {
+        Result.Rotation.z = 0.5f * Sqrt(Z.z - X.x - Y.y + 1.0f);
+        f32 f = 0.25f / Result.Rotation.z;
+        Result.Rotation.x = f * (X.z + Z.x);
+        Result.Rotation.y = f * (Y.z + Z.y);
+        Result.Rotation.w = f * (X.y - Y.x);
+    }
     return(Result);
 }
 
