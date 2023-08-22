@@ -15,6 +15,53 @@ internal line ProjectTo(line Line, plane Plane);
 internal v3 ProjectTo(v3 P, line Line);
 internal line AntiProjectTo(line Line, v3 P);
 
+//
+// GUI
+//
+
+enum gui_flow
+{
+    Flow_Vertical = 0,
+    Flow_Horizontal,
+};
+
+struct gui_context
+{
+    render_frame* Frame;
+    font* Font;
+
+    rgba8 DefaultForegroundColor;
+    rgba8 DefaultBackgroundColor;
+    rgba8 SelectedBackgroundColor;
+    rgba8 HotBackgroundColor;
+    rgba8 ActiveBackgroundColor;
+
+    v2 MouseP;
+    v2 MousedP;
+    platform_input_key MouseLeft;
+    platform_input_key MouseRight;
+
+    v2 CurrentP;
+    font_layout_type CurrentLayout;
+    gui_flow CurrentFlow;
+    b32 IsRightAligned;
+    f32 Margin;
+
+    u32 LastElementID;
+    u32 HotID;
+    u32 ActiveID;
+
+    static constexpr umm TextBufferSize = 1024;
+    char TextBuffer[TextBufferSize];
+};
+
+internal gui_context BeginGUI(render_frame* Frame, font* Font, game_io* IO);
+internal u32 TextGUI(gui_context* Context, f32 Size, const char* Text, ...);
+internal u32 ButtonGUI(gui_context* Context, f32 Size, const char* Text, ...);
+internal u32 F32Slider(gui_context* Context, f32 Size, const char* Name, f32* Value, f32 DefaultValue, f32 MinValue, f32 MaxValue, f32 Step);
+
+internal v2 AdvanceCursor(gui_context* Context, f32 Size, mmrect2 Rect);
+
 lbfn void InitEditor(game_state* Game, memory_arena* Arena)
 {
     Game->Editor.IsEnabled = false;
@@ -35,48 +82,19 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         Editor->IsEnabled = !Editor->IsEnabled;
     }
 
-    rgba8 DefaultForegroundColor = PackRGBA8(0xFF, 0xFF, 0xFF, 0xFF);
-    rgba8 DefaultBackgroundColor = PackRGBA8(0x00, 0x00, 0xFF, 0xAA);
-    rgba8 SelectedBackgroundColor = PackRGBA8(0xAA, 0x00, 0xFF, 0xAA);
-    rgba8 HotBackgroundColor = PackRGBA8(0xFF, 0x00 ,0xFF, 0xAA);
-    rgba8 ActiveBackgroundColor = PackRGBA8(0xFF, 0x00, 0xFF, 0xFF);
+    gui_context Context = BeginGUI(Frame, Font, IO);
+    Context.ActiveID = Editor->ActiveMenuID;
 
     // NOTE(boti): we always print the frametime, regardless of whether the debug UI is active or not
     {
-        font_layout_type Layout = font_layout_type::Top;
-        f32 FrameTimeSize = 24.0f;
+        Context.CurrentLayout = font_layout_type::Top;
+        Context.CurrentFlow = Flow_Vertical;
+        Context.IsRightAligned = true;
 
-        constexpr size_t BuffSize = 256;
-        char Buff[BuffSize];
-
-        f32 CurrentY = 0.0f;
-
-        snprintf(Buff, BuffSize, "%.2fms", 1000.0f * IO->dt);
-        mmrect2 Rect = GetTextRect(Font, Buff, Layout);
-        Rect.Min *= FrameTimeSize;
-        Rect.Max *= FrameTimeSize;
-        f32 Width = Rect.Max.x - Rect.Min.x;
-        v2 P = { (f32)Frame->RenderWidth - Width, CurrentY };
-        PushTextWithShadow(Frame, Buff, Font, FrameTimeSize, P,  DefaultForegroundColor, Layout);
-        CurrentY += FrameTimeSize * Font->BaselineDistance;
-
-        const char* DeviceName = GetDeviceName(Frame->Renderer);
-        f32 DeviceNameSize = 20.0f;
-        Rect = GetTextRect(Font, DeviceName, Layout);
-        Rect.Min *= DeviceNameSize;
-        Rect.Max *= DeviceNameSize;
-        Width = Rect.Max.x - Rect.Min.x;
-        P = { (f32)Frame->RenderWidth - Width, CurrentY };
-        PushTextWithShadow(Frame, DeviceName, Font, DeviceNameSize, P, DefaultForegroundColor, Layout);
-        CurrentY += DeviceNameSize * Font->BaselineDistance;
-
-        snprintf(Buff, BuffSize, "Rendering@%ux%u", Frame->RenderWidth, Frame->RenderHeight);
-        Rect = GetTextRect(Font, Buff, Layout);
-        Rect.Min *= DeviceNameSize;
-        Rect.Max *= DeviceNameSize;
-        Width = Rect.Max.x - Rect.Min.x;
-        P = { (f32)Frame->RenderWidth - Width, CurrentY };
-        PushTextWithShadow(Frame, Buff, Font, DeviceNameSize, P, DefaultForegroundColor, Layout);
+        Context.CurrentP = { (f32)Frame->RenderWidth, 0.0f };
+        TextGUI(&Context, 24.0f, "%.2fms", 1000.0f * IO->dt);
+        TextGUI(&Context, 20.0f, "%s", GetDeviceName(Frame->Renderer));
+        TextGUI(&Context, 20.0f, "Rendering@%ux%u", Frame->RenderWidth, Frame->RenderHeight);
     }
 
     if (!Editor->IsEnabled) 
@@ -89,82 +107,26 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         Editor->DrawLights = !Editor->DrawLights;
     }
 
-    if (WasPressed(IO->Keys[SC_F1]))
-    {
-        Editor->SelectedMenuID = 0;
-    }
-    else if (WasPressed(IO->Keys[SC_F2]))
-    {
-        Editor->SelectedMenuID = 1;
-    }
-
-    f32 Margin = 10.0f;
-
+    Context.Margin = 10.0f;
     f32 TextSize = 32.0f;
     font_layout_type Layout = font_layout_type::Top;
+    Context.CurrentP = { 0.0f, 0.0f };
+    Context.CurrentFlow = Flow_Horizontal;
+    Context.IsRightAligned = false;
 
-    v2 StartP = { 0.0f, 0.0f };
-    v2 CurrentP = StartP;
-    u32 CurrentID = 1;
-    u32 HotID = 0;
+    u32 CPUMenuID = ButtonGUI(&Context, TextSize, "CPU");
+    u32 GPUMenuID = ButtonGUI(&Context, TextSize, "GPU");
+    u32 PostProcessMenuID = ButtonGUI(&Context, TextSize, "PostProcess");
 
-    auto ResetX = [&]() { CurrentP.x = StartP.x; };
-
-    auto DoButton = [&](const char* Text) -> u32
+    if (WasReleased(Context.MouseLeft))
     {
-        mmrect2 Rect = GetTextRect(Font, Text, Layout);
-        Rect.Min *= TextSize;
-        Rect.Max *= TextSize;
-        Rect.Min += CurrentP;
-        Rect.Max += CurrentP + v2{ 2.0f * Margin, 0.0f };
-        bool IsHot = PointRectOverlap(IO->Mouse.P, Rect);
-        
-        rgba8 CurrentColor = DefaultBackgroundColor;
-        if (IsHot)
+        if (Context.ActiveID != 0)
         {
-            HotID = CurrentID;
-            if (WasPressed(IO->Keys[SC_MouseLeft]))
+            if (Context.ActiveID == Context.HotID)
             {
-                Editor->ActiveMenuID = CurrentID;
+                Editor->SelectedMenuID = Context.ActiveID;
             }
-
-            if (Editor->ActiveMenuID == 0)
-            {
-                CurrentColor = HotBackgroundColor;
-            }
-        }
-
-        if (Editor->SelectedMenuID == CurrentID)
-        {
-            CurrentColor = SelectedBackgroundColor;
-        }
-        else if (Editor->ActiveMenuID == CurrentID)
-        {
-            CurrentColor = ActiveBackgroundColor;
-        }
-        PushRect(Frame, Rect.Min, Rect.Max, { 0.0f, 0.0f, }, { 0.0f, 0.0f }, CurrentColor);
-        CurrentP.x += Margin;
-        PushTextWithShadow(Frame, Text, Font, 
-                           TextSize, CurrentP,
-                           DefaultForegroundColor,
-                           Layout);
-        CurrentP.x = Rect.Max.x;
-        return(CurrentID++);
-    };
-
-    u32 CPUMenuID = DoButton("CPU");
-    u32 GPUMenuID = DoButton("GPU");
-    u32 PostProcessMenuID = DoButton("PostProcess");
-
-    if (WasReleased(IO->Keys[SC_MouseLeft]))
-    {
-        if (Editor->ActiveMenuID != 0)
-        {
-            if (Editor->ActiveMenuID == HotID)
-            {
-                Editor->SelectedMenuID = Editor->ActiveMenuID;
-            }
-            Editor->ActiveMenuID = 0;
+            Context.ActiveID = 0;
         }
     }
     else if (!IO->Keys[SC_MouseLeft].bIsDown)
@@ -173,111 +135,62 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         Editor->ActiveMenuID = 0;
     }
 
-    CurrentP.x = 0.0f;
-    CurrentP.y += TextSize * Font->BaselineDistance; // TODO(boti): this is kind of a hack
+    Context.CurrentP.x = 0.0f;
+    Context.CurrentP.y += TextSize * Font->BaselineDistance; // TODO(boti): this is kind of a hack
     TextSize = 24.0f;
-
-    auto TextLine = [&](const char* Format, ...)
-    {
-        constexpr size_t BuffSize = 128;
-        char Buff[BuffSize];
-
-        va_list ArgList;
-        va_start(ArgList, Format);
-        vsnprintf(Buff, BuffSize, Format, ArgList);
-        va_end(ArgList);
-
-        mmrect2 TextRect = PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, DefaultForegroundColor, Layout);
-        CurrentP.y = TextRect.Max.y;
-    };
 
     if (Editor->SelectedMenuID == CPUMenuID)
     {
+        Context.CurrentFlow = Flow_Vertical;
         for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
         {
             constexpr size_t BufferSize = 256;
             char Buffer[BufferSize];
             snprintf(Buffer, BufferSize, "Select Entity%03u", EntityIndex);
-            u32 SelectButtonID = DoButton(Buffer);
-            if (SelectButtonID == HotID && WasPressed(IO->Keys[SC_MouseLeft]))
+            u32 SelectButtonID = ButtonGUI(&Context, TextSize, Buffer);
+            if (SelectButtonID == Context.HotID && WasPressed(Context.MouseLeft))
             {
                 Editor->SelectedEntityID = { EntityIndex };
             }
-            CurrentP.x = StartP.x;
-            CurrentP.y += TextSize;
             
         }
     }
     else if (Editor->SelectedMenuID == GPUMenuID)
     {
-        render_stats* Stats = &Frame->Stats;
+        Context.CurrentFlow = Flow_Vertical;
 
-        TextLine("Total memory usage: %llu/%llu MB", Stats->TotalMemoryUsed >> 20, Stats->TotalMemoryAllocated >> 20);
+        render_stats* Stats = &Frame->Stats;
+        TextGUI(&Context, TextSize, "Total memory usage: %llu/%llu MB", Stats->TotalMemoryUsed >> 20, Stats->TotalMemoryAllocated >> 20);
         for (u32 Index = 0; Index < Stats->EntryCount; Index++)
         {
             render_stat_entry* Entry = Stats->Entries + Index;
-            TextLine("%s memory: %llu/%llu MB", Entry->Name, Entry->UsedSize >> 20, Entry->AllocationSize >> 20);
+            TextGUI(&Context, TextSize, "%s memory: %llu/%llu MB", Entry->Name, Entry->UsedSize >> 20, Entry->AllocationSize >> 20);
         }
     }
     else if (Editor->SelectedMenuID == PostProcessMenuID)
     {
-        auto F32Slider = [&](const char* Name, f32* Value, 
-            f32 DefaultValue, f32 MinValue, f32 MaxValue, f32 Step) -> u32
-        {
-            u32 ResetButtonID = DoButton(" ");
-            if (ResetButtonID == HotID && WasPressed(IO->Keys[SC_MouseLeft]))
-            {
-                *Value = DefaultValue;
-            }
+        // HACK(boti): The horizontal flow here makes the button and text _within_ the widget behave correctly,
+        // but that's not the actual flow of this menu item...
+        Context.CurrentFlow = Flow_Horizontal;
 
-            constexpr size_t BuffSize = 128;
-            char Buff[BuffSize];
-            snprintf(Buff, BuffSize, "%s = %f", Name, *Value);
-            mmrect2 TextRect = GetTextRect(Font, Buff, Layout);
-            TextRect.Min *= TextSize;
-            TextRect.Max *= TextSize;
-            TextRect.Min += CurrentP;
-            TextRect.Max += CurrentP;
-            rgba8 TextColor = DefaultForegroundColor;
-
-            b32 IsHot = PointRectOverlap(IO->Mouse.P, TextRect);
-            if (IsHot)
-            {
-                if (WasPressed(IO->Keys[SC_MouseLeft]))
-                {
-                    Editor->ActiveMenuID = CurrentID;
-                }
-            }
-            if (Editor->ActiveMenuID == CurrentID)
-            {
-                *Value += Step * IO->Mouse.dP.x;
-                *Value = Clamp(*Value, MinValue, MaxValue);
-            }
-
-            if ((IsHot && (Editor->ActiveMenuID == 0)) ||
-                Editor->ActiveMenuID == CurrentID)
-            {
-                TextColor = PackRGBA8(0xFF, 0xFF, 0x00, 0xFF);
-            }
-
-
-            PushTextWithShadow(Frame, Buff, Font, TextSize, CurrentP, TextColor, Layout);
-            CurrentP.y = TextRect.Max.y;
-            ResetX();
-            return(CurrentID++);
-        };
-        F32Slider("Bloom filter radius", &Game->PostProcessParams.Bloom.FilterRadius, 
+        F32Slider(&Context, TextSize, 
+                  "Bloom filter radius", &Game->PostProcessParams.Bloom.FilterRadius, 
                   bloom_params::DefaultFilterRadius, 0.0f, 1.0f, 1e-4f);
-        F32Slider("Bloom internal strength", &Game->PostProcessParams.Bloom.InternalStrength, 
+        F32Slider(&Context, TextSize, 
+                  "Bloom internal strength", &Game->PostProcessParams.Bloom.InternalStrength, 
                   bloom_params::DefaultInternalStrength, 0.0f, 1.0f, 1e-3f);
-        F32Slider("Bloom strength", &Game->PostProcessParams.Bloom.Strength, 
+        F32Slider(&Context, TextSize, 
+                  "Bloom strength", &Game->PostProcessParams.Bloom.Strength, 
                   bloom_params::DefaultStrength, 0.0f, 1.0f, 1e-3f);
 
-        F32Slider("SSAO intensity", &Game->PostProcessParams.SSAO.Intensity, 
+        F32Slider(&Context, TextSize, 
+                  "SSAO intensity", &Game->PostProcessParams.SSAO.Intensity, 
                   ssao_params::DefaultIntensity, 0.0f, 20.0f, 1e-2f);
-        F32Slider("SSAO max distance", &Game->PostProcessParams.SSAO.MaxDistance, 
+        F32Slider(&Context, TextSize, 
+                  "SSAO max distance", &Game->PostProcessParams.SSAO.MaxDistance, 
                   ssao_params::DefaultMaxDistance, 1e-3f, 10.0f, 1e-3f);
-        F32Slider("SSAO tangent tau", &Game->PostProcessParams.SSAO.TangentTau, 
+        F32Slider(&Context, TextSize, 
+                  "SSAO tangent tau", &Game->PostProcessParams.SSAO.TangentTau, 
                   ssao_params::DefaultTangentTau, 0.0f, 1.0f, 1e-3f);
     }
 
@@ -387,7 +300,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
                 }
             }
 
-            u32 PlaybackID = CurrentID++;
+            u32 PlaybackID = ++Context.LastElementID;
             
             v2 ScreenExtent = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
             f32 OutlineSize = 1.0f;
@@ -416,19 +329,19 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             
             if (PointRectOverlap(IO->Mouse.P, { { MinX, MinY}, { MaxX, MaxY } }))
             {
-                HotID = PlaybackID;
-                if (WasPressed(IO->Keys[SC_MouseLeft]))
+                Context.HotID = PlaybackID;
+                if (WasPressed(Context.MouseLeft))
                 {
-                    Editor->ActiveMenuID = PlaybackID;
+                    Context.ActiveID = PlaybackID;
                 }
             }
             
-            if (Editor->ActiveMenuID == PlaybackID)
+            if (Context.ActiveID == PlaybackID)
             {
                 Entity->AnimationCounter = Clamp(MaxTimestamp * (IO->Mouse.P.x - MinX) / ExtentX, 0.0f, MaxTimestamp);
-                if (IO->Keys[SC_MouseLeft].bIsDown == false)
+                if (Context.MouseLeft.bIsDown == false)
                 {
-                    Editor->ActiveMenuID = 0;
+                    Context.ActiveID = 0;
                 }
             }
         }
@@ -555,12 +468,13 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         }
     }
 
+    Editor->ActiveMenuID = Context.ActiveID;
+
     if (Editor->ActiveMenuID)
     {
         IO->Mouse.dP = { 0.0f, 0.0f };
     }
 }
-
 
 internal void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 Color)
 {
@@ -673,4 +587,169 @@ internal line AntiProjectTo(line Line, v3 P)
     Result.Direction = Line.Direction;
     Result.Moment = Cross(P, Line.Direction);
     return(Result);
+}
+
+//
+// Gui
+//
+
+internal gui_context BeginGUI(render_frame* Frame, font* Font, game_io* IO)
+{
+    gui_context Context = 
+    {
+        .Frame = Frame,
+        .Font = Font,
+
+        .DefaultForegroundColor = PackRGBA8(0xFF, 0xFF, 0xFF, 0xFF),
+        .DefaultBackgroundColor = PackRGBA8(0x00, 0x00, 0xFF, 0xAA),
+        .SelectedBackgroundColor = PackRGBA8(0xAA, 0x00, 0xFF, 0xAA),
+        .HotBackgroundColor = PackRGBA8(0xFF, 0x00 ,0xFF, 0xAA),
+        .ActiveBackgroundColor = PackRGBA8(0xFF, 0x00, 0xFF, 0xFF),
+
+        .MouseP = IO->Mouse.P,
+        .MousedP = IO->Mouse.dP,
+        .MouseLeft = IO->Keys[SC_MouseLeft],
+        .MouseRight = IO->Keys[SC_MouseRight],
+
+        .CurrentP = { 0.0f, 0.0f },
+        .CurrentLayout = font_layout_type::Baseline,
+        .CurrentFlow = Flow_Vertical,
+        .IsRightAligned = false,
+        .Margin = 0.0f,
+
+        .LastElementID = 0,
+    };
+    return(Context);
+}
+
+internal v2 AdvanceCursor(gui_context* Context, f32 Size, mmrect2 Rect)
+{
+    v2 P = Context->CurrentP;
+    switch (Context->CurrentFlow)
+    {
+        case Flow_Vertical:
+        {
+            P.y += Size * Context->Font->BaselineDistance;
+        } break;
+        case Flow_Horizontal:
+        {
+            P.x = Context->IsRightAligned ? Rect.Min.x : Rect.Max.x;
+        } break;
+        InvalidDefaultCase;
+    }
+    return(P);
+}
+
+internal u32 TextGUI(gui_context* Context, f32 Size, const char* Format, ...)
+{
+    u32 ID = ++Context->LastElementID;
+
+    va_list ArgList;
+    va_start(ArgList, Format);
+    vsnprintf(Context->TextBuffer, Context->TextBufferSize, Format, ArgList);
+    
+    mmrect2 Rect = GetTextRect(Context->Font, Context->TextBuffer, Context->CurrentLayout);
+    Rect.Min *= Size;
+    Rect.Max *= Size;
+    Rect.Min += Context->CurrentP;
+    Rect.Max += Context->CurrentP;
+    f32 Width = Rect.Max.x - Rect.Min.x;
+    v2 P = Context->CurrentP;
+    if (Context->IsRightAligned)
+    {
+        P.x -= Width;
+    }
+    PushTextWithShadow(Context->Frame, Context->TextBuffer, Context->Font, Size, P, 
+                       Context->DefaultForegroundColor, Context->CurrentLayout);
+    Context->CurrentP = AdvanceCursor(Context, Size, Rect);
+    return(ID);
+}
+
+internal u32 ButtonGUI(gui_context* Context, f32 Size, const char* Format, ...)
+{
+    u32 ID = ++Context->LastElementID;
+
+    va_list ArgList;
+    va_start(ArgList, Format);
+    vsnprintf(Context->TextBuffer, Context->TextBufferSize, Format, ArgList);
+
+    mmrect2 Rect = GetTextRect(Context->Font, Context->TextBuffer, Context->CurrentLayout);
+    Rect.Min *= Size;
+    Rect.Max *= Size;
+    Rect.Min += Context->CurrentP;
+    Rect.Max += Context->CurrentP + v2{ 2.0f * Context->Margin, 0.0f };
+    bool IsHot = PointRectOverlap(Context->MouseP, Rect);
+
+    rgba8 Color = Context->DefaultBackgroundColor;
+    if (IsHot)
+    {
+        Context->HotID = ID;
+        Color = Context->HotBackgroundColor;
+        if (WasPressed(Context->MouseLeft))
+        {
+            Context->ActiveID = ID;
+        }
+    }
+
+    if (Context->ActiveID == ID)
+    {
+        Color = Context->ActiveBackgroundColor;
+    }
+    //else if (Context->SelectedID == ID)
+    //{
+    //Color = Context->SelectedBackgroundColor;
+    //}
+
+    PushRect(Context->Frame, Rect.Min, Rect.Max, { 0.0f, 0.0f }, { 0.0f, 0.0f }, Color);
+    PushTextWithShadow(Context->Frame, Context->TextBuffer, Context->Font, 
+                       Size, { Context->CurrentP.x + Context->Margin, Context->CurrentP.y },
+                       Context->DefaultForegroundColor,
+                       Context->CurrentLayout);
+    Context->CurrentP = AdvanceCursor(Context, Size, Rect);
+    return(ID);
+}
+
+internal u32 F32Slider(gui_context* Context, f32 Size, const char* Name, f32* Value, f32 DefaultValue, f32 MinValue, f32 MaxValue, f32 Step)
+{
+    // HACK(boti): We store the initial position here, so that we can reset the X coordinate when moving to a new line...
+    v2 StartP = Context->CurrentP;
+    u32 ResetButtonID = ButtonGUI(Context, Size, " ");
+    if (ResetButtonID == Context->HotID && WasPressed(Context->MouseLeft))
+    {
+        *Value = DefaultValue;
+    }
+
+    snprintf(Context->TextBuffer, Context->TextBufferSize, "%s = %f", Name, *Value);
+    mmrect2 TextRect = GetTextRect(Context->Font, Context->TextBuffer, Context->CurrentLayout);
+    TextRect.Min *= Size;
+    TextRect.Max *= Size;
+    TextRect.Min += Context->CurrentP;
+    TextRect.Max += Context->CurrentP;
+
+    u32 RectID = ++Context->LastElementID;
+    b32 IsHot = PointRectOverlap(Context->MouseP, TextRect);
+    if (IsHot)
+    {
+        if (WasPressed(Context->MouseLeft))
+        {
+            Context->ActiveID = RectID;
+        }
+    }
+    if (Context->ActiveID == RectID)
+    {
+        *Value += Step * Context->MousedP.x;
+        *Value = Clamp(*Value, MinValue, MaxValue);
+    }
+
+    rgba8 TextColor = Context->DefaultForegroundColor;
+    if ((IsHot && (Context->ActiveID == 0)) ||
+        Context->ActiveID == RectID)
+    {
+        TextColor = PackRGBA8(0xFF, 0xFF, 0x00, 0xFF);
+    }
+
+    PushTextWithShadow(Context->Frame, Context->TextBuffer, Context->Font, Size, Context->CurrentP, TextColor, Context->CurrentLayout);
+    Context->CurrentP.x = StartP.x;
+    Context->CurrentP.y = TextRect.Max.y;
+    return(RectID);
 }
