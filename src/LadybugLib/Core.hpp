@@ -412,6 +412,8 @@ inline v4& operator-=(v4& a, v4 b);
 
 inline f32 Dot(v4 a, v4 b);
 inline v4 Normalize(v4 V);
+// NOTE(boti): This is _not_ an slerp
+inline v4 QLerp(v4 A, v4 B, f32 t);
 
 inline m4 M4(
     f32 m00, f32 m01, f32 m02, f32 m03,
@@ -961,6 +963,17 @@ inline v4 Normalize(v4 V)
     v4 Result;
     f32 InvLength = 1.0f / Sqrt(Dot(V, V));
     Result = V * InvLength;
+    return(Result);
+}
+
+inline v4 QLerp(v4 A, v4 B, f32 t)
+{
+    if (Dot(A, B) < 0.0f)
+    {
+        B = -B;
+    }
+
+    v4 Result = Normalize(Lerp(A, B, t));
     return(Result);
 }
 
