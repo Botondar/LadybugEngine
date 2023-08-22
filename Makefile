@@ -3,13 +3,13 @@ SRC = src
 
 .SUFFIXES : .glsl .comp
 
-COMMON = -nologo -std:c++20 -Zi -EHsc -MD -arch:AVX2
+COMMON = -nologo -std:c++20 -Zi -EHsc -MT -arch:AVX2
 FLOAT_ENV = -fp:except- -fp:strict
-OPTIMIZATION = -Od -Oi
+OPTIMIZATION = -O2 -Oi
 INCLUDES = -I$(SRC) -I$(VULKAN_SDK)/Include/
 DEFINES = -DDEVELOPER=1 -DWIN32_LEAN_AND_MEAN -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX
 WARNINGS_MSVC = -WX -W4 -wd4100 -wd4189 -wd4200 -wd4201 -wd4505
-WARNINGS_CLANG = -Wshadow -Wno-unused-function -Wno-unused-variable -Wno-unused-lambda-capture -Wno-unused-value -Wno-missing-field-initializers -Wno-char-subscripts -Wno-missing-braces -Wno-c99-designator
+WARNINGS_CLANG = -Wshadow -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-lambda-capture -Wno-unused-value -Wno-missing-field-initializers -Wno-char-subscripts -Wno-missing-braces -Wno-c99-designator
 WARNINGS = $(WARNINGS_MSVC) $(WARNINGS_CLANG)
 
 CXX_FLAGS = $(COMMON) $(FLOAT_ENV) $(INCLUDES) $(DEFINES) $(WARNINGS)
@@ -17,7 +17,7 @@ CXX_FLAGS = $(COMMON) $(FLOAT_ENV) $(INCLUDES) $(DEFINES) $(WARNINGS)
 LINK_FLAGS = -INCREMENTAL:NO -LIBPATH:"$(VULKAN_SDK)/Lib/" -LIBPATH:lib/
 SHADER_FLAGS = -g -O --target-env=vulkan1.3 -fhlsl-offsets
 
-LIBS = kernel32.lib user32.lib gdi32.lib Shell32.lib advapi32.lib vulkan-1.lib nvtt30106.lib
+LIBS = kernel32.lib user32.lib gdi32.lib Shell32.lib advapi32.lib vulkan-1.lib
 
 SRC_BASE = "$(SRC)/*.cpp" "$(SRC)/*.hpp"
 SRC_RENDERER = "$(SRC)/Renderer/*.cpp" "$(SRC)/Renderer/*.hpp"
