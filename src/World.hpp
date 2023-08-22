@@ -113,8 +113,12 @@ struct game_world
     u32 ParticleSystemCount;
     particle_system ParticleSystems[MaxParticleSystemCount];
 
+    // NOTE(boti): Ad-hoc lights are just for testing the light binning
+    f32 AdHocLightUpdateRate;
+    f32 AdHocLightCounter;
     mmbox AdHocLightBounds;
-    static constexpr u32 AdHocLightCount = 192u;
+    static constexpr u32 AdHocLightCount = 256u;
+    v3 AdHocLightdPs[AdHocLightCount];
     light AdHocLights[AdHocLightCount];
 };
 

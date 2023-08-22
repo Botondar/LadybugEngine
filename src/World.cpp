@@ -118,7 +118,10 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         };
 
         {
-            World->AdHocLightBounds = { { -7.5f, -4.0f, 4.0f }, { +7.5f, -2.75f, 6.0f } };
+            World->AdHocLightUpdateRate = 1.0f / 15.0f;
+            World->AdHocLightCounter = World->AdHocLightUpdateRate;
+            
+            World->AdHocLightBounds = { { -8.0f, -4.5f, 3.5f }, { +7.5f, -2.0f, 6.5f } };
             mmbox Bounds = World->AdHocLightBounds;
             entropy32* R = &World->EffectEntropy;
             for (u32 LightIndex = 0; LightIndex < World->AdHocLightCount; LightIndex++)
@@ -565,15 +568,27 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
         Frame->ParticleCount += World->AdHocLightCount;
     }
+
+    b32 DoVelocityUpdate = false;
+    World->AdHocLightCounter += dt;
+    while (World->AdHocLightCounter >= World->AdHocLightUpdateRate)
+    {
+        DoVelocityUpdate = true;
+        World->AdHocLightCounter -= World->AdHocLightUpdateRate;
+    }
+
     for (u32 LightIndex = 0; LightIndex < World->AdHocLightCount; LightIndex++)
     {
         light* Light = World->AdHocLights + LightIndex;
-#if 1
-        v3 dP = { RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy) };
-        dP = RandBetween(&World->EffectEntropy, 1.5f, 4.5f) * dP;
-#else
-        v3 dP = { 0.0f, 0.0f, 0.0f };
-#endif
+
+        v3 dP = World->AdHocLightdPs[LightIndex];
+        if (DoVelocityUpdate)
+        {
+            dP = { RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy) };
+            dP = RandBetween(&World->EffectEntropy, 1.5f, 4.5f) * dP;
+            World->AdHocLightdPs[LightIndex] = dP;
+        }
+
         Light->P.xyz += dP * dt;
         Light->P.x = Clamp(Light->P.x, World->AdHocLightBounds.Min.x, World->AdHocLightBounds.Max.x);
         Light->P.y = Clamp(Light->P.y, World->AdHocLightBounds.Min.y, World->AdHocLightBounds.Max.y);
@@ -585,7 +600,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             Frame->Particles[Cmd->FirstParticle + LightIndex] = 
             {
                 .P = Light->P.xyz,
-                .TextureIndex = Particle_Star07,
+                .TextureIndex = Particle_Star06,
                 .Color = { Light->E.x, Light->E.y, Light->E.z, 5.0f },
                 .HalfExtent = { 0.1f, 0.1f },
             };
