@@ -2,46 +2,6 @@ internal mesh CreateCubeMesh(memory_arena* Arena);
 internal mesh CreateSphereMesh(memory_arena* Arena);
 internal mesh CreateArrowMesh(memory_arena* Arena);
 
-// NOTE(boti): This is pretty much the only place where we include something locally, because in the future Nvtt should be removed
-// from the runtime
-#include <nvtt/nvtt.h>
-
-struct NvttOutputHandler : public nvtt::OutputHandler
-{
-    u64 MemorySize;
-    u64 MemoryAt;
-    u8* Memory;
-
-    NvttOutputHandler(u64 MemorySize, void* Memory) :
-        MemorySize(MemorySize),
-    MemoryAt(0),
-    Memory((u8*)Memory)
-    { 
-    }
-
-    void beginImage(int Size, int Width, int Height, int Depth, int Face, int Mip) override
-    {
-    }
-
-    bool writeData(const void* Data, int iSize) override
-    {
-        bool Result = false;
-
-        u64 Size = (u64)iSize;
-        if (MemorySize - MemoryAt >= Size)
-        {
-            memcpy(Memory + MemoryAt, Data, Size);
-            MemoryAt += Size;
-            Result = true;
-        }
-        return Result;
-    }
-
-    void endImage() override
-    {
-    }
-};
-
 lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scratch)
 {
     b32 Result = true;
@@ -337,7 +297,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
             strncpy(Filename, Image->URI.String, Image->URI.Length);
             Filename[Image->URI.Length] = 0;
-#if 1
+
             format Format = Format_Undefined;
             int Alpha = 0;
             switch (Type)
@@ -461,85 +421,6 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             {
                 UnhandledError("Failed to load glTF image");
             }
-#else
-            nvtt::Surface Surface;
-            bool HasAlpha = false;
-            if (Surface.load(PathBuff, &HasAlpha, false, nullptr))
-            {
-#if 1
-                constexpr int ResolutionLimit = 2048;
-                while (Surface.width() > ResolutionLimit || Surface.height() > ResolutionLimit)
-                {
-                    Surface.buildNextMipmap(nvtt::MipmapFilter_Box);
-                }
-#endif
-
-                int Width = Surface.width();
-                int Height = Surface.height();
-                int MipCount = Surface.countMipmaps(1);
-
-                nvtt::Context Ctx(true);
-                nvtt::CompressionOptions CompressionOptions;
-                nvtt::OutputOptions OutputOptions;
-
-                nvtt::Format CompressFormat = nvtt::Format_RGB;
-                format Format = Format_Undefined;
-                switch (Type)
-                {
-                    case texture_type::Diffuse:
-                    {
-                        if (AlphaMode == GLTF_ALPHA_MODE_OPAQUE)
-                        {
-                            Format = Format_BC1_RGB_SRGB;
-                            CompressFormat = nvtt::Format_BC1;
-                        }
-                        else
-                        {
-                            Format =  Format_BC3_SRGB; 
-                            CompressFormat = nvtt::Format_BC3;
-                        }
-                    } break;
-                    case texture_type::Normal:
-                    {
-                        Format = Format_BC5_UNorm; 
-                        CompressFormat = nvtt::Format_BC5;
-                    } break;
-                    case texture_type::Material:
-                    {
-                        Format = Format_BC3_UNorm; 
-                        CompressFormat = nvtt::Format_BC3;
-                    } break;
-                }
-
-                CompressionOptions.setFormat(CompressFormat);
-                CompressionOptions.setQuality(nvtt::Quality_Fastest);
-
-                u64 Size = (u64)Ctx.estimateSize(Surface, MipCount, CompressionOptions);
-                void* Texels = PushSize(Scratch, Size, 64);
-                NvttOutputHandler OutputHandler(Size, Texels);
-                OutputOptions.setOutputHandler(&OutputHandler);
-
-                for (int Mip = 0; Mip < MipCount; Mip++)
-                {
-                    bool CompressionResult = Ctx.compress(Surface, 0, Mip, CompressionOptions, OutputOptions);
-                    if (!CompressionResult)
-                    {
-                        UnhandledError("Failed to compress mip level");
-                    }
-
-                    if (Mip < MipCount - 1)
-                    {
-                        Surface.buildNextMipmap(nvtt::MipmapFilter_Box);
-                    }
-                }
-
-                Result = PushTexture(Renderer, TextureFlag_None, (u32)Width, (u32)Height, (u32)MipCount, 1, Format, {}, Texels);
-            }
-            else
-            {
-                UnhandledError("Couldn't load image");
-            }
-#endif
         }
         else
         {
