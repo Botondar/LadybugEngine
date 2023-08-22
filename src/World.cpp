@@ -207,13 +207,6 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 }
             }
         }
-#else
-        // Bathroom scene
-        {
-            m4 Transform = YUpToZUp;
-            DEBUGLoadTestScene(Scratch, Assets, World, Frame->Renderer,
-                               "data/Scenes/Bathroom/Bathroom.gltf", Transform);
-        }
 #endif
 
         // Animated fox
@@ -350,7 +343,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                         trs_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
                         trs_transform Transform = 
                         {
-                            .Rotation = Normalize(Lerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor)),
+                            .Rotation = QLerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor),
                             .Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor),
                             .Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor),
                         };
