@@ -301,6 +301,10 @@ inline f32 Sin(f32 x) { return sinf(x); }
 inline f32 Cos(f32 x) { return cosf(x); }
 inline f32 Tan(f32 x) { return tanf(x); }
 
+inline f32 ASin(f32 x) { return asinf(x); }
+inline f32 ACos(f32 x) { return acosf(x); }
+inline f32 ATan2(f32 y, f32 x) { return atan2f(y, x); }
+
 inline f32 Ln(f32 x) { return logf(x); }
 inline f32 Pow(f32 a, f32 b) { return powf(a, b); }
 
