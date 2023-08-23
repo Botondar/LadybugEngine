@@ -3001,6 +3001,7 @@ void EndRenderFrame(render_frame* Frame)
                 Entry->Name = Name;
                 Entry->UsedSize = UsedSize;
                 Entry->AllocationSize = TotalSize;
+                Result = true;
             }
             return(Result);
         };
