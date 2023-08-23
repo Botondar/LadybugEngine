@@ -1,7 +1,10 @@
 build/
-data/
 tmp/
 *.10x
 *.rdbg
 *.obj
 *.pdb
+
+data/Scenes/*
+!data/Scenes/Fox/
+!data/Scenes/Sponza
