@@ -35,16 +35,19 @@ SHADERS = build/blit.vs build/blit.fs build/shader.vs build/shader.fs build/prep
     build/skin.cs \
     build/light_bin.cs
 
-all: "$(OUT)/Win_LadybugEngine.exe" "$(OUT)/game.dll" "$(OUT)/renderer.obj" $(SHADERS)
+all: "$(OUT)/" "$(OUT)/Win_LadybugEngine.exe" "$(OUT)/game.dll" "$(OUT)/renderer.obj" $(SHADERS)
 
 clean: 
-    @del /q build\*.*
+    @del /q $(OUT)\*.*
 
-"$(OUT)/renderer.obj": $(SRC_LBLIB) $(SRC_RENDERER)
+"$(OUT)/":
+	@if not exist $@ mkdir $@
+
+"$(OUT)/renderer.obj": "$(OUT)/" $(SRC_LBLIB) $(SRC_RENDERER)
     @clang-cl $(CXX_FLAGS) -c "src/Renderer/Renderer.cpp" -Fo$@ -Fd"$(OUT)/"
-"$(OUT)/Win_LadybugEngine.exe": $(SRC_ALL)
+"$(OUT)/Win_LadybugEngine.exe": "$(OUT)/" $(SRC_ALL)
     @clang-cl $(CXX_FLAGS) "src/Win_LadybugEngine.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) -link $(LINK_FLAGS)
-"$(OUT)/game.dll": $(SRC_ALL) "$(OUT)/renderer.obj"
+"$(OUT)/game.dll":"$(OUT)/" $(SRC_ALL) "$(OUT)/renderer.obj"
     @clang-cl $(CXX_FLAGS) "src/LadybugEngine.cpp" -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) "$(OUT)/renderer.obj" -link -DLL -OUT:$@ $(LINK_FLAGS) $(GAME_EXPORT)
 
 {$(SRC)/Shader/}.glsl{$(OUT)/}.vs:
