@@ -1,1 +1,2 @@
-@cloc --exclude-dir=stb ./*
+@REM NOTE(boti): Because cloc doesn't know glsl, we force all shaders to be counted as HLSL instead
+@cloc --exclude-dir=stb --force-lang="HLSL",glsl --force-lang="HLSL",glsli --force-lang="HLSL",comp ./*
