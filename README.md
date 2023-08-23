@@ -24,7 +24,7 @@ The program is divided into subsystems, each of which uses the STUB (single tran
 - Application/Game (.dll):
     - Contains the logic of the program in a platform-independent manner.
 - Renderer (.dll/.obj):
-    - Contains the code specific to the Graphics API.
+    - Contains graphics API specific code.
 
 A few select header files are used as interfaces between the subsystems:
 - `src/Platform.hpp` contains the interface between the platform layer and the application code. Also available to the renderer.
