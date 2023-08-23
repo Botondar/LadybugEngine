@@ -239,6 +239,18 @@ void main()
         L = L * sqrt(InvDistSq);
         E = E * InvDistSq;
 
+        // NOTE(boti): When there are a lot of light sources close together,
+        // their cumulative effect can be seen on quite far away texels from the source,
+        // which produces "blocky" artefacts when only certain portions of a screen tile
+        // passes the binning check.
+        // To counteract this, we set the luminance of those lights to 0,
+        // but a better way in the future would probably be to have an attenuation
+        // that actually falls to 0.
+        if (max(E.x, max(E.y, E.z)) < R_LuminanceThreshold)
+        {
+            E = vec3(0.0);
+        }
+
         float NdotL = max(dot(L, N), 0.0);
         vec3 Diffuse = DiffuseBase * NdotL;
 
