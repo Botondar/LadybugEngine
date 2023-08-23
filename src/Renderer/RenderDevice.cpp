@@ -2,10 +2,15 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
 {
     VkResult Result = VK_SUCCESS;
 
-    const char* RequiredInstanceLayers[] = 
+    constexpr b32 UseValidation = true;
+    const char* RequiredInstanceLayers_[] = 
     {
         "VK_LAYER_KHRONOS_validation",
     };
+    u32 RequiredInstanceLayerCount_ = CountOf(RequiredInstanceLayers_);
+
+    u32 RequiredInstanceLayerCount = UseValidation ? RequiredInstanceLayerCount_ : 0;
+    const char** RequiredInstanceLayers = UseValidation ? RequiredInstanceLayers_ : nullptr;
 
     const char* RequiredInstanceExtensions[] = 
     {
@@ -31,7 +36,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
         .pNext = nullptr,
         .flags = 0,
         .pApplicationInfo = &AppInfo,
-        .enabledLayerCount = CountOf(RequiredInstanceLayers),
+        .enabledLayerCount = RequiredInstanceLayerCount,
         .ppEnabledLayerNames = RequiredInstanceLayers,
         .enabledExtensionCount= CountOf(RequiredInstanceExtensions),
         .ppEnabledExtensionNames = RequiredInstanceExtensions,
