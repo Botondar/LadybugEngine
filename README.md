@@ -14,6 +14,24 @@ Vulkan-based renderer for x64 Windows.
 ## Running
 Run `build\Win_LadybugEngine.exe` from the _root directory of the repository_ (i.e. _not_ the build directory).
 
+## Project structure
+The program is divided into subsystems, each of which uses the STUB (single translation unit build) compilation model. These are as follows:
+- Windows platform layer (.exe): 
+    - Contains the entry-point of the program
+    - Handles window creation
+    - Listens to input and passes it to the application
+    - Provides platform specific functionality (memory, file IO, etc.)
+- Application/Game (.dll):
+    - Contains the logic of the program in a platform-independent manner.
+- Renderer (.dll/.obj):
+    - Contains the code specific to the Graphics API.
+
+A few select header files are used as interfaces between the subsystems:
+- `src/Platform.hpp` contains the interface between the platform layer and the application code. Also available to the renderer.
+- `src/Renderer/Renderer.hpp` contains the interface between the application and renderer code.
+
+The folder `src/LadybugLib/` contains utilities available to all subsystems.
+
 ## Renderer features
 - Forward+ pipeline with 2.5D tiled light binning
 - High-dynamic range rendering
@@ -27,7 +45,7 @@ Run `build\Win_LadybugEngine.exe` from the _root directory of the repository_ (i
 - Tonemapping
 - Immediate-mode 2D rendering
 
-## Architecture
+## Renderer architecture
 While the renderer is based on Vulkan, it does not leak Vulkan-specific information into the rest of the application code. Instead it's divided into a frontend (which is the interface between the app and the renderer) and a backend (which performs the rendering and makes the actual Vulkan calls)
 
 ### Frontend
