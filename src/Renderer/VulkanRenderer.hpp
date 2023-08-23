@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Renderer/Renderer.hpp"
+#include "Renderer/Pipelines.hpp"
+
 #include <vulkan/vulkan.h>
 
 //

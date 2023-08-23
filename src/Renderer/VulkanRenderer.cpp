@@ -170,6 +170,13 @@ internal VkShaderStageFlags PipelineStagesToVulkan(flags32 Stages)
     return(Result);
 }
 
+#include "RenderDevice.cpp"
+#include "Frame.cpp"
+#include "Geometry.cpp"
+#include "RenderTarget.cpp"
+#include "TextureManager.cpp"
+#include "Pipelines.cpp"
+
 internal VkMemoryRequirements 
 GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInfo)
 {

@@ -44,7 +44,7 @@ clean:
 	@if not exist $@ mkdir $@
 
 "$(OUT)/renderer.obj": "$(OUT)/" $(SRC_LBLIB) $(SRC_RENDERER)
-    @clang-cl $(CXX_FLAGS) -c "src/Renderer/Renderer.cpp" -Fo$@ -Fd"$(OUT)/"
+    @clang-cl $(CXX_FLAGS) -c "src/Renderer/VulkanRenderer.cpp" -Fo$@ -Fd"$(OUT)/"
 "$(OUT)/Win_LadybugEngine.exe": "$(OUT)/" $(SRC_ALL)
     @clang-cl $(CXX_FLAGS) "src/Win_LadybugEngine.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) -link $(LINK_FLAGS)
 "$(OUT)/game.dll":"$(OUT)/" $(SRC_ALL) "$(OUT)/renderer.obj"
