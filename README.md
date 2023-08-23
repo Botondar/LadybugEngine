@@ -7,6 +7,7 @@ Vulkan-based renderer for x64 Windows.
     - Windows SDK
     - C++ Clang tools for Windows x64/x86
 - [Vulkan SDK](https://www.lunarg.com/vulkan-sdk/) with `VULKAN_SDK` environment variable set and the SDK's `Bin` directory in `PATH`
+- Vulkan 1.3 capable _discrete_ graphics card (required features can be found at the bottom of this readme)
 ## Building
 - Open the x64 Developer Command Prompt for Visual Studio.
 - Navigate to the repository's directory.
@@ -78,3 +79,80 @@ With that in mind, the GPU timeline looks as follows:
 - Anonymous `struct`/`union` member
 - Flexible member array
 - C99 designated initializers
+
+## Required Vulkan features
+- BAR memory (64 MiB)
+#### Vulkan 1.0
+- robustBufferAccess
+- fullDrawIndexUint32
+- multiDrawIndirect
+- drawIndirectFirstInstance
+- depthClamp
+- depthBiasClamp
+- depthBounds
+- alphaToOne
+- samplerAnisotropy
+- textureCompressionBC
+- pipelineStatisticsQuery
+- fragmentStoresAndAtomics
+- shaderImageGatherExtended
+- shaderStorageImageExtendedFormat
+- shaderStorageImageMultisample
+- shaderStorageImageReadWithoutFormat
+- shaderStorageImageWriteWithoutFormat
+- shaderUniformBufferArrayDynamicIndexing
+- shaderSampledImageArrayDynamicIndexing
+- shaderStorageBufferArrayDynamicIndexing
+- shaderResourceResidency
+- shaderResourceMinLod
+- sparseBinding
+- sparseResidencyBuffer
+- sparseResidencyImage2D
+- sparseResidencyImage3D
+- sparseResidencyAliased
+#### Vulkan 1.1
+- storagebuffer16BitAccess
+- uniformAndStorageBuffer16BitAccess
+- shaderDrawParameters
+#### Vulkan 1.2
+- drawIndirectCount
+- storageBuffer8BitAccess
+- uniformAndStorageBuffer8BitAccess
+- descriptorIndexing
+- shaderUniformTexelBufferArrayDynamicIndexing
+- shaderStorageTexelBufferArrayDynamicIndexing
+- shaderUniformBufferArrayNonUniformIndexing
+- shaderSampledImageArrayNonUniformIndexing
+- shaderStorageBufferArrayNonUniformIndexing
+- shaderStorageImageArrayNonUniformIndexing
+- shaderUniformTexelBufferArrayNonUniformIndexing
+- shaderStorageTexelBufferArrayNonUniformIndexing
+- descriptorBindingSampledImageUpdateAfterBind
+- descriptorBindingStorageBufferUpdateAfterBind
+- descriptorBindingUniformTexelBufferUpdateAfterBind
+- descriptorBindingStorageTexelBufferUpdateAfterBind
+- descriptorBindingUpdateUnusedWhilePending
+- descriptorBindingPartiallyBound
+- descriptorBindingVariableDescriptorCount
+- runtimeDescriptorArray
+- scalarBlockLayout
+- imagelessFramebuffer
+- uniformBufferStandardLayout
+- separateDepthStencilLayouts
+- hostQueryReset
+- timelineSemaphore
+- bufferDeviceAddress
+- bufferDeviceAddressCaptureReplay
+- vulkanMemoryModel
+- shaderOutputViewportIndex
+- shaderOutputLayer
+- subgroupBroadcastDynamicId
+
+#### Vulkan 1.3
+- robustImageAccess
+- inlineUniformBlock
+- descriptorBindingInlineUniformBlockUpdateAfterBind
+- synchronization2
+- shaderZeroInitializeWorkgroupMemory
+- dynamicRendering
+- maintenance4
