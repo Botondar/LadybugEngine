@@ -231,6 +231,13 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
             Assert(Vulkan->GraphicsQueueIdx != VK_QUEUE_FAMILY_IGNORED);
             Assert(Vulkan->TransferQueueIdx != VK_QUEUE_FAMILY_IGNORED);
 
+            // NOTE(boti): There's no way for me to test whether we're using async compute correctly or not,
+            // so for now it's always disabled (even if the card supports that functionality).
+#if 1
+            Vulkan->ComputeQueueIdx = Vulkan->GraphicsQueueIdx;
+            u32 ComputeQueueIdx = 1;
+            u32 GraphicsQueueCount = 2;
+#else
             u32 ComputeQueueIdx = 0;
             u32 GraphicsQueueCount = 1;
             if (Vulkan->ComputeQueueIdx == VK_QUEUE_FAMILY_IGNORED)
@@ -239,6 +246,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                 ComputeQueueIdx = 1;
                 GraphicsQueueCount = 2;
             }
+#endif
 
             f32 QueuePriorityMax = 1.0f;
             VkDeviceQueueCreateInfo QueueInfos[] = 
