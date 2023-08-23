@@ -8,7 +8,7 @@ Vulkan-based renderer for x64 Windows.
     - C++ Clang tools for Windows x64/x86
 - [Vulkan SDK](https://www.lunarg.com/vulkan-sdk/) with `VULKAN_SDK` environment variable set and the SDK's `Bin` directory in `PATH`
 ## Building
-- Open the x64 Developer Command Prompt of Visual Studio.
+- Open the x64 Developer Command Prompt for Visual Studio.
 - Navigate to the repository's directory.
 - Run `nmake`
 ## Running
