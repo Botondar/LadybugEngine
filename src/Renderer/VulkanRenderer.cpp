@@ -3117,7 +3117,7 @@ internal void SetupSceneRendering(render_frame* Frame)
         m4 CameraToSun = SunView * Frame->Uniforms.CameraTransform;
     
         f32 SplitFactor = 0.15f;
-        f32 Splits[] = { 1.5f, 4.0f, 8.0f, 30.0f };
+        f32 Splits[] = { 2.0f, 5.0f, 12.0f, 30.0f };
         f32 NdTable[] = 
         { 
             0.0f,
