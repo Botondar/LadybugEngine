@@ -38,7 +38,7 @@ The commands in each bucket are executed in the order they were submitted, but t
 Helper functions are provided by the front-end that aid in filling and bounds-checking the buckets.
 
 ### Backend
-While some of the buckets in the frontend live purely on the CPU-side, some are mapped directly to BAR memory, and as such don't need to be explicitly transferred on the GPU's timeline.
+While some of the buckets in the frontend live purely on the CPU-side, some are mapped directly to BAR or shared memory, and as such don't need to be explicitly transferred on the GPU's timeline.
 With that in mind, the GPU timeline looks as follows:
 1. Upload light source data to the GPU (performing coarse frustum light culling on the CPU)
 2. Perform mesh skinning and write the results into a dedicated vertex buffer.
