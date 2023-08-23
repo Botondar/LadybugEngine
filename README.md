@@ -73,3 +73,8 @@ With that in mind, the GPU timeline looks as follows:
 13. Draw 3D UI elements on the swapchain
 14. Draw 2D UI elements on the swapchain
 15. Present
+
+## Non-standard C++ extensions used
+- Anonymous `struct`/`union` member
+- Flexible member array
+- C99 designated initializers
