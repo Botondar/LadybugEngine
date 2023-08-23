@@ -98,7 +98,7 @@ void main()
 #else
     vec3 Color = TraceAtmosphere(V);
 #endif
-    Color += 0.05 * PerFrame.SunL * CalculateAtmosphere(PerFrame.FarZ * V, PerFrame, ShadowSampler);
+    Color += 0.02 * PerFrame.SunL * CalculateAtmosphere(PerFrame.FarZ * V, PerFrame, ShadowSampler);
 
     Out0 = vec4(Color, 1.0);
 }

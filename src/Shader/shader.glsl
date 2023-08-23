@@ -278,7 +278,7 @@ void main()
         vec3 fMie = vec3(exp(-1.1111 * BetaM0 * (PhaseMieOut * Distance)));
         Lo = Lo * fMie + La * (vec3(1.0) - fMie);
 #else
-        Lo += 0.05 * PerFrame.SunL * CalculateAtmosphere(P, PerFrame, ShadowSampler);
+        Lo += 0.02 * PerFrame.SunL * CalculateAtmosphere(P, PerFrame, ShadowSampler);
 #endif
     }
     
