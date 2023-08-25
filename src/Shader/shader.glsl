@@ -2,7 +2,7 @@
 
 #include "common.glsli"
 
-layout(set = 2, binding = 0, std140) uniform PerFrameBlock
+layout(set = 2, binding = 0, scalar) uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
@@ -126,7 +126,7 @@ float CalculateShadow(vec3 SP, in vec3 CascadeBlends)
     float Shadow1 = 0.0;
     float Shadow2 = 0.0;
 
-#if 1
+#if 0
     const float W[3][3] =
     {
         { 0.5, 1.0, 0.5 },
@@ -136,7 +136,7 @@ float CalculateShadow(vec3 SP, in vec3 CascadeBlends)
     int MinW = -(W.length() / 2);
     int MaxW = -MinW;
 
-    float SumWeight = 0.0;
+    float SumWeight = 7.0;
     for (int y = MinW; y <= MaxW; y++)
     {
         for (int x = MinW; x <= MaxW; x++)
@@ -145,7 +145,7 @@ float CalculateShadow(vec3 SP, in vec3 CascadeBlends)
             float Weight = W[y + MaxW][x + MaxW];
             Shadow1 += Weight * texture(ShadowSampler, P1 + vec4(SampleOffset, 0.0, 0.0));
             Shadow2 += Weight * texture(ShadowSampler, P2 + vec4(SampleOffset, 0.0, 0.0));
-            SumWeight += Weight;
+            //SumWeight += Weight;
         }
     }
 #else

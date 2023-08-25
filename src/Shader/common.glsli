@@ -43,8 +43,8 @@ struct per_frame
     mat4 ViewProjection;
 
     mat4 CascadeViewProjection;
-    vec4 CascadeMinDistances;
-    vec4 CascadeMaxDistances;
+    float CascadeMinDistances[4];
+    float CascadeMaxDistances[4];
     vec3 CascadeScales[3];
     vec3 CascadeOffsets[3];
 
@@ -148,7 +148,7 @@ float GeometryGGX(in float Roughness, in float NdotV, in float NdotL)
 // Shadow helpers
 //
 
-vec3 GetCascadeBlends(in vec4 MinDistances, in vec4 MaxDistances, in vec3 P)
+vec3 GetCascadeBlends(in float MinDistances[4], in float MaxDistances[4], in vec3 P)
 {
     vec3 Result = vec3(0.0);
     for (uint i = 1; i < 4; i++)

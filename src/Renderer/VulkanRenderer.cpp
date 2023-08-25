@@ -3238,10 +3238,8 @@ internal void SetupSceneRendering(render_frame* Frame)
                     Cascade0ToI.E[0][0],
                     Cascade0ToI.E[1][1],
                     Cascade0ToI.E[2][2],
-                    0.0f,
                 };
-                Frame->Uniforms.CascadeOffsets[CascadeIndex - 1] = Cascade0ToI.P;
-                Frame->Uniforms.CascadeOffsets[CascadeIndex - 1].w = 0.0f;
+                Frame->Uniforms.CascadeOffsets[CascadeIndex - 1] = Cascade0ToI.P.xyz;
             }
 
             Frame->Uniforms.CascadeMinDistances[CascadeIndex] = Nd;

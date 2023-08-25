@@ -698,8 +698,8 @@ struct frame_uniform_data
     m4 CascadeViewProjection;
     f32 CascadeMinDistances[4];
     f32 CascadeMaxDistances[4];
-    v4 CascadeScales[3];
-    v4 CascadeOffsets[3];
+    v3 CascadeScales[3];
+    v3 CascadeOffsets[3];
 
     f32 FocalLength;
     f32 AspectRatio;
@@ -707,19 +707,15 @@ struct frame_uniform_data
     f32 FarZ;
 
     v3 CameraP;
-    f32 Padding0;
 
     v3 SunV; // NOTE(boti): view space
-    f32 Padding1;
     v3 SunL;
-    f32 Padding2;
 
     v2 ScreenSize;
     u32 TileCountX;
     u32 TileCountY;
 
     u32 LightCount;
-    f32 Padding4;
 };
 
 struct renderer;

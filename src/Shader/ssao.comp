@@ -7,7 +7,7 @@ layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(set = 0, binding = 0) uniform sampler2D StructureBuffer;
 layout(set = 0, binding = 1) uniform writeonly restrict image2D SSAOImage;
 
-layout(set = 1, binding = 0) uniform PerFrameBlock
+layout(set = 1, binding = 0, scalar) uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
