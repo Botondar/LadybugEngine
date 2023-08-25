@@ -462,12 +462,8 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     } break;
                     case ParticleSystem_Magic:
                     {
-                        v3 ParticleP = 
-                        {
-                            RandBetween(&World->EffectEntropy, Bounds.Min.x, Bounds.Max.x), 
-                            RandBetween(&World->EffectEntropy, Bounds.Min.y, Bounds.Max.y), 
-                            Bounds.Min.z,
-                        };
+                        v2 XY = 0.5f * Hadamard((Bounds.Max.xy - Bounds.Min.xy), RandInUnitCircle(&World->EffectEntropy));
+                        v3 ParticleP = { XY.x, XY.y, Bounds.Min.z };
                         ParticleSystem->Particles[ParticleSystem->NextParticle] = 
                         {
                             .P = BaseP + ParticleP,

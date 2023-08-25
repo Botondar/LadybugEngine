@@ -246,19 +246,6 @@ constexpr f32 F32_MIN_SUBNORMAL = 1.40129846e-45f;
 constexpr f32 F32_EPSILON = 1.19209290e-7f;
 
 //
-// Random
-//
-struct entropy32
-{
-    u32 Value;
-};
-
-inline u32 RandU32(entropy32* Entropy);
-inline f32 RandUnilateral(entropy32* Entropy);
-inline f32 RandBilateral(entropy32* Entropy);
-inline f32 RandBetween(entropy32* Entropy, f32 Minimum, f32 Maximum);
-
-//
 // Math
 //
 
@@ -384,6 +371,7 @@ inline f32 Dot(v2 a, v2 b);
 inline f32 VectorLength(v2 v);
 inline v2 Normalize(v2 v);
 inline v2 NOZ(v2 v);
+inline v2 Hadamard(v2 a, v2 b);
 
 inline v3 operator-(v3 v);
 inline v3 operator*(v3 v, f32 s);
@@ -448,6 +436,20 @@ struct mmbox
 };
 
 inline m4 QuaternionToM4(v4 Q);
+
+//
+// Random
+//
+struct entropy32
+{
+    u32 Value;
+};
+
+inline u32 RandU32(entropy32* Entropy);
+inline f32 RandUnilateral(entropy32* Entropy);
+inline f32 RandBilateral(entropy32* Entropy);
+inline f32 RandBetween(entropy32* Entropy, f32 Minimum, f32 Maximum);
+inline v2 RandInUnitCircle(entropy32* Entropy);
 
 //
 // Implementations
@@ -660,6 +662,15 @@ inline f32 RandBetween(entropy32* Entropy, f32 Minimum, f32 Maximum)
     return(Result);
 }
 
+inline v2 RandInUnitCircle(entropy32* Entropy)
+{
+    f32 Angle = 2.0f * Pi * RandUnilateral(Entropy);
+    f32 R = Sqrt(RandUnilateral(Entropy));
+
+    v2 Result = R * v2{ Cos(Angle), Sin(Angle) };
+    return(Result);
+}
+
 //
 // Math
 //
@@ -811,6 +822,12 @@ inline v2 NOZ(v2 v)
         Result = v * InvLength;
     }
 
+    return(Result);
+}
+
+inline v2 Hadamard(v2 a, v2 b)
+{
+    v2 Result = { a.x*b.x, a.y*b.y };
     return(Result);
 }
 
