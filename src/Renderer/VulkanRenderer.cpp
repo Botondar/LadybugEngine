@@ -1852,39 +1852,56 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
         Frame->Backend->ShadowCascadeViews[i] = Renderer->ShadowCascadeViews[i];
     }
 
-    Frame->LightCount = 0;
+    // Reset buffers
+    {
+        Frame->MaxLightCount = R_MaxLightCount;
+        Frame->LightCount = 0;
+        Frame->Lights = PushArray<light>(Arena, Frame->MaxLightCount);
+    
+        Frame->MaxDrawCmdCount = 1u << 20;
+        Frame->DrawCmdCount = 0;
+        Frame->DrawCmds = PushArray<draw_cmd>(Arena, Frame->MaxDrawCmdCount);
+    
+        Frame->MaxSkinnedDrawCmdCount = 1u << 20;
+        Frame->SkinnedDrawCmdCount = 0;
+        Frame->SkinnedDrawCmds = PushArray<draw_cmd>(Arena, Frame->MaxSkinnedDrawCmdCount);
 
-    Frame->Backend->UniformBuffer = Renderer->PerFrameUniformBuffers[FrameID];
-    Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
+        Frame->MaxSkinningCmdCount = Frame->MaxSkinnedDrawCmdCount;
+        Frame->SkinningCmdCount = 0;
+        Frame->SkinningCmds = PushArray<skinning_cmd>(Arena, Frame->MaxSkinningCmdCount);
 
-    Frame->StagingBufferAt = 0;
-    Frame->Backend->StagingBuffer = Renderer->StagingBuffers[FrameID];
+        Frame->MaxParticleDrawCmdCount = 8192u;
+        Frame->ParticleDrawCmdCount = 0;
+        Frame->ParticleDrawCmds = PushArray<particle_cmd>(Arena, Frame->MaxParticleDrawCmdCount);
 
-    Frame->Backend->Vertex2DBuffer = Renderer->PerFrameVertex2DBuffers[FrameID];
+        Frame->MaxDrawWidget3DCmdCount = 1u << 16;
+        Frame->DrawWidget3DCmdCount = 0;
+        Frame->DrawWidget3DCmds = PushArray<draw_widget3d_cmd>(Arena, Frame->MaxDrawWidget3DCmdCount);
 
-    Frame->Vertex2DCount = 0;
-    Frame->Vertex2DArray = (vertex_2d*)Renderer->PerFrameVertex2DMappings[FrameID];
+        Frame->Backend->UniformBuffer = Renderer->PerFrameUniformBuffers[FrameID];
+        Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
 
-    Frame->DrawCmdCount = 0;
-    Frame->SkinnedDrawCmdCount = 0;
-    Frame->SkinningCmdCount = 0;
+        Frame->StagingBufferAt = 0;
+        Frame->Backend->StagingBuffer = Renderer->StagingBuffers[FrameID];
 
-    Frame->ParticleCount = 0;
-    Frame->Backend->ParticleBuffer = Renderer->PerFrameParticleBuffers[FrameID];
-    Frame->Particles = (render_particle*)Renderer->PerFrameParticleBufferMappings[FrameID];
+        Frame->Backend->Vertex2DBuffer = Renderer->PerFrameVertex2DBuffers[FrameID];
 
-    Frame->ParticleDrawCmdCount = 0;
+        Frame->Vertex2DCount = 0;
+        Frame->Vertex2DArray = (vertex_2d*)Renderer->PerFrameVertex2DMappings[FrameID];
 
-    Frame->JointCount = 0;
-    Frame->Backend->JointBuffer = Renderer->PerFrameJointBuffers[FrameID];
-    Frame->JointMapping = (m4*)Renderer->PerFrameJointBufferMappings[FrameID];
-    Frame->JointBufferAlignment = TruncateU64ToU32(VK.ConstantBufferAlignment) / sizeof(m4);
+        Frame->ParticleCount = 0;
+        Frame->Backend->ParticleBuffer = Renderer->PerFrameParticleBuffers[FrameID];
+        Frame->Particles = (render_particle*)Renderer->PerFrameParticleBufferMappings[FrameID];
 
-    Frame->MaxSkinnedVertexCount = TruncateU64ToU32(R_SkinningBufferSize / sizeof(vertex));
-    Frame->SkinnedMeshVertexCount = 0;
-    Frame->Backend->SkinnedMeshVB = Renderer->SkinningBuffer;
+        Frame->JointCount = 0;
+        Frame->Backend->JointBuffer = Renderer->PerFrameJointBuffers[FrameID];
+        Frame->JointMapping = (m4*)Renderer->PerFrameJointBufferMappings[FrameID];
+        Frame->JointBufferAlignment = TruncateU64ToU32(VK.ConstantBufferAlignment) / sizeof(m4);
 
-    Frame->DrawWidget3DCmdCount = 0;
+        Frame->MaxSkinnedVertexCount = TruncateU64ToU32(R_SkinningBufferSize / sizeof(vertex));
+        Frame->SkinnedMeshVertexCount = 0;
+        Frame->Backend->SkinnedMeshVB = Renderer->SkinningBuffer;
+    }
 
     Frame->RenderWidth = Renderer->SurfaceExtent.width;
     Frame->RenderHeight = Renderer->SurfaceExtent.height;

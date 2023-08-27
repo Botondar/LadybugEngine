@@ -767,38 +767,48 @@ struct render_frame
     umm StagingBufferAt;
     void* StagingBufferBase;
 
-    static constexpr u32 MaxDrawCmdCount            = (1u << 22);
-    static constexpr u32 MaxSkinnedDrawCmdCount     = (1u << 20);
-    static constexpr u32 MaxSkinningCmdCount        = MaxSkinnedDrawCmdCount;
+    // Limits
     static constexpr u32 MaxParticleCount           = (1u << 18);
-    static constexpr u32 MaxParticleDrawCmdCount    = 8192u;
-    static constexpr u32 MaxDrawWidget3DCmdCount    = (1u << 16);
     static constexpr u32 MaxJointCount              = (1u << 17);
-
-    u32 MaxSkinnedVertexCount;
+    u32 MaxLightCount;
+    u32 MaxDrawCmdCount;
+    u32 MaxSkinnedDrawCmdCount;
+    u32 MaxSkinningCmdCount;
+    u32 MaxParticleDrawCmdCount;
+    u32 MaxDrawWidget3DCmdCount;
     u32 MaxVertex2DCount;
-
-    u32 LightCount;
-    u32 DrawCmdCount;
-    u32 SkinnedDrawCmdCount;
-    u32 SkinningCmdCount;
-    u32 ParticleDrawCmdCount;
-    u32 ParticleCount;
-    u32 JointCount;
+    // TODO(boti): There's no need to have the skinned vertex count in the frontend, the backend
+    // can just keep track of everything when executing the skinning cmds
+    u32 MaxSkinnedVertexCount;
     u32 SkinnedMeshVertexCount;
-    u32 DrawWidget3DCmdCount;
-    u32 Vertex2DCount;
 
     u32 JointBufferAlignment;
 
-    light Lights[R_MaxLightCount];
-    draw_cmd DrawCmds[MaxDrawCmdCount];
-    draw_cmd SkinnedDrawCmds[MaxSkinnedDrawCmdCount];
-    skinning_cmd SkinningCmds[MaxSkinningCmdCount];
-    particle_cmd ParticleDrawCmds[MaxParticleDrawCmdCount];
-    draw_widget3d_cmd DrawWidget3DCmds[MaxDrawWidget3DCmdCount];
-    render_particle* Particles;
+    u32 LightCount;
+    light* Lights;
+
+    u32 DrawCmdCount;
+    draw_cmd* DrawCmds;
+    
+    u32 SkinnedDrawCmdCount;
+    draw_cmd* SkinnedDrawCmds;
+
+    u32 JointCount;
     m4* JointMapping;
+
+    u32 SkinningCmdCount;
+    skinning_cmd* SkinningCmds;
+
+    u32 ParticleDrawCmdCount;
+    particle_cmd* ParticleDrawCmds;
+
+    u32 ParticleCount;
+    render_particle* Particles;
+
+    u32 DrawWidget3DCmdCount;
+    draw_widget3d_cmd* DrawWidget3DCmds;
+
+    u32 Vertex2DCount;
     vertex_2d* Vertex2DArray;
 
     void* UniformData; // GPU-backed frame_uniform_data
