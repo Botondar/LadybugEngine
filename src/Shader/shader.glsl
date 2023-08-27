@@ -167,6 +167,29 @@ float CalculateShadow(vec3 SP, in vec3 CascadeBlends)
     return Result;
 }
 
+// NOTE(boti): Albedo must be weighted by (1 - Metallic) factor!
+v3 CalculateOutgoingLuminance(v3 Li, v3 L, v3 N, v3 V, 
+                              v3 Albedo, in v3 F0, f32 Roughness)
+{
+    // TODO(boti): N.V is independent of the light source, should we just precalculate and pass it in?
+    float NdotV = max(dot(N, V), 1.0);
+    float NdotL = max(dot(L, N), 0.0);
+    vec3 Diffuse = Albedo;
+
+    vec3 H = normalize(L + V);
+    float VdotH = max(dot(V, H), 0.0);
+    vec3 Fresnel = FresnelSchlick(F0, VdotH);
+
+    float NdotH = max(dot(N, H), 0.0);
+    float Distribution = DistributionGGX(Roughness, NdotH);
+    float Geometry = GeometryGGX(Roughness, NdotV, NdotL);
+
+    float SpecularDenominator = max(4.0 * NdotV * NdotL, 1e-4);
+    vec3 Specular = Distribution * Geometry * Fresnel / SpecularDenominator;
+    v3 Result = (Diffuse + Specular) * NdotL * Li;
+    return(Result);
+}
+
 void main()
 {
 #if 1
@@ -204,31 +227,13 @@ void main()
     vec3 V = normalize(-P);
     vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);
     vec3 DiffuseBase = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb;
-    float NdotV = max(dot(N, V), 0.0);
 
-    vec3 Lo = vec3(0.0, 0.0, 0.0);
-    {
-        float NdotL = max(dot(PerFrame.SunV, N), 0.0);
-        vec3 Diffuse = DiffuseBase * NdotL;
-
-        vec3 H = normalize(PerFrame.SunV + V);
-        float VdotH = max(dot(V, H), 0.0);
-        vec3 Fresnel = FresnelSchlick(F0, VdotH);
-
-        float NdotH = max(dot(N, H), 0.0);
-        float Distribution = DistributionGGX(Roughness, NdotH);
-        float Geometry = GeometryGGX(Roughness, NdotV, NdotL);
-
-        float SpecularDenominator = max(4.0 * NdotL * NdotV, 1e-4);
-        vec3 Specular = Distribution * Geometry * Fresnel / SpecularDenominator;
-
-        Lo += Shadow * (Diffuse + Specular) * PerFrame.SunL;
-    }
+    vec3 Lo = CalculateOutgoingLuminance(Shadow * PerFrame.SunL, PerFrame.SunV, N, V,
+                                         DiffuseBase, F0, Roughness);
 
     uint TileX = uint(gl_FragCoord.x) / R_TileSizeX;
     uint TileY = uint(gl_FragCoord.y) / R_TileSizeY;
     uint TileIndex = TileX + TileY * PerFrame.TileCount.x;
-
     for (uint i = 0; i < Tiles[TileIndex].LightCount; i++)
     {
         uint LightIndex = Tiles[TileIndex].LightIndices[i];
@@ -242,7 +247,7 @@ void main()
         // NOTE(boti): When there are a lot of light sources close together,
         // their cumulative effect can be seen on quite far away texels from the source,
         // which produces "blocky" artefacts when only certain portions of a screen tile
-        // passes the binning check.
+        // pass the binning check.
         // To counteract this, we set the luminance of those lights to 0,
         // but a better way in the future would probably be to have an attenuation
         // that actually falls to 0.
@@ -250,21 +255,8 @@ void main()
         {
             E = vec3(0.0);
         }
-
-        float NdotL = max(dot(L, N), 0.0);
-        vec3 Diffuse = DiffuseBase * NdotL;
-
-        vec3 H = normalize(L + V);
-        float VdotH = max(dot(V, H), 0.0);
-        vec3 Fresnel = FresnelSchlick(F0, VdotH);
-
-        float NdotH = max(dot(N, H), 0.0);
-        float Distribution = DistributionGGX(Roughness, NdotH);
-        float Geometry = GeometryGGX(Roughness, NdotV, NdotL);
-
-        float SpecularDenominator = max(4.0 * NdotL * NdotV, 1e-4);
-        vec3 Specular = Distribution * Geometry * Fresnel / SpecularDenominator;
-        Lo += (Diffuse + Specular) * E;
+        Lo += CalculateOutgoingLuminance(E, L, N, V,
+                                         DiffuseBase, F0, Roughness);
     }
 
     float AmbientFactor = 3e-1;
