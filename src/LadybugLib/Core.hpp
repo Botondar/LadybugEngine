@@ -516,7 +516,9 @@ inline void* PushSize(memory_arena* Arena,
         }
         else
         {
+#if DEVELOPER
             UnhandledError("Arena out of memory");
+#endif
         }
     }
     return Result;
