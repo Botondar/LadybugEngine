@@ -105,7 +105,7 @@ void main()
     v4 SampleColor = texture(Texture, vec3(TexCoord, float(ParticleTexture)));
 
     f32 FarFade = clamp(2.0 * (Depth - ViewP.z), 0.0, 1.0);
-    f32 NearFade = smoothstep(PerFrame.NearZ, PerFrame.NearZ + 0.1, ViewP.z);
+    f32 NearFade = clamp(ViewP.z - (PerFrame.NearZ + 0.01), 0.0, 1.0);
     f32 Fade = min(FarFade, NearFade);
     Target0 = v4(ParticleColor.xyz * SampleColor.xyz, Fade * ParticleColor.w * SampleColor.w);
 }
