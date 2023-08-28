@@ -205,6 +205,9 @@ void main()
     vec4 Albedo = texture(sampler2D(Textures[Material.DiffuseID], Sampler), TexCoord);
     Albedo.rgb *= BaseColor.rgb;
 
+    // NOTE(boti): Light sources contribute to this term, to produce a fake GI effect
+    vec3 AmbientTerm = vec3(0.25);
+
     vec3 Normal;
     Normal.xy = texture(sampler2D(Textures[Material.NormalID], Sampler), TexCoord).xy;
     Normal.xy = 2.0 * Normal.xy - vec2(1.0);
@@ -271,14 +274,15 @@ void main()
             f32 r = 1.0 / (f - n);
             Depth = f*r - f*n*r / Depth;
             Shadow = texture(PointShadows[ShadowIndex], vec4(SampleP, Depth));
+
+            AmbientTerm += 0.1 * E;
         }
 
         Lo += Shadow * CalculateOutgoingLuminance(Shadow * E, L, N, V,
                                                   DiffuseBase, F0, Roughness);
     }
 
-    float AmbientFactor = 3e-1;
-    vec3 Ambient = AmbientFactor * Albedo.rgb * ScreenSpaceOcclusion;
+    vec3 Ambient = AmbientTerm * Albedo.rgb * ScreenSpaceOcclusion;
     Lo += Ambient + Material.Emissive;
 
     {
