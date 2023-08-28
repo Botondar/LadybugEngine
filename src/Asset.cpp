@@ -205,20 +205,9 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Rendere
 // TODO(boti): remove the renderer from here
 internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_world* World, renderer* Renderer, const char* ScenePath, m4 BaseTransform)
 {
-    constexpr u64 PathBuffSize = 256;
-    char PathBuff[PathBuffSize];
-    u64 PathDirectoryLength = 0;
-    for (u64 i = 0; ScenePath[i]; i++)
-    {
-        if (ScenePath[i] == '/' || ScenePath[i] == '\\')
-        {
-            PathDirectoryLength = i + 1;
-        }
-    }
-    strncpy(PathBuff, ScenePath, PathDirectoryLength);
-
-    u64 FilenameBuffSize = PathBuffSize - PathDirectoryLength;
-    char* Filename = PathBuff + PathDirectoryLength;
+    filepath Filepath = {};
+    b32 FilepathResult = MakeFilepathFromZ(&Filepath, ScenePath);
+    Assert(FilepathResult);
 
     gltf GLTF = {};
     // JSON test parsing
@@ -258,11 +247,9 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
     for (u32 BufferIndex = 0; BufferIndex < GLTF.BufferCount; BufferIndex++)
     {
         string URI = GLTF.Buffers[BufferIndex].URI;
-        if (URI.Length <= FilenameBuffSize)
+        if (OverwriteNameAndExtension(&Filepath, URI))
         {
-            strncpy(Filename, URI.String, URI.Length);
-            Filename[URI.Length] = 0;
-            Buffers[BufferIndex] = Platform.LoadEntireFile(PathBuff, Scratch);
+            Buffers[BufferIndex] = Platform.LoadEntireFile(Filepath.Path, Scratch);
             if (!Buffers[BufferIndex].Data)
             {
                 UnhandledError("Couldn't load glTF buffer");
@@ -294,10 +281,10 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             gltf_image* Image = GLTF.Images + Texture->ImageIndex;
             if (Image->BufferViewIndex != U32_MAX) UnimplementedCodePath;
 
-            if (Image->URI.Length > FilenameBuffSize) UnhandledError("Invalid glTF image path");
-
-            strncpy(Filename, Image->URI.String, Image->URI.Length);
-            Filename[Image->URI.Length] = 0;
+            if (!OverwriteNameAndExtension(&Filepath, Image->URI))
+            {
+                UnhandledError("Invalid glTF image path");
+            }
 
             format Format = Format_Undefined;
             int Alpha = 0;
@@ -321,7 +308,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
             u32 Width, Height, ChannelCount;
             int DesiredChannelCount = 4;
-            rgba8* SrcImage = (rgba8*)stbi_load(PathBuff, (int*)&Width, (int*)&Height, (int*)&ChannelCount, DesiredChannelCount);
+            rgba8* SrcImage = (rgba8*)stbi_load(Filepath.Path, (int*)&Width, (int*)&Height, (int*)&ChannelCount, DesiredChannelCount);
             if (SrcImage)
             {
                 if (ChannelCount == 3)
