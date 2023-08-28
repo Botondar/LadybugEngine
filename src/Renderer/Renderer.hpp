@@ -21,7 +21,9 @@ constexpr u64 R_RenderTargetMemorySize      = MiB(320);
 constexpr u64 R_TextureMemorySize           = MiB(1024llu);
 constexpr u64 R_ShadowMapMemorySize         = MiB(256);
 constexpr u32 R_MaxShadowCascadeCount       = 4;
-constexpr u32 R_ShadowResolution            = (2048);
+constexpr u32 R_ShadowResolution            = 2048u; // TODO(boti): Rename, this only applies to the cascades
+constexpr u32 R_MaxShadowCount              = 64u;
+constexpr u32 R_PointShadowResolution       = 512u;
 constexpr u64 R_VertexBufferMaxBlockCount   = (1llu << 18);
 constexpr u64 R_SkinningBufferSize          = MiB(128);
 constexpr u32 R_MaxLightCount               = (1u << 14);
@@ -624,6 +626,13 @@ struct alignas(4) push_constants
     material Material;
 };
 
+typedef flags32 light_flags;
+enum light_flag_bits : light_flags
+{
+    LightFlag_None = 0,
+    LightFlag_ShadowCaster = (1 << 0),
+};
+
 // NOTE(boti): point light
 struct light
 {
@@ -694,6 +703,8 @@ struct frame_uniform_data
     m4 ProjectionTransform;
     m4 InverseProjectionTransform;
     m4 ViewProjectionTransform;
+
+    m4 ShadowViewProjections[6*R_MaxShadowCount];
 
     m4 CascadeViewProjection;
     f32 CascadeMinDistances[4];
@@ -771,6 +782,7 @@ struct render_frame
     static constexpr u32 MaxParticleCount           = (1u << 18);
     static constexpr u32 MaxJointCount              = (1u << 17);
     u32 MaxLightCount;
+    u32 MaxShadowCount;
     u32 MaxDrawCmdCount;
     u32 MaxSkinnedDrawCmdCount;
     u32 MaxSkinningCmdCount;
@@ -786,6 +798,9 @@ struct render_frame
 
     u32 LightCount;
     light* Lights;
+
+    u32 ShadowCount;
+    u32* Shadows;
 
     u32 DrawCmdCount;
     draw_cmd* DrawCmds;
@@ -850,7 +865,7 @@ inline b32 DrawWidget3D(render_frame* Frame,
                         u32 VertexOffset, u32 VertexCount,
                         u32 IndexOffset, u32 IndexCount,
                         m4 Transform, rgba8 Color);
-inline b32 AddLight(render_frame* Frame, light Light);
+inline b32 AddLight(render_frame* Frame, light Light, light_flags Flags);
 
 inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* VertexArray);
 
@@ -1054,12 +1069,21 @@ inline b32 DrawWidget3D(render_frame* Frame,
     return(Result);
 }
 
-inline b32 AddLight(render_frame* Frame, light Light)
+inline b32 AddLight(render_frame* Frame, light Light, light_flags Flags)
 {
     b32 Result = false;
     if (Frame->LightCount < R_MaxLightCount)
     {
-        Frame->Lights[Frame->LightCount++] = Light;
+        u32 LightIndex = Frame->LightCount++;
+        Frame->Lights[LightIndex] = Light;
+        if (Flags & LightFlag_ShadowCaster)
+        {
+            if (Frame->ShadowCount < Frame->MaxShadowCount)
+            {
+                Frame->Shadows[Frame->ShadowCount++] = LightIndex;
+            }
+        }
+
         Result = true;
     }
     return(Result);

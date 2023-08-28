@@ -905,6 +905,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
 
     // Shadow storage
     {
+        VkFormat ShadowFormat = FormatTable[SHADOW_FORMAT];
         u32 MemoryTypeIndex = 0;
         {
             VkImageCreateInfo DummyImageInfo = 
@@ -913,7 +914,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
                 .pNext = nullptr,
                 .flags = 0,
                 .imageType = VK_IMAGE_TYPE_2D,
-                .format = FormatTable[SHADOW_FORMAT],
+                .format = ShadowFormat,
                 .extent = { R_ShadowResolution, R_ShadowResolution, 1 },
                 .mipLevels = 1,
                 .arrayLayers = R_MaxShadowCascadeCount,
@@ -953,77 +954,54 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->ShadowMemory);
         ReturnOnFailure();
 
-        Renderer->ShadowCascadeCount = R_MaxShadowCascadeCount;
-        VkImageCreateInfo ImageInfo = 
+        // Directional cascaded shadow maps
         {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = FormatTable[SHADOW_FORMAT],
-            .extent = { R_ShadowResolution, R_ShadowResolution, 1 },
-            .mipLevels = 1,
-            .arrayLayers = R_MaxShadowCascadeCount,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = 0,
-            .pQueueFamilyIndices = nullptr,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        };
+            Renderer->ShadowCascadeCount = R_MaxShadowCascadeCount;
+            VkImageCreateInfo ImageInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .imageType = VK_IMAGE_TYPE_2D,
+                .format = ShadowFormat,
+                .extent = { R_ShadowResolution, R_ShadowResolution, 1 },
+                .mipLevels = 1,
+                .arrayLayers = R_MaxShadowCascadeCount,
+                .samples = VK_SAMPLE_COUNT_1_BIT,
+                .tiling = VK_IMAGE_TILING_OPTIMAL,
+                .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
+                .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                .queueFamilyIndexCount = 0,
+                .pQueueFamilyIndices = nullptr,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            };
         
-        Result = vkCreateImage(VK.Device, &ImageInfo, nullptr, &Renderer->ShadowMap);
-        ReturnOnFailure();
-        
-        VkMemoryRequirements MemoryRequirements;
-        vkGetImageMemoryRequirements(VK.Device, Renderer->ShadowMap, &MemoryRequirements);
-        
-        size_t Offset = Align(Renderer->ShadowMemoryOffset, MemoryRequirements.alignment);
-        if (Offset + MemoryRequirements.size <= Renderer->ShadowMemorySize)
-        {
-            Result = vkBindImageMemory(VK.Device, Renderer->ShadowMap, Renderer->ShadowMemory, Offset);
+            Result = vkCreateImage(VK.Device, &ImageInfo, nullptr, &Renderer->ShadowMap);
             ReturnOnFailure();
         
-            Renderer->ShadowMemoryOffset = Offset + MemoryRequirements.size;
-        }
-        else
-        {
-            return(nullptr);
-        }
+            VkMemoryRequirements MemoryRequirements;
+            vkGetImageMemoryRequirements(VK.Device, Renderer->ShadowMap, &MemoryRequirements);
         
-        VkImageViewCreateInfo ViewInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .image = Renderer->ShadowMap,
-            .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
-            .format = FormatTable[SHADOW_FORMAT],
-            .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
-            .subresourceRange = 
+            size_t Offset = Align(Renderer->ShadowMemoryOffset, MemoryRequirements.alignment);
+            if (Offset + MemoryRequirements.size <= Renderer->ShadowMemorySize)
             {
-                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = VK_REMAINING_ARRAY_LAYERS,
-            },
-        };
+                Result = vkBindImageMemory(VK.Device, Renderer->ShadowMap, Renderer->ShadowMemory, Offset);
+                ReturnOnFailure();
         
-        Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr,
-                                   &Renderer->ShadowView);
-        ReturnOnFailure();
+                Renderer->ShadowMemoryOffset = Offset + MemoryRequirements.size;
+            }
+            else
+            {
+                return(nullptr);
+            }
         
-        for (u32 Cascade = 0; Cascade < Renderer->ShadowCascadeCount; Cascade++)
-        {
-            VkImageViewCreateInfo CascadeViewInfo = 
+            VkImageViewCreateInfo ViewInfo = 
             {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
                 .image = Renderer->ShadowMap,
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
                 .format = FormatTable[SHADOW_FORMAT],
                 .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
                 .subresourceRange = 
@@ -1031,14 +1009,136 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
                     .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
                     .baseMipLevel = 0,
                     .levelCount = 1,
-                    .baseArrayLayer = Cascade,
-                    .layerCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
                 },
             };
         
-            Result = vkCreateImageView(VK.Device, &CascadeViewInfo, nullptr, 
-                                       &Renderer->ShadowCascadeViews[Cascade]);
+            Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr,
+                                       &Renderer->ShadowView);
             ReturnOnFailure();
+        
+            for (u32 Cascade = 0; Cascade < Renderer->ShadowCascadeCount; Cascade++)
+            {
+                VkImageViewCreateInfo CascadeViewInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .image = Renderer->ShadowMap,
+                    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                    .format = ShadowFormat,
+                    .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
+                    .subresourceRange = 
+                    {
+                        .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = Cascade,
+                        .layerCount = 1,
+                    },
+                };
+        
+                Result = vkCreateImageView(VK.Device, &CascadeViewInfo, nullptr, 
+                                           &Renderer->ShadowCascadeViews[Cascade]);
+                ReturnOnFailure();
+            }
+        }
+
+        // Point shadow maps
+        for (u32 ShadowMapIndex = 0; ShadowMapIndex < R_MaxShadowCount; ShadowMapIndex++)
+        {
+            point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowMapIndex;
+
+            VkImageCreateInfo ImageInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
+                .imageType = VK_IMAGE_TYPE_2D,
+                .format = ShadowFormat,
+                .extent = { R_PointShadowResolution, R_PointShadowResolution, 1 },
+                .mipLevels = 1,
+                .arrayLayers = 6,
+                .samples = VK_SAMPLE_COUNT_1_BIT,
+                .tiling = VK_IMAGE_TILING_OPTIMAL,
+                .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
+                .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                .queueFamilyIndexCount = 0,
+                .pQueueFamilyIndices = nullptr,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            };
+
+            Result = vkCreateImage(VK.Device, &ImageInfo, nullptr, &ShadowMap->Image);
+            ReturnOnFailure();
+
+            VkMemoryRequirements MemoryRequirements = {};
+            vkGetImageMemoryRequirements(VK.Device, ShadowMap->Image, &MemoryRequirements);
+            if ((1u << MemoryTypeIndex) & MemoryRequirements.memoryTypeBits)
+            {
+                umm Offset = Align(Renderer->ShadowMemoryOffset, MemoryRequirements.alignment);
+                if (Offset + MemoryRequirements.size < Renderer->ShadowMemorySize)
+                {
+                    Result = vkBindImageMemory(VK.Device, ShadowMap->Image, Renderer->ShadowMemory, Offset);
+                    ReturnOnFailure();
+                    Renderer->ShadowMemoryOffset = Offset + MemoryRequirements.size;
+                }
+                else
+                {
+                    UnhandledError("Out of shadow memory");
+                    return(0);
+                }
+            }
+            else
+            {
+                UnhandledError("Invalid point shadow map memory type");
+                return(0);
+            }
+
+            VkImageViewCreateInfo ViewInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .image = ShadowMap->Image,
+                .viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+                .format = ShadowFormat,
+                .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
+                .subresourceRange = 
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 6,
+                },
+            };
+            Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &ShadowMap->CubeView);
+            ReturnOnFailure();
+
+            for (u32 LayerIndex = 0; LayerIndex < 6; LayerIndex++)
+            {
+                VkImageViewCreateInfo LayerViewInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .image = ShadowMap->Image,
+                    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                    .format = ShadowFormat,
+                    .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
+                    .subresourceRange = 
+                    {
+                        .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = LayerIndex,
+                        .layerCount = 1,
+                    },
+                };
+                Result = vkCreateImageView(VK.Device, &LayerViewInfo, nullptr, &ShadowMap->LayerViews[LayerIndex]);
+                ReturnOnFailure();
+            }
         }
     }
     
@@ -1858,6 +1958,11 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
         Frame->LightCount = 0;
         Frame->Lights = PushArray<light>(Arena, Frame->MaxLightCount);
     
+
+        Frame->MaxShadowCount = R_MaxShadowCount;
+        Frame->ShadowCount = 0;
+        Frame->Shadows = PushArray<u32>(Arena, Frame->MaxShadowCount);
+
         Frame->MaxDrawCmdCount = 1u << 20;
         Frame->DrawCmdCount = 0;
         Frame->DrawCmds = PushArray<draw_cmd>(Arena, Frame->MaxDrawCmdCount);
@@ -2014,6 +2119,72 @@ void EndRenderFrame(render_frame* Frame)
         }
         Frame->Backend->SwapchainImage = Renderer->SwapchainImages[Frame->Backend->SwapchainImageIndex];
         Frame->Backend->SwapchainImageView = Renderer->SwapchainImageViews[Frame->Backend->SwapchainImageIndex];
+    }
+
+    for (u32 ShadowIndex = 0; ShadowIndex < Frame->ShadowCount; ShadowIndex++)
+    {
+        light* Light = Frame->Lights + Frame->Shadows[ShadowIndex];
+        v3 P = Light->P.xyz;
+
+        // TODO(boti): Get the far plane from the luminance and the light threshold
+        f32 n = 1e-1f;
+        f32 f = 10.0f;
+        f32 r = 1.0f / (f - n);
+        m4 Projection = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                           0.0f, 1.0f, 0.0f, 0.0f,
+                           0.0f, 0.0f, f*r, -f*n*r,
+                           0.0f, 0.0f, 1.0f, 0.0f);
+
+        m3 Bases[6] = 
+        {
+            // +X
+            {
+                .X = {  0.0f, -1.0f,  0.0f },
+                .Y = {  0.0f,  0.0f, -1.0f },
+                .Z = { +1.0f,  0.0f,  0.0f },
+            },
+            // -X
+            {
+                .X = {  0.0f, +1.0f,  0.0f },
+                .Y = {  0.0f,  0.0f, -1.0f },
+                .Z = { -1.0f,  0.0f,  0.0f },
+            },
+            // +Y
+            {
+                .X = { +1.0f,  0.0f,  0.0f },
+                .Y = {  0.0f,  0.0f, -1.0f },
+                .Z = {  0.0f, +1.0f,  0.0f },
+            },
+            // -Y
+            {
+                .X = { -1.0f,  0.0f,  0.0f },
+                .Y = {  0.0f,  0.0f, -1.0f },
+                .Z = {  0.0f, -1.0f,  0.0f },
+            },
+            // +Z
+            {
+                .X = { +1.0f,  0.0f,  0.0f },
+                .Y = {  0.0f, +1.0f,  0.0f },
+                .Z = {  0.0f,  0.0f, -1.0f },
+            },
+            // -Z
+            {
+                .X = { -1.0f,  0.0f,  0.0f },
+                .Y = {  0.0f, -1.0f,  0.0f },
+                .Z = {  0.0f,  0.0f, -1.0f },
+            },
+        };
+
+        for (u32 LayerIndex = 0; LayerIndex < 6; LayerIndex++)
+        {
+            m3 M = Bases[LayerIndex];
+            m4 View = M4(M.X.x, M.X.y, M.X.z, -Dot(M.X, P),
+                         M.Y.x, M.Y.y, M.Y.z, -Dot(M.Y, P),
+                         M.Z.x, M.Z.y, M.Z.z, -Dot(M.Z, P),
+                         0.0f, 0.0f, 0.0f, 1.0f);
+            m4 ViewProjection = Projection * View;
+            Frame->Uniforms.ShadowViewProjections[6*ShadowIndex + LayerIndex] = ViewProjection;
+        }
     }
 
     VkCommandBufferBeginInfo CmdBufferBegin = 
@@ -2513,39 +2684,182 @@ void EndRenderFrame(render_frame* Frame)
     vkQueueSubmit2(VK.ComputeQueue, 1, &SubmitPreLight, nullptr);
 
     vkBeginCommandBuffer(ShadowCmd, &CmdBufferBegin);
-    VkViewport ShadowViewport = 
-    {
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = (f32)R_ShadowResolution,
-        .height = (f32)R_ShadowResolution,
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-    };
-    VkRect2D ShadowScissor = 
-    {
-        .offset = { 0, 0 },
-        .extent = { R_ShadowResolution, R_ShadowResolution },
-    };
-    vkCmdSetViewport(ShadowCmd, 0, 1, &ShadowViewport);
-    vkCmdSetScissor(ShadowCmd, 0, 1, &ShadowScissor);
-    for (u32 Cascade = 0; Cascade < R_MaxShadowCascadeCount; Cascade++)
-    {
-        BeginCascade(Frame, ShadowCmd, Cascade);
 
-        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Shadow];
-        vkCmdBindPipeline(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-        vkCmdPushConstants(ShadowCmd, Pipeline.Layout,
-                           VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                           sizeof(push_constants), sizeof(u32), &Cascade);
-        vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
+    // Cascaded shadows
+    {
+        pipeline_with_layout ShadowPipeline = Renderer->Pipelines[Pipeline_Shadow];
+        vkCmdBindPipeline(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Pipeline);
+
+        VkViewport ShadowViewport = 
+        {
+            .x = 0.0f,
+            .y = 0.0f,
+            .width = (f32)R_ShadowResolution,
+            .height = (f32)R_ShadowResolution,
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
+        };
+        VkRect2D ShadowScissor = 
+        {
+            .offset = { 0, 0 },
+            .extent = { R_ShadowResolution, R_ShadowResolution },
+        };
+        vkCmdSetViewport(ShadowCmd, 0, 1, &ShadowViewport);
+        vkCmdSetScissor(ShadowCmd, 0, 1, &ShadowScissor);
+        for (u32 Cascade = 0; Cascade < R_MaxShadowCascadeCount; Cascade++)
+        {
+            BeginCascade(Frame, ShadowCmd, Cascade);
+
+            vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout,
+                               VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                               sizeof(push_constants), sizeof(u32), &Cascade);
+            vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Layout,
+                                    0, 3, DescriptorSets, 0, nullptr);
+            DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout);
+
+            EndCascade(Frame, ShadowCmd);
+        }
+    }
+
+    // Point shadows
+    {
+        pipeline_with_layout ShadowPipeline = Renderer->Pipelines[Pipeline_ShadowAny];
+        vkCmdBindPipeline(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Pipeline);
+        vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Layout,
                                 0, 3, DescriptorSets, 0, nullptr);
-        DrawMeshes(Frame, ShadowCmd, Pipeline.Layout);
 
-        EndCascade(Frame, ShadowCmd);
+        VkViewport ShadowViewport = 
+        {
+            .x = 0.0f,
+            .y = 0.0f,
+            .width = (f32)R_PointShadowResolution,
+            .height = (f32)R_PointShadowResolution,
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
+        };
+        VkRect2D ShadowScissor = 
+        {
+            .offset = { 0, 0 },
+            .extent = { R_PointShadowResolution, R_PointShadowResolution },
+        };
+
+        vkCmdSetViewport(ShadowCmd, 0, 1, &ShadowViewport);
+        vkCmdSetScissor(ShadowCmd, 0, 1, &ShadowScissor);
+        for (u32 ShadowIndex = 0; ShadowIndex < Frame->ShadowCount; ShadowIndex++)
+        {
+            u32 LightIndex = Frame->Shadows[ShadowIndex];
+            light* Light = Frame->Lights + LightIndex;
+            point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;
+
+            for (u32 LayerIndex = 0; LayerIndex < 6; LayerIndex++)
+            {
+                VkImageMemoryBarrier2 BeginBarriers[] = 
+                {
+                    {
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                        .pNext = nullptr,
+                        .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                        .srcAccessMask = VK_ACCESS_2_NONE,
+                        .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+                        .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+                        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                        .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                        .image = ShadowMap->Image,
+                        .subresourceRange = 
+                        {
+                            .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = 1,
+                            .baseArrayLayer = LayerIndex,
+                            .layerCount = 1,
+                        },
+                    },
+                };
+                VkDependencyInfo BeginShadow = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .imageMemoryBarrierCount = CountOf(BeginBarriers),
+                    .pImageMemoryBarriers = BeginBarriers,
+                };
+                vkCmdPipelineBarrier2(ShadowCmd, &BeginShadow);
+
+                VkRenderingAttachmentInfo DepthAttachment = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                    .pNext = nullptr,
+                    .imageView = ShadowMap->LayerViews[LayerIndex],
+                    .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                    .resolveMode = VK_RESOLVE_MODE_NONE,
+                    .resolveImageView = VK_NULL_HANDLE,
+                    .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                    .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                    .clearValue = { .depthStencil = { 1.0f, 0 } },
+                };
+                VkRenderingInfo ShadowRendering = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .renderArea = { { 0, 0 }, { R_PointShadowResolution, R_PointShadowResolution } },
+                    .layerCount = 1,
+                    .viewMask = 0,
+                    .colorAttachmentCount = 0,
+                    .pColorAttachments = nullptr,
+                    .pDepthAttachment = &DepthAttachment,
+                    .pStencilAttachment = nullptr,
+                };
+                vkCmdBeginRendering(ShadowCmd, &ShadowRendering);
+        
+                u32 Index = 6*ShadowIndex + LayerIndex;
+                vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                                   sizeof(push_constants), sizeof(Index), &Index);
+                DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout);
+
+                vkCmdEndRendering(ShadowCmd);
+
+                VkImageMemoryBarrier2 EndBarriers[] = 
+                {
+                    {
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                        .pNext = nullptr,
+                        .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+                        .srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+                        .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                        .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                        .oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                        .image = ShadowMap->Image,
+                        .subresourceRange = 
+                        {
+                            .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = 1,
+                            .baseArrayLayer = LayerIndex,
+                            .layerCount = 1,
+                        },
+                    },
+                };
+                VkDependencyInfo EndShadow = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .imageMemoryBarrierCount = CountOf(EndBarriers),
+                    .pImageMemoryBarriers = EndBarriers,
+                };
+                vkCmdPipelineBarrier2(ShadowCmd, &EndShadow);
+            }
+        }
     }
     vkEndCommandBuffer(ShadowCmd);
-
+    
     u64 ShadowCounter = ++Renderer->TimelineSemaphoreCounter;
     VkCommandBufferSubmitInfo ShadowCmdBuffers[] = 
     {
@@ -2589,13 +2903,13 @@ void EndRenderFrame(render_frame* Frame)
         .pSignalSemaphoreInfos = ShadowSignals,
     };
     vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitShadow, nullptr);
+    
 
     vkBeginCommandBuffer(RenderCmd, &CmdBufferBegin);
     vkCmdSetViewport(RenderCmd, 0, 1, &FrameViewport);
     vkCmdSetScissor(RenderCmd, 0, 1, &FrameScissor);
     BeginForwardPass(Frame, RenderCmd);
     {
-
         pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Simple];
         vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
         vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 

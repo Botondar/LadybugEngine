@@ -693,6 +693,55 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .StencilAttachment = Format_Undefined,
     },
 
+    [Pipeline_ShadowAny] =
+    {
+        .Name = "shadow_any",
+        .Type = PipelineType_Graphics,
+        .Layout = 
+        {
+            .PushConstantRangeCount = 1,
+            .DescriptorSetCount = 3,
+            .PushConstantRanges = 
+            {
+                {
+                    .Stages = PipelineStage_VS|PipelineStage_PS,
+                    .ByteSize = sizeof(m4) + sizeof(material) + sizeof(u32),
+                    .ByteOffset = 0,
+                },
+            },
+            .DescriptorSets = 
+            {
+                SetLayout_DefaultSamplerPS,
+                SetLayout_BindlessTexturesPS,
+                SetLayout_PerFrameUniformData,
+            },
+        },
+        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
+        .InputAssemblerState = InputState_vertex,
+        .RasterizerState = 
+        {
+            .Flags = RS_DepthBiasEnable,
+            .Fill = Fill_Solid,
+            .CullFlags = Cull_None,
+            .DepthBiasConstantFactor = 1.0f / 4096.0f,
+            .DepthBiasClamp = 1.0f / 24.0f,
+            .DepthBiasSlopeFactor = 3.0f,
+        },
+        .DepthStencilState = 
+        {
+            .Flags = DS_DepthTestEnable|DS_DepthWriteEnable,
+            .DepthCompareOp = Compare_LessEqual,
+            .MinDepthBounds = 0.0f,
+            .MaxDepthBounds = 1.0f,
+        },
+        .BlendAttachmentCount = 0,
+        //.BlendAttachments,
+        .ColorAttachmentCount = 0,
+        //.ColorAttachments,
+        .DepthAttachment = SHADOW_FORMAT,
+        .StencilAttachment = Format_Undefined,
+    },
+
     [Pipeline_Gizmo] =
     {
         .Name = "gizmo",

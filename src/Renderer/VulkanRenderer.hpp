@@ -96,6 +96,13 @@ struct backend_render_frame
     VkBuffer Vertex2DBuffer;
 };
 
+struct point_shadow_map
+{
+    VkImage Image;
+    VkImageView CubeView;
+    VkImageView LayerViews[6];
+};
+
 struct renderer
 {
     vulkan Vulkan;
@@ -144,6 +151,8 @@ struct renderer
         VkImage ShadowMap;
         VkImageView ShadowView;
         VkImageView ShadowCascadeViews[R_MaxShadowCascadeCount];
+
+        point_shadow_map PointShadowMaps[R_MaxShadowCount];
     };
 
     VkCommandPool TransferCmdPool;

@@ -47,7 +47,8 @@ enum pipeline : u32
 
     Pipeline_Simple,
     Pipeline_Prepass,
-    Pipeline_Shadow,
+    Pipeline_Shadow, // TODO(boti): This is for cascades, rename
+    Pipeline_ShadowAny, // TODO(boti): This is for generic shadows, rename
     Pipeline_Gizmo,
     Pipeline_Sky,
     Pipeline_UI,

@@ -11,7 +11,7 @@ layout(push_constant) uniform PushConstants
 {
     mat4 ModelTransform;
     material Material;
-    uint CascadeIndex;
+    uint Index;
 };
 
 #if defined(VS)
@@ -24,11 +24,7 @@ layout(location = 0) out vec2 TexCoord;
 void main()
 {
     TexCoord = aTexCoord;
-    gl_Position = PerFrame.CascadeViewProjection * (ModelTransform * vec4(aP, 1.0));
-    if (CascadeIndex > 0)
-    {
-        gl_Position.xyz = PerFrame.CascadeScales[CascadeIndex - 1] * gl_Position.xyz + PerFrame.CascadeOffsets[CascadeIndex - 1];
-    }
+    gl_Position = PerFrame.ShadowViewProjections[Index] * (ModelTransform * vec4(aP, 1.0));
 }
 
 #elif defined(FS)

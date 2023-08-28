@@ -397,7 +397,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
         if (Entity->Flags & EntityFlag_LightSource)
         {
-            AddLight(Frame, { Entity->Transform.P, Entity->LightEmission });
+            AddLight(Frame, { Entity->Transform.P, Entity->LightEmission }, LightFlag_ShadowCaster);
             if (DrawLights)
             {
                 geometry_buffer_allocation Mesh = Assets->Meshes[Assets->SphereMeshID];
@@ -590,7 +590,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         Light->P.y = Clamp(Light->P.y, World->AdHocLightBounds.Min.y, World->AdHocLightBounds.Max.y);
         Light->P.z = Clamp(Light->P.z, World->AdHocLightBounds.Min.z, World->AdHocLightBounds.Max.z);
 
-        AddLight(Frame, *Light);
+        AddLight(Frame, *Light, LightFlag_None);
         if (Cmd)
         {
             Frame->Particles[Cmd->FirstParticle + LightIndex] = 
