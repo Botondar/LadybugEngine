@@ -28,6 +28,7 @@ GAME_EXPORT = -EXPORT:Game_UpdateAndRender
 
 SHADERS = build/blit.vs build/blit.fs build/shader.vs build/shader.fs build/prepass.vs build/prepass.fs \
     build/shadow.vs build/shadow.fs build/sky.vs build/sky.fs build/ui.vs build/ui.fs \
+    build/shadow_any.vs build/shadow_any.fs \
     build/gizmo.vs build/gizmo.fs \
     build/downsample_bloom.cs build/upsample_bloom.cs build/ssao.cs build/ssao_blur.cs \
     build/fx.vs build/fx.fs \
