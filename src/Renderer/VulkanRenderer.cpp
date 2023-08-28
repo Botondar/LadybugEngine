@@ -2144,6 +2144,7 @@ void EndRenderFrame(render_frame* Frame)
                            0.0f, 0.0f, f*r, -f*n*r,
                            0.0f, 0.0f, 1.0f, 0.0f);
 
+        // NOTE(boti): See Vulkan spec. 16.5.4. Table 17. to find where these transforms come from
         m3 Bases[6] = 
         {
             // +X
