@@ -2867,13 +2867,10 @@ void EndRenderFrame(render_frame* Frame)
                 };
                 vkCmdBeginRendering(ShadowCmd, &ShadowRendering);
                 
-                //if (LayerIndex < 1)
-                {
-                    u32 Index = 6*ShadowIndex + LayerIndex;
-                    vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                                       sizeof(push_constants), sizeof(Index), &Index);
-                    DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout);
-                }
+                u32 Index = 6*ShadowIndex + LayerIndex;
+                vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                                   sizeof(push_constants), sizeof(Index), &Index);
+                DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout);
 
                 vkCmdEndRendering(ShadowCmd);
             }
