@@ -41,6 +41,7 @@ The folder `src/LadybugLib/` contains utilities available to all subsystems.
 - Physically-based shading model
 - Cascaded shadow maps
 - Volumetric directional light
+- Multiple omnidirectional shadow maps
 - Mesh skinning and animation
 - Additive particle effects (w/ multiple billboard modes)
 - Screen-space ambient occlusion
