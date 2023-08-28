@@ -169,7 +169,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 { { +8.95f, +3.60f, 1.30f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
                 { { +8.95f, -3.20f, 1.30f, 1.0f }, { 0.6f, 0.2f, 1.0f, 2.5f } },
                 { { -9.65f, +3.60f, 1.30f, 1.0f }, { 0.4f, 1.0f, 0.4f, 2.5f } },
-                { { -9.65f, -3.20f, 1.30f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
+                { { -9.65f, -3.20f, 1.30f, 1.0f }, { 1.0f, 0.1f, 0.1f, 7.5f } },
             };
 
             for (u32 LightIndex = 0; LightIndex < CountOf(LightSources); LightIndex++)
