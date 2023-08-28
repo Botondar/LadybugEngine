@@ -36,7 +36,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
         GameState = Memory->GameState = PushStruct<game_state>(&BootstrapArena);
         GameState->TotalArena = BootstrapArena;
-        constexpr size_t TransientArenaSize = MiB(512);
+        constexpr umm TransientArenaSize = MiB(512);
         GameState->TransientArena = InitializeArena(TransientArenaSize, PushSize(&GameState->TotalArena, TransientArenaSize, 64));
 
         GameState->Renderer = CreateRenderer(&GameState->TotalArena, &GameState->TransientArena);
@@ -47,8 +47,10 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             return;
         }
 
-        assets* Assets = GameState->Assets = PushStruct<assets>(&GameState->TotalArena);
-        Assets->Arena = &GameState->TotalArena;
+        constexpr umm AssetArenaSize = GiB(1);
+        memory_arena AssetArena = InitializeArena(AssetArenaSize, PushSize(&GameState->TotalArena, AssetArenaSize, KiB(4)));
+        assets* Assets = GameState->Assets = PushStruct<assets>(&AssetArena);
+        Assets->Arena = AssetArena;
         InitializeAssets(Assets, GameState->Renderer, &GameState->TransientArena);
 
         game_world* World = GameState->World = PushStruct<game_world>(&GameState->TotalArena);

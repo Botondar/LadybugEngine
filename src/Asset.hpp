@@ -145,7 +145,7 @@ extern const char* ParticlePaths[Particle_COUNT];
 
 struct assets
 {
-    memory_arena* Arena;
+    memory_arena Arena;
 
     texture_id Whiteness;
 

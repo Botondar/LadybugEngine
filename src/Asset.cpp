@@ -33,9 +33,9 @@ lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scra
         NullAnimation->KeyFrameCount = 1;
         NullAnimation->MinTimestamp = 0.0f;
         NullAnimation->MaxTimestamp = 0.0f;
-        NullAnimation->KeyFrameTimestamps = PushArray<f32>(Assets->Arena, 1);
+        NullAnimation->KeyFrameTimestamps = PushArray<f32>(&Assets->Arena, 1);
         NullAnimation->KeyFrameTimestamps[0] = 0.0f;
-        NullAnimation->KeyFrames = PushArray<animation_key_frame>(Assets->Arena, 1);
+        NullAnimation->KeyFrames = PushArray<animation_key_frame>(&Assets->Arena, 1);
         for (u32 JointIndex = 0; JointIndex < skin::MaxJointCount; JointIndex++)
         {
             NullAnimation->KeyFrames[0].JointTransforms[JointIndex] = 
@@ -250,8 +250,9 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
     }
 
     // NOTE(boti): Store the initial indices in the game so that we know what to offset the glTF indices by
-    u32 BaseMeshIndex = Assets->MeshCount;
-    u32 BaseMaterialIndex = Assets->MaterialCount;
+    u32 BaseMeshIndex       = Assets->MeshCount;
+    u32 BaseMaterialIndex   = Assets->MaterialCount;
+    u32 BaseSkinIndex       = Assets->SkinCount;
 
     buffer* Buffers = PushArray<buffer>(Scratch, GLTF.BufferCount, MemPush_Clear);
     for (u32 BufferIndex = 0; BufferIndex < GLTF.BufferCount; BufferIndex++)
@@ -762,7 +763,6 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         }
     }
 
-    u32 BaseSkinIndex = Assets->SkinCount;
     for (u32 SkinIndex = 0; SkinIndex < GLTF.SkinCount; SkinIndex++)
     {
         gltf_skin* Skin = GLTF.Skins + SkinIndex;
@@ -976,8 +976,8 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             animation* AnimationAsset = Assets->Animations + Assets->AnimationCount++;
             AnimationAsset->SkinID = BaseSkinIndex + SkinIndex;
             AnimationAsset->KeyFrameCount = KeyFrameCount;
-            AnimationAsset->KeyFrameTimestamps = PushArray<f32>(Assets->Arena, KeyFrameCount);
-            AnimationAsset->KeyFrames = PushArray<animation_key_frame>(Assets->Arena, KeyFrameCount);
+            AnimationAsset->KeyFrameTimestamps = PushArray<f32>(&Assets->Arena, KeyFrameCount);
+            AnimationAsset->KeyFrames = PushArray<animation_key_frame>(&Assets->Arena, KeyFrameCount);
             memcpy(AnimationAsset->KeyFrameTimestamps, KeyFrameTimestamps, KeyFrameCount * sizeof(f32));
 
             memset(&AnimationAsset->ActiveJoints, 0x00, sizeof(AnimationAsset->ActiveJoints));
