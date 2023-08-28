@@ -740,7 +740,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .Flags = RS_DepthBiasEnable,
             .Fill = Fill_Solid,
             .CullFlags = Cull_None,
-            .DepthBiasConstantFactor = 2.0f / 512.0f,
+            .DepthBiasConstantFactor = 2.0f / 256.0f,
             .DepthBiasClamp = 1.0f / 24.0f,
             .DepthBiasSlopeFactor = 3.0f,
         },
