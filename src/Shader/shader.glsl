@@ -275,6 +275,8 @@ void main()
             Depth = f*r - f*n*r / Depth;
             Shadow = texture(PointShadows[ShadowIndex], vec4(SampleP, Depth));
 
+            // TODO(boti): Better filtering shadow filtering here
+
             AmbientTerm += 0.1 * E;
         }
 
