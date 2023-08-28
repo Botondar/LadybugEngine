@@ -37,6 +37,7 @@ enum descriptor_set_layout : u32
     SetLayout_Skinning, 
     SetLayout_StructuredBuffer,
     SetLayout_SingleCombinedTextureCS,
+    SetLayout_PointShadows,
 
     SetLayout_Count,
 };

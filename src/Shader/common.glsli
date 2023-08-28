@@ -25,7 +25,7 @@
 
 struct light
 {
-    vec4 P;
+    vec4 P; // NOTE(boti): w is shadow index
     vec4 E;
 };
 

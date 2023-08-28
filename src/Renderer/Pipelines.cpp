@@ -534,6 +534,22 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
             },
         },
     },
+
+    [SetLayout_PointShadows] =
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = Descriptor_ImageSampler,
+                .DescriptorCount = R_MaxShadowCount,
+                .Stages = PipelineStage_PS,
+                .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
 };
 
 const pipeline_info PipelineInfos[Pipeline_Count] = 
@@ -548,7 +564,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Layout = 
         {
             .PushConstantRangeCount = 1,
-            .DescriptorSetCount = 8,
+            .DescriptorSetCount = 9,
             .PushConstantRanges = 
             {
                 { 
@@ -567,6 +583,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
                 SetLayout_ShadowPS, // Shadow map
                 SetLayout_StructuredBuffer, // LightBuffer
                 SetLayout_StructuredBuffer, // TileBuffer
+                SetLayout_PointShadows,
             },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
@@ -723,7 +740,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .Flags = RS_DepthBiasEnable,
             .Fill = Fill_Solid,
             .CullFlags = Cull_None,
-            .DepthBiasConstantFactor = 1.0f / 4096.0f,
+            .DepthBiasConstantFactor = 2.0f / 512.0f,
             .DepthBiasClamp = 1.0f / 24.0f,
             .DepthBiasSlopeFactor = 3.0f,
         },

@@ -66,6 +66,7 @@ readonly buffer TileBuffer
     screen_tile Tiles[];
 };
 
+layout(set = 8, binding = 0) uniform samplerCubeShadow PointShadows[];
 
 layout(location = 0) in vec3 P;
 layout(location = 1) in vec2 TexCoord;
@@ -193,9 +194,9 @@ v3 CalculateOutgoingLuminance(v3 Li, v3 L, v3 N, v3 V,
 void main()
 {
 #if 1
-    float Shadow = CalculateShadow(ShadowP, ShadowBlends);
+    float SunShadow = CalculateShadow(ShadowP, ShadowBlends);
 #else
-    float Shadow = 1.0;
+    float SunShadow = 1.0;
 #endif
 
     vec4 BaseColor = UnpackRGBA8(Material.Diffuse);
@@ -228,7 +229,7 @@ void main()
     vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);
     vec3 DiffuseBase = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb;
 
-    vec3 Lo = CalculateOutgoingLuminance(Shadow * PerFrame.SunL, PerFrame.SunV, N, V,
+    vec3 Lo = CalculateOutgoingLuminance(SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
                                          DiffuseBase, F0, Roughness);
 
     uint TileX = uint(gl_FragCoord.x) / R_TileSizeX;
@@ -237,11 +238,11 @@ void main()
     for (uint i = 0; i < Tiles[TileIndex].LightCount; i++)
     {
         uint LightIndex = Tiles[TileIndex].LightIndices[i];
-        vec3 L = Lights[LightIndex].P.xyz - P;
-        vec3 E = Lights[LightIndex].E.xyz * Lights[LightIndex].E.w;
-        float DistSq = dot(L, L);
+        v3 dP = Lights[LightIndex].P.xyz - P;
+        v3 E = Lights[LightIndex].E.xyz * Lights[LightIndex].E.w;
+        float DistSq = dot(dP, dP);
         float InvDistSq = 1.0 / DistSq;
-        L = L * sqrt(InvDistSq);
+        v3 L = dP * sqrt(InvDistSq);
         E = E * InvDistSq;
 
         // NOTE(boti): When there are a lot of light sources close together,
@@ -255,8 +256,25 @@ void main()
         {
             E = vec3(0.0);
         }
-        Lo += CalculateOutgoingLuminance(E, L, N, V,
-                                         DiffuseBase, F0, Roughness);
+
+        uint ShadowIndex = uint(Lights[LightIndex].P.w);
+        float Shadow = 1.0;
+        if (ShadowIndex != 0xFF)
+        {
+            v3 SampleP = TransformDirection(PerFrame.CameraTransform, dP);
+            SampleP = -SampleP;
+            f32 Depth = max(abs(SampleP.x), max(abs(SampleP.y), abs(SampleP.z)));
+
+            // HACK(boti): These will need to be stored and fetched from the per-frame uniform buffer
+            f32 n = 0.05;
+            f32 f = 10.0;
+            f32 r = 1.0 / (f - n);
+            Depth = f*r - f*n*r / Depth;
+            Shadow = texture(PointShadows[ShadowIndex], vec4(SampleP, Depth));
+        }
+
+        Lo += Shadow * CalculateOutgoingLuminance(Shadow * E, L, N, V,
+                                                  DiffuseBase, F0, Roughness);
     }
 
     float AmbientFactor = 3e-1;

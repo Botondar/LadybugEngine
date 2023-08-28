@@ -513,13 +513,22 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
             const descriptor_set_layout_info* Info = SetLayoutInfos + Index;
 
             VkDescriptorSetLayoutBinding Bindings[MaxDescriptorSetLayoutBindingCount] = {};
-            for (u32 Binding = 0; Binding < Info->BindingCount; Binding++)
+            for (u32 BindingIndex = 0; BindingIndex < Info->BindingCount; BindingIndex++)
             {
-                Bindings[Binding].binding = Info->Bindings[Binding].Binding;
-                Bindings[Binding].descriptorType = (VkDescriptorType)Info->Bindings[Binding].Type;
-                Bindings[Binding].descriptorCount = Info->Bindings[Binding].DescriptorCount;
-                Bindings[Binding].stageFlags = PipelineStagesToVulkan(Info->Bindings[Binding].Stages);
-                Bindings[Binding].pImmutableSamplers = &Renderer->Samplers[Info->Bindings[Binding].ImmutableSampler];
+                const descriptor_set_binding* Binding = Info->Bindings + BindingIndex;
+                Bindings[BindingIndex].binding = Binding->Binding;
+                Bindings[BindingIndex].descriptorType = (VkDescriptorType)Binding->Type; // TODO(boti): create a helper for this
+                Bindings[BindingIndex].descriptorCount = Binding->DescriptorCount;
+                Bindings[BindingIndex].stageFlags = PipelineStagesToVulkan(Binding->Stages);
+                if (Binding->ImmutableSampler == Sampler_None)
+                {
+                    Bindings[BindingIndex].pImmutableSamplers = nullptr;
+                }
+                else
+                {
+                    Assert(Binding->DescriptorCount <= 1);
+                    Bindings[BindingIndex].pImmutableSamplers = &Renderer->Samplers[Binding->ImmutableSampler];
+                }
             }
             VkDescriptorSetLayoutCreateInfo CreateInfo = 
             {
@@ -2127,7 +2136,7 @@ void EndRenderFrame(render_frame* Frame)
         v3 P = Light->P.xyz;
 
         // TODO(boti): Get the far plane from the luminance and the light threshold
-        f32 n = 1e-1f;
+        f32 n = 0.05f;
         f32 f = 10.0f;
         f32 r = 1.0f / (f - n);
         m4 Projection = M4(1.0f, 0.0f, 0.0f, 0.0f,
@@ -2139,33 +2148,33 @@ void EndRenderFrame(render_frame* Frame)
         {
             // +X
             {
-                .X = {  0.0f, -1.0f,  0.0f },
-                .Y = {  0.0f,  0.0f, -1.0f },
+                .X = {  0.0f,  0.0f, -1.0f },
+                .Y = {  0.0f, -1.0f,  0.0f },
                 .Z = { +1.0f,  0.0f,  0.0f },
             },
             // -X
             {
-                .X = {  0.0f, +1.0f,  0.0f },
-                .Y = {  0.0f,  0.0f, -1.0f },
+                .X = {  0.0f,  0.0f, +1.0f },
+                .Y = {  0.0f, -1.0f,  0.0f },
                 .Z = { -1.0f,  0.0f,  0.0f },
             },
             // +Y
             {
                 .X = { +1.0f,  0.0f,  0.0f },
-                .Y = {  0.0f,  0.0f, -1.0f },
+                .Y = {  0.0f,  0.0f, +1.0f },
                 .Z = {  0.0f, +1.0f,  0.0f },
             },
             // -Y
             {
-                .X = { -1.0f,  0.0f,  0.0f },
+                .X = { +1.0f,  0.0f,  0.0f },
                 .Y = {  0.0f,  0.0f, -1.0f },
                 .Z = {  0.0f, -1.0f,  0.0f },
             },
             // +Z
             {
                 .X = { +1.0f,  0.0f,  0.0f },
-                .Y = {  0.0f, +1.0f,  0.0f },
-                .Z = {  0.0f,  0.0f, -1.0f },
+                .Y = {  0.0f, -1.0f,  0.0f },
+                .Z = {  0.0f,  0.0f, +1.0f },
             },
             // -Z
             {
@@ -2216,9 +2225,17 @@ void EndRenderFrame(render_frame* Frame)
             UnimplementedCodePath;
         }
 
+        u32 ShadowAt = 0;
         for (u32 LightIndex = 0; LightIndex < Frame->LightCount; LightIndex++)
         {
             light* Light = Frame->Lights + LightIndex;
+
+            u32 ShadowIndex = 0xFF;
+            if ((ShadowAt < Frame->ShadowCount) && 
+                (Frame->Shadows[ShadowAt] == LightIndex))
+            {
+                    ShadowIndex = ShadowAt++;
+            }
 
             f32 L = Light->E.w * Max(Max(Light->E.x, Light->E.y), Light->E.z);
             f32 R = Sqrt(Max((L / R_LuminanceThreshold), 0.0f));
@@ -2228,7 +2245,7 @@ void EndRenderFrame(render_frame* Frame)
                 u32 DstIndex = Frame->Uniforms.LightCount++;
                 LightBuffer[DstIndex] = 
                 {
-                    .P = P,
+                    .P = { P.x, P.y, P.z, (f32)ShadowIndex }, // HACK(boti): the shadow index shouldn't be a float
                     .E = Light->E,
                 };
 
@@ -2330,6 +2347,35 @@ void EndRenderFrame(render_frame* Frame)
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         Frame->Backend->ShadowMapView,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    // TODO(boti): This descriptor set update could just be done at init, no need to do it every frame
+    VkDescriptorSet PointShadowsDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PointShadows]);
+    {
+        VkDescriptorImageInfo* DescriptorImages = PushArray<VkDescriptorImageInfo>(Frame->Arena, Frame->MaxShadowCount);
+        for (u32 ShadowIndex = 0; ShadowIndex < Frame->MaxShadowCount; ShadowIndex++)
+        {
+            point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;
+            DescriptorImages[ShadowIndex] = 
+            {
+                .sampler = Renderer->Samplers[Sampler_Shadow],
+                .imageView = ShadowMap->CubeView,
+                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            };
+        }
+
+        VkWriteDescriptorSet Write = 
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+            .dstSet = PointShadowsDescriptorSet,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = Frame->MaxShadowCount,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = DescriptorImages,
+        };
+        vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
+    }
 
     VkViewport FrameViewport = 
     {
@@ -2486,6 +2532,7 @@ void EndRenderFrame(render_frame* Frame)
         ShadowDescriptorSet,
         LightBufferDescriptorSet,
         TileBufferDescriptorSet,
+        PointShadowsDescriptorSet,
     };
 
     vkCmdSetViewport(PrepassCmd, 0, 1, &FrameViewport);
@@ -2723,8 +2770,7 @@ void EndRenderFrame(render_frame* Frame)
 
     // Point shadows
     {
-        u32 BarrierCount = Frame->ShadowCount;
-        VkImageMemoryBarrier2* Barriers = PushArray<VkImageMemoryBarrier2>(Frame->Arena, BarrierCount);
+        VkImageMemoryBarrier2* Barriers = PushArray<VkImageMemoryBarrier2>(Frame->Arena, Frame->MaxShadowCount);
         for (u32 ShadowIndex = 0; ShadowIndex < Frame->ShadowCount; ShadowIndex++)
         {
             point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;
@@ -2757,7 +2803,7 @@ void EndRenderFrame(render_frame* Frame)
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
             .pNext = nullptr,
             .dependencyFlags = 0,
-            .imageMemoryBarrierCount = BarrierCount,
+            .imageMemoryBarrierCount = Frame->ShadowCount,
             .pImageMemoryBarriers = Barriers,
         };
         vkCmdPipelineBarrier2(ShadowCmd, &BeginShadow);
@@ -2819,11 +2865,14 @@ void EndRenderFrame(render_frame* Frame)
                     .pStencilAttachment = nullptr,
                 };
                 vkCmdBeginRendering(ShadowCmd, &ShadowRendering);
-        
-                u32 Index = 6*ShadowIndex + LayerIndex;
-                vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                                   sizeof(push_constants), sizeof(Index), &Index);
-                DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout);
+                
+                //if (LayerIndex < 1)
+                {
+                    u32 Index = 6*ShadowIndex + LayerIndex;
+                    vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                                       sizeof(push_constants), sizeof(Index), &Index);
+                    DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout);
+                }
 
                 vkCmdEndRendering(ShadowCmd);
             }
@@ -2840,8 +2889,8 @@ void EndRenderFrame(render_frame* Frame)
                 .srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
                 .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
                 .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                .oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .image = ShadowMap->Image,
@@ -2855,12 +2904,39 @@ void EndRenderFrame(render_frame* Frame)
                 },
             };
         }
+        for (u32 ShadowIndex = Frame->ShadowCount; ShadowIndex < Frame->MaxShadowCount; ShadowIndex++)
+        {
+            point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;
+            Barriers[ShadowIndex] = 
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                .srcAccessMask = VK_ACCESS_2_NONE,
+                .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = ShadowMap->Image,
+                .subresourceRange = 
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 6,
+                },
+            };
+        }
+
         VkDependencyInfo EndShadow = 
         {
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
             .pNext = nullptr,
             .dependencyFlags = 0,
-            .imageMemoryBarrierCount = BarrierCount,
+            .imageMemoryBarrierCount = Frame->MaxShadowCount,
             .pImageMemoryBarriers = Barriers,
         };
         vkCmdPipelineBarrier2(ShadowCmd, &EndShadow);

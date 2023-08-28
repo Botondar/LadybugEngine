@@ -51,6 +51,13 @@ struct screen_tile
     u32 LightIndices[R_MaxLightCountPerTile];
 };
 
+struct point_shadow_map
+{
+    VkImage Image;
+    VkImageView CubeView;
+    VkImageView LayerViews[6];
+};
+
 struct pipeline_with_layout
 {
     VkPipeline Pipeline;
@@ -94,13 +101,6 @@ struct backend_render_frame
     VkBuffer JointBuffer;
     VkBuffer SkinnedMeshVB;
     VkBuffer Vertex2DBuffer;
-};
-
-struct point_shadow_map
-{
-    VkImage Image;
-    VkImageView CubeView;
-    VkImageView LayerViews[6];
 };
 
 struct renderer
