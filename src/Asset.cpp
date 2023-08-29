@@ -166,7 +166,7 @@ lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scra
     // Default textures
     {
         u32 Value = 0xFFFFFFFFu;
-        texture_id Whiteness = PushTexture(Renderer, TextureFlag_None, 1, 1, 1, 1, Format_R8G8B8A8_SRGB, {}, &Value);
+        renderer_texture_id Whiteness = PushTexture(Renderer, TextureFlag_None, 1, 1, 1, 1, Format_R8G8B8A8_SRGB, {}, &Value);
 
         Assets->DefaultDiffuseID = Whiteness;
         Assets->DefaultMetallicRoughnessID = Whiteness;
@@ -417,9 +417,9 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         }
     }
 
-    auto LoadAndUploadTexture = [&](u32 TextureIndex, texture_type Type, gltf_alpha_mode AlphaMode) -> texture_id
+    auto LoadAndUploadTexture = [&](u32 TextureIndex, texture_type Type, gltf_alpha_mode AlphaMode) -> renderer_texture_id
     {
-        texture_id Result = { 0 };
+        renderer_texture_id Result = { 0 };
         if (TextureIndex < GLTF.TextureCount)
         {
             if ((Assets->TextureQueue.CompletionGoal - Assets->TextureQueue.CompletionCount) < Assets->TextureQueue.MaxEntryCount)
@@ -455,7 +455,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         return Result;
     };
 
-    texture_id* TextureTable = PushArray<texture_id>(Scratch, GLTF.TextureCount);
+    renderer_texture_id* TextureTable = PushArray<renderer_texture_id>(Scratch, GLTF.TextureCount);
     for (u32 i = 0; i < GLTF.TextureCount; i++)
     {
         TextureTable[i].Value = INVALID_INDEX_U32;
@@ -484,7 +484,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
             if (SrcMaterial->BaseColorTexture.TextureIndex != U32_MAX)
             {
-                texture_id* Texture = TextureTable + SrcMaterial->BaseColorTexture.TextureIndex;
+                renderer_texture_id* Texture = TextureTable + SrcMaterial->BaseColorTexture.TextureIndex;
                 if (!IsValid(*Texture))
                 {
                     *Texture = LoadAndUploadTexture(SrcMaterial->BaseColorTexture.TextureIndex, TextureType_Diffuse, SrcMaterial->AlphaMode);
@@ -493,7 +493,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             }
             if (SrcMaterial->NormalTexture.TextureIndex != U32_MAX)
             {
-                texture_id* Texture = TextureTable + SrcMaterial->NormalTexture.TextureIndex;
+                renderer_texture_id* Texture = TextureTable + SrcMaterial->NormalTexture.TextureIndex;
                 if (!IsValid(*Texture))
                 {
                     *Texture = LoadAndUploadTexture(SrcMaterial->NormalTexture.TextureIndex, TextureType_Normal, SrcMaterial->AlphaMode);
@@ -502,7 +502,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             }
             if (SrcMaterial->MetallicRoughnessTexture.TextureIndex != U32_MAX)
             {
-                texture_id* Texture = TextureTable + SrcMaterial->MetallicRoughnessTexture.TextureIndex;
+                renderer_texture_id* Texture = TextureTable + SrcMaterial->MetallicRoughnessTexture.TextureIndex;
                 if (!IsValid(*Texture))
                 {
                     *Texture = LoadAndUploadTexture(SrcMaterial->MetallicRoughnessTexture.TextureIndex, TextureType_Material, SrcMaterial->AlphaMode);

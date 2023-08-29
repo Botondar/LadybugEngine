@@ -489,11 +489,11 @@ inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 P, f32 r);
 // Render API
 //
 
-struct texture_id
+struct renderer_texture_id
 {
     u32 Value;
 };
-inline bool IsValid(texture_id ID) { return ID.Value != U32_MAX; }
+inline bool IsValid(renderer_texture_id ID) { return ID.Value != U32_MAX; }
 
 
 // NOTE(boti): Normally textures get put into the bindless descriptor heap,
@@ -614,9 +614,9 @@ struct material
     v3 Emissive;
     rgba8 DiffuseColor;
     rgba8 BaseMaterial;
-    texture_id DiffuseID;
-    texture_id NormalID;
-    texture_id MetallicRoughnessID;
+    renderer_texture_id DiffuseID;
+    renderer_texture_id NormalID;
+    renderer_texture_id MetallicRoughnessID;
 };
 
 // TODO(boti): Rename this. we'd probably want pipeline-specific push constant types
@@ -768,7 +768,7 @@ enum transfer_op_type : u32
 
 struct transfer_texture
 {
-    texture_id TargetID;
+    renderer_texture_id TargetID;
     umm StagingBufferOffset;
 
     texture_info Info;
@@ -795,8 +795,8 @@ struct render_frame
     u32 RenderWidth;
     u32 RenderHeight;
 
-    texture_id ImmediateTextureID;
-    texture_id ParticleTextureID; // TODO(boti): Move this to the particle command?
+    renderer_texture_id ImmediateTextureID;
+    renderer_texture_id ParticleTextureID; // TODO(boti): Move this to the particle command?
 
     post_process_params PostProcess;
 
@@ -879,10 +879,10 @@ UploadVertexData(renderer* Renderer,
                 u32 VertexCount, const vertex* VertexData,
                 u32 IndexCount, const vert_index* IndexData);
 
-extern texture_id
+extern renderer_texture_id
 AllocateTextureName(renderer* Renderer, texture_flags Flags);
 
-extern texture_id 
+extern renderer_texture_id 
 PushTexture(renderer* Renderer, texture_flags Flags,
             u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
             format Format, texture_swizzle Swizzle,
@@ -899,7 +899,7 @@ void EndRenderFrame(render_frame* Frame);
 
 void SetRenderCamera(render_frame* Frame, const render_camera* Camera);
 
-inline b32 TransferTexture(render_frame* Frame, texture_id ID, texture_info Info, const void* Data);
+inline b32 TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_info Info, const void* Data);
 
 inline b32 DrawMesh(render_frame* Frame,
                       u32 VertexOffset, u32 VertexCount, 
@@ -1082,7 +1082,7 @@ inline u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, 
     return Result;
 }
 
-inline b32 TransferTexture(render_frame* Frame, texture_id ID, texture_info Info, const void* Data)
+inline b32 TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_info Info, const void* Data)
 {
     b32 Result = true;
 

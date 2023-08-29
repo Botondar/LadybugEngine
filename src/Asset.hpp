@@ -56,6 +56,82 @@ struct animation
 
 inline b32 IsJointActive(animation* Animation, u32 JointIndex);
 
+enum texture_type : u32
+{
+    TextureType_Diffuse,
+    TextureType_Normal,
+    TextureType_Material,
+};
+
+struct texture_queue_entry
+{
+    renderer_texture_id ID;
+    texture_type TextureType;
+    b32 AlphaEnabled;
+    filepath Path;
+};
+
+struct texture_queue
+{
+    static constexpr u32 MaxEntryCount = 1u << 14;
+
+    u32 CompletionCount;
+    u32 CompletionGoal;
+    texture_queue_entry Entries[MaxEntryCount];
+};
+
+struct assets
+{
+    memory_arena Arena;
+
+    texture_queue TextureQueue;
+
+    renderer_texture_id Whiteness;
+
+    renderer_texture_id DefaultDiffuseID;
+    renderer_texture_id DefaultNormalID;
+    renderer_texture_id DefaultMetallicRoughnessID;
+
+    renderer_texture_id DefaultFontTextureID;
+    font DefaultFont;
+
+    renderer_texture_id ParticleArrayID;
+
+    u32 ArrowMeshID;
+    u32 SphereMeshID;
+    u32 CubeMeshID;
+
+    static constexpr u32 MaxMeshCount = 1u << 16;
+    static constexpr u32 MaxMaterialCount = 1u << 14;
+    static constexpr u32 MaxSkinCount = 1u << 14;
+    static constexpr u32 MaxAnimationCount = 1u << 16;
+    u32 MeshCount;
+    u32 MaterialCount;
+    u32 SkinCount;
+    u32 AnimationCount;
+
+    geometry_buffer_allocation Meshes[MaxMeshCount];
+    mmbox MeshBoxes[MaxMeshCount];
+    u32 MeshMaterialIndices[MaxMeshCount];
+
+    material Materials[MaxMaterialCount];
+
+    skin Skins[MaxSkinCount];
+
+    animation Animations[MaxAnimationCount];
+};
+
+lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, memory_arena* Scratch);
+lbfn b32 IsEmpty(texture_queue* Queue);
+
+lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scratch);
+
+lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Renderer, const char* Path);
+lbfn void DEBUGLoadTestScene(memory_arena* Scratch, 
+                             assets* Assets, struct game_world* World, render_frame* Frame,
+                             const char* ScenePath, m4 BaseTransform);
+
+
 enum particle_texture : u32
 {
     Particle_Circle01,
@@ -143,80 +219,6 @@ enum particle_texture : u32
 };
 extern const char* ParticlePaths[Particle_COUNT];
 
-enum texture_type : u32
-{
-    TextureType_Diffuse,
-    TextureType_Normal,
-    TextureType_Material,
-};
-
-struct texture_queue_entry
-{
-    texture_id ID;
-    texture_type TextureType;
-    b32 AlphaEnabled;
-    filepath Path;
-};
-
-struct texture_queue
-{
-    static constexpr u32 MaxEntryCount = 1u << 14;
-
-    u32 CompletionCount;
-    u32 CompletionGoal;
-    texture_queue_entry Entries[MaxEntryCount];
-};
-
-struct assets
-{
-    memory_arena Arena;
-
-    texture_queue TextureQueue;
-
-    texture_id Whiteness;
-
-    texture_id DefaultDiffuseID;
-    texture_id DefaultNormalID;
-    texture_id DefaultMetallicRoughnessID;
-
-    texture_id DefaultFontTextureID;
-    font DefaultFont;
-
-    texture_id ParticleArrayID;
-
-    u32 ArrowMeshID;
-    u32 SphereMeshID;
-    u32 CubeMeshID;
-
-    static constexpr u32 MaxMeshCount = 1u << 16;
-    static constexpr u32 MaxMaterialCount = 1u << 14;
-    static constexpr u32 MaxSkinCount = 1u << 14;
-    static constexpr u32 MaxAnimationCount = 1u << 16;
-    u32 MeshCount;
-    u32 MaterialCount;
-    u32 SkinCount;
-    u32 AnimationCount;
-
-    geometry_buffer_allocation Meshes[MaxMeshCount];
-    mmbox MeshBoxes[MaxMeshCount];
-    u32 MeshMaterialIndices[MaxMeshCount];
-
-    material Materials[MaxMaterialCount];
-
-    skin Skins[MaxSkinCount];
-
-    animation Animations[MaxAnimationCount];
-};
-
-lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, memory_arena* Scratch);
-lbfn b32 IsEmpty(texture_queue* Queue);
-
-lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scratch);
-
-lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Renderer, const char* Path);
-lbfn void DEBUGLoadTestScene(memory_arena* Scratch, 
-                             assets* Assets, struct game_world* World, render_frame* Frame,
-                             const char* ScenePath, m4 BaseTransform);
 
 //
 // Implementation

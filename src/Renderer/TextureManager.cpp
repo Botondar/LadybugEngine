@@ -131,7 +131,7 @@ internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32
     return (Result == VK_SUCCESS);
 }
 
-internal VkImage* GetImage(texture_manager* Manager, texture_id ID)
+internal VkImage* GetImage(texture_manager* Manager, renderer_texture_id ID)
 {
     VkImage* Result = nullptr;
     if (IsValid(ID))
@@ -149,7 +149,7 @@ internal VkImage* GetImage(texture_manager* Manager, texture_id ID)
     return Result;
 }
 
-internal VkImageView* GetImageView(texture_manager* Manager, texture_id ID)
+internal VkImageView* GetImageView(texture_manager* Manager, renderer_texture_id ID)
 {
     VkImageView* Result = nullptr;
     if (IsValid(ID))
@@ -167,10 +167,10 @@ internal VkImageView* GetImageView(texture_manager* Manager, texture_id ID)
     return(Result);
 }
 
-internal texture_id
+internal renderer_texture_id
 AllocateTextureName(texture_manager* Manager, texture_flags Flags)
 {
-    texture_id Result = { U32_MAX };
+    renderer_texture_id Result = { U32_MAX };
 
     if (Flags & TextureFlag_Special)
     {
@@ -201,7 +201,7 @@ AllocateTextureName(texture_manager* Manager, texture_flags Flags)
 }
 
 internal b32
-AllocateTexture(texture_manager* Manager, texture_id ID, texture_info Info)
+AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info Info)
 {
     b32 Result = false;
 
@@ -336,7 +336,7 @@ AllocateTexture(texture_manager* Manager, texture_id ID, texture_info Info)
 }
 
 // TODO(boti): Pipe this through AllocateTexture
-internal texture_id 
+internal renderer_texture_id 
 CreateTexture2D(texture_manager* Manager, texture_flags Flags,
                 u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
                 VkFormat Format, texture_swizzle Swizzle)
@@ -359,7 +359,7 @@ CreateTexture2D(texture_manager* Manager, texture_flags Flags,
         return(Result);
     };
 
-    texture_id ID = AllocateTextureName(Manager, Flags);
+    renderer_texture_id ID = AllocateTextureName(Manager, Flags);
 
     if (IsValid(ID))
     {

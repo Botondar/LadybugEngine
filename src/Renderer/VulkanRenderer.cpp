@@ -1772,12 +1772,12 @@ geometry_buffer_allocation UploadVertexData(renderer* Renderer,
 
 #undef ReturnOnFailure
 
-texture_id PushTexture(renderer* Renderer, texture_flags Flags,
+renderer_texture_id PushTexture(renderer* Renderer, texture_flags Flags,
                        u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
                        format InFormat, texture_swizzle Swizzle, 
                        const void* Data)
 {
-    texture_id ID = { INVALID_INDEX_U32 };
+    renderer_texture_id ID = { INVALID_INDEX_U32 };
 
     VkFormat Format = FormatTable[InFormat];
 
@@ -3573,10 +3573,10 @@ void EndRenderFrame(render_frame* Frame)
     }
 }
 
-texture_id 
+renderer_texture_id 
 AllocateTextureName(renderer* Renderer, texture_flags Flags)
 {
-    texture_id Result = AllocateTextureName(&Renderer->TextureManager, Flags);
+    renderer_texture_id Result = AllocateTextureName(&Renderer->TextureManager, Flags);
     return(Result);
 }
 

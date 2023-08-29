@@ -82,7 +82,7 @@ PushImageDescriptor(render_frame* Frame,
 }
 
 internal VkDescriptorSet 
-PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, texture_id ID)
+PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, renderer_texture_id ID)
 {
     texture_manager* TextureManager = &Frame->Renderer->TextureManager;
     VkDescriptorSet Set = PushImageDescriptor(Frame, Layout,
