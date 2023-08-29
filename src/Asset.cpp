@@ -1244,10 +1244,12 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 Entity->Transform = NodeTransform;
 
                 Assert(Mesh->PrimitiveCount <= Entity->MaxPieceCount);
-                Entity->PieceCount = Mesh->PrimitiveCount;
-                for (u32 Piece = 0; Piece < Entity->PieceCount; Piece++)
+                for (u32 PrimitiveIndex = 0; PrimitiveIndex < Mesh->PrimitiveCount; PrimitiveIndex++)
                 {
-                    Entity->Pieces[Piece] = { .MeshID = BaseMeshIndex + MeshOffset + Piece };
+                    Entity->Pieces[Entity->PieceCount++] = 
+                    { 
+                        .MeshID = BaseMeshIndex + MeshOffset + PrimitiveIndex 
+                    };
                 }
 
                 if (Node->SkinIndex != U32_MAX)
