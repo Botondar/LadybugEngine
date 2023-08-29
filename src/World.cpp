@@ -378,24 +378,22 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             for (u32 PieceIndex = 0; PieceIndex < Entity->PieceCount; PieceIndex++)
             {
                 entity_piece* Piece = Entity->Pieces + PieceIndex;
-                geometry_buffer_allocation MeshAllocation = Assets->Meshes[Piece->MeshID];
-                u32 MaterialID = Assets->MeshMaterialIndices[Piece->MeshID];
-                
-                u32 VertexOffset = TruncateU64ToU32(MeshAllocation.VertexBlock->ByteOffset / sizeof(vertex));
-                u32 VertexCount = TruncateU64ToU32(MeshAllocation.VertexBlock->ByteSize / sizeof(vertex));
-                u32 IndexOffset = TruncateU64ToU32(MeshAllocation.IndexBlock->ByteOffset / sizeof(vert_index));
-                u32 IndexCount = TruncateU64ToU32(MeshAllocation.IndexBlock->ByteSize / sizeof(vert_index));
+                mesh* Mesh = Assets->Meshes + Piece->MeshID;
+                u32 VertexOffset = TruncateU64ToU32(Mesh->Allocation.VertexBlock->ByteOffset / sizeof(vertex));
+                u32 VertexCount = TruncateU64ToU32(Mesh->Allocation.VertexBlock->ByteSize / sizeof(vertex));
+                u32 IndexOffset = TruncateU64ToU32(Mesh->Allocation.IndexBlock->ByteOffset / sizeof(vert_index));
+                u32 IndexCount = TruncateU64ToU32(Mesh->Allocation.IndexBlock->ByteSize / sizeof(vert_index));
 
                 if (DrawSkinned)
                 {
                     DrawSkinnedMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
-                                    Entity->Transform, Assets->Materials[MaterialID],
+                                    Entity->Transform, Assets->Materials[Mesh->MaterialID],
                                     JointCount, Pose);
                 }
                 else
                 {
                     DrawMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
-                             Entity->Transform, Assets->Materials[MaterialID]);
+                             Entity->Transform, Assets->Materials[Mesh->MaterialID]);
                 }
 
             }
@@ -406,11 +404,11 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             AddLight(Frame, { Entity->Transform.P, Entity->LightEmission }, LightFlag_ShadowCaster);
             if (DrawLights)
             {
-                geometry_buffer_allocation Mesh = Assets->Meshes[Assets->SphereMeshID];
-                u32 VertexOffset = Mesh.VertexBlock->ByteOffset / sizeof(vertex);
-                u32 VertexCount = Mesh.VertexBlock->ByteSize / sizeof(vertex);
-                u32 IndexOffset = Mesh.IndexBlock->ByteOffset / sizeof(vert_index);
-                u32 IndexCount = Mesh.IndexBlock->ByteSize / sizeof(vert_index);
+                mesh* Mesh = Assets->Meshes + Assets->SphereMeshID;
+                u32 VertexOffset = TruncateU64ToU32(Mesh->Allocation.VertexBlock->ByteOffset / sizeof(vertex));
+                u32 VertexCount = TruncateU64ToU32(Mesh->Allocation.VertexBlock->ByteSize / sizeof(vertex));
+                u32 IndexOffset = TruncateU64ToU32(Mesh->Allocation.IndexBlock->ByteOffset / sizeof(vert_index));
+                u32 IndexCount = TruncateU64ToU32(Mesh->Allocation.IndexBlock->ByteSize / sizeof(vert_index));
 
                 f32 S = World->LightProxyScale;
                 m4 Transform = Entity->Transform * M4(S, 0.0f, 0.0f, 0.0f,

@@ -248,18 +248,19 @@ lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scra
 
     LoadDebugFont(Scratch, Assets, Renderer, "data/liberation-mono.lbfnt");
 
-    auto AddMesh = [Assets, Renderer](mesh_data Mesh) -> u32
+    auto AddMesh = [Assets, Renderer](mesh_data MeshData) -> u32
     {
         u32 Result = U32_MAX;
         if (Assets->MeshCount < Assets->MaxMeshCount)
         {
-            geometry_buffer_allocation Allocation = UploadVertexData(Renderer, 
-                Mesh.VertexCount, Mesh.VertexData,
-                Mesh.IndexCount, Mesh.IndexData);
             Result = Assets->MeshCount++;
-            Assets->Meshes[Result] = Allocation;
-            Assets->MeshBoxes[Result] = Mesh.Box;
-            Assets->MeshMaterialIndices[Result] = 0;
+            mesh* Mesh = Assets->Meshes + Result;
+
+            Mesh->Allocation = UploadVertexData(Renderer, 
+                MeshData.VertexCount, MeshData.VertexData,
+                MeshData.IndexCount, MeshData.IndexData);
+            Mesh->BoundingBox = MeshData.Box;
+            Mesh->MaterialID = 0;
         }
         return(Result);
     };
@@ -772,11 +773,12 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             if (Assets->MeshCount < Assets->MaxMeshCount)
             {
                 u32 MeshID = Assets->MeshCount++;
-                Assets->Meshes[MeshID] = UploadVertexData(Frame->Renderer,
-                                                          VertexCount, VertexData,
-                                                          IndexCount, IndexData);
-                Assets->MeshBoxes[MeshID] = Box;
-                Assets->MeshMaterialIndices[MeshID] = Primitive->MaterialIndex + BaseMaterialIndex;
+                mesh* DstMesh = Assets->Meshes + MeshID;
+                DstMesh->Allocation = UploadVertexData(Frame->Renderer,
+                                                    VertexCount, VertexData,
+                                                    IndexCount, IndexData);
+                DstMesh->BoundingBox = Box;
+                DstMesh->MaterialID = Primitive->MaterialIndex + BaseMaterialIndex;
             }
             else
             {

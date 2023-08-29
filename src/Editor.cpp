@@ -228,7 +228,8 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
 
             if (HasFlag(Entity->Flags, EntityFlag_Mesh))
             {
-                mmbox Box = Assets->MeshBoxes[Entity->Pieces[0].MeshID]; // HACK(boti)
+                mesh* Mesh = Assets->Meshes + Entity->Pieces[0].MeshID; // HACK(boti): we need to loop through all the pieces here
+                mmbox Box = Mesh->BoundingBox;
                 v3 BoxP = 0.5f * (Box.Min + Box.Max);
                 v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
         
@@ -367,7 +368,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             Transform.C[AxisIndex].z = Axes[AxisIndex].z;
         }
 
-        mmbox Box = Assets->MeshBoxes[Assets->ArrowMeshID];
+        mmbox Box = Assets->Meshes[Assets->ArrowMeshID].BoundingBox;
         v3 BoxP = 0.5f * (Box.Min + Box.Max);
         v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
 
@@ -433,7 +434,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         }
 
         // Render
-        geometry_buffer_allocation Mesh = Assets->Meshes[Assets->ArrowMeshID];
+        geometry_buffer_allocation Mesh = Assets->Meshes[Assets->ArrowMeshID].Allocation;
         u32 VertexOffset = Mesh.VertexBlock->ByteOffset / sizeof(vertex);
         u32 VertexCount = Mesh.VertexBlock->ByteSize / sizeof(vertex);
         u32 IndexOffset = Mesh.IndexBlock->ByteOffset / sizeof(vert_index);

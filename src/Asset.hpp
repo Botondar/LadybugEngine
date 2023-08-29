@@ -80,6 +80,13 @@ struct texture_queue
     texture_queue_entry Entries[MaxEntryCount];
 };
 
+struct mesh
+{
+    geometry_buffer_allocation Allocation;
+    mmbox BoundingBox;
+    u32 MaterialID;
+};
+
 struct assets
 {
     memory_arena Arena;
@@ -110,14 +117,9 @@ struct assets
     u32 SkinCount;
     u32 AnimationCount;
 
-    geometry_buffer_allocation Meshes[MaxMeshCount];
-    mmbox MeshBoxes[MaxMeshCount];
-    u32 MeshMaterialIndices[MaxMeshCount];
-
+    mesh Meshes[MaxMeshCount];
     material Materials[MaxMaterialCount];
-
     skin Skins[MaxSkinCount];
-
     animation Animations[MaxAnimationCount];
 };
 
