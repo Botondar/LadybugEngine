@@ -102,7 +102,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                           0.0f, 0.0f, 1e-2f, 0.0f,
                           0.0f, 0.0f, 0.0f, 1.0f) * YUpToZUp;
 #endif
-        DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, GameState->Renderer, GameIO->DroppedFilename, Transform);
+        DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, RenderFrame, GameIO->DroppedFilename, Transform);
         GameIO->bHasDroppedFile = false;
     }
     

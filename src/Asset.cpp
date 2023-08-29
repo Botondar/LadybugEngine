@@ -202,8 +202,7 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Rendere
 }
 
 // TODO(boti): There seem to be multiple places in here that might not handle the case where the buffer view stride is 0
-// TODO(boti): remove the renderer from here
-internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_world* World, renderer* Renderer, const char* ScenePath, m4 BaseTransform)
+internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_world* World, render_frame* Frame, const char* ScenePath, m4 BaseTransform)
 {
     filepath Filepath = {};
     b32 FilepathResult = MakeFilepathFromZ(&Filepath, ScenePath);
@@ -402,7 +401,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                     }
                 }
 
-                Result = PushTexture(Renderer, TextureFlag_None, Width, Height, MipCount, 1, Format, {}, MipChain);
+                Result = PushTexture(Frame->Renderer, TextureFlag_None, Width, Height, MipCount, 1, Format, {}, MipChain);
                 stbi_image_free(SrcImage);
             }
             else 
@@ -735,7 +734,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             if (Assets->MeshCount < Assets->MaxMeshCount)
             {
                 u32 MeshID = Assets->MeshCount++;
-                Assets->Meshes[MeshID] = UploadVertexData(Renderer,
+                Assets->Meshes[MeshID] = UploadVertexData(Frame->Renderer,
                                                           VertexCount, VertexData,
                                                           IndexCount, IndexData);
                 Assets->MeshBoxes[MeshID] = Box;

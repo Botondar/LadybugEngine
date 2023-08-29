@@ -154,7 +154,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 #if 1
         {
             m4 Transform = YUpToZUp;
-            DEBUGLoadTestScene(Scratch, Assets, World, Frame->Renderer,
+            DEBUGLoadTestScene(Scratch, Assets, World, Frame,
                                "data/Scenes/Sponza/Sponza.gltf", Transform);
 
             const light LightSources[] = 
@@ -218,7 +218,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                                          0.0f, 1e-2f, 0.0f, 0.0f,
                                          0.0f, 0.0f, 1e-2f, 0.0f,
                                          0.0f, 0.0f, 0.0f, 1.0f);
-            DEBUGLoadTestScene(Scratch, Assets, World, Frame->Renderer, 
+            DEBUGLoadTestScene(Scratch, Assets, World, Frame, 
                                "data/Scenes/Fox/Fox.gltf", Transform);
         }
 
