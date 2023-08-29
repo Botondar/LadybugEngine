@@ -264,20 +264,45 @@ void main()
         float Shadow = 1.0;
         if (ShadowIndex != 0xFF)
         {
-            v3 SampleP = TransformDirection(PerFrame.CameraTransform, dP);
-            SampleP = -SampleP;
-            f32 Depth = max(abs(SampleP.x), max(abs(SampleP.y), abs(SampleP.z)));
+            v3 SampleP = TransformDirection(PerFrame.CameraTransform, -dP);
+            v3 AbsP = abs(SampleP);
+            f32 MaxXY = max(AbsP.x, AbsP.y);
+            f32 Depth = max(MaxXY, AbsP.z);
+
+            ivec2 ShadowResolution = textureSize(PointShadows[ShadowIndex], 0);
+            f32 TexelSize = 1.0 / float(ShadowResolution.x);
+            f32 Offset = 2.0 * TexelSize;
 
             // HACK(boti): These will need to be stored and fetched from the per-frame uniform buffer
             f32 n = 0.05;
             f32 f = 10.0;
             f32 r = 1.0 / (f - n);
-            Depth = f*r - f*n*r / Depth;
-            Shadow = texture(PointShadows[ShadowIndex], vec4(SampleP, Depth));
+            f32 ProjDepth = f*r - f*n*r / Depth;
+            Shadow = texture(PointShadows[ShadowIndex], v4(SampleP, ProjDepth));
 
-            // TODO(boti): Better filtering shadow filtering here
+#if 1
+            f32 dXY = (MaxXY > AbsP.z) ? Offset : 0.0;
+            f32 dX = (AbsP.x > AbsP.y) ? dXY : 0.0;
+            v2 OffsetXY = v2(Offset - dX, dX);
+            v2 OffsetYZ = v2(Offset - dXY, dXY);
 
-            AmbientTerm += 0.1 * E;
+            v3 Limit = v3(Depth);
+            Limit.xy -= OffsetXY * (1.0 / 1024.0);
+            Limit.yz -= OffsetYZ * (1.0 / 1024.0);
+
+            SampleP.xy -= OffsetXY;
+            SampleP.yz -= OffsetYZ;
+            Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+            SampleP.xy += 2.0 * OffsetXY;
+            Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+            SampleP.yz += 2.0 * OffsetYZ;
+            Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+            SampleP.xy -= 2.0 * OffsetXY;
+            Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+
+            Shadow = 0.2 * Shadow;
+#endif
+            AmbientTerm += 0.05 * E;
         }
 
         Lo += Shadow * CalculateOutgoingLuminance(Shadow * E, L, N, V,
