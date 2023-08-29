@@ -2,6 +2,163 @@ internal mesh CreateCubeMesh(memory_arena* Arena);
 internal mesh CreateSphereMesh(memory_arena* Arena);
 internal mesh CreateArrowMesh(memory_arena* Arena);
 
+lbfn b32 IsEmpty(texture_queue* Queue)
+{
+    b32 Result = (Queue->CompletionCount == Queue->CompletionGoal);
+    return(Result);
+}
+
+lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, memory_arena* Scratch)
+{
+    b32 Result = false;
+    if (!IsEmpty(Queue))
+    {
+        texture_queue_entry* Entry = Queue->Entries + Queue->CompletionCount++;
+
+        memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
+
+        texture_info Info = {};
+        Info.Depth = 1;
+        Info.ArrayCount = 1;
+
+        int Alpha = 0;
+        switch (Entry->TextureType)
+        {
+            case TextureType_Diffuse:
+            {
+                if (Entry->AlphaEnabled)
+                {
+                    Alpha = 1;
+                    Info.Format = Format_BC3_SRGB;
+                }
+                else
+                {
+                    Info.Format = Format_BC1_RGB_SRGB;
+                }
+            } break;
+            case TextureType_Normal:
+            {
+                Info.Format = Format_BC5_UNorm;
+            } break;
+            case TextureType_Material:
+            {
+                Info.Format = Format_BC3_UNorm;
+            } break;
+            InvalidDefaultCase;
+        }
+        
+        u32 ChannelCount;
+        int DesiredChannelCount = 4;
+        rgba8* SrcImage = (rgba8*)stbi_load(Entry->Path.Path, (int*)&Info.Width, (int*)&Info.Height, (int*)&ChannelCount, DesiredChannelCount);
+        if (SrcImage)
+        {
+            if (ChannelCount == 3)
+            {
+                for (u32 Index = 0; Index < Info.Width*Info.Height; Index++)
+                {
+                    SrcImage[Index].A = 0xFF;
+                }
+            }
+
+            Info.MipCount = GetMaxMipCountGreaterThanOne(Info.Width, Info.Height);
+            format_byterate ByteRate = FormatByterateTable[Info.Format];
+            u64 TotalMipChainSize = GetMipChainSize(Info.Width, Info.Height, Info.MipCount, 1, ByteRate);
+            u8* MipChain = (u8*)PushSize(Scratch, TotalMipChainSize, 64);
+
+            u32 BlockSize = 16 * ByteRate.Numerator / ByteRate.Denominator;
+
+            rgba8* DownscaleBuffer = PushArray<rgba8>(Scratch, Info.Width*Info.Height, 64);
+            rgba8* SrcAt = SrcImage;
+            u8* DstAt = MipChain;
+            for (u32 MipIndex = 0; MipIndex < Info.MipCount; MipIndex++)
+            {
+                u32 Width = Max(Info.Width >> MipIndex, 1u);
+                u32 Height = Max(Info.Height >> MipIndex, 1u);
+
+                if (MipIndex != 0)
+                {
+                    u32 PrevWidth = Max(Info.Width >> (MipIndex - 1), 1u);
+                    u32 PrevHeight = Max(Info.Height >> (MipIndex - 1), 1u);
+                    // TODO(boti): alpha and srgb correct resize here
+                    stbir_resize_uint8((u8*)SrcAt, PrevWidth, PrevHeight, 0, 
+                                       (u8*)DownscaleBuffer, Width, Height, 0,
+                                       DesiredChannelCount);
+                    SrcAt = DownscaleBuffer;
+                }
+
+                for (u32 Y = 0; Y < Height; Y += 4)
+                {
+                    for (u32 X = 0; X < Width; X += 4)
+                    {
+                        u32 Y0 = (Y + 0) * Width;
+                        u32 Y1 = (Y + 1) * Width;
+                        u32 Y2 = (Y + 2) * Width;
+                        u32 Y3 = (Y + 3) * Width;
+                        switch (Info.Format)
+                        {
+                            case Format_BC3_SRGB: Alpha = 1;
+                            case Format_BC3_UNorm: Alpha = 1;
+                            case Format_BC1_RGB_SRGB:
+                            {
+                                rgba8 SrcBlock[16] = 
+                                {
+                                    SrcAt[X+0 + Y0], SrcAt[X+1 + Y0], SrcAt[X+2 + Y0], SrcAt[X+3 + Y0],
+                                    SrcAt[X+0 + Y1], SrcAt[X+1 + Y1], SrcAt[X+2 + Y1], SrcAt[X+3 + Y1],
+                                    SrcAt[X+0 + Y2], SrcAt[X+1 + Y2], SrcAt[X+2 + Y2], SrcAt[X+3 + Y2],
+                                    SrcAt[X+0 + Y3], SrcAt[X+1 + Y3], SrcAt[X+2 + Y3], SrcAt[X+3 + Y3],
+                                };
+                                stb_compress_dxt_block(DstAt, (u8*)SrcBlock, Alpha, STB_DXT_HIGHQUAL);
+                            } break;
+                            case Format_BC5_UNorm:
+                            {
+                                u8 SrcBlock[16][2] = 
+                                {
+                                    { SrcAt[X+0 + Y0].R, SrcAt[X+0 + Y0].G },
+                                    { SrcAt[X+1 + Y0].R, SrcAt[X+1 + Y0].G },
+                                    { SrcAt[X+2 + Y0].R, SrcAt[X+2 + Y0].G },
+                                    { SrcAt[X+3 + Y0].R, SrcAt[X+3 + Y0].G },
+
+                                    { SrcAt[X+0 + Y1].R, SrcAt[X+0 + Y1].G },
+                                    { SrcAt[X+1 + Y1].R, SrcAt[X+1 + Y1].G },
+                                    { SrcAt[X+2 + Y1].R, SrcAt[X+2 + Y1].G },
+                                    { SrcAt[X+3 + Y1].R, SrcAt[X+3 + Y1].G },
+
+                                    { SrcAt[X+0 + Y2].R, SrcAt[X+0 + Y2].G },
+                                    { SrcAt[X+1 + Y2].R, SrcAt[X+1 + Y2].G },
+                                    { SrcAt[X+2 + Y2].R, SrcAt[X+2 + Y2].G },
+                                    { SrcAt[X+3 + Y2].R, SrcAt[X+3 + Y2].G },
+
+                                    { SrcAt[X+0 + Y3].R, SrcAt[X+0 + Y3].G },
+                                    { SrcAt[X+1 + Y3].R, SrcAt[X+1 + Y3].G },
+                                    { SrcAt[X+2 + Y3].R, SrcAt[X+2 + Y3].G },
+                                    { SrcAt[X+3 + Y3].R, SrcAt[X+3 + Y3].G },
+                                };
+                                stb_compress_bc5_block(DstAt, (u8*)SrcBlock);
+                            } break;
+                            InvalidDefaultCase;
+                        }
+
+                        DstAt += BlockSize;
+                    }
+                }
+            }
+
+            TransferTexture(Frame, Entry->ID, Info, MipChain);
+            stbi_image_free(SrcImage);
+        }
+        else 
+        {
+            UnhandledError("Failed to load glTF image");
+        }
+        RestoreArena(Scratch, Checkpoint);
+    }
+    else
+    {
+        Result = true;
+    }
+    return(Result);
+}
+
 lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scratch)
 {
     b32 Result = true;
@@ -266,7 +423,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         texture_id Result = { 0 };
         if (TextureIndex < GLTF.TextureCount)
         {
-            if (TextureQueue->EntryCount < TextureQueue->MaxEntryCount)
+            if ((TextureQueue->CompletionGoal - TextureQueue->CompletionCount) < TextureQueue->MaxEntryCount)
             {
                 gltf_texture* Texture = GLTF.Textures + TextureIndex;
                 if (Texture->ImageIndex >= GLTF.ImageCount) UnhandledError("Invalid glTF image index");
@@ -281,7 +438,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
                 Result = AllocateTextureName(Frame->Renderer, TextureFlag_None);
 
-                texture_queue_entry* Entry = TextureQueue->Entries + TextureQueue->EntryCount++;
+                texture_queue_entry* Entry = TextureQueue->Entries + TextureQueue->CompletionGoal++;
                 Entry->ID = Result;
                 Entry->AlphaEnabled = (AlphaMode != GLTF_ALPHA_MODE_OPAQUE);
                 Entry->TextureType = Type;
@@ -1019,147 +1176,9 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         }
     }
 
-    // Upload textures
-    for (u32 EntryIndex = 0; EntryIndex < TextureQueue->EntryCount; EntryIndex++)
+    while (!IsEmpty(TextureQueue))
     {
-        texture_queue_entry* Entry = TextureQueue->Entries + EntryIndex;
-
-        memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
-
-        texture_info Info = {};
-        Info.Depth = 1;
-        Info.ArrayCount = 1;
-
-        int Alpha = 0;
-        switch (Entry->TextureType)
-        {
-            case TextureType_Diffuse:
-            {
-                if (Entry->AlphaEnabled)
-                {
-                    Alpha = 1;
-                    Info.Format = Format_BC3_SRGB;
-                }
-                else
-                {
-                    Info.Format = Format_BC1_RGB_SRGB;
-                }
-            } break;
-            case TextureType_Normal:
-            {
-                Info.Format = Format_BC5_UNorm;
-            } break;
-            case TextureType_Material:
-            {
-                Info.Format = Format_BC3_UNorm;
-            } break;
-            InvalidDefaultCase;
-        }
-        
-        u32 ChannelCount;
-        int DesiredChannelCount = 4;
-        rgba8* SrcImage = (rgba8*)stbi_load(Entry->Path.Path, (int*)&Info.Width, (int*)&Info.Height, (int*)&ChannelCount, DesiredChannelCount);
-        if (SrcImage)
-        {
-            if (ChannelCount == 3)
-            {
-                for (u32 Index = 0; Index < Info.Width*Info.Height; Index++)
-                {
-                    SrcImage[Index].A = 0xFF;
-                }
-            }
-
-            Info.MipCount = GetMaxMipCountGreaterThanOne(Info.Width, Info.Height);
-            format_byterate ByteRate = FormatByterateTable[Info.Format];
-            u64 TotalMipChainSize = GetMipChainSize(Info.Width, Info.Height, Info.MipCount, 1, ByteRate);
-            u8* MipChain = (u8*)PushSize(Scratch, TotalMipChainSize, 64);
-
-            u32 BlockSize = 16 * ByteRate.Numerator / ByteRate.Denominator;
-
-            rgba8* DownscaleBuffer = PushArray<rgba8>(Scratch, Info.Width*Info.Height, 64);
-            rgba8* SrcAt = SrcImage;
-            u8* DstAt = MipChain;
-            for (u32 MipIndex = 0; MipIndex < Info.MipCount; MipIndex++)
-            {
-                u32 Width = Max(Info.Width >> MipIndex, 1u);
-                u32 Height = Max(Info.Height >> MipIndex, 1u);
-
-                if (MipIndex != 0)
-                {
-                    u32 PrevWidth = Max(Info.Width >> (MipIndex - 1), 1u);
-                    u32 PrevHeight = Max(Info.Height >> (MipIndex - 1), 1u);
-                    // TODO(boti): alpha and srgb correct resize here
-                    stbir_resize_uint8((u8*)SrcAt, PrevWidth, PrevHeight, 0, 
-                                       (u8*)DownscaleBuffer, Width, Height, 0,
-                                       DesiredChannelCount);
-                    SrcAt = DownscaleBuffer;
-                }
-
-                for (u32 Y = 0; Y < Height; Y += 4)
-                {
-                    for (u32 X = 0; X < Width; X += 4)
-                    {
-                        u32 Y0 = (Y + 0) * Width;
-                        u32 Y1 = (Y + 1) * Width;
-                        u32 Y2 = (Y + 2) * Width;
-                        u32 Y3 = (Y + 3) * Width;
-                        switch (Info.Format)
-                        {
-                            case Format_BC3_SRGB: Alpha = 1;
-                            case Format_BC3_UNorm: Alpha = 1;
-                            case Format_BC1_RGB_SRGB:
-                            {
-                                rgba8 SrcBlock[16] = 
-                                {
-                                    SrcAt[X+0 + Y0], SrcAt[X+1 + Y0], SrcAt[X+2 + Y0], SrcAt[X+3 + Y0],
-                                    SrcAt[X+0 + Y1], SrcAt[X+1 + Y1], SrcAt[X+2 + Y1], SrcAt[X+3 + Y1],
-                                    SrcAt[X+0 + Y2], SrcAt[X+1 + Y2], SrcAt[X+2 + Y2], SrcAt[X+3 + Y2],
-                                    SrcAt[X+0 + Y3], SrcAt[X+1 + Y3], SrcAt[X+2 + Y3], SrcAt[X+3 + Y3],
-                                };
-                                stb_compress_dxt_block(DstAt, (u8*)SrcBlock, Alpha, STB_DXT_HIGHQUAL);
-                            } break;
-                            case Format_BC5_UNorm:
-                            {
-                                u8 SrcBlock[16][2] = 
-                                {
-                                    { SrcAt[X+0 + Y0].R, SrcAt[X+0 + Y0].G },
-                                    { SrcAt[X+1 + Y0].R, SrcAt[X+1 + Y0].G },
-                                    { SrcAt[X+2 + Y0].R, SrcAt[X+2 + Y0].G },
-                                    { SrcAt[X+3 + Y0].R, SrcAt[X+3 + Y0].G },
-
-                                    { SrcAt[X+0 + Y1].R, SrcAt[X+0 + Y1].G },
-                                    { SrcAt[X+1 + Y1].R, SrcAt[X+1 + Y1].G },
-                                    { SrcAt[X+2 + Y1].R, SrcAt[X+2 + Y1].G },
-                                    { SrcAt[X+3 + Y1].R, SrcAt[X+3 + Y1].G },
-
-                                    { SrcAt[X+0 + Y2].R, SrcAt[X+0 + Y2].G },
-                                    { SrcAt[X+1 + Y2].R, SrcAt[X+1 + Y2].G },
-                                    { SrcAt[X+2 + Y2].R, SrcAt[X+2 + Y2].G },
-                                    { SrcAt[X+3 + Y2].R, SrcAt[X+3 + Y2].G },
-
-                                    { SrcAt[X+0 + Y3].R, SrcAt[X+0 + Y3].G },
-                                    { SrcAt[X+1 + Y3].R, SrcAt[X+1 + Y3].G },
-                                    { SrcAt[X+2 + Y3].R, SrcAt[X+2 + Y3].G },
-                                    { SrcAt[X+3 + Y3].R, SrcAt[X+3 + Y3].G },
-                                };
-                                stb_compress_bc5_block(DstAt, (u8*)SrcBlock);
-                            } break;
-                            InvalidDefaultCase;
-                        }
-
-                        DstAt += BlockSize;
-                    }
-                }
-            }
-
-            TransferTexture(Frame, Entry->ID, Info, MipChain);
-            stbi_image_free(SrcImage);
-        }
-        else 
-        {
-            UnhandledError("Failed to load glTF image");
-        }
-        RestoreArena(Scratch, Checkpoint);
+        ProcessTextureQueueEntry(TextureQueue, Frame, Scratch);
     }
 
     if (GLTF.DefaultSceneIndex >= GLTF.SceneCount)

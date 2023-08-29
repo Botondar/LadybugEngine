@@ -156,14 +156,14 @@ struct texture_queue_entry
     texture_type TextureType;
     b32 AlphaEnabled;
     filepath Path;
-    
 };
 
 struct texture_queue
 {
     static constexpr u32 MaxEntryCount = 1u << 14;
 
-    u32 EntryCount;
+    u32 CompletionCount;
+    u32 CompletionGoal;
     texture_queue_entry Entries[MaxEntryCount];
 };
 
@@ -205,6 +205,9 @@ struct assets
 
     animation Animations[MaxAnimationCount];
 };
+
+lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, memory_arena* Scratch);
+lbfn b32 IsEmpty(texture_queue* Queue);
 
 lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scratch);
 
