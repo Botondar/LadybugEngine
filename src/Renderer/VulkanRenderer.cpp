@@ -1704,13 +1704,13 @@ geometry_buffer_allocation UploadVertexData(renderer* Renderer,
         Assert(Allocation.VertexBlock);
 
         void* Mapping = Renderer->StagingBuffer.Mapping;
-        memcpy(OffsetPtr(Mapping, Renderer->StagingBuffer.Offset), VertexData, Allocation.VertexBlock->ByteSize);
+        memcpy(OffsetPtr(Mapping, Renderer->StagingBuffer.Offset), VertexData, Allocation.VertexBlock->Count * sizeof(vertex));
 
         VkBufferCopy VertexRegion = 
         {
             .srcOffset = Renderer->StagingBuffer.Offset,
-            .dstOffset = Allocation.VertexBlock->ByteOffset,
-            .size = Allocation.VertexBlock->ByteSize,
+            .dstOffset = Allocation.VertexBlock->Offset * sizeof(vertex),
+            .size = Allocation.VertexBlock->Count * sizeof(vertex),
         };
         // TODO(boti): support for multiple concurrent uploads
         //Renderer->StagingBuffer.Offset += Size;
@@ -1730,15 +1730,15 @@ geometry_buffer_allocation UploadVertexData(renderer* Renderer,
         if (IndexCount)
         {
             Assert(Allocation.IndexBlock);
-            u64 IndexOffset = Allocation.VertexBlock->ByteSize;
+            u64 IndexOffset = Allocation.VertexBlock->Count * sizeof(vertex);
 
-            memcpy(OffsetPtr(Mapping, Renderer->StagingBuffer.Offset + IndexOffset), IndexData, Allocation.IndexBlock->ByteSize);
+            memcpy(OffsetPtr(Mapping, Renderer->StagingBuffer.Offset + IndexOffset), IndexData, Allocation.IndexBlock->Count * sizeof(vert_index));
 
             VkBufferCopy IndexRegion = 
             {
                 .srcOffset = Renderer->StagingBuffer.Offset + IndexOffset,
-                .dstOffset = Allocation.IndexBlock->ByteOffset,
-                .size = Allocation.IndexBlock->ByteSize,
+                .dstOffset = Allocation.IndexBlock->Offset * sizeof(vert_index),
+                .size = Allocation.IndexBlock->Count * sizeof(vert_index),
             };
 
             vkCmdCopyBuffer(Renderer->TransferCmdBuffer,
@@ -3563,8 +3563,12 @@ void EndRenderFrame(render_frame* Frame)
 
         AddEntry("BAR", Renderer->BARMemory.MemoryAt, Renderer->BARMemory.Size);
         AddEntry("RenderTarget", Renderer->RenderTargetHeap.Offset, Renderer->RenderTargetHeap.MemorySize);
-        AddEntry("VertexBuffer", Renderer->GeometryBuffer.VertexMemory.MemoryInUse, Renderer->GeometryBuffer.VertexMemory.MemorySize);
-        AddEntry("IndexBuffer", Renderer->GeometryBuffer.IndexMemory.MemoryInUse, Renderer->GeometryBuffer.IndexMemory.MemorySize);
+        AddEntry("VertexBuffer", 
+                 Renderer->GeometryBuffer.VertexMemory.CountInUse * Renderer->GeometryBuffer.VertexMemory.Stride, 
+                 Renderer->GeometryBuffer.VertexMemory.MaxCount * Renderer->GeometryBuffer.VertexMemory.Stride);
+        AddEntry("IndexBuffer", 
+                 Renderer->GeometryBuffer.IndexMemory.CountInUse * Renderer->GeometryBuffer.IndexMemory.Stride, 
+                 Renderer->GeometryBuffer.IndexMemory.MaxCount * Renderer->GeometryBuffer.IndexMemory.Stride);
         AddEntry("Texture", Renderer->TextureManager.MemoryOffset, Renderer->TextureManager.MemorySize);
         AddEntry("Shadow", Renderer->ShadowMemoryOffset, Renderer->ShadowMemorySize);
         AddEntry("Staging", Frame->StagingBufferAt, Frame->StagingBufferSize);

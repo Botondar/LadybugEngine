@@ -9,9 +9,21 @@ internal bool CreateGeometryMemory(geometry_memory* Memory, geometry_buffer_type
     bool Result = false;
 
     VkBufferUsageFlags Usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    if      (Type == geometry_buffer_type::Vertex) Usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-    else if (Type == geometry_buffer_type::Index)  Usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    else InvalidCodePath;
+    u32 Stride = 0;
+    switch (Type)
+    {
+        case geometry_buffer_type::Vertex:
+        {
+            Stride = sizeof(vertex);
+            Usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+        } break;
+        case geometry_buffer_type::Index:
+        {
+            Stride = sizeof(vert_index);
+            Usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        } break;
+        InvalidDefaultCase;
+    }
 
     VkBufferCreateInfo BufferInfo = 
     {
@@ -41,6 +53,7 @@ internal bool CreateGeometryMemory(geometry_memory* Memory, geometry_buffer_type
             *Memory = {};
             Memory->MemoryTypeIndex = MemoryTypeIndex;
             Memory->Buffer = Buffer;
+            Memory->Stride = Stride;
             DListInitialize(&Memory->FreeBlocks);
             DListInitialize(&Memory->UsedBlocks);
 
@@ -78,8 +91,8 @@ internal bool CreateGeometryBuffer(u64 MaxBlockCount, memory_arena* Arena, geome
         {
             for (u64 i = 0; i < MaxBlockCount; i++)
             {
-                BlockPool[i].ByteSize = 0;
-                BlockPool[i].ByteOffset = 0;
+                BlockPool[i].Count = 0;
+                BlockPool[i].Offset = 0;
                 if (i < MaxBlockCount - 1)
                 {
                     BlockPool[i + 0].Next = BlockPool + (i + 1);
@@ -128,9 +141,9 @@ internal bool AllocateGPUBlocks(geometry_memory* Memory, geometry_buffer_block*&
                 Memory->FreeBlocks.Next = Memory->FreeBlocks.Prev = FreeBlock;
                 FreeBlock->Prev = FreeBlock->Next = &Memory->FreeBlocks;
 
-                FreeBlock->ByteSize = Memory->GPUBlockSize;
-                FreeBlock->ByteOffset = 0;
-                Memory->MemorySize += Memory->GPUBlockSize;
+                FreeBlock->Count = Memory->GPUBlockSize / Memory->Stride;
+                FreeBlock->Offset = 0;
+                Memory->MaxCount += Memory->GPUBlockSize / Memory->Stride;
 
                 Result = true;
             }
@@ -219,7 +232,7 @@ internal bool AllocateGPUBlocks(geometry_memory* Memory, geometry_buffer_block*&
     return Result;
 }
 
-internal geometry_buffer_block* FindCandidateBlock(geometry_memory* Memory, u64 ByteSize)
+internal geometry_buffer_block* FindCandidateBlock(geometry_memory* Memory, u32 Count)
 {
     geometry_buffer_block* Result = nullptr;
 
@@ -227,7 +240,7 @@ internal geometry_buffer_block* FindCandidateBlock(geometry_memory* Memory, u64 
          Candidate != &Memory->FreeBlocks;
          Candidate = Candidate->Next)
     {
-        if (ByteSize <= Candidate->ByteSize)
+        if (Count <= Candidate->Count)
         {
             Result = Candidate;
             break;
@@ -236,68 +249,35 @@ internal geometry_buffer_block* FindCandidateBlock(geometry_memory* Memory, u64 
     return Result;
 }
 
-internal void DefragmentGPUBuffer(geometry_memory* Memory, geometry_buffer_block* BlockPool)
-{
-    geometry_buffer_block* It = Memory->FreeBlocks.Next;
-    while (It != &Memory->FreeBlocks)
-    {
-        geometry_buffer_block* Next = It->Next;
-        if (Next != &Memory->FreeBlocks)
-        {
-            if (It->ByteOffset == (Next->ByteOffset + Next->ByteSize) ||
-                Next->ByteOffset == (It->ByteOffset + It->ByteSize))
-            {
-                It->ByteOffset = Min(It->ByteOffset, Next->ByteOffset);
-                It->ByteSize = It->ByteSize + Next->ByteSize;
-                DListRemove(Next);
-                FreeListFree(BlockPool, Next);
-            }
-            else
-            {
-                It = Next;
-            }
-        }
-        else
-        {
-            It = Next;
-        }
-    }
-}
-
-internal geometry_buffer_block* AllocateSubBuffer(geometry_memory* Memory, u64 AllocationSize, geometry_buffer_block*& BlockPool)
+internal geometry_buffer_block* AllocateSubBuffer(geometry_memory* Memory, u32 Count, geometry_buffer_block*& BlockPool)
 {
     geometry_buffer_block* Result = nullptr;
 
-    while (Memory->MemorySize - Memory->MemoryInUse < AllocationSize)
+    while (Memory->MaxCount - Memory->CountInUse < Count)
     {
         if (!AllocateGPUBlocks(Memory, BlockPool))
         {
+            UnhandledError("Out of geometry memory");
             return Result;
         }
     }
 
-    geometry_buffer_block* FreeBlock = FindCandidateBlock(Memory, AllocationSize);
-    if (!FreeBlock)
-    {
-        DefragmentGPUBuffer(Memory, BlockPool);
-        FreeBlock = FindCandidateBlock(Memory, AllocationSize);
-    }
-
+    geometry_buffer_block* FreeBlock = FindCandidateBlock(Memory, Count);
     if (FreeBlock)
     {
         DListRemove(FreeBlock);
 
-        if (FreeBlock->ByteSize > AllocationSize)
+        if (FreeBlock->Count > Count)
         {
             geometry_buffer_block* NextFreeBlock = FreeListAllocate(BlockPool);
-            NextFreeBlock->ByteSize = FreeBlock->ByteSize - AllocationSize;
-            NextFreeBlock->ByteOffset = FreeBlock->ByteOffset + AllocationSize;
-            FreeBlock->ByteSize = AllocationSize;
+            NextFreeBlock->Count = FreeBlock->Count - Count;
+            NextFreeBlock->Offset = FreeBlock->Offset + Count;
+            FreeBlock->Count = Count;
             DListInsert(&Memory->FreeBlocks, NextFreeBlock);
         }
 
         DListInsert(&Memory->UsedBlocks, FreeBlock);
-        Memory->MemoryInUse += FreeBlock->ByteSize;
+        Memory->CountInUse += FreeBlock->Count;
         Memory->BlocksInUse++;
 
         Result = FreeBlock;
@@ -316,13 +296,11 @@ internal geometry_buffer_allocation AllocateVertexBuffer(geometry_buffer* GB, u3
 
     if (VertexCount)
     {
-        u64 VertexMemorySize = u64(VertexCount) * sizeof(vertex);
-        Result.VertexBlock = AllocateSubBuffer(&GB->VertexMemory, VertexMemorySize, GB->BlockPool); 
+        Result.VertexBlock = AllocateSubBuffer(&GB->VertexMemory, VertexCount, GB->BlockPool); 
 
         if (IndexCount)
         {
-            u64 IndexMemorySize = u64(IndexCount) * sizeof(vert_index);
-            Result.IndexBlock = AllocateSubBuffer(&GB->IndexMemory, IndexMemorySize, GB->BlockPool);
+            Result.IndexBlock = AllocateSubBuffer(&GB->IndexMemory, IndexCount, GB->BlockPool);
         }
     }
 
@@ -335,7 +313,7 @@ internal void DeallocateVertexBuffer(geometry_buffer* GB, geometry_buffer_alloca
     {
         DListRemove(Allocation.VertexBlock);
         DListInsert(&GB->VertexMemory.FreeBlocks, Allocation.VertexBlock);
-        GB->VertexMemory.MemoryInUse -= Allocation.VertexBlock->ByteSize;
+        GB->VertexMemory.CountInUse -= Allocation.VertexBlock->Count;
         GB->VertexMemory.BlocksInUse--;
     }
 
@@ -343,7 +321,7 @@ internal void DeallocateVertexBuffer(geometry_buffer* GB, geometry_buffer_alloca
     {
         DListRemove(Allocation.IndexBlock);
         DListInsert(&GB->IndexMemory.FreeBlocks, Allocation.IndexBlock);
-        GB->IndexMemory.MemoryInUse -= Allocation.VertexBlock->ByteSize;
+        GB->IndexMemory.CountInUse -= Allocation.IndexBlock->Count;
         GB->IndexMemory.BlocksInUse--;
     }
 }

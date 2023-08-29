@@ -379,20 +379,16 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             {
                 entity_piece* Piece = Entity->Pieces + PieceIndex;
                 mesh* Mesh = Assets->Meshes + Piece->MeshID;
-                u32 VertexOffset = TruncateU64ToU32(Mesh->Allocation.VertexBlock->ByteOffset / sizeof(vertex));
-                u32 VertexCount = TruncateU64ToU32(Mesh->Allocation.VertexBlock->ByteSize / sizeof(vertex));
-                u32 IndexOffset = TruncateU64ToU32(Mesh->Allocation.IndexBlock->ByteOffset / sizeof(vert_index));
-                u32 IndexCount = TruncateU64ToU32(Mesh->Allocation.IndexBlock->ByteSize / sizeof(vert_index));
 
                 if (DrawSkinned)
                 {
-                    DrawSkinnedMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
+                    DrawSkinnedMesh(Frame, Mesh->Allocation,
                                     Entity->Transform, Assets->Materials[Mesh->MaterialID],
                                     JointCount, Pose);
                 }
                 else
                 {
-                    DrawMesh(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
+                    DrawMesh(Frame, Mesh->Allocation,
                              Entity->Transform, Assets->Materials[Mesh->MaterialID]);
                 }
 
@@ -405,17 +401,12 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             if (DrawLights)
             {
                 mesh* Mesh = Assets->Meshes + Assets->SphereMeshID;
-                u32 VertexOffset = TruncateU64ToU32(Mesh->Allocation.VertexBlock->ByteOffset / sizeof(vertex));
-                u32 VertexCount = TruncateU64ToU32(Mesh->Allocation.VertexBlock->ByteSize / sizeof(vertex));
-                u32 IndexOffset = TruncateU64ToU32(Mesh->Allocation.IndexBlock->ByteOffset / sizeof(vert_index));
-                u32 IndexCount = TruncateU64ToU32(Mesh->Allocation.IndexBlock->ByteSize / sizeof(vert_index));
-
                 f32 S = World->LightProxyScale;
                 m4 Transform = Entity->Transform * M4(S, 0.0f, 0.0f, 0.0f,
                                                       0.0f, S, 0.0f, 0.0f,
                                                       0.0f, 0.0f, S, 0.0f,
                                                       0.0f, 0.0f, 0.0f, 1.0f);
-                DrawWidget3D(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount, Transform, PackRGBA(Entity->LightEmission));
+                DrawWidget3D(Frame, Mesh->Allocation, Transform, PackRGBA(Entity->LightEmission));
             }
         }
     }

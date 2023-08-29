@@ -683,8 +683,8 @@ struct draw_widget3d_cmd
 
 struct geometry_buffer_block
 {
-    u64 ByteSize;
-    u64 ByteOffset;
+    u32 Count;
+    u32 Offset;
 
     geometry_buffer_block* Next;
     geometry_buffer_block* Prev;
@@ -901,19 +901,21 @@ void SetRenderCamera(render_frame* Frame, const render_camera* Camera);
 
 inline b32 TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_info Info, const void* Data);
 
-inline b32 DrawMesh(render_frame* Frame,
-                      u32 VertexOffset, u32 VertexCount, 
-                      u32 IndexOffset, u32 IndexCount,
-                      m4 Transform, material Material);
-inline b32 DrawSkinnedMesh(render_frame* Frame,
-                           u32 VertexOffset, u32 VertexCount,
-                           u32 IndexOffset, u32 IndexCount,
-                           m4 Transform, material,
-                           u32 JointCount, m4* Pose);
-inline b32 DrawWidget3D(render_frame* Frame,
-                        u32 VertexOffset, u32 VertexCount,
-                        u32 IndexOffset, u32 IndexCount,
-                        m4 Transform, rgba8 Color);
+inline b32 
+DrawMesh(render_frame* Frame,
+         geometry_buffer_allocation Allocation, 
+         m4 Transform, material Material);
+
+inline b32 
+DrawSkinnedMesh(render_frame* Frame,
+                geometry_buffer_allocation Allocation,
+                m4 Transform, material Material,
+                u32 JointCount, m4* Pose);
+
+inline b32 
+DrawWidget3D(render_frame* Frame,
+             geometry_buffer_allocation Allocation,
+             m4 Transform, rgba8 Color);
 inline b32 AddLight(render_frame* Frame, light Light, light_flags Flags);
 
 inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* VertexArray);
@@ -1112,10 +1114,10 @@ inline b32 TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_
     return(Result);
 }
 
-inline b32 DrawMesh(render_frame* Frame, 
-                    u32 VertexOffset, u32 VertexCount, 
-                    u32 IndexOffset, u32 IndexCount,
-                    m4 Transform, material Material)
+inline b32 
+DrawMesh(render_frame* Frame, 
+         geometry_buffer_allocation Allocation,
+         m4 Transform, material Material)
 {
     b32 Result = false;
     if (Frame->DrawCmdCount < Frame->MaxDrawCmdCount)
@@ -1124,10 +1126,10 @@ inline b32 DrawMesh(render_frame* Frame,
         {
             .Base = 
             {
-                .IndexCount = IndexCount,
+                .IndexCount = Allocation.IndexBlock->Count,
                 .InstanceCount = 1,
-                .IndexOffset = IndexOffset,
-                .VertexOffset = VertexOffset,
+                .IndexOffset = Allocation.IndexBlock->Offset,
+                .VertexOffset = Allocation.VertexBlock->Offset,
                 .InstanceOffset = 0,
             },
             .Transform = Transform,
@@ -1138,21 +1140,21 @@ inline b32 DrawMesh(render_frame* Frame,
     return(Result);
 }
 
-inline b32 DrawSkinnedMesh(render_frame* Frame,
-                           u32 VertexOffset, u32 VertexCount,
-                           u32 IndexOffset, u32 IndexCount,
-                           m4 Transform, material Material,
-                           u32 JointCount, m4* Pose)
+inline b32 
+DrawSkinnedMesh(render_frame* Frame,
+                geometry_buffer_allocation Allocation,
+                m4 Transform, material Material,
+                u32 JointCount, m4* Pose)
 {
     b32 Result = false;
 
     if ((Frame->SkinningCmdCount < Frame->MaxSkinningCmdCount) &&
         (Frame->SkinnedDrawCmdCount < Frame->MaxSkinnedDrawCmdCount) &&
-        (Frame->SkinnedMeshVertexCount + VertexCount <= Frame->MaxSkinnedVertexCount) &&
+        (Frame->SkinnedMeshVertexCount + Allocation.VertexBlock->Count <= Frame->MaxSkinnedVertexCount) &&
         (Frame->JointCount + JointCount <= Frame->MaxJointCount))
     {
         u32 DstVertexOffset = Frame->SkinnedMeshVertexCount;
-        Frame->SkinnedMeshVertexCount += VertexCount;
+        Frame->SkinnedMeshVertexCount += Allocation.VertexBlock->Count;
 
         memcpy(Frame->JointMapping + Frame->JointCount, Pose, JointCount * sizeof(m4));
         u32 JointBufferOffset = Frame->JointCount * sizeof(m4);
@@ -1160,9 +1162,9 @@ inline b32 DrawSkinnedMesh(render_frame* Frame,
 
         Frame->SkinningCmds[Frame->SkinningCmdCount++] =
         {
-            .SrcVertexOffset = VertexOffset,
+            .SrcVertexOffset = Allocation.VertexBlock->Offset,
             .DstVertexOffset = DstVertexOffset,
-            .VertexCount = VertexCount,
+            .VertexCount = Allocation.VertexBlock->Count,
             .PoseOffset = JointBufferOffset,
         };
 
@@ -1170,9 +1172,9 @@ inline b32 DrawSkinnedMesh(render_frame* Frame,
         {
             .Base = 
             {
-                .IndexCount = IndexCount,
+                .IndexCount = Allocation.IndexBlock->Count,
                 .InstanceCount = 1,
-                .IndexOffset = IndexOffset,
+                .IndexOffset = Allocation.IndexBlock->Offset,
                 .VertexOffset = DstVertexOffset,
                 .InstanceOffset = 0,
             },
@@ -1185,10 +1187,10 @@ inline b32 DrawSkinnedMesh(render_frame* Frame,
     return(Result);
 }
 
-inline b32 DrawWidget3D(render_frame* Frame,
-                        u32 VertexOffset, u32 VertexCount,
-                        u32 IndexOffset, u32 IndexCount,
-                        m4 Transform, rgba8 Color)
+inline b32 
+DrawWidget3D(render_frame* Frame,
+             geometry_buffer_allocation Allocation,
+             m4 Transform, rgba8 Color)
 {
     b32 Result = false;
     if (Frame->DrawWidget3DCmdCount < Frame->MaxDrawWidget3DCmdCount)
@@ -1197,10 +1199,10 @@ inline b32 DrawWidget3D(render_frame* Frame,
         {
             .Base = 
             {
-                .IndexCount = IndexCount,
+                .IndexCount = Allocation.IndexBlock->Count,
                 .InstanceCount = 1,
-                .IndexOffset = IndexOffset,
-                .VertexOffset = VertexOffset,
+                .IndexOffset = Allocation.IndexBlock->Offset,
+                .VertexOffset = Allocation.VertexBlock->Offset,
                 .InstanceOffset = 0,
             },
             .Transform = Transform,

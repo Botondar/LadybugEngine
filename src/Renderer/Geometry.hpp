@@ -20,8 +20,9 @@ struct geometry_memory
 
     VkBuffer Buffer;
 
-    u64 MemorySize;
-    u64 MemoryInUse;
+    u32 MaxCount;
+    u32 CountInUse;
+    u32 Stride;
 
     u64 BlocksInUse;
     geometry_buffer_block FreeBlocks;

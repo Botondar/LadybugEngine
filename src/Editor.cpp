@@ -434,12 +434,6 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         }
 
         // Render
-        geometry_buffer_allocation Mesh = Assets->Meshes[Assets->ArrowMeshID].Allocation;
-        u32 VertexOffset = Mesh.VertexBlock->ByteOffset / sizeof(vertex);
-        u32 VertexCount = Mesh.VertexBlock->ByteSize / sizeof(vertex);
-        u32 IndexOffset = Mesh.IndexBlock->ByteOffset / sizeof(vert_index);
-        u32 IndexCount = Mesh.IndexBlock->ByteSize / sizeof(vert_index);
-
         rgba8 Colors[3] = 
         {
             PackRGBA8(0xFF, 0x00, 0x00),
@@ -464,7 +458,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
                                                       0.0f, 0.0f, 0.0f, 1.0f);
             rgba8 Color = (GizmoIndex == Editor->Gizmo.Selection) ? 
                 SelectedColors[GizmoIndex] : Colors[GizmoIndex];
-            DrawWidget3D(Frame, VertexOffset, VertexCount, IndexOffset, IndexCount,
+            DrawWidget3D(Frame, Assets->Meshes[Assets->ArrowMeshID].Allocation,
                          CurrentTransform, Color);
         }
     }
