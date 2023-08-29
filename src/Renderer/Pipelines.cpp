@@ -742,7 +742,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .CullFlags = Cull_None,
             .DepthBiasConstantFactor = 2.0f / 256.0f,
             .DepthBiasClamp = 1.0f / 24.0f,
-            .DepthBiasSlopeFactor = 3.0f,
+            .DepthBiasSlopeFactor = 4.0f,
         },
         .DepthStencilState = 
         {
