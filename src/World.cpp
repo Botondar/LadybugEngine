@@ -223,6 +223,9 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         }
 
         World->IsLoaded = true;
+
+        // HACK(boti): We return here so that the screen doesn't before the scene starts loading
+        return;
     }
 
     f32 dt = IO->dt;
