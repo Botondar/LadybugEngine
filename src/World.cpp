@@ -274,7 +274,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
     // Sun update
     {
-        World->SunL = 2.5f * v3{ 10.0f, 7.0f, 5.0f };
+        World->SunL = 2.0f * v3{ 10.0f, 7.0f, 5.0f };
         World->SunV = Normalize(v3{ +4.25f, -0.5f, 10.0f });
         Frame->SunV = World->SunV;
         Frame->Uniforms.SunV = TransformDirection(Frame->Uniforms.ViewTransform, World->SunV);
