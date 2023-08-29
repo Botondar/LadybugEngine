@@ -114,8 +114,16 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     UpdateEditor(GameState, GameIO, RenderFrame);
     RenderFrame->PostProcess = GameState->PostProcessParams;
 
-    UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, 
-                         &GameState->TransientArena, GameState->Editor.DrawLights);
+    if (!IsEmpty(&GameState->Assets->TextureQueue))
+    {
+        ProcessTextureQueueEntry(&GameState->Assets->TextureQueue, RenderFrame, &GameState->TransientArena);
+    }
+
+    if (IsEmpty(&GameState->Assets->TextureQueue))
+    {
+        UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, 
+                             &GameState->TransientArena, GameState->Editor.DrawLights);
+    }
     EndRenderFrame(RenderFrame);
 
     GameState->FrameID++;

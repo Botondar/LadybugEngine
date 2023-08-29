@@ -13,7 +13,7 @@ lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, mem
     b32 Result = false;
     if (!IsEmpty(Queue))
     {
-        texture_queue_entry* Entry = Queue->Entries + Queue->CompletionCount++;
+        texture_queue_entry* Entry = Queue->Entries + (Queue->CompletionCount++ % Queue->MaxEntryCount);
 
         memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
 
@@ -417,13 +417,12 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         }
     }
 
-    texture_queue* TextureQueue = PushStruct<texture_queue>(Scratch, MemPush_Clear);
     auto LoadAndUploadTexture = [&](u32 TextureIndex, texture_type Type, gltf_alpha_mode AlphaMode) -> texture_id
     {
         texture_id Result = { 0 };
         if (TextureIndex < GLTF.TextureCount)
         {
-            if ((TextureQueue->CompletionGoal - TextureQueue->CompletionCount) < TextureQueue->MaxEntryCount)
+            if ((Assets->TextureQueue.CompletionGoal - Assets->TextureQueue.CompletionCount) < Assets->TextureQueue.MaxEntryCount)
             {
                 gltf_texture* Texture = GLTF.Textures + TextureIndex;
                 if (Texture->ImageIndex >= GLTF.ImageCount) UnhandledError("Invalid glTF image index");
@@ -438,7 +437,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
                 Result = AllocateTextureName(Frame->Renderer, TextureFlag_None);
 
-                texture_queue_entry* Entry = TextureQueue->Entries + TextureQueue->CompletionGoal++;
+                texture_queue_entry* Entry = Assets->TextureQueue.Entries + (Assets->TextureQueue.CompletionGoal++ % Assets->TextureQueue.MaxEntryCount);
                 Entry->ID = Result;
                 Entry->AlphaEnabled = (AlphaMode != GLTF_ALPHA_MODE_OPAQUE);
                 Entry->TextureType = Type;
@@ -1174,11 +1173,6 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         {
             UnhandledError("Out of animation pool");
         }
-    }
-
-    while (!IsEmpty(TextureQueue))
-    {
-        ProcessTextureQueueEntry(TextureQueue, Frame, Scratch);
     }
 
     if (GLTF.DefaultSceneIndex >= GLTF.SceneCount)

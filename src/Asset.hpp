@@ -171,6 +171,8 @@ struct assets
 {
     memory_arena Arena;
 
+    texture_queue TextureQueue;
+
     texture_id Whiteness;
 
     texture_id DefaultDiffuseID;
