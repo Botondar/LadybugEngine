@@ -52,7 +52,9 @@ lbfn m4 GetTransform(const camera* Camera)
     return Result;
 }
 
-lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_system_type Type, mmbox Bounds)
+lbfn u32 
+MakeParticleSystem(game_world* World, entity_id ParentID, particle_system_type Type, 
+                   v3 EmitterOffset, mmbox Bounds)
 {
     u32 Result = U32_MAX;
     if (World->ParticleSystemCount < World->MaxParticleSystemCount)
@@ -66,6 +68,7 @@ lbfn u32 MakeParticleSystem(game_world* World, entity_id ParentID, particle_syst
         particle_system* ParticleSystem = World->ParticleSystems + Result;
         ParticleSystem->ParentID = ParentID;
         ParticleSystem->Type = Type;
+        ParticleSystem->EmitterOffset = EmitterOffset;
         ParticleSystem->Bounds = Bounds;
         ParticleSystem->Counter = 0.0f;
 
@@ -196,7 +199,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                             .Min = { -0.3f, -0.3f, -0.25f },
                             .Max = { +0.3f, +0.3f, +1.75f },
                         };
-                        MakeParticleSystem(World, ID, ParticleSystem_Magic, Bounds);
+                        MakeParticleSystem(World, ID, ParticleSystem_Magic, { 0.0f, 0.0f, -0.25f}, Bounds);
                     }
                     else
                     {
@@ -205,7 +208,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                             .Min = { -0.15f, -0.15f, -0.15f },
                             .Max = { +0.15f, +0.15f, +0.50f },
                         };
-                        MakeParticleSystem(World, ID, ParticleSystem_Fire, Bounds);
+                        MakeParticleSystem(World, ID, ParticleSystem_Fire, { 0.0f, 0.0f, -0.15f }, Bounds);
                     }
                 }
             }
@@ -466,10 +469,10 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     case ParticleSystem_Magic:
                     {
                         v2 XY = 0.5f * Hadamard((Bounds.Max.xy - Bounds.Min.xy), RandInUnitCircle(&World->EffectEntropy));
-                        v3 ParticleP = { XY.x, XY.y, Bounds.Min.z };
+                        v3 ParticleP = { XY.x, XY.y, 0.0f };
                         ParticleSystem->Particles[ParticleSystem->NextParticle] = 
                         {
-                            .P = BaseP + ParticleP,
+                            .P = BaseP + ParticleSystem->EmitterOffset + ParticleP,
                             .dP = { 0.0f, 0.0f, RandBetween(&World->EffectEntropy, 0.25f, 2.25f) },
                             .Color = Color,
                             .dColor = { 0.0f, 0.0f, 0.0f, 0.0f },
@@ -482,10 +485,10 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                         u32 OnePastLastTexture = Particle_Flame04 + 1;
                         u32 TextureCount = OnePastLastTexture - FirstTexture;
 
-                        v3 ParticleP = { 0.0f, 0.0f, Bounds.Min.z };
+                        v3 ParticleP = { 0.0f, 0.0f, 0.0f };
                         ParticleSystem->Particles[ParticleSystem->NextParticle] = 
                         {
-                            .P = ParticleP + BaseP,
+                            .P = ParticleP + ParticleSystem->EmitterOffset + BaseP,
                             .dP = 
                             { 
                                 0.3f * RandBilateral(&World->EffectEntropy),
