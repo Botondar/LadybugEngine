@@ -163,10 +163,10 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             const light LightSources[] = 
             {
                 // "Fire" lights on top of the metal hangers
-                { { -4.95f, -1.15f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
-                { { +3.90f, -1.15f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
-                { { -4.95f, +1.75f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
-                { { +3.90f, +1.75f, 1.20f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+                { { -4.95f, -1.15f, 1.40f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+                { { +3.90f, -1.15f, 1.40f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+                { { -4.95f, +1.75f, 1.40f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+                { { +3.90f, +1.75f, 1.40f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
 
                 // "Magic" lights on top of the wells
                 { { +8.95f, +3.60f, 1.30f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
@@ -208,7 +208,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                             .Min = { -0.15f, -0.15f, -0.15f },
                             .Max = { +0.15f, +0.15f, +0.50f },
                         };
-                        MakeParticleSystem(World, ID, ParticleSystem_Fire, { 0.0f, 0.0f, -0.15f }, Bounds);
+                        MakeParticleSystem(World, ID, ParticleSystem_Fire, { 0.0f, 0.0f, -0.35f }, Bounds);
                     }
                 }
             }
