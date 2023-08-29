@@ -1,6 +1,6 @@
 #pragma once
 
-struct mesh
+struct mesh_data
 {
     u32 VertexCount;
     u32 IndexCount;

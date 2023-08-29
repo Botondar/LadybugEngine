@@ -1,6 +1,6 @@
-internal mesh CreateCubeMesh(memory_arena* Arena);
-internal mesh CreateSphereMesh(memory_arena* Arena);
-internal mesh CreateArrowMesh(memory_arena* Arena);
+internal mesh_data CreateCubeMesh(memory_arena* Arena);
+internal mesh_data CreateSphereMesh(memory_arena* Arena);
+internal mesh_data CreateArrowMesh(memory_arena* Arena);
 
 lbfn b32 IsEmpty(texture_queue* Queue)
 {
@@ -248,7 +248,7 @@ lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scra
 
     LoadDebugFont(Scratch, Assets, Renderer, "data/liberation-mono.lbfnt");
 
-    auto AddMesh = [Assets, Renderer](mesh Mesh) -> u32
+    auto AddMesh = [Assets, Renderer](mesh_data Mesh) -> u32
     {
         u32 Result = U32_MAX;
         if (Assets->MeshCount < Assets->MaxMeshCount)
@@ -1262,9 +1262,9 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
     }
 }
 
-internal mesh CreateCubeMesh(memory_arena* Arena)
+internal mesh_data CreateCubeMesh(memory_arena* Arena)
 {
-    mesh Result = {};
+    mesh_data Result = {};
     Result.Box = { { -1.0f, -1.0f, -1.0f }, { +1.0f, +1.0f, +1.0f } };
 
     vertex VertexData[] = 
@@ -1323,9 +1323,9 @@ internal mesh CreateCubeMesh(memory_arena* Arena)
     return(Result);
 }
 
-internal mesh CreateSphereMesh(memory_arena* Arena)
+internal mesh_data CreateSphereMesh(memory_arena* Arena)
 {
-    mesh Result = {};
+    mesh_data Result = {};
 
     Result.Box = { { -1.0f, -1.0f, -1.0f }, { +1.0f, +1.0f, +1.0f } };
 
@@ -1387,9 +1387,9 @@ internal mesh CreateSphereMesh(memory_arena* Arena)
     return(Result);
 }
 
-internal mesh CreateArrowMesh(memory_arena* Arena)
+internal mesh_data CreateArrowMesh(memory_arena* Arena)
 {
-    mesh Result = {};
+    mesh_data Result = {};
 
     rgba8 White = { 0xFFFFFFFFu };
 
