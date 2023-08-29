@@ -691,9 +691,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .Flags = RS_DepthClampEnable|RS_DepthBiasEnable,
             .Fill = Fill_Solid,
             .CullFlags = Cull_None,
-            .DepthBiasConstantFactor = 1.0f / 4096.0f,
-            .DepthBiasClamp = 1.0f / 24.0f,
-            .DepthBiasSlopeFactor = 3.0f,
+            .DepthBiasConstantFactor = 2.0f / (f32)R_ShadowResolution,
+            .DepthBiasClamp = 1.0f / 16.0f,
+            .DepthBiasSlopeFactor = 4.0f,
         },
         .DepthStencilState = 
         {

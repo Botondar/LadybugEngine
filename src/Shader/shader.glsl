@@ -150,21 +150,31 @@ float CalculateShadow(vec3 SP, in vec3 CascadeBlends)
         }
     }
 #else
-    float SumWeight = 8.0;
-    vec2 SampleOffset = 1.0 * TexelSize;
-    Shadow1 += 4.0 * texture(ShadowSampler, P1);
-    Shadow1 += texture(ShadowSampler, P1 + vec4(-SampleOffset.x, -SampleOffset.y, 0.0, 0.0));
-    Shadow1 += texture(ShadowSampler, P1 + vec4(+SampleOffset.x, -SampleOffset.y, 0.0, 0.0));
-    Shadow1 += texture(ShadowSampler, P1 + vec4(-SampleOffset.x, +SampleOffset.y, 0.0, 0.0));
-    Shadow1 += texture(ShadowSampler, P1 + vec4(+SampleOffset.x, +SampleOffset.y, 0.0, 0.0));
+    float SumWeight = 1.0 / 4.0;
+    float d = 3.0 / 16.0;
+    float o = d * TexelSize.x;
+    float s1 = 1.0;
+    float s2 = 3.0;
+    v2 SampleOffsets[4] = 
+    {
+        v2(-s1*o, -s2*o),
+        v2(+s2*o, -s1*o),
+        v2(+s1*o, +s2*o),
+        v2(-s2*o, +s1*o),
+    };
+    //Shadow1 += texture(ShadowSampler, P1);
+    Shadow1 += texture(ShadowSampler, P1 + vec4(SampleOffsets[0], 0.0, 0.0));
+    Shadow1 += texture(ShadowSampler, P1 + vec4(SampleOffsets[1], 0.0, 0.0));
+    Shadow1 += texture(ShadowSampler, P1 + vec4(SampleOffsets[2], 0.0, 0.0));
+    Shadow1 += texture(ShadowSampler, P1 + vec4(SampleOffsets[3], 0.0, 0.0));
 
-    Shadow2 += 4.0 * texture(ShadowSampler, P2);
-    Shadow2 += texture(ShadowSampler, P2 + vec4(-SampleOffset.x, -SampleOffset.y, 0.0, 0.0));
-    Shadow2 += texture(ShadowSampler, P2 + vec4(+SampleOffset.x, -SampleOffset.y, 0.0, 0.0));
-    Shadow2 += texture(ShadowSampler, P2 + vec4(-SampleOffset.x, +SampleOffset.y, 0.0, 0.0));
-    Shadow2 += texture(ShadowSampler, P2 + vec4(+SampleOffset.x, +SampleOffset.y, 0.0, 0.0));
+    //Shadow2 += texture(ShadowSampler, P2);
+    Shadow2 += texture(ShadowSampler, P2 + vec4(SampleOffsets[0], 0.0, 0.0));
+    Shadow2 += texture(ShadowSampler, P2 + vec4(SampleOffsets[1], 0.0, 0.0));
+    Shadow2 += texture(ShadowSampler, P2 + vec4(SampleOffsets[2], 0.0, 0.0));
+    Shadow2 += texture(ShadowSampler, P2 + vec4(SampleOffsets[3], 0.0, 0.0));
 #endif
-    float Result = mix(Shadow1, Shadow2, Blend) / SumWeight;
+    float Result = mix(Shadow1, Shadow2, Blend) * SumWeight;
     return Result;
 }
 
