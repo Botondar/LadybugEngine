@@ -143,6 +143,30 @@ enum particle_texture : u32
 };
 extern const char* ParticlePaths[Particle_COUNT];
 
+enum texture_type : u32
+{
+    TextureType_Diffuse,
+    TextureType_Normal,
+    TextureType_Material,
+};
+
+struct texture_queue_entry
+{
+    texture_id ID;
+    texture_type TextureType;
+    b32 AlphaEnabled;
+    filepath Path;
+    
+};
+
+struct texture_queue
+{
+    static constexpr u32 MaxEntryCount = 1u << 14;
+
+    u32 EntryCount;
+    texture_queue_entry Entries[MaxEntryCount];
+};
+
 struct assets
 {
     memory_arena Arena;
