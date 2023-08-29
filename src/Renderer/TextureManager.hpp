@@ -24,13 +24,18 @@ struct texture_manager
     VkImageView SpecialImageViews[MaxSpecialTextureCount];
 };
 
-internal u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate);
-
 internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes);
 
-internal VkImage GetImage(texture_manager* Manager, texture_id ID);
-internal VkImageView GetImageView(texture_manager* Manager, texture_id ID);
+internal VkImage* GetImage(texture_manager* Manager, texture_id ID);
+internal VkImageView* GetImageView(texture_manager* Manager, texture_id ID);
 
-internal texture_id CreateTexture2D(texture_manager* Manager, texture_flags Flags,
-                                u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
-                                VkFormat Format, texture_swizzle Swizzle);
+internal texture_id
+AllocateTextureName(texture_manager* Manager, texture_flags Flags);
+
+internal b32
+AllocateTexture(texture_manager* Manager, texture_id ID, texture_info Info);
+
+internal texture_id 
+CreateTexture2D(texture_manager* Manager, texture_flags Flags,
+                u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
+                VkFormat Format, texture_swizzle Swizzle);

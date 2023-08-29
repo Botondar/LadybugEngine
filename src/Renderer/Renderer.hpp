@@ -749,6 +749,40 @@ struct render_stats
     render_stat_entry Entries[MaxEntryCount];
 };
 
+struct texture_info
+{
+    u32 Width;
+    u32 Height;
+    u32 Depth;
+    u32 MipCount;
+    u32 ArrayCount;
+    format Format;
+    texture_swizzle Swizzle;
+};
+
+enum transfer_op_type : u32
+{
+    TransferOp_Undefined,
+    TransferOp_Texture,
+};
+
+struct transfer_texture
+{
+    texture_id TargetID;
+    umm StagingBufferOffset;
+
+    texture_info Info;
+};
+
+struct transfer_op
+{
+    transfer_op_type Type;
+    union
+    {
+        transfer_texture Texture;
+    };
+};
+
 struct render_frame
 {
     renderer* Renderer;
@@ -779,6 +813,7 @@ struct render_frame
     void* StagingBufferBase;
 
     // Limits
+    static constexpr u32 MaxTransferOpCount           = (1u << 15);
     static constexpr u32 MaxParticleCount           = (1u << 18);
     static constexpr u32 MaxJointCount              = (1u << 17);
     u32 MaxLightCount;
@@ -795,6 +830,9 @@ struct render_frame
     u32 SkinnedMeshVertexCount;
 
     u32 JointBufferAlignment;
+
+    u32 TransferOpCount;
+    transfer_op TransferOps[MaxTransferOpCount];
 
     u32 LightCount;
     light* Lights;
@@ -830,16 +868,25 @@ struct render_frame
     frame_uniform_data Uniforms;
 };
 
-renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena);
-const char* GetDeviceName(renderer* Renderer);
+extern renderer* 
+CreateRenderer(memory_arena* Arena, memory_arena* TempArena);
 
-geometry_buffer_allocation UploadVertexData(renderer* Renderer, 
-                                            u32 VertexCount, const vertex* VertexData,
-                                            u32 IndexCount, const vert_index* IndexData);
-texture_id PushTexture(renderer* Renderer, texture_flags Flags,
-                       u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
-                       format Format, texture_swizzle Swizzle,
-                       const void* Data);
+extern const char* 
+GetDeviceName(renderer* Renderer);
+
+extern geometry_buffer_allocation 
+UploadVertexData(renderer* Renderer, 
+                u32 VertexCount, const vertex* VertexData,
+                u32 IndexCount, const vert_index* IndexData);
+
+extern texture_id
+AllocateTextureName(renderer* Renderer, texture_flags Flags);
+
+extern texture_id 
+PushTexture(renderer* Renderer, texture_flags Flags,
+            u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
+            format Format, texture_swizzle Swizzle,
+            const void* Data);
 
 //
 // Frame rendering
@@ -851,6 +898,8 @@ BeginRenderFrame(renderer* Renderer, memory_arena* arena,
 void EndRenderFrame(render_frame* Frame);
 
 void SetRenderCamera(render_frame* Frame, const render_camera* Camera);
+
+inline b32 TransferTexture(render_frame* Frame, texture_id ID, texture_info Info, const void* Data);
 
 inline b32 DrawMesh(render_frame* Frame,
                       u32 VertexOffset, u32 VertexCount, 
@@ -877,6 +926,69 @@ inline rgba8 PackRGBA(v4 Color);
 inline u32 GetMaxMipCount(u32 Width, u32 Height);
 inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFFFFFFu);
 inline u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate);
+
+static format_byterate FormatByterateTable[Format_Count] = 
+{
+    [Format_Undefined]          = { 0, 0, false },
+
+    [Format_R8_UNorm]           = { 1*1, 1, false },
+    [Format_R8_UInt]            = { 1*1, 1, false },
+    [Format_R8_SRGB]            = { 1*1, 1, false },
+    [Format_R8G8_UNorm]         = { 2*1, 1, false },
+    [Format_R8G8_UInt]          = { 2*1, 1, false },
+    [Format_R8G8_SRGB]          = { 2*1, 1, false },
+    [Format_R8G8B8_UNorm]       = { 3*1, 1, false },
+    [Format_R8G8B8_UInt]        = { 3*1, 1, false },
+    [Format_R8G8B8_SRGB]        = { 3*1, 1, false },
+    [Format_R8G8B8A8_UNorm]     = { 4*1, 1, false },
+    [Format_R8G8B8A8_UInt]      = { 4*1, 1, false },
+    [Format_R8G8B8A8_SRGB]      = { 4*1, 1, false },
+    [Format_R16_UNorm]          = { 1*2, 1, false },
+    [Format_R16_UInt]           = { 1*2, 1, false },
+    [Format_R16_Float]          = { 1*2, 1, false },
+    [Format_R16G16_UNorm]       = { 2*2, 1, false },
+    [Format_R16G16_UInt]        = { 2*2, 1, false },
+    [Format_R16G16_Float]       = { 2*2, 1, false },
+    [Format_R16G16B16_UNorm]    = { 3*2, 1, false },
+    [Format_R16G16B16_UInt]     = { 3*2, 1, false },
+    [Format_R16G16B16_Float]    = { 3*2, 1, false },
+    [Format_R16G16B16A16_UNorm] = { 4*2, 1, false },
+    [Format_R16G16B16A16_UInt]  = { 4*2, 1, false },
+    [Format_R16G16B16A16_Float] = { 4*2, 1, false },
+    [Format_R32_UInt]           = { 1*4, 1, false },
+    [Format_R32_Float]          = { 1*4, 1, false },
+    [Format_R32G32_UInt]        = { 2*4, 1, false },
+    [Format_R32G32_Float]       = { 2*4, 1, false },
+    [Format_R32G32B32_UInt]     = { 3*4, 1, false },
+    [Format_R32G32B32_Float]    = { 3*4, 1, false },
+    [Format_R32G32B32A32_UInt]  = { 4*4, 1, false },
+    [Format_R32G32B32A32_Float] = { 4*4, 1, false },
+
+    [Format_R11G11B10_Float]    = { 4, 1, false},
+    [Format_D16]                = { 2, 1, false },
+    [Format_D24X8]              = { 4, 1, false },
+    [Format_D32]                = { 4, 1, false },
+    [Format_S8]                 = { 1, 1, false },
+    [Format_D24S8]              = { 4, 1, false },
+    [Format_D32S8]              = { 8, 1, false },
+
+    [Format_BC1_RGB_UNorm]  = { 1, 2, true },
+    [Format_BC1_RGB_SRGB]   = { 1, 2, true },
+    [Format_BC1_RGBA_UNorm] = { 1, 2, true },
+    [Format_BC1_RGBA_SRGB]  = { 1, 2, true },
+    [Format_BC2_UNorm]      = { 1, 1, true },
+    [Format_BC2_SRGB]       = { 1, 1, true },
+    [Format_BC3_UNorm]      = { 1, 1, true },
+    [Format_BC3_SRGB]       = { 1, 1, true },
+    [Format_BC4_UNorm]      = { 1, 1, true },
+    [Format_BC4_SNorm]      = { 1, 1, true },
+    [Format_BC5_UNorm]      = { 1, 1, true },
+    [Format_BC5_SNorm]      = { 1, 1, true },
+    [Format_BC6_UFloat]     = { 1, 1, true },
+    [Format_BC6_SFloat]     = { 1, 1, true },
+    [Format_BC7_UNorm]      = { 1, 1, true },
+    [Format_BC7_SRGB]       = { 1, 1, true },
+};
 
 //
 // Implementation
@@ -968,6 +1080,36 @@ inline u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, 
     Result *= ArrayCount;
 
     return Result;
+}
+
+inline b32 TransferTexture(render_frame* Frame, texture_id ID, texture_info Info, const void* Data)
+{
+    b32 Result = true;
+
+    if (Frame->TransferOpCount < Frame->MaxTransferOpCount)
+    {
+        format_byterate ByteRate = FormatByterateTable[Info.Format];
+        umm TotalSize = GetMipChainSize(Info.Width, Info.Height, Info.MipCount, Info.ArrayCount, ByteRate);
+        if (Frame->StagingBufferAt + TotalSize < Frame->StagingBufferSize)
+        {
+            transfer_op* Op = Frame->TransferOps + Frame->TransferOpCount++;
+            Op->Type = TransferOp_Texture;
+            Op->Texture.TargetID = ID;
+            Op->Texture.StagingBufferOffset = Frame->StagingBufferAt;
+            Op->Texture.Info = Info;
+            memcpy(OffsetPtr(Frame->StagingBufferBase, Frame->StagingBufferAt), Data, TotalSize);
+            Frame->StagingBufferAt += TotalSize;
+        }
+        else
+        {
+            UnhandledError("Out of staging memory");
+        }
+    }
+    else
+    {
+        UnhandledError("Out of transfer pool");
+    }
+    return(Result);
 }
 
 inline b32 DrawMesh(render_frame* Frame, 
@@ -1144,70 +1286,3 @@ inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 Center, f32 r)
     }
     return(Result);
 }
-
-//
-// Dump...
-//
-
-static format_byterate FormatByterateTable[Format_Count] = 
-{
-    [Format_Undefined]          = { 0, 0, false },
-
-    [Format_R8_UNorm]           = { 1*1, 1, false },
-    [Format_R8_UInt]            = { 1*1, 1, false },
-    [Format_R8_SRGB]            = { 1*1, 1, false },
-    [Format_R8G8_UNorm]         = { 2*1, 1, false },
-    [Format_R8G8_UInt]          = { 2*1, 1, false },
-    [Format_R8G8_SRGB]          = { 2*1, 1, false },
-    [Format_R8G8B8_UNorm]       = { 3*1, 1, false },
-    [Format_R8G8B8_UInt]        = { 3*1, 1, false },
-    [Format_R8G8B8_SRGB]        = { 3*1, 1, false },
-    [Format_R8G8B8A8_UNorm]     = { 4*1, 1, false },
-    [Format_R8G8B8A8_UInt]      = { 4*1, 1, false },
-    [Format_R8G8B8A8_SRGB]      = { 4*1, 1, false },
-    [Format_R16_UNorm]          = { 1*2, 1, false },
-    [Format_R16_UInt]           = { 1*2, 1, false },
-    [Format_R16_Float]          = { 1*2, 1, false },
-    [Format_R16G16_UNorm]       = { 2*2, 1, false },
-    [Format_R16G16_UInt]        = { 2*2, 1, false },
-    [Format_R16G16_Float]       = { 2*2, 1, false },
-    [Format_R16G16B16_UNorm]    = { 3*2, 1, false },
-    [Format_R16G16B16_UInt]     = { 3*2, 1, false },
-    [Format_R16G16B16_Float]    = { 3*2, 1, false },
-    [Format_R16G16B16A16_UNorm] = { 4*2, 1, false },
-    [Format_R16G16B16A16_UInt]  = { 4*2, 1, false },
-    [Format_R16G16B16A16_Float] = { 4*2, 1, false },
-    [Format_R32_UInt]           = { 1*4, 1, false },
-    [Format_R32_Float]          = { 1*4, 1, false },
-    [Format_R32G32_UInt]        = { 2*4, 1, false },
-    [Format_R32G32_Float]       = { 2*4, 1, false },
-    [Format_R32G32B32_UInt]     = { 3*4, 1, false },
-    [Format_R32G32B32_Float]    = { 3*4, 1, false },
-    [Format_R32G32B32A32_UInt]  = { 4*4, 1, false },
-    [Format_R32G32B32A32_Float] = { 4*4, 1, false },
-
-    [Format_R11G11B10_Float]    = { 4, 1, false},
-    [Format_D16]                = { 2, 1, false },
-    [Format_D24X8]              = { 4, 1, false },
-    [Format_D32]                = { 4, 1, false },
-    [Format_S8]                 = { 1, 1, false },
-    [Format_D24S8]              = { 4, 1, false },
-    [Format_D32S8]              = { 8, 1, false },
-
-    [Format_BC1_RGB_UNorm]  = { 1, 2, true },
-    [Format_BC1_RGB_SRGB]   = { 1, 2, true },
-    [Format_BC1_RGBA_UNorm] = { 1, 2, true },
-    [Format_BC1_RGBA_SRGB]  = { 1, 2, true },
-    [Format_BC2_UNorm]      = { 1, 1, true },
-    [Format_BC2_SRGB]       = { 1, 1, true },
-    [Format_BC3_UNorm]      = { 1, 1, true },
-    [Format_BC3_SRGB]       = { 1, 1, true },
-    [Format_BC4_UNorm]      = { 1, 1, true },
-    [Format_BC4_SNorm]      = { 1, 1, true },
-    [Format_BC5_UNorm]      = { 1, 1, true },
-    [Format_BC5_SNorm]      = { 1, 1, true },
-    [Format_BC6_UFloat]     = { 1, 1, true },
-    [Format_BC6_SFloat]     = { 1, 1, true },
-    [Format_BC7_UNorm]      = { 1, 1, true },
-    [Format_BC7_SRGB]       = { 1, 1, true },
-};

@@ -401,7 +401,22 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                     }
                 }
 
+#if 1
+                Result = AllocateTextureName(Frame->Renderer, TextureFlag_None);
+                texture_info Info = 
+                {
+                    .Width = Width,
+                    .Height = Height,
+                    .Depth = 1,
+                    .MipCount = MipCount,
+                    .ArrayCount = 1,
+                    .Format = Format,
+                    .Swizzle = {},
+                };
+                TransferTexture(Frame, Result, Info, MipChain);
+#else
                 Result = PushTexture(Frame->Renderer, TextureFlag_None, Width, Height, MipCount, 1, Format, {}, MipChain);
+#endif
                 stbi_image_free(SrcImage);
             }
             else 

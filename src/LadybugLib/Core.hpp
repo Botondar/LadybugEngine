@@ -43,8 +43,7 @@
 #include <cstddef>
 #include <cfloat>
 #include <cassert>
-
-//extern "C" void* memcpy(void*, const void*, size_t);
+#include <cstdlib>
 
 typedef uintptr_t umm;
 typedef intptr_t smm;

@@ -1785,7 +1785,7 @@ texture_id PushTexture(renderer* Renderer, texture_flags Flags,
     ID = CreateTexture2D(TextureManager, Flags, Width, Height, MipCount, ArrayCount, Format, Swizzle);
     if (IsValid(ID))
     {
-        VkImage Image = GetImage(TextureManager, ID);
+        VkImage Image = *GetImage(TextureManager, ID);
 
         format_byterate ByteRate = FormatByterateTable[InFormat];
         u64 MemorySize = GetMipChainSize(Width, Height, MipCount, ArrayCount, ByteRate);
@@ -1963,10 +1963,13 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
 
     // Reset buffers
     {
+        Frame->StagingBufferAt = 0;
+        Frame->Backend->StagingBuffer = Renderer->StagingBuffers[FrameID];
+        Frame->TransferOpCount = 0;
+
         Frame->MaxLightCount = R_MaxLightCount;
         Frame->LightCount = 0;
         Frame->Lights = PushArray<light>(Arena, Frame->MaxLightCount);
-    
 
         Frame->MaxShadowCount = R_MaxShadowCount;
         Frame->ShadowCount = 0;
@@ -1994,9 +1997,6 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
 
         Frame->Backend->UniformBuffer = Renderer->PerFrameUniformBuffers[FrameID];
         Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
-
-        Frame->StagingBufferAt = 0;
-        Frame->Backend->StagingBuffer = Renderer->StagingBuffers[FrameID];
 
         Frame->Backend->Vertex2DBuffer = Renderer->PerFrameVertex2DBuffers[FrameID];
 
@@ -2205,6 +2205,149 @@ void EndRenderFrame(render_frame* Frame)
         .pInheritanceInfo = nullptr,
     };
     vkBeginCommandBuffer(PrepassCmd, &CmdBufferBegin);
+
+    for (u32 TransferOpIndex = 0; TransferOpIndex < Frame->TransferOpCount; TransferOpIndex++)
+    {
+        transfer_op* Op = Frame->TransferOps + TransferOpIndex;
+        switch (Op->Type)
+        {
+            case TransferOp_Texture:
+            {
+                texture_info* Info = &Op->Texture.Info;
+                if (Info->Depth > 1)
+                {
+                    UnimplementedCodePath;
+                }
+
+                format_byterate ByteRate = FormatByterateTable[Info->Format];
+                umm TotalSize = GetMipChainSize(Info->Width, Info->Height, Info->MipCount, Info->ArrayCount, ByteRate);
+
+                u32 CopyCount = Info->MipCount * Info->ArrayCount;
+                VkBufferImageCopy* Copies = PushArray<VkBufferImageCopy>(Frame->Arena, CopyCount);
+                VkBufferImageCopy* CopyAt = Copies;
+
+                u64 Offset = Op->Texture.StagingBufferOffset;
+                for (u32 ArrayIndex = 0; ArrayIndex < Info->ArrayCount; ArrayIndex++)
+                {
+                    for (u32 MipIndex = 0; MipIndex < Info->MipCount; MipIndex++)
+                    {
+                        u32 Width = Max(Info->Width >> MipIndex, 1u);
+                        u32 Height = Max(Info->Height >> MipIndex, 1u);
+
+                        u32 RowLength = 0;
+                        u32 ImageHeight = 0;
+                        u64 TexelCount;
+                        if (ByteRate.IsBlock)
+                        {
+                            RowLength = Align(Width, 4u);
+                            ImageHeight = Align(Height, 4u);
+
+                            TexelCount = (u64)RowLength * ImageHeight;
+                        }
+                        else
+                        {
+                            TexelCount = Width * Height;
+                        }
+                        u64 MipSize = TexelCount * ByteRate.Numerator / ByteRate.Denominator;
+
+                        CopyAt->bufferOffset = Offset,
+                        CopyAt->bufferRowLength = RowLength,
+                        CopyAt->bufferImageHeight = ImageHeight,
+                        CopyAt->imageSubresource = 
+                        {
+                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .mipLevel = MipIndex,
+                            .baseArrayLayer = ArrayIndex,
+                            .layerCount = 1,
+                        },
+                        CopyAt->imageOffset = { 0, 0, 0 },
+                        CopyAt->imageExtent = { Width, Height, 1 },
+
+                        Offset += MipSize;
+                        CopyAt++;
+                    }
+                }
+
+                VkImage* Image = GetImage(&Renderer->TextureManager, Op->Texture.TargetID);
+                if (*Image == VK_NULL_HANDLE)
+                {
+                    AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
+                }
+                else
+                {
+                    UnimplementedCodePath;
+                }
+
+                VkImageMemoryBarrier2 BeginBarrier = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                    .srcAccessMask = VK_ACCESS_2_NONE,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = *Image,
+                    .subresourceRange = 
+                    {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                };
+                VkDependencyInfo BeginDependency = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .imageMemoryBarrierCount = 1,
+                    .pImageMemoryBarriers = &BeginBarrier,
+                };
+                vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
+                vkCmdCopyBufferToImage(PrepassCmd, Frame->Backend->StagingBuffer, *Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                       CopyCount, Copies);
+
+                VkImageMemoryBarrier2 EndBarrier = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                    .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                    .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .image = *Image,
+                    .subresourceRange = 
+                    {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                };
+                VkDependencyInfo EndDependency =
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .imageMemoryBarrierCount = 1,
+                    .pImageMemoryBarriers = &EndBarrier,
+                };
+                vkCmdPipelineBarrier2(PrepassCmd, &EndDependency);
+
+            } break;
+            InvalidDefaultCase;
+        }
+    }
 
     u32 TileCountX = CeilDiv(Frame->RenderWidth, R_TileSizeX);
     u32 TileCountY = CeilDiv(Frame->RenderHeight, R_TileSizeY);
@@ -3018,7 +3161,7 @@ void EndRenderFrame(render_frame* Frame)
 
         // Particles
         {
-            VkImageView ParticleView = GetImageView(&Renderer->TextureManager, Frame->ParticleTextureID);
+            VkImageView ParticleView = *GetImageView(&Renderer->TextureManager, Frame->ParticleTextureID);
             VkDescriptorSet TextureSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS]);
             VkDescriptorImageInfo DescriptorImage = 
             {
@@ -3428,6 +3571,13 @@ void EndRenderFrame(render_frame* Frame)
         AddEntry("LightBuffer", Frame->LightCount * sizeof(light), Renderer->LightBufferMemorySize);
         AddEntry("TileBuffer", TileCountX * TileCountY * sizeof(screen_tile), Renderer->TileMemorySize);
     }
+}
+
+texture_id 
+AllocateTextureName(renderer* Renderer, texture_flags Flags)
+{
+    texture_id Result = AllocateTextureName(&Renderer->TextureManager, Flags);
+    return(Result);
 }
 
 void SetRenderCamera(render_frame* Frame, const render_camera* CameraIn)
