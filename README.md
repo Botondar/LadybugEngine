@@ -35,7 +35,7 @@ A few select header files are used as interfaces between the subsystems:
 
 The folder `src/LadybugLib/` contains utilities available to all subsystems.
 
-## Renderer features
+## Features
 - Forward+ pipeline with 2.5D tiled light binning
 - High-dynamic range rendering
 - Physically-based shading model
@@ -48,6 +48,7 @@ The folder `src/LadybugLib/` contains utilities available to all subsystems.
 - Bloom post-process effect
 - Tonemapping
 - Immediate-mode 2D rendering
+- Asynchronous texture uploads
 
 ## Renderer architecture
 While the renderer is based on Vulkan, it does not leak Vulkan-specific information into the rest of the application code. Instead it's divided into a frontend (which is the interface between the app and the renderer) and a backend (which performs the rendering and makes the actual Vulkan calls)
