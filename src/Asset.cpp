@@ -220,7 +220,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 
     {
         texture_queue* Queue = &Assets->TextureQueue;
-        Queue->Semaphore = Platform.CreateSemaphore(0, Queue->MaxEntryCount);
+        Queue->Semaphore = Platform.CreateSemaphore(0, 1);
         umm ScratchSize = MiB(64);
         Queue->Scratch = InitializeArena(ScratchSize, PushSize(&Assets->Arena, ScratchSize, KiB(4)));
 
