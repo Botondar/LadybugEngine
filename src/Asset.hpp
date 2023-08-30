@@ -80,6 +80,9 @@ struct texture_queue
     texture_queue_entry Entries[MaxEntryCount];
 };
 
+lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, memory_arena* Scratch);
+lbfn b32 IsEmpty(texture_queue* Queue);
+
 struct mesh
 {
     geometry_buffer_allocation Allocation;
@@ -122,9 +125,6 @@ struct assets
     skin Skins[MaxSkinCount];
     animation Animations[MaxAnimationCount];
 };
-
-lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, memory_arena* Scratch);
-lbfn b32 IsEmpty(texture_queue* Queue);
 
 lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scratch);
 
