@@ -880,10 +880,8 @@ CreateRenderer(memory_arena* Arena, memory_arena* TempArena);
 extern const char* 
 GetDeviceName(renderer* Renderer);
 
-extern geometry_buffer_allocation 
-UploadVertexData(renderer* Renderer, 
-                u32 VertexCount, const vertex* VertexData,
-                u32 IndexCount, const vert_index* IndexData);
+extern geometry_buffer_allocation
+AllocateGeometry(renderer* Renderer, u32 VertexCount, u32 IndexCount);
 
 extern renderer_texture_id
 AllocateTextureName(renderer* Renderer, texture_flags Flags);
@@ -1133,6 +1131,7 @@ inline b32 TransferGeometry(render_frame* Frame, geometry_buffer_allocation Allo
         if (Frame->StagingBufferAt + TotalSize < Frame->StagingBufferSize)
         {
             transfer_op* Op = Frame->TransferOps + Frame->TransferOpCount++;
+            Op->Type = TransferOp_Geometry;
             Op->SourceOffset = Frame->StagingBufferAt;
             Op->Geometry.Dest = Allocation;
             memcpy(OffsetPtr(Frame->StagingBufferBase, Frame->StagingBufferAt), VertexData, VertexSize);

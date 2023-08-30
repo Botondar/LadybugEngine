@@ -270,7 +270,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 
     LoadDebugFont(Scratch, Assets, Frame, "data/liberation-mono.lbfnt");
 
-    auto AddMesh = [Assets, Renderer = Frame->Renderer](mesh_data MeshData) -> u32
+    auto AddMesh = [Assets, Frame](mesh_data MeshData) -> u32
     {
         u32 Result = U32_MAX;
         if (Assets->MeshCount < Assets->MaxMeshCount)
@@ -278,11 +278,10 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
             Result = Assets->MeshCount++;
             mesh* Mesh = Assets->Meshes + Result;
 
-            Mesh->Allocation = UploadVertexData(Renderer, 
-                MeshData.VertexCount, MeshData.VertexData,
-                MeshData.IndexCount, MeshData.IndexData);
+            Mesh->Allocation = AllocateGeometry(Frame->Renderer, MeshData.VertexCount, MeshData.IndexCount);
             Mesh->BoundingBox = MeshData.Box;
             Mesh->MaterialID = 0;
+            TransferGeometry(Frame, Mesh->Allocation, MeshData.VertexData, MeshData.IndexData);
         }
         return(Result);
     };
@@ -799,11 +798,10 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             {
                 u32 MeshID = Assets->MeshCount++;
                 mesh* DstMesh = Assets->Meshes + MeshID;
-                DstMesh->Allocation = UploadVertexData(Frame->Renderer,
-                                                    VertexCount, VertexData,
-                                                    IndexCount, IndexData);
+                DstMesh->Allocation = AllocateGeometry(Frame->Renderer, VertexCount, IndexCount);
                 DstMesh->BoundingBox = Box;
                 DstMesh->MaterialID = Primitive->MaterialIndex + BaseMaterialIndex;
+                TransferGeometry(Frame, DstMesh->Allocation, VertexData, IndexData);
             }
             else
             {

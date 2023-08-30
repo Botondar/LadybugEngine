@@ -1693,88 +1693,18 @@ internal VkResult ResizeRenderTargets(renderer* Renderer)
     return Result;
 }
 
-geometry_buffer_allocation UploadVertexData(renderer* Renderer, 
-                                            u32 VertexCount, const vertex* VertexData,
-                                            u32 IndexCount, const vert_index* IndexData)
-{
-    geometry_buffer_allocation Allocation = AllocateVertexBuffer(&Renderer->GeometryBuffer, VertexCount, IndexCount);
-
-    if (VertexCount)
-    {
-        Assert(Allocation.VertexBlock);
-
-        void* Mapping = Renderer->StagingBuffer.Mapping;
-        memcpy(OffsetPtr(Mapping, Renderer->StagingBuffer.Offset), VertexData, Allocation.VertexBlock->Count * sizeof(vertex));
-
-        VkBufferCopy VertexRegion = 
-        {
-            .srcOffset = Renderer->StagingBuffer.Offset,
-            .dstOffset = Allocation.VertexBlock->Offset * sizeof(vertex),
-            .size = Allocation.VertexBlock->Count * sizeof(vertex),
-        };
-        // TODO(boti): support for multiple concurrent uploads
-        //Renderer->StagingBuffer.Offset += Size;
-
-        VkCommandBufferBeginInfo BeginInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            .pNext = nullptr,
-            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-            .pInheritanceInfo = nullptr,
-        };
-        vkBeginCommandBuffer(Renderer->TransferCmdBuffer, &BeginInfo);
-        vkCmdCopyBuffer(Renderer->TransferCmdBuffer, 
-                        Renderer->StagingBuffer.Buffer, 
-                        Renderer->GeometryBuffer.VertexMemory.Buffer, 
-                        1, &VertexRegion);
-        if (IndexCount)
-        {
-            Assert(Allocation.IndexBlock);
-            u64 IndexOffset = Allocation.VertexBlock->Count * sizeof(vertex);
-
-            memcpy(OffsetPtr(Mapping, Renderer->StagingBuffer.Offset + IndexOffset), IndexData, Allocation.IndexBlock->Count * sizeof(vert_index));
-
-            VkBufferCopy IndexRegion = 
-            {
-                .srcOffset = Renderer->StagingBuffer.Offset + IndexOffset,
-                .dstOffset = Allocation.IndexBlock->Offset * sizeof(vert_index),
-                .size = Allocation.IndexBlock->Count * sizeof(vert_index),
-            };
-
-            vkCmdCopyBuffer(Renderer->TransferCmdBuffer,
-                            Renderer->StagingBuffer.Buffer,
-                            Renderer->GeometryBuffer.IndexMemory.Buffer,
-                            1, &IndexRegion);
-        }
-
-        vkEndCommandBuffer(Renderer->TransferCmdBuffer);
-
-        VkSubmitInfo SubmitInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .pNext = nullptr,
-            .waitSemaphoreCount = 0,
-            .pWaitSemaphores = nullptr,
-            .pWaitDstStageMask = nullptr,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &Renderer->TransferCmdBuffer,
-            .signalSemaphoreCount = 0,
-            .pSignalSemaphores = nullptr,
-        };
-        vkQueueSubmit(VK.GraphicsQueue, 1, &SubmitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(VK.GraphicsQueue);
-
-        vkResetCommandPool(VK.Device, Renderer->TransferCmdPool, 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
-    }
-
-    return Allocation;
-}
-
 #undef ReturnOnFailure
 
 //
 // Rendering interface implementation
 //
+
+extern geometry_buffer_allocation
+AllocateGeometry(renderer* Renderer, u32 VertexCount, u32 IndexCount)
+{
+    geometry_buffer_allocation Result = AllocateVertexBuffer(&Renderer->GeometryBuffer, VertexCount, IndexCount);
+    return(Result);
+}
 
 render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 OutputWidth, u32 OutputHeight)
 {
@@ -2265,7 +2195,7 @@ void EndRenderFrame(render_frame* Frame)
                     vkCmdPipelineBarrier2(PrepassCmd, &Dependency);
                     VkBufferCopy Copy = 
                     {
-                        .srcOffset = Op->SourceOffset + VertexByteOffset,
+                        .srcOffset = Op->SourceOffset + VertexByteCount,
                         .dstOffset = IndexByteOffset,
                         .size = IndexByteCount,
                     };
