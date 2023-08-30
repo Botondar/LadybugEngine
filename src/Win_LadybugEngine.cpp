@@ -101,6 +101,58 @@ internal f32 Win_ElapsedSeconds(counter Start, counter End)
     return Result;
 }
 
+struct thread_params
+{
+    thread_procedure* Proc;
+    void* Data;
+};
+
+internal __stdcall DWORD 
+Win_ThreadEntry(void* Data)
+{
+    thread_params* Params = (thread_params*)Data;
+    Params->Proc(Params->Data);
+    return(0);
+}
+
+// NOTE(boti): Because we need to maintain 2 parameters per thread entry,
+// and because we want to avoid the race condition of WinCreateThread returning before WinThreadEntry
+// could read the data, we maintain all thread starting parameters here.
+// TODO(boti): move this out of global storage
+static constexpr u32 MaxThreadCount = 1024u;
+static volatile u32 CurrentThreadCount = 0;
+static thread_params ThreadParamStorage[MaxThreadCount];
+
+internal void 
+Win_CreateThread(thread_procedure* Proc, void* Data)
+{
+    u32 ThreadIndex = (u32)(_InterlockedIncrement((long*)&CurrentThreadCount) - 1);
+    thread_params* Params = ThreadParamStorage + ThreadIndex;
+    Params->Proc = Proc;
+    Params->Data = Data;
+    HANDLE ThreadHandle = CreateThread(nullptr, 0, &Win_ThreadEntry, Params, 0, nullptr);
+}
+
+internal platform_semaphore 
+Win_CreateSemaphore(u32 InitialCount, u32 MaxCount)
+{
+    platform_semaphore Semaphore = {};
+    Semaphore.Handle = (void*)CreateSemaphoreA(nullptr, (LONG)InitialCount, (LONG)MaxCount, nullptr);
+    return(Semaphore);
+}
+
+internal void
+Win_WaitForSemaphore(platform_semaphore Semaphore, u32 TimeoutMS)
+{
+    WaitForSingleObjectEx((HANDLE)Semaphore.Handle, TimeoutMS, FALSE);
+}
+
+internal void
+Win_ReleaseSemaphore(platform_semaphore Semaphore, u32 ReleaseCount, u32* PrevCount)
+{
+    ReleaseSemaphore((HANDLE)Semaphore.Handle, (LONG)ReleaseCount, (LONG*)PrevCount);
+}
+
 //
 // Input
 //
@@ -353,6 +405,11 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     GameMemory.PlatformAPI.ElapsedSeconds = &Win_ElapsedSeconds;
     GameMemory.PlatformAPI.LoadEntireFile = &Win_LoadEntireFile;
     GameMemory.PlatformAPI.CreateVulkanSurface = &Win_CreateVulkanSurface;
+    GameMemory.PlatformAPI.CreateVulkanSurface = &Win_CreateVulkanSurface;
+    GameMemory.PlatformAPI.CreateThread = &Win_CreateThread;
+    GameMemory.PlatformAPI.CreateSemaphore = &Win_CreateSemaphore;
+    GameMemory.PlatformAPI.WaitForSemaphore = &Win_WaitForSemaphore;
+    GameMemory.PlatformAPI.ReleaseSemaphore = &Win_ReleaseSemaphore;
 
     win_xinput XInput = {};
     Win_InitializeXInput(&XInput);

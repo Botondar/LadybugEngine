@@ -9,6 +9,10 @@
 
 #include <Xinput.h>
 
+// NOTE(boti): If there are any conflicting defines with the Platform.hpp code,
+// those should be undefined here
+#undef CreateSemaphore
+
 enum win_service_msg
 {
     WIN_SERVICE_MSG_UNDEFINED = WM_USER,

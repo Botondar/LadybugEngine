@@ -14,11 +14,22 @@ typedef struct VkInstance_T* VkInstance;
 typedef struct VkSurfaceKHR_T* VkSurfaceKHR;
 #endif
 
+struct platform_semaphore
+{
+    void* Handle;
+};
+
+typedef void thread_procedure(void* Data);
+
 typedef void debug_print(const char* Format, ...);
 typedef counter get_counter();
 typedef f32 elapsed_seconds(counter Start, counter End);
 typedef buffer load_entire_file(const char* Path, memory_arena* Arena);
 typedef VkSurfaceKHR create_vulkan_surface(VkInstance Instance);
+typedef void create_thread(thread_procedure* Proc, void* Data);
+typedef platform_semaphore create_semaphore(u32 InitialCount, u32 MaxCount);
+typedef void wait_for_semaphore(platform_semaphore Semaphore, u32 TimeoutMS);
+typedef void release_semaphore(platform_semaphore Semaphore, u32 ReleaseCount, u32* PrevCount);
 
 struct platform_api
 {
@@ -27,6 +38,10 @@ struct platform_api
     elapsed_seconds* ElapsedSeconds;
     load_entire_file* LoadEntireFile;
     create_vulkan_surface* CreateVulkanSurface;
+    create_thread* CreateThread;
+    create_semaphore* CreateSemaphore;
+    wait_for_semaphore* WaitForSemaphore;
+    release_semaphore* ReleaseSemaphore;
 };
 
 // Custom key table for layout-independent keys. Naming follows the US keyboard layout
