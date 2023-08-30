@@ -769,7 +769,6 @@ enum transfer_op_type : u32
 struct transfer_texture
 {
     renderer_texture_id TargetID;
-    umm StagingBufferOffset;
 
     texture_info Info;
 };
@@ -777,6 +776,7 @@ struct transfer_texture
 struct transfer_op
 {
     transfer_op_type Type;
+    umm SourceOffset;
     union
     {
         transfer_texture Texture;
@@ -1096,8 +1096,8 @@ inline b32 TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_
         {
             transfer_op* Op = Frame->TransferOps + Frame->TransferOpCount++;
             Op->Type = TransferOp_Texture;
+            Op->SourceOffset = Frame->StagingBufferAt;
             Op->Texture.TargetID = ID;
-            Op->Texture.StagingBufferOffset = Frame->StagingBufferAt;
             Op->Texture.Info = Info;
             memcpy(OffsetPtr(Frame->StagingBufferBase, Frame->StagingBufferAt), Data, TotalSize);
             Frame->StagingBufferAt += TotalSize;

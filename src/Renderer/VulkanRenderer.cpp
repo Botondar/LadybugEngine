@@ -2226,7 +2226,7 @@ void EndRenderFrame(render_frame* Frame)
                 VkBufferImageCopy* Copies = PushArray<VkBufferImageCopy>(Frame->Arena, CopyCount);
                 VkBufferImageCopy* CopyAt = Copies;
 
-                u64 Offset = Op->Texture.StagingBufferOffset;
+                u64 Offset = Op->SourceOffset;
                 for (u32 ArrayIndex = 0; ArrayIndex < Info->ArrayCount; ArrayIndex++)
                 {
                     for (u32 MipIndex = 0; MipIndex < Info->MipCount; MipIndex++)
