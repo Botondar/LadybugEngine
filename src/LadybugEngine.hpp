@@ -3,7 +3,6 @@
 /*
 TODO: list
 - Decals
-- Multiple shadows
 - Visibility buffer rendering
 - Transparents
 */
