@@ -609,7 +609,7 @@ struct particle_cmd
     billboard_mode Mode;
 };
 
-struct material
+struct renderer_material
 {
     v3 Emissive;
     rgba8 DiffuseColor;
@@ -623,7 +623,7 @@ struct material
 struct alignas(4) push_constants
 {
     m4 Transform;
-    material Material;
+    renderer_material Material;
 };
 
 typedef flags32 light_flags;
@@ -663,7 +663,7 @@ struct draw_cmd
 {
     draw_indirect_index_cmd Base;
     m4 Transform;
-    material Material;
+    renderer_material Material;
 };
 
 struct skinning_cmd
@@ -906,12 +906,12 @@ inline b32 TransferGeometry(render_frame* Frame, geometry_buffer_allocation Allo
 inline b32 
 DrawMesh(render_frame* Frame,
          geometry_buffer_allocation Allocation, 
-         m4 Transform, material Material);
+         m4 Transform, renderer_material Material);
 
 inline b32 
 DrawSkinnedMesh(render_frame* Frame,
                 geometry_buffer_allocation Allocation,
-                m4 Transform, material Material,
+                m4 Transform, renderer_material Material,
                 u32 JointCount, m4* Pose);
 
 inline b32 
@@ -1156,7 +1156,7 @@ inline b32 TransferGeometry(render_frame* Frame, geometry_buffer_allocation Allo
 inline b32 
 DrawMesh(render_frame* Frame, 
          geometry_buffer_allocation Allocation,
-         m4 Transform, material Material)
+         m4 Transform, renderer_material Material)
 {
     b32 Result = false;
     if (Frame->DrawCmdCount < Frame->MaxDrawCmdCount)
@@ -1182,7 +1182,7 @@ DrawMesh(render_frame* Frame,
 inline b32 
 DrawSkinnedMesh(render_frame* Frame,
                 geometry_buffer_allocation Allocation,
-                m4 Transform, material Material,
+                m4 Transform, renderer_material Material,
                 u32 JointCount, m4* Pose)
 {
     b32 Result = false;

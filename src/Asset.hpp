@@ -138,7 +138,7 @@ struct assets
     u32 AnimationCount;
 
     mesh Meshes[MaxMeshCount];
-    material Materials[MaxMaterialCount];
+    renderer_material Materials[MaxMaterialCount];
     skin Skins[MaxSkinCount];
     animation Animations[MaxAnimationCount];
 };

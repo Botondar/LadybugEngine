@@ -560,7 +560,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
         if (Assets->MaterialCount < Assets->MaxMaterialCount)
         {
-            material* Material = Assets->Materials + Assets->MaterialCount++;
+            renderer_material* Material = Assets->Materials + Assets->MaterialCount++;
 
             Material->Emissive = SrcMaterial->EmissiveFactor;
             Material->DiffuseColor = PackRGBA(SrcMaterial->BaseColorFactor);

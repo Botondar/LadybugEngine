@@ -569,7 +569,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 { 
                     .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .ByteSize = sizeof(m4) + sizeof(material),
+                    .ByteSize = sizeof(m4) + sizeof(renderer_material),
                     .ByteOffset = 0, 
                 },
             },
@@ -624,7 +624,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 { 
                     .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .ByteSize = sizeof(m4) + sizeof(material),
+                    .ByteSize = sizeof(m4) + sizeof(renderer_material),
                     .ByteOffset = 0, 
                 },
             },
@@ -673,7 +673,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 { 
                     .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .ByteSize = sizeof(m4) + sizeof(material) + sizeof(u32),
+                    .ByteSize = sizeof(m4) + sizeof(renderer_material) + sizeof(u32),
                     .ByteOffset = 0, 
                 },
             },
@@ -722,7 +722,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 {
                     .Stages = PipelineStage_VS|PipelineStage_PS,
-                    .ByteSize = sizeof(m4) + sizeof(material) + sizeof(u32),
+                    .ByteSize = sizeof(m4) + sizeof(renderer_material) + sizeof(u32),
                     .ByteOffset = 0,
                 },
             },
