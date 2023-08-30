@@ -26,7 +26,7 @@ typedef counter get_counter();
 typedef f32 elapsed_seconds(counter Start, counter End);
 typedef buffer load_entire_file(const char* Path, memory_arena* Arena);
 typedef VkSurfaceKHR create_vulkan_surface(VkInstance Instance);
-typedef void create_thread(thread_procedure* Proc, void* Data);
+typedef void create_thread(thread_procedure* Proc, void* Data, const wchar_t* Name);
 typedef platform_semaphore create_semaphore(u32 InitialCount, u32 MaxCount);
 typedef void wait_for_semaphore(platform_semaphore Semaphore, u32 TimeoutMS);
 typedef void release_semaphore(platform_semaphore Semaphore, u32 ReleaseCount, u32* PrevCount);

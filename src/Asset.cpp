@@ -227,7 +227,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         Queue->RingBufferSize = MiB(128);
         Queue->RingBufferMemory = (u8*)PushSize(&Assets->Arena, Queue->RingBufferSize, KiB(4));
 
-        Platform.CreateThread(&AssetThread, Assets);
+        Platform.CreateThread(&AssetThread, Assets, L"AssetThread");
     }
 
     // Default textures

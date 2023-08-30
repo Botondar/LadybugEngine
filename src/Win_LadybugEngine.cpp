@@ -124,13 +124,17 @@ static volatile u32 CurrentThreadCount = 0;
 static thread_params ThreadParamStorage[MaxThreadCount];
 
 internal void 
-Win_CreateThread(thread_procedure* Proc, void* Data)
+Win_CreateThread(thread_procedure* Proc, void* Data, const wchar_t* Name)
 {
     u32 ThreadIndex = (u32)(_InterlockedIncrement((long*)&CurrentThreadCount) - 1);
     thread_params* Params = ThreadParamStorage + ThreadIndex;
     Params->Proc = Proc;
     Params->Data = Data;
     HANDLE ThreadHandle = CreateThread(nullptr, 0, &Win_ThreadEntry, Params, 0, nullptr);
+    if (Name)
+    {
+        SetThreadDescription(ThreadHandle, Name);
+    }
 }
 
 internal platform_semaphore 
@@ -665,6 +669,8 @@ internal LRESULT CALLBACK Win_ServiceWindowProc(HWND Window, UINT Message, WPARA
 
 int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int CommandShow)
 {
+    SetThreadDescription(GetCurrentThread(), L"MessageThread");
+
     WNDCLASSEXW ServiceWindowClass = 
     {
         .cbSize = sizeof(WNDCLASSEXW),
@@ -697,6 +703,7 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLi
     }
 
     HANDLE MainThreadHandle = CreateThread(nullptr, 0, &Win_MainThread, ServiceWindow, 0, &MainThreadID);
+    SetThreadDescription(MainThreadHandle, L"MainThread");
 
     for (;;)
     {
