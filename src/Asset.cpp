@@ -2,6 +2,39 @@ internal mesh_data CreateCubeMesh(memory_arena* Arena);
 internal mesh_data CreateSphereMesh(memory_arena* Arena);
 internal mesh_data CreateArrowMesh(memory_arena* Arena);
 
+lbfn void AssetThread(void* Param)
+{
+    assets* Assets = (assets*)Param;
+    texture_queue* Queue = &Assets->TextureQueue;
+
+    for (;;)
+    {
+        Platform.WaitForSemaphore(Queue->Semaphore, 0xFFFFFFFFu);
+    }
+}
+
+lbfn void AddEntry(texture_queue* Queue, renderer_texture_id ID, texture_type Type, b32 AlphaEnabled, const filepath* Path)
+{
+    // TODO(boti): Spin-wait here?
+    if (Queue->CompletionGoal - Queue->CompletionCount < Queue->MaxEntryCount)
+    {
+        u32 Completion = AtomicLoadAndIncrement(&Queue->CompletionGoal);
+        u32 Index = Completion % Queue->MaxEntryCount;
+        Queue->Entries[Index] =
+        {
+            .ID = ID,
+            .TextureType = Type,
+            .AlphaEnabled = AlphaEnabled,
+            .Path = *Path,
+        };
+        Platform.ReleaseSemaphore(Queue->Semaphore, 1, nullptr);
+    }
+    else
+    {
+        UnhandledError("Texture queue full");
+    }
+}
+
 lbfn b32 IsEmpty(texture_queue* Queue)
 {
     b32 Result = (Queue->CompletionCount == Queue->CompletionGoal);
@@ -13,7 +46,7 @@ lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, mem
     b32 Result = false;
     if (!IsEmpty(Queue))
     {
-        texture_queue_entry* Entry = Queue->Entries + (Queue->CompletionCount++ % Queue->MaxEntryCount);
+        texture_queue_entry* Entry = Queue->Entries + (AtomicLoadAndIncrement(&Queue->CompletionCount) % Queue->MaxEntryCount);
 
         memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
 
@@ -162,6 +195,15 @@ lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, mem
 lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scratch)
 {
     b32 Result = true;
+
+    {
+        texture_queue* Queue = &Assets->TextureQueue;
+        Queue->Semaphore = Platform.CreateSemaphore(0, Queue->MaxEntryCount);
+        umm ScratchSize = MiB(16);
+        Queue->Scratch = InitializeArena(ScratchSize, PushSize(&Assets->Arena, ScratchSize, KiB(4)));
+
+        //Platform.CreateThread(&AssetThread, Assets);
+    }
 
     // Default textures
     {
@@ -461,12 +503,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 }
 
                 Result = AllocateTextureName(Frame->Renderer, TextureFlag_None);
-
-                texture_queue_entry* Entry = Assets->TextureQueue.Entries + (Assets->TextureQueue.CompletionGoal++ % Assets->TextureQueue.MaxEntryCount);
-                Entry->ID = Result;
-                Entry->AlphaEnabled = (AlphaMode != GLTF_ALPHA_MODE_OPAQUE);
-                Entry->TextureType = Type;
-                Entry->Path = Filepath;
+                AddEntry(&Assets->TextureQueue, Result, Type, (AlphaMode != GLTF_ALPHA_MODE_OPAQUE), &Filepath);
             }
             else
             {

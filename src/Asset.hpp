@@ -73,15 +73,23 @@ struct texture_queue_entry
 
 struct texture_queue
 {
-    static constexpr u32 MaxEntryCount = 1u << 14;
+    platform_semaphore Semaphore;
+    memory_arena Scratch;
 
-    u32 CompletionCount;
-    u32 CompletionGoal;
+    static constexpr u32 MaxEntryCount = 1u << 14;
+    volatile u32 CompletionCount;
+    volatile u32 CompletionGoal;
     texture_queue_entry Entries[MaxEntryCount];
+
+    umm RingBufferSize;
+    umm RingBufferWriteAt;
+    umm RingBufferReadAt;
+    u8* RingBufferMemory;
 };
 
 lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, memory_arena* Scratch);
 lbfn b32 IsEmpty(texture_queue* Queue);
+lbfn void AddEntry(texture_queue* Queue, renderer_texture_id ID, texture_type Type, b32 AlphaEnabled, const filepath* Path);
 
 struct mesh
 {
@@ -93,7 +101,6 @@ struct mesh
 struct assets
 {
     memory_arena Arena;
-
     texture_queue TextureQueue;
 
     renderer_texture_id Whiteness;
@@ -133,6 +140,7 @@ lbfn void DEBUGLoadTestScene(memory_arena* Scratch,
                              assets* Assets, struct game_world* World, render_frame* Frame,
                              const char* ScenePath, m4 BaseTransform);
 
+lbfn void AssetThread(void* Param);
 
 enum particle_texture : u32
 {

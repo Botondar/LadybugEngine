@@ -42,3 +42,9 @@ LB_INLINE u8 BitScanReverse(u32* Result, u64 Value)
 {
     return _BitScanReverse64((unsigned long*)Result, Value);
 }
+
+LB_INLINE u32 AtomicLoadAndIncrement(volatile u32* Value)
+{
+    u32 Result = (u32)(_InterlockedIncrement((long*)Value) - 1);
+    return(Result);
+}
