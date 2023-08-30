@@ -122,7 +122,6 @@ struct renderer
     VkExtent2D SurfaceExtent;
 
     render_target_heap RenderTargetHeap;
-    vulkan_buffer StagingBuffer;
     geometry_buffer GeometryBuffer;
     texture_manager TextureManager;
     gpu_memory_arena BARMemory;

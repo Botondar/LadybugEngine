@@ -565,22 +565,6 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
             Assert(Result == VK_SUCCESS);
         }
     }
-    
-    // Staging Buffer
-    {
-        size_t MemorySize = MiB(128);
-        if ((Result = CreateAndAllocateBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
-                VK.SharedMemTypes, MemorySize, 
-                &Renderer->StagingBuffer.Buffer, &Renderer->StagingBuffer.Memory)) == VK_SUCCESS)
-        {
-            Renderer->StagingBuffer.Size = MemorySize;
-            Result = vkMapMemory(VK.Device, Renderer->StagingBuffer.Memory, 
-                                 0, Renderer->StagingBuffer.Size, 0, 
-                                 &Renderer->StagingBuffer.Mapping);
-            ReturnOnFailure();
-        }
-        ReturnOnFailure();
-    }
 
     // Vertex Buffer
     {
