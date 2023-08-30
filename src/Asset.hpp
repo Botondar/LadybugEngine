@@ -66,9 +66,16 @@ enum texture_type : u32
 struct texture_queue_entry
 {
     renderer_texture_id ID;
+
+    // Input parameters for processing
     texture_type TextureType;
     b32 AlphaEnabled;
     filepath Path;
+
+    // Output parameters for transfer
+    volatile b32 ReadyToTransfer;
+    umm TotalSize;
+    texture_info Info;
 };
 
 struct texture_queue
@@ -77,19 +84,22 @@ struct texture_queue
     memory_arena Scratch;
 
     static constexpr u32 MaxEntryCount = 1u << 14;
+    u32 ProcessingCount;
     volatile u32 CompletionCount;
     volatile u32 CompletionGoal;
     texture_queue_entry Entries[MaxEntryCount];
 
     umm RingBufferSize;
-    umm RingBufferWriteAt;
-    umm RingBufferReadAt;
+    volatile umm RingBufferWriteAt;
+    volatile umm RingBufferReadAt;
     u8* RingBufferMemory;
 };
 
-lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, memory_arena* Scratch);
 lbfn b32 IsEmpty(texture_queue* Queue);
 lbfn void AddEntry(texture_queue* Queue, renderer_texture_id ID, texture_type Type, b32 AlphaEnabled, const filepath* Path);
+lbfn b32 ProcessEntry(texture_queue* Queue);
+// NOTE(boti): Wraps around when Begin+TotalSize > MemorySize
+lbfn umm GetNextEntryOffset(texture_queue* Queue, umm TotalSize, umm Begin);
 
 struct mesh
 {

@@ -119,11 +119,30 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     UpdateEditor(GameState, GameIO, RenderFrame);
     RenderFrame->PostProcess = GameState->PostProcessParams;
 
-    if (!IsEmpty(&GameState->Assets->TextureQueue))
+    // Asset update
     {
-        ProcessTextureQueueEntry(&GameState->Assets->TextureQueue, RenderFrame, &GameState->TransientArena);
+        assets* Assets = GameState->Assets;
+        texture_queue* Queue = &Assets->TextureQueue;
+        for (u32 Completion = Queue->CompletionCount; Completion < Queue->CompletionGoal; Completion++)
+        {
+            u32 EntryIndex = Completion % Queue->MaxEntryCount;
+            texture_queue_entry* Entry = Queue->Entries + EntryIndex;
+            if (Entry->ReadyToTransfer)
+            {
+                umm TotalSize = GetMipChainSize(Entry->Info.Width, Entry->Info.Height, 
+                                                Entry->Info.MipCount, Entry->Info.ArrayCount,
+                                                FormatByterateTable[Entry->Info.Format]);
+                umm Begin = GetNextEntryOffset(Queue, TotalSize, Queue->RingBufferReadAt);
+                TransferTexture(RenderFrame, Entry->ID, Entry->Info, Queue->RingBufferMemory + (Begin % Queue->RingBufferSize));
+                Queue->RingBufferReadAt = Begin + TotalSize;
+                AtomicLoadAndIncrement(&Queue->CompletionCount);
+            }
+            else
+            {
+                break;
+            }
+        }
     }
-
     if (IsEmpty(&GameState->Assets->TextureQueue))
     {
         UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, 

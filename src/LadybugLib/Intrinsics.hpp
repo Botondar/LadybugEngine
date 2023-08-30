@@ -9,12 +9,16 @@
 
 #define LB_INLINE __forceinline
 
+
 LB_INLINE u32 FindLeastSignificantSetBit(u32 Value);
 
 LB_INLINE u8 BitScanForward(u32* Result, u32 Value);
 LB_INLINE u8 BitScanReverse(u32* Result, u32 Value);
 LB_INLINE u8 BitScanForward(u32* Result, u64 Value);
 LB_INLINE u8 BitScanReverse(u32* Result, u64 Value);
+
+#define SpinWait _mm_pause()
+LB_INLINE u32 AtomicLoadAndIncrement(volatile u32* Value);
 
 LB_INLINE u32 FindLeastSignificantSetBit(u32 Value)
 {

@@ -9,8 +9,24 @@ lbfn void AssetThread(void* Param)
 
     for (;;)
     {
-        Platform.WaitForSemaphore(Queue->Semaphore, 0xFFFFFFFFu);
+        b32 WeShouldSleep = ProcessEntry(Queue);
+        while (!WeShouldSleep)
+        {
+            WeShouldSleep = ProcessEntry(Queue);
+        }
+        u32 WaitMS = 0xFFFFFFFFu;
+        Platform.WaitForSemaphore(Queue->Semaphore, WaitMS);
     }
+}
+
+lbfn umm GetNextEntryOffset(texture_queue* Queue, umm TotalSize, umm Begin)
+{
+    umm End = Begin + TotalSize;
+    if ((End % Queue->RingBufferSize) < (Begin % Queue->RingBufferSize))
+    {
+        Begin = Align(Begin, Queue->RingBufferSize);
+    }
+    return(Begin);
 }
 
 lbfn void AddEntry(texture_queue* Queue, renderer_texture_id ID, texture_type Type, b32 AlphaEnabled, const filepath* Path)
@@ -18,14 +34,14 @@ lbfn void AddEntry(texture_queue* Queue, renderer_texture_id ID, texture_type Ty
     // TODO(boti): Spin-wait here?
     if (Queue->CompletionGoal - Queue->CompletionCount < Queue->MaxEntryCount)
     {
-        u32 Completion = AtomicLoadAndIncrement(&Queue->CompletionGoal);
-        u32 Index = Completion % Queue->MaxEntryCount;
+        u32 Index = AtomicLoadAndIncrement(&Queue->CompletionGoal) % Queue->MaxEntryCount;
         Queue->Entries[Index] =
         {
             .ID = ID,
             .TextureType = Type,
             .AlphaEnabled = AlphaEnabled,
             .Path = *Path,
+            .ReadyToTransfer = false,
         };
         Platform.ReleaseSemaphore(Queue->Semaphore, 1, nullptr);
     }
@@ -41,18 +57,18 @@ lbfn b32 IsEmpty(texture_queue* Queue)
     return(Result);
 }
 
-lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, memory_arena* Scratch)
+lbfn b32 ProcessEntry(texture_queue* Queue)
 {
     b32 Result = false;
-    if (!IsEmpty(Queue))
+    if (Queue->ProcessingCount < Queue->CompletionGoal)
     {
-        texture_queue_entry* Entry = Queue->Entries + (AtomicLoadAndIncrement(&Queue->CompletionCount) % Queue->MaxEntryCount);
+        texture_queue_entry* Entry = Queue->Entries + (Queue->ProcessingCount++ % Queue->MaxEntryCount);
 
+        memory_arena* Scratch = &Queue->Scratch;
         memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
 
-        texture_info Info = {};
-        Info.Depth = 1;
-        Info.ArrayCount = 1;
+        Entry->Info.Depth = 1;
+        Entry->Info.ArrayCount = 1;
 
         int Alpha = 0;
         switch (Entry->TextureType)
@@ -62,56 +78,63 @@ lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, mem
                 if (Entry->AlphaEnabled)
                 {
                     Alpha = 1;
-                    Info.Format = Format_BC3_SRGB;
+                    Entry->Info.Format = Format_BC3_SRGB;
                 }
                 else
                 {
-                    Info.Format = Format_BC1_RGB_SRGB;
+                    Entry->Info.Format = Format_BC1_RGB_SRGB;
                 }
             } break;
             case TextureType_Normal:
             {
-                Info.Format = Format_BC5_UNorm;
+                Entry->Info.Format = Format_BC5_UNorm;
             } break;
             case TextureType_Material:
             {
-                Info.Format = Format_BC3_UNorm;
+                Entry->Info.Format = Format_BC3_UNorm;
             } break;
             InvalidDefaultCase;
         }
         
         u32 ChannelCount;
         int DesiredChannelCount = 4;
-        rgba8* SrcImage = (rgba8*)stbi_load(Entry->Path.Path, (int*)&Info.Width, (int*)&Info.Height, (int*)&ChannelCount, DesiredChannelCount);
+        rgba8* SrcImage = (rgba8*)stbi_load(Entry->Path.Path, (int*)&Entry->Info.Width, (int*)&Entry->Info.Height, (int*)&ChannelCount, DesiredChannelCount);
         if (SrcImage)
         {
             if (ChannelCount == 3)
             {
-                for (u32 Index = 0; Index < Info.Width*Info.Height; Index++)
+                for (u32 Index = 0; Index < Entry->Info.Width*Entry->Info.Height; Index++)
                 {
                     SrcImage[Index].A = 0xFF;
                 }
             }
 
-            Info.MipCount = GetMaxMipCountGreaterThanOne(Info.Width, Info.Height);
-            format_byterate ByteRate = FormatByterateTable[Info.Format];
-            u64 TotalMipChainSize = GetMipChainSize(Info.Width, Info.Height, Info.MipCount, 1, ByteRate);
-            u8* MipChain = (u8*)PushSize(Scratch, TotalMipChainSize, 64);
+            Entry->Info.MipCount = GetMaxMipCountGreaterThanOne(Entry->Info.Width, Entry->Info.Height);
+            format_byterate ByteRate = FormatByterateTable[Entry->Info.Format];
+            u64 TotalMipChainSize = GetMipChainSize(Entry->Info.Width, Entry->Info.Height, Entry->Info.MipCount, 1, ByteRate);
+            umm MipChainBegin = GetNextEntryOffset(Queue, TotalMipChainSize, Queue->RingBufferWriteAt);
+            while (((MipChainBegin + TotalMipChainSize) - Queue->RingBufferReadAt) >= Queue->RingBufferSize)
+            {
+                SpinWait;
+            }
+
+            u8* MipChain = Queue->RingBufferMemory + (MipChainBegin % Queue->RingBufferSize);
+            Queue->RingBufferWriteAt = MipChainBegin + TotalMipChainSize;
 
             u32 BlockSize = 16 * ByteRate.Numerator / ByteRate.Denominator;
 
-            rgba8* DownscaleBuffer = PushArray<rgba8>(Scratch, Info.Width*Info.Height, 64);
+            rgba8* DownscaleBuffer = PushArray<rgba8>(Scratch, Entry->Info.Width*Entry->Info.Height, 64);
             rgba8* SrcAt = SrcImage;
             u8* DstAt = MipChain;
-            for (u32 MipIndex = 0; MipIndex < Info.MipCount; MipIndex++)
+            for (u32 MipIndex = 0; MipIndex < Entry->Info.MipCount; MipIndex++)
             {
-                u32 Width = Max(Info.Width >> MipIndex, 1u);
-                u32 Height = Max(Info.Height >> MipIndex, 1u);
+                u32 Width = Max(Entry->Info.Width >> MipIndex, 1u);
+                u32 Height = Max(Entry->Info.Height >> MipIndex, 1u);
 
                 if (MipIndex != 0)
                 {
-                    u32 PrevWidth = Max(Info.Width >> (MipIndex - 1), 1u);
-                    u32 PrevHeight = Max(Info.Height >> (MipIndex - 1), 1u);
+                    u32 PrevWidth = Max(Entry->Info.Width >> (MipIndex - 1), 1u);
+                    u32 PrevHeight = Max(Entry->Info.Height >> (MipIndex - 1), 1u);
                     // TODO(boti): alpha and srgb correct resize here
                     stbir_resize_uint8((u8*)SrcAt, PrevWidth, PrevHeight, 0, 
                                        (u8*)DownscaleBuffer, Width, Height, 0,
@@ -127,7 +150,7 @@ lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, mem
                         u32 Y1 = (Y + 1) * Width;
                         u32 Y2 = (Y + 2) * Width;
                         u32 Y3 = (Y + 3) * Width;
-                        switch (Info.Format)
+                        switch (Entry->Info.Format)
                         {
                             case Format_BC3_SRGB: Alpha = 1;
                             case Format_BC3_UNorm: Alpha = 1;
@@ -175,9 +198,8 @@ lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, mem
                     }
                 }
             }
-
-            TransferTexture(Frame, Entry->ID, Info, MipChain);
             stbi_image_free(SrcImage);
+            Entry->ReadyToTransfer = true;
         }
         else 
         {
@@ -199,10 +221,13 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
     {
         texture_queue* Queue = &Assets->TextureQueue;
         Queue->Semaphore = Platform.CreateSemaphore(0, Queue->MaxEntryCount);
-        umm ScratchSize = MiB(16);
+        umm ScratchSize = MiB(64);
         Queue->Scratch = InitializeArena(ScratchSize, PushSize(&Assets->Arena, ScratchSize, KiB(4)));
 
-        //Platform.CreateThread(&AssetThread, Assets);
+        Queue->RingBufferSize = MiB(128);
+        Queue->RingBufferMemory = (u8*)PushSize(&Assets->Arena, Queue->RingBufferSize, KiB(4));
+
+        Platform.CreateThread(&AssetThread, Assets);
     }
 
     // Default textures
