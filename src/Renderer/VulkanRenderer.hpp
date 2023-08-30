@@ -125,15 +125,7 @@ struct renderer
     vulkan_buffer StagingBuffer;
     geometry_buffer GeometryBuffer;
     texture_manager TextureManager;
-
-#if 1
     gpu_memory_arena BARMemory;
-#else
-    VkDeviceSize BARMemoryByteSize;
-    VkDeviceSize BARMemoryByteOffset;
-    VkDeviceMemory BARMemory;
-    void* BARMemoryMapping;
-#endif
 
     struct render_debug
     {
