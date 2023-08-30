@@ -2345,6 +2345,93 @@ void EndRenderFrame(render_frame* Frame)
                 vkCmdPipelineBarrier2(PrepassCmd, &EndDependency);
 
             } break;
+            case TransferOp_Geometry:
+            {
+                umm VertexByteCount = Op->Geometry.Dest.VertexBlock->Count * sizeof(vertex);
+                umm VertexByteOffset = Op->Geometry.Dest.VertexBlock->Offset * sizeof(vertex);
+                umm IndexByteCount = Op->Geometry.Dest.IndexBlock->Count * sizeof(vert_index);
+                umm IndexByteOffset = Op->Geometry.Dest.IndexBlock->Offset * sizeof(vert_index);
+                VkBuffer VertexBuffer = Renderer->GeometryBuffer.VertexMemory.Buffer;
+                VkBuffer IndexBuffer = Renderer->GeometryBuffer.IndexMemory.Buffer;
+
+                VkBufferMemoryBarrier2 Barrier = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = 0,
+                    .srcAccessMask = 0,
+                    .dstStageMask = 0,
+                    .dstAccessMask = 0,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .buffer = VK_NULL_HANDLE,
+                    .offset = 0,
+                    .size = 0,
+                };
+                VkDependencyInfo Dependency = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .bufferMemoryBarrierCount = 1,
+                    .pBufferMemoryBarriers = &Barrier,
+                };
+
+                if (VertexByteCount)
+                {
+
+                    Barrier.buffer = VertexBuffer;
+                    Barrier.offset = VertexByteOffset;
+                    Barrier.size = VertexByteCount;
+
+                    Barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+                    Barrier.srcAccessMask = VK_ACCESS_2_NONE;
+                    Barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                    Barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    vkCmdPipelineBarrier2(PrepassCmd, &Dependency);
+
+                    VkBufferCopy Copy = 
+                    {
+                        .srcOffset = Op->SourceOffset,
+                        .dstOffset = VertexByteOffset,
+                        .size = VertexByteCount,
+                    };
+                    vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, VertexBuffer, 1, &Copy);
+
+                    Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                    Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    Barrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+                    Barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+                    vkCmdPipelineBarrier2(PrepassCmd, &Dependency);
+                }
+
+                if (IndexByteCount)
+                {
+                    Barrier.buffer = IndexBuffer;
+                    Barrier.offset = IndexByteOffset;
+                    Barrier.size = IndexByteCount;
+
+                    Barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+                    Barrier.srcAccessMask = VK_ACCESS_2_NONE;
+                    Barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                    Barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    vkCmdPipelineBarrier2(PrepassCmd, &Dependency);
+                    VkBufferCopy Copy = 
+                    {
+                        .srcOffset = Op->SourceOffset + VertexByteOffset,
+                        .dstOffset = IndexByteOffset,
+                        .size = IndexByteCount,
+                    };
+                    vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, IndexBuffer, 1, &Copy);
+
+                    Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                    Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                    Barrier.dstStageMask = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
+                    Barrier.dstAccessMask = VK_ACCESS_2_INDEX_READ_BIT;
+                    vkCmdPipelineBarrier2(PrepassCmd, &Dependency);
+                }
+
+            } break;
             InvalidDefaultCase;
         }
     }

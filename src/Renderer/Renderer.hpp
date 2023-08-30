@@ -764,13 +764,18 @@ enum transfer_op_type : u32
 {
     TransferOp_Undefined,
     TransferOp_Texture,
+    TransferOp_Geometry,
 };
 
 struct transfer_texture
 {
     renderer_texture_id TargetID;
-
     texture_info Info;
+};
+
+struct transfer_geometry
+{
+    geometry_buffer_allocation Dest;
 };
 
 struct transfer_op
@@ -780,6 +785,7 @@ struct transfer_op
     union
     {
         transfer_texture Texture;
+        transfer_geometry Geometry;
     };
 };
 
@@ -899,7 +905,11 @@ void EndRenderFrame(render_frame* Frame);
 
 void SetRenderCamera(render_frame* Frame, const render_camera* Camera);
 
-inline b32 TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_info Info, const void* Data);
+inline b32 
+TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_info Info, 
+                const void* Data);
+inline b32 TransferGeometry(render_frame* Frame, geometry_buffer_allocation Allocation,
+                            const void* VertexData, const void* IndexData);
 
 inline b32 
 DrawMesh(render_frame* Frame,
@@ -1104,13 +1114,49 @@ inline b32 TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_
         }
         else
         {
+            Result = false;
             UnhandledError("Out of staging memory");
         }
     }
     else
     {
+        Result = false;
         UnhandledError("Out of transfer pool");
     }
+    return(Result);
+}
+
+inline b32 TransferGeometry(render_frame* Frame, geometry_buffer_allocation Allocation,
+                            const void* VertexData, const void* IndexData)
+{
+    b32 Result = true;
+
+    if (Frame->TransferOpCount < Frame->MaxTransferOpCount)
+    {
+        umm VertexSize = (umm)Allocation.VertexBlock->Count * sizeof(vertex);
+        umm IndexSize = (umm)Allocation.IndexBlock->Count * sizeof(vert_index);
+        umm TotalSize = VertexSize + IndexSize;
+        if (Frame->StagingBufferAt + TotalSize < Frame->StagingBufferSize)
+        {
+            transfer_op* Op = Frame->TransferOps + Frame->TransferOpCount++;
+            Op->SourceOffset = Frame->StagingBufferAt;
+            Op->Geometry.Dest = Allocation;
+            memcpy(OffsetPtr(Frame->StagingBufferBase, Frame->StagingBufferAt), VertexData, VertexSize);
+            memcpy(OffsetPtr(Frame->StagingBufferBase, Frame->StagingBufferAt + VertexSize), IndexData, IndexSize);
+            Frame->StagingBufferAt += TotalSize;
+        }
+        else
+        {
+            Result = false;
+            UnhandledError("Out of staging memory");
+        }
+    }
+    else
+    {
+        Result = false;
+        UnhandledError("Out of transfer pool");
+    }
+
     return(Result);
 }
 
