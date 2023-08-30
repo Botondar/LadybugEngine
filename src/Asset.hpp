@@ -126,9 +126,9 @@ struct assets
     animation Animations[MaxAnimationCount];
 };
 
-lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scratch);
+lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scratch);
 
-lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Renderer, const char* Path);
+lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Frame, const char* Path);
 lbfn void DEBUGLoadTestScene(memory_arena* Scratch, 
                              assets* Assets, struct game_world* World, render_frame* Frame,
                              const char* ScenePath, m4 BaseTransform);

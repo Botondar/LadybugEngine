@@ -888,12 +888,6 @@ UploadVertexData(renderer* Renderer,
 extern renderer_texture_id
 AllocateTextureName(renderer* Renderer, texture_flags Flags);
 
-extern renderer_texture_id 
-PushTexture(renderer* Renderer, texture_flags Flags,
-            u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
-            format Format, texture_swizzle Swizzle,
-            const void* Data);
-
 //
 // Frame rendering
 //

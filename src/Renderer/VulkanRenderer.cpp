@@ -1772,159 +1772,6 @@ geometry_buffer_allocation UploadVertexData(renderer* Renderer,
 
 #undef ReturnOnFailure
 
-renderer_texture_id PushTexture(renderer* Renderer, texture_flags Flags,
-                       u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
-                       format InFormat, texture_swizzle Swizzle, 
-                       const void* Data)
-{
-    renderer_texture_id ID = { INVALID_INDEX_U32 };
-
-    VkFormat Format = FormatTable[InFormat];
-
-    texture_manager* TextureManager = &Renderer->TextureManager;
-    ID = CreateTexture2D(TextureManager, Flags, Width, Height, MipCount, ArrayCount, Format, Swizzle);
-    if (IsValid(ID))
-    {
-        VkImage Image = *GetImage(TextureManager, ID);
-
-        format_byterate ByteRate = FormatByterateTable[InFormat];
-        u64 MemorySize = GetMipChainSize(Width, Height, MipCount, ArrayCount, ByteRate);
-
-        vulkan_buffer* StagingBuffer = &Renderer->StagingBuffer;
-        Assert(MemorySize <= StagingBuffer->Size);
-
-        VkCommandBufferBeginInfo BeginInfo =
-        {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            .pNext = nullptr,
-            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-            .pInheritanceInfo = nullptr,
-        };
-        vkBeginCommandBuffer(Renderer->TransferCmdBuffer, &BeginInfo);
-
-        VkImageMemoryBarrier BeginBarrier = 
-        {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            .pNext = nullptr,
-            .srcAccessMask = VK_ACCESS_NONE,
-            .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Image,
-            .subresourceRange = 
-            {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = MipCount,
-                .baseArrayLayer = 0,
-                .layerCount = ArrayCount,
-            },
-        };
-        vkCmdPipelineBarrier(Renderer->TransferCmdBuffer, 
-                             VK_PIPELINE_STAGE_NONE, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-                             0, nullptr,
-                             0, nullptr,
-                             1, &BeginBarrier);
-
-        u8* Mapping = (u8*)StagingBuffer->Mapping;
-        memcpy(Mapping, Data, MemorySize);
-
-        u64 CopyOffset = 0;
-        for (u32 ArrayIndex = 0; ArrayIndex < ArrayCount; ArrayIndex++)
-        {
-            for (u32 Mip = 0; Mip < MipCount; Mip++)
-            {
-                u32 CurrentWidth = Max(Width >> Mip, 1u);
-                u32 CurrentHeight = Max(Height >> Mip, 1u);
-
-                u32 RowLength = 0;
-                u32 ImageHeight = 0;
-                u64 TexelCount;
-                u64 MipSize;
-                if (ByteRate.IsBlock)
-                {
-                    RowLength = Align(CurrentWidth, 4u);
-                    ImageHeight = Align(CurrentHeight, 4u);
-
-                    TexelCount = (u64)RowLength * ImageHeight;
-                }
-                else
-                {
-                    TexelCount = CurrentWidth * CurrentHeight;
-                }
-                MipSize = TexelCount * ByteRate.Numerator / ByteRate.Denominator;
-
-                VkBufferImageCopy CopyRegion = 
-                {
-                    .bufferOffset = CopyOffset,
-                    .bufferRowLength = RowLength,
-                    .bufferImageHeight = ImageHeight,
-                    .imageSubresource = 
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .mipLevel = Mip,
-                        .baseArrayLayer = ArrayIndex,
-                        .layerCount = 1,
-                    },
-                    .imageOffset = { 0, 0, 0 },
-                    .imageExtent = { CurrentWidth, CurrentHeight, 1 },
-                };
-                vkCmdCopyBufferToImage(Renderer->TransferCmdBuffer, StagingBuffer->Buffer, Image, 
-                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &CopyRegion);
-                CopyOffset += MipSize;
-            }
-        }
-        VkImageMemoryBarrier EndBarrier = 
-        {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-            .pNext = nullptr,
-            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            .newLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Image,
-            .subresourceRange = 
-            {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = MipCount,
-                .baseArrayLayer = 0,
-                .layerCount = ArrayCount,
-            },
-        };
-        vkCmdPipelineBarrier(Renderer->TransferCmdBuffer, 
-                             VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 
-                             0,
-                             0, nullptr,
-                             0, nullptr,
-                             1, &EndBarrier);
-        vkEndCommandBuffer(Renderer->TransferCmdBuffer);
-
-        VkSubmitInfo SubmitInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .pNext = nullptr,
-            .waitSemaphoreCount = 0,
-            .pWaitSemaphores = nullptr,
-            .pWaitDstStageMask = nullptr,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &Renderer->TransferCmdBuffer,
-            .signalSemaphoreCount = 0,
-            .pSignalSemaphores = nullptr,
-        };
-        vkQueueSubmit(VK.GraphicsQueue, 1, &SubmitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(VK.GraphicsQueue);
-
-        vkResetCommandPool(VK.Device, Renderer->TransferCmdPool, 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
-    }
-    
-    return(ID);
-}
-
 //
 // Rendering interface implementation
 //
@@ -2343,8 +2190,8 @@ void EndRenderFrame(render_frame* Frame)
                     .pImageMemoryBarriers = &EndBarrier,
                 };
                 vkCmdPipelineBarrier2(PrepassCmd, &EndDependency);
-
             } break;
+
             case TransferOp_Geometry:
             {
                 umm VertexByteCount = Op->Geometry.Dest.VertexBlock->Count * sizeof(vertex);
@@ -2430,7 +2277,6 @@ void EndRenderFrame(render_frame* Frame)
                     Barrier.dstAccessMask = VK_ACCESS_2_INDEX_READ_BIT;
                     vkCmdPipelineBarrier2(PrepassCmd, &Dependency);
                 }
-
             } break;
             InvalidDefaultCase;
         }

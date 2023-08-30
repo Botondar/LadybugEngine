@@ -30,6 +30,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     }
 
     game_state* GameState = Memory->GameState;
+    render_frame* RenderFrame = nullptr;
     if (!GameState)
     {
         memory_arena BootstrapArena = InitializeArena(Memory->Size, Memory->Memory);
@@ -46,12 +47,13 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             GameIO->QuitMessage = "Renderer creation failed";
             return;
         }
+        RenderFrame = BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputWidth, GameIO->OutputHeight);
 
         constexpr umm AssetArenaSize = GiB(1);
         memory_arena AssetArena = InitializeArena(AssetArenaSize, PushSize(&GameState->TotalArena, AssetArenaSize, KiB(4)));
         assets* Assets = GameState->Assets = PushStruct<assets>(&AssetArena);
         Assets->Arena = AssetArena;
-        InitializeAssets(Assets, GameState->Renderer, &GameState->TransientArena);
+        InitializeAssets(Assets, RenderFrame, &GameState->TransientArena);
 
         game_world* World = GameState->World = PushStruct<game_world>(&GameState->TotalArena);
 
@@ -83,7 +85,10 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         GameIO->dt = 0.0f;
     }
 
-    render_frame* RenderFrame = BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputWidth, GameIO->OutputHeight);
+    if (!RenderFrame)
+    {
+        RenderFrame = BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputWidth, GameIO->OutputHeight);
+    }
     RenderFrame->ImmediateTextureID = GameState->Assets->DefaultFontTextureID;
     RenderFrame->ParticleTextureID = GameState->Assets->ParticleArrayID;
 

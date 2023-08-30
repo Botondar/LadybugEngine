@@ -159,21 +159,44 @@ lbfn b32 ProcessTextureQueueEntry(texture_queue* Queue, render_frame* Frame, mem
     return(Result);
 }
 
-lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scratch)
+lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scratch)
 {
     b32 Result = true;
 
     // Default textures
     {
-        u32 Value = 0xFFFFFFFFu;
-        renderer_texture_id Whiteness = PushTexture(Renderer, TextureFlag_None, 1, 1, 1, 1, Format_R8G8B8A8_SRGB, {}, &Value);
-
+        renderer_texture_id Whiteness = AllocateTextureName(Frame->Renderer, TextureFlag_None);
         Assets->DefaultDiffuseID = Whiteness;
         Assets->DefaultMetallicRoughnessID = Whiteness;
+
+        texture_info Info =
+        {
+            .Width = 1,
+            .Height = 1,
+            .Depth = 1,
+            .MipCount = 1,
+            .ArrayCount = 1,
+            .Format = Format_R8G8B8A8_SRGB,
+            .Swizzle = {},
+        };
+        u32 Texel = 0xFFFFFFFFu;
+        TransferTexture(Frame, Whiteness, Info, &Texel);
     }
+
     {
-        u16 Value = 0x8080u;
-        Assets->DefaultNormalID = PushTexture(Renderer, TextureFlag_None, 1, 1, 1, 1, Format_R8G8_UNorm, {}, &Value);
+        Assets->DefaultNormalID = AllocateTextureName(Frame->Renderer, TextureFlag_None);
+        texture_info Info =
+        {
+            .Width = 1,
+            .Height = 1,
+            .Depth = 1,
+            .MipCount = 1,
+            .ArrayCount = 1,
+            .Format = Format_R8G8_UNorm,
+            .Swizzle = {},
+        };
+        u16 Texel = 0x8080u;
+        TransferTexture(Frame, Assets->DefaultNormalID, Info, &Texel);
     }
 
     // Null skin
@@ -184,7 +207,6 @@ lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scra
 
     // Null animation
     {
-
         animation* NullAnimation = Assets->Animations + Assets->AnimationCount++;
         NullAnimation->SkinID = 0;
         NullAnimation->KeyFrameCount = 1;
@@ -207,48 +229,48 @@ lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scra
 
     // Particle textures
     {
+        Assets->ParticleArrayID = AllocateTextureName(Frame->Renderer, TextureFlag_Special);
         // TODO(boti): For now we know that the texture pack we're using is 512x512, 
         // but we may want to figure out some way for the user code to pack texture arrays/atlases dynamically
-        u32 ParticleWidth = 512;
-        u32 ParticleHeight = 512;
-        u32 ParticleCount = Particle_COUNT;
+        texture_info Info =
+        {
+            .Width = 512,
+            .Height = 512,
+            .Depth = 1,
+            .MipCount = 1,
+            .ArrayCount = Particle_COUNT,
+            .Format = Format_R8_UNorm,
+            .Swizzle = { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
+        };
 
-        umm ImageSize = ParticleWidth * ParticleHeight;
-        umm MemorySize = ImageSize * ParticleCount;
+        umm ImageSize = Info.Width * Info.Height;
+        umm MemorySize = ImageSize * Particle_COUNT;
         void* Memory = PushSize(Scratch, MemorySize, 0x100);
 
         u8* MemoryAt = (u8*)Memory;
-        for (u32 ParticleIndex = 0; ParticleIndex < ParticleCount; ParticleIndex++)
+        for (u32 ParticleIndex = 0; ParticleIndex < Particle_COUNT; ParticleIndex++)
         {
             s32 Width, Height, ChannelCount;
             u8* Texels = stbi_load(ParticlePaths[ParticleIndex], &Width, &Height, &ChannelCount, 1);
             if (Texels)
             {
-                Assert(((u32)Width == ParticleWidth) && ((u32)Height == ParticleHeight));
+                Assert(((u32)Width == Info.Width) && ((u32)Height == Info.Height));
                 memcpy(MemoryAt, Texels, ImageSize);
+                MemoryAt += ImageSize;
+                stbi_image_free(Texels);
             }
             else
             {
                 UnhandledError("Failed to load particle texture");
             }
-            stbi_image_free(Texels);
-            MemoryAt += ImageSize;
         }
 
-        Assets->ParticleArrayID = PushTexture(
-            Renderer, TextureFlag_Special,
-            ParticleWidth, ParticleHeight, 1, ParticleCount, 
-            Format_R8_UNorm, { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
-            Memory);
-        if (!IsValid(Assets->ParticleArrayID))
-        {
-            UnhandledError("Failed to create particles texture");
-        }
+        TransferTexture(Frame, Assets->ParticleArrayID, Info, Memory);
     }
 
-    LoadDebugFont(Scratch, Assets, Renderer, "data/liberation-mono.lbfnt");
+    LoadDebugFont(Scratch, Assets, Frame, "data/liberation-mono.lbfnt");
 
-    auto AddMesh = [Assets, Renderer](mesh_data MeshData) -> u32
+    auto AddMesh = [Assets, Renderer = Frame->Renderer](mesh_data MeshData) -> u32
     {
         u32 Result = U32_MAX;
         if (Assets->MeshCount < Assets->MaxMeshCount)
@@ -273,7 +295,7 @@ lbfn b32 InitializeAssets(assets* Assets, renderer* Renderer, memory_arena* Scra
     return(Result);
 }
 
-static void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Renderer, const char* Path)
+static void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Frame, const char* Path)
 {
     memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Arena);
     buffer FileBuffer = Platform.LoadEntireFile(Path, Arena);
@@ -335,16 +357,19 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, renderer* Rendere
                 }
             }
 
-            Assets->DefaultFontTextureID = PushTexture(Renderer, TextureFlag_None,
-                                                       FontFile->Bitmap.Width, FontFile->Bitmap.Height, 1, 1,
-                                                       Format_R8_UNorm, 
-                                                       {
-                                                           .R = Swizzle_One,
-                                                           .G = Swizzle_One,
-                                                           .B = Swizzle_One,
-                                                           .A = Swizzle_R,
-                                                       },
-                                                       FontFile->Bitmap.Bitmap);
+            Assets->DefaultFontTextureID = AllocateTextureName(Frame->Renderer, TextureFlag_None);
+
+            texture_info Info = 
+            {
+                .Width = FontFile->Bitmap.Width,
+                .Height = FontFile->Bitmap.Height,
+                .Depth = 1,
+                .MipCount = 1,
+                .ArrayCount = 1,
+                .Format = Format_R8_UNorm,
+                .Swizzle = { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
+            };
+            TransferTexture(Frame, Assets->DefaultFontTextureID, Info, FontFile->Bitmap.Bitmap);
         }
         else
         {
