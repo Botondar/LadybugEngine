@@ -309,6 +309,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             f32 MaxX = 0.9f * ScreenExtent.x;
             f32 MaxY = ScreenExtent.y - 60.0f;
             f32 MinY = ScreenExtent.y - 140.0f;
+            PushRect(Frame, { MinX, MinY }, { MaxX, MaxY }, {}, {}, PackRGBA8(0x00, 0x00, 0x00, 0xC0));
             PushRect(Frame, { MinX, MinY - OutlineSize }, { MaxX, MinY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
             PushRect(Frame, { MinX, MaxY - OutlineSize }, { MaxX, MaxY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
             PushRect(Frame, { MinX - OutlineSize, MinY}, { MinX + OutlineSize, MaxY }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
