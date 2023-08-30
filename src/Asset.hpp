@@ -1,5 +1,8 @@
 #pragma once
 
+//
+// Utility
+//
 struct mesh_data
 {
     u32 VertexCount;
@@ -18,6 +21,10 @@ struct trs_transform
 
 inline m4 TRSToM4(trs_transform Transform);
 inline trs_transform M4ToTRS(m4 M);
+
+//
+// Skin and animation
+//
 
 // NOTE(boti): Skin joints must not precede their parents in the array
 struct skin
@@ -56,6 +63,16 @@ struct animation
 
 inline b32 IsJointActive(animation* Animation, u32 JointIndex);
 
+//
+// Texture
+//
+
+struct texture
+{
+    renderer_texture_id RendererID;
+    b32 IsLoaded;
+};
+
 enum texture_type : u32
 {
     TextureType_Diffuse,
@@ -65,7 +82,7 @@ enum texture_type : u32
 
 struct texture_queue_entry
 {
-    renderer_texture_id ID;
+    texture* Texture;
 
     // Input parameters for processing
     texture_type TextureType;
@@ -96,11 +113,36 @@ struct texture_queue
 };
 
 lbfn b32 IsEmpty(texture_queue* Queue);
-lbfn void AddEntry(texture_queue* Queue, renderer_texture_id ID, texture_type Type, b32 AlphaEnabled, const filepath* Path);
+lbfn void AddEntry(texture_queue* Queue, texture* Texture, texture_type Type, b32 AlphaEnabled, const filepath* Path);
 lbfn b32 ProcessEntry(texture_queue* Queue);
 // NOTE(boti): Wraps around when Begin+TotalSize > MemorySize
 lbfn umm GetNextEntryOffset(texture_queue* Queue, umm TotalSize, umm Begin);
 
+//
+// Material
+//
+
+enum transparency_mode : u32
+{
+    Transparency_Opaque = 0,
+    Transparency_AlphaTest,
+    Transparency_AlphaBlend,
+};
+
+struct material
+{
+    u32 AlbedoID;
+    u32 NormalID;
+    u32 MetallicRoughnessID;
+    transparency_mode Transparency;
+    rgba8 Albedo;
+    rgba8 MetallicRoughness;
+    v3 Emission;
+};
+
+//
+// Mesh
+//
 struct mesh
 {
     geometry_buffer_allocation Allocation;
@@ -108,37 +150,54 @@ struct mesh
     u32 MaterialID;
 };
 
+//
+// Assets
+//
 struct assets
 {
     memory_arena Arena;
     texture_queue TextureQueue;
 
+#if 1
+    u32 WhitenessID;
+    u32 DefaultDiffuseID;
+    u32 DefaultNormalID;
+    u32 DefaultMetallicRoughnessID;
+
+    u32 ParticleArrayID;
+
+    u32 DefaultFontTextureID;
+#else
     renderer_texture_id Whiteness;
 
     renderer_texture_id DefaultDiffuseID;
     renderer_texture_id DefaultNormalID;
     renderer_texture_id DefaultMetallicRoughnessID;
 
-    renderer_texture_id DefaultFontTextureID;
-    font DefaultFont;
-
     renderer_texture_id ParticleArrayID;
+
+    renderer_texture_id DefaultFontTextureID;
+#endif
+    font DefaultFont;
 
     u32 ArrowMeshID;
     u32 SphereMeshID;
     u32 CubeMeshID;
 
+    static constexpr u32 MaxTextureCount = 1u << 20;
     static constexpr u32 MaxMeshCount = 1u << 16;
     static constexpr u32 MaxMaterialCount = 1u << 14;
     static constexpr u32 MaxSkinCount = 1u << 14;
     static constexpr u32 MaxAnimationCount = 1u << 16;
+    u32 TextureCount;
     u32 MeshCount;
     u32 MaterialCount;
     u32 SkinCount;
     u32 AnimationCount;
 
+    texture Textures[MaxTextureCount];
     mesh Meshes[MaxMeshCount];
-    renderer_material Materials[MaxMaterialCount];
+    material Materials[MaxMaterialCount];
     skin Skins[MaxSkinCount];
     animation Animations[MaxAnimationCount];
 };

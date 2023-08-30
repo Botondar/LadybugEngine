@@ -29,7 +29,7 @@ lbfn umm GetNextEntryOffset(texture_queue* Queue, umm TotalSize, umm Begin)
     return(Begin);
 }
 
-lbfn void AddEntry(texture_queue* Queue, renderer_texture_id ID, texture_type Type, b32 AlphaEnabled, const filepath* Path)
+lbfn void AddEntry(texture_queue* Queue, texture* Texture, texture_type Type, b32 AlphaEnabled, const filepath* Path)
 {
     // TODO(boti): Spin-wait here?
     if (Queue->CompletionGoal - Queue->CompletionCount < Queue->MaxEntryCount)
@@ -37,7 +37,7 @@ lbfn void AddEntry(texture_queue* Queue, renderer_texture_id ID, texture_type Ty
         u32 Index = AtomicLoadAndIncrement(&Queue->CompletionGoal) % Queue->MaxEntryCount;
         Queue->Entries[Index] =
         {
-            .ID = ID,
+            .Texture = Texture,
             .TextureType = Type,
             .AlphaEnabled = AlphaEnabled,
             .Path = *Path,
@@ -232,9 +232,14 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 
     // Default textures
     {
-        renderer_texture_id Whiteness = AllocateTextureName(Frame->Renderer, TextureFlag_None);
-        Assets->DefaultDiffuseID = Whiteness;
-        Assets->DefaultMetallicRoughnessID = Whiteness;
+        // NOTE(boti): We want the the null texture to be some sensible default
+        Assert(Assets->TextureCount == 0);
+        Assets->WhitenessID = Assets->TextureCount++;
+        texture* Whiteness = Assets->Textures + Assets->WhitenessID;
+
+        Whiteness->RendererID = AllocateTextureName(Frame->Renderer, TextureFlag_None);
+        Assets->DefaultDiffuseID = Assets->WhitenessID;
+        Assets->DefaultMetallicRoughnessID = Assets->WhitenessID;
 
         texture_info Info =
         {
@@ -247,11 +252,14 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
             .Swizzle = {},
         };
         u32 Texel = 0xFFFFFFFFu;
-        TransferTexture(Frame, Whiteness, Info, &Texel);
+        TransferTexture(Frame, Whiteness->RendererID, Info, &Texel);
+        Whiteness->IsLoaded = true;
     }
 
     {
-        Assets->DefaultNormalID = AllocateTextureName(Frame->Renderer, TextureFlag_None);
+        Assets->DefaultNormalID = Assets->TextureCount++;
+        texture* DefaultNormalTexture = Assets->Textures + Assets->DefaultNormalID;
+        DefaultNormalTexture->RendererID = AllocateTextureName(Frame->Renderer, TextureFlag_None);
         texture_info Info =
         {
             .Width = 1,
@@ -263,7 +271,8 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
             .Swizzle = {},
         };
         u16 Texel = 0x8080u;
-        TransferTexture(Frame, Assets->DefaultNormalID, Info, &Texel);
+        TransferTexture(Frame, DefaultNormalTexture->RendererID, Info, &Texel);
+        DefaultNormalTexture->IsLoaded = true;
     }
 
     // Null skin
@@ -296,7 +305,9 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 
     // Particle textures
     {
-        Assets->ParticleArrayID = AllocateTextureName(Frame->Renderer, TextureFlag_Special);
+        Assets->ParticleArrayID = Assets->TextureCount++;
+        texture* ParticleArray = Assets->Textures + Assets->ParticleArrayID;
+        ParticleArray->RendererID = AllocateTextureName(Frame->Renderer, TextureFlag_Special);
         // TODO(boti): For now we know that the texture pack we're using is 512x512, 
         // but we may want to figure out some way for the user code to pack texture arrays/atlases dynamically
         texture_info Info =
@@ -332,7 +343,8 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
             }
         }
 
-        TransferTexture(Frame, Assets->ParticleArrayID, Info, Memory);
+        TransferTexture(Frame, ParticleArray->RendererID, Info, Memory);
+        ParticleArray->IsLoaded = true;
     }
 
     LoadDebugFont(Scratch, Assets, Frame, "data/liberation-mono.lbfnt");
@@ -423,7 +435,9 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Fra
                 }
             }
 
-            Assets->DefaultFontTextureID = AllocateTextureName(Frame->Renderer, TextureFlag_None);
+            Assets->DefaultFontTextureID = Assets->TextureCount++;
+            texture* DefaultFontTexture = Assets->Textures + Assets->DefaultFontTextureID;
+            DefaultFontTexture->RendererID = AllocateTextureName(Frame->Renderer, TextureFlag_None);
 
             texture_info Info = 
             {
@@ -435,7 +449,8 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Fra
                 .Format = Format_R8_UNorm,
                 .Swizzle = { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
             };
-            TransferTexture(Frame, Assets->DefaultFontTextureID, Info, FontFile->Bitmap.Bitmap);
+            TransferTexture(Frame, DefaultFontTexture->RendererID, Info, FontFile->Bitmap.Bitmap);
+            DefaultFontTexture->IsLoaded = true;
         }
         else
         {
@@ -509,9 +524,9 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         }
     }
 
-    auto LoadAndUploadTexture = [&](u32 TextureIndex, texture_type Type, gltf_alpha_mode AlphaMode) -> renderer_texture_id
+    auto LoadAndUploadTexture = [&](u32 TextureIndex, texture_type Type, gltf_alpha_mode AlphaMode) -> u32
     {
-        renderer_texture_id Result = { 0 };
+        u32 Result = Assets->TextureCount++;
         if (TextureIndex < GLTF.TextureCount)
         {
             if ((Assets->TextureQueue.CompletionGoal - Assets->TextureQueue.CompletionCount) < Assets->TextureQueue.MaxEntryCount)
@@ -526,9 +541,11 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 {
                     UnhandledError("Invalid glTF image path");
                 }
-
-                Result = AllocateTextureName(Frame->Renderer, TextureFlag_None);
-                AddEntry(&Assets->TextureQueue, Result, Type, (AlphaMode != GLTF_ALPHA_MODE_OPAQUE), &Filepath);
+                
+                texture* TextureAsset = Assets->Textures + Result;
+                TextureAsset->RendererID = AllocateTextureName(Frame->Renderer, TextureFlag_None);
+                TextureAsset->IsLoaded = false;
+                AddEntry(&Assets->TextureQueue, TextureAsset, Type, (AlphaMode != GLTF_ALPHA_MODE_OPAQUE), &Filepath);
             }
             else
             {
@@ -542,11 +559,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         return Result;
     };
 
-    renderer_texture_id* TextureTable = PushArray<renderer_texture_id>(Scratch, GLTF.TextureCount);
-    for (u32 i = 0; i < GLTF.TextureCount; i++)
-    {
-        TextureTable[i].Value = INVALID_INDEX_U32;
-    }
+    u32* TextureTable = PushArray<u32>(Scratch, GLTF.TextureCount, MemPush_Clear);
 
     for (u32 MaterialIndex = 0; MaterialIndex < GLTF.MaterialCount; MaterialIndex++)
     {
@@ -560,28 +573,36 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
         if (Assets->MaterialCount < Assets->MaxMaterialCount)
         {
-            renderer_material* Material = Assets->Materials + Assets->MaterialCount++;
+            material* Material = Assets->Materials + Assets->MaterialCount++;
 
-            Material->Emissive = SrcMaterial->EmissiveFactor;
-            Material->DiffuseColor = PackRGBA(SrcMaterial->BaseColorFactor);
-            Material->BaseMaterial = PackRGBA(v4{ 1.0f, SrcMaterial->RoughnessFactor, SrcMaterial->MetallicFactor, 1.0f });
-            Material->DiffuseID = Assets->DefaultDiffuseID;
+            Material->AlbedoID = Assets->DefaultDiffuseID;
             Material->NormalID = Assets->DefaultNormalID;
             Material->MetallicRoughnessID = Assets->DefaultMetallicRoughnessID;
+            switch (SrcMaterial->AlphaMode)
+            {
+                case GLTF_ALPHA_MODE_OPAQUE:    Material->Transparency = Transparency_Opaque; break;
+                case GLTF_ALPHA_MODE_MASK:      Material->Transparency = Transparency_AlphaTest; break;
+                case GLTF_ALPHA_MODE_BLEND:     Material->Transparency = Transparency_AlphaBlend; break;
+
+            }
+            Material->Emission = SrcMaterial->EmissiveFactor;
+            Material->Albedo = PackRGBA(SrcMaterial->BaseColorFactor);
+            Material->MetallicRoughness = PackRGBA(v4{ 1.0f, SrcMaterial->RoughnessFactor, SrcMaterial->MetallicFactor, 1.0f });
+            
 
             if (SrcMaterial->BaseColorTexture.TextureIndex != U32_MAX)
             {
-                renderer_texture_id* Texture = TextureTable + SrcMaterial->BaseColorTexture.TextureIndex;
-                if (!IsValid(*Texture))
+                u32* Texture = TextureTable + SrcMaterial->BaseColorTexture.TextureIndex;
+                if (!*Texture)
                 {
                     *Texture = LoadAndUploadTexture(SrcMaterial->BaseColorTexture.TextureIndex, TextureType_Diffuse, SrcMaterial->AlphaMode);
                 }
-                Material->DiffuseID = *Texture;
+                Material->AlbedoID = *Texture;
             }
             if (SrcMaterial->NormalTexture.TextureIndex != U32_MAX)
             {
-                renderer_texture_id* Texture = TextureTable + SrcMaterial->NormalTexture.TextureIndex;
-                if (!IsValid(*Texture))
+                u32* Texture = TextureTable + SrcMaterial->NormalTexture.TextureIndex;
+                if (!*Texture)
                 {
                     *Texture = LoadAndUploadTexture(SrcMaterial->NormalTexture.TextureIndex, TextureType_Normal, SrcMaterial->AlphaMode);
                 }
@@ -589,8 +610,8 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             }
             if (SrcMaterial->MetallicRoughnessTexture.TextureIndex != U32_MAX)
             {
-                renderer_texture_id* Texture = TextureTable + SrcMaterial->MetallicRoughnessTexture.TextureIndex;
-                if (!IsValid(*Texture))
+                u32* Texture = TextureTable + SrcMaterial->MetallicRoughnessTexture.TextureIndex;
+                if (!*Texture)
                 {
                     *Texture = LoadAndUploadTexture(SrcMaterial->MetallicRoughnessTexture.TextureIndex, TextureType_Material, SrcMaterial->AlphaMode);
                 }

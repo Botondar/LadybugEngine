@@ -89,8 +89,8 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     {
         RenderFrame = BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputWidth, GameIO->OutputHeight);
     }
-    RenderFrame->ImmediateTextureID = GameState->Assets->DefaultFontTextureID;
-    RenderFrame->ParticleTextureID = GameState->Assets->ParticleArrayID;
+    RenderFrame->ImmediateTextureID = GameState->Assets->Textures[GameState->Assets->DefaultFontTextureID].RendererID;
+    RenderFrame->ParticleTextureID = GameState->Assets->Textures[GameState->Assets->ParticleArrayID].RendererID;
 
     if (GameIO->bHasDroppedFile)
     {
@@ -133,7 +133,8 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                                                 Entry->Info.MipCount, Entry->Info.ArrayCount,
                                                 FormatByterateTable[Entry->Info.Format]);
                 umm Begin = GetNextEntryOffset(Queue, TotalSize, Queue->RingBufferReadAt);
-                TransferTexture(RenderFrame, Entry->ID, Entry->Info, Queue->RingBufferMemory + (Begin % Queue->RingBufferSize));
+                TransferTexture(RenderFrame, Entry->Texture->RendererID, Entry->Info, Queue->RingBufferMemory + (Begin % Queue->RingBufferSize));
+                Entry->Texture->IsLoaded = true;
                 Queue->RingBufferReadAt = Begin + TotalSize;
                 AtomicLoadAndIncrement(&Queue->CompletionCount);
             }
@@ -143,11 +144,9 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             }
         }
     }
-    if (IsEmpty(&GameState->Assets->TextureQueue))
-    {
-        UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, 
-                             &GameState->TransientArena, GameState->Editor.DrawLights);
-    }
+    
+    UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, 
+                         &GameState->TransientArena, GameState->Editor.DrawLights);
     EndRenderFrame(RenderFrame);
 
     GameState->FrameID++;
