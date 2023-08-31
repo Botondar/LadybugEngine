@@ -51,12 +51,27 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
         Result = vkEnumeratePhysicalDevices(Vulkan->Instance, &PhysicalDeviceCount, PhysicalDevices);
         if (Result == VK_SUCCESS)
         {
-            // TODO(boti): device selection
-            Vulkan->PhysicalDevice = PhysicalDevices[0];
-            vkGetPhysicalDeviceProperties(Vulkan->PhysicalDevice, &Vulkan->DeviceProps);
-            if (Vulkan->DeviceProps.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+            VkPhysicalDevice SelectedDevice = VK_NULL_HANDLE;
+            VkPhysicalDeviceProperties DeviceProps = {};
+            // TODO(boti): better device selection
+            for (u32 DeviceIndex = 0; DeviceIndex < PhysicalDeviceCount; DeviceIndex++)
             {
-                UnimplementedCodePath;
+                vkGetPhysicalDeviceProperties(PhysicalDevices[DeviceIndex], &DeviceProps);
+                if (DeviceProps.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+                {
+                    SelectedDevice = PhysicalDevices[DeviceIndex];
+                    break;
+                }
+            }
+
+            if (SelectedDevice)
+            {
+                Vulkan->PhysicalDevice = PhysicalDevices[0];
+                Vulkan->DeviceProps = DeviceProps;
+            }
+            else
+            {
+                UnhandledError("Failed to find appropriate device");
             }
 
             Vulkan->TimestampPeriod = Vulkan->DeviceProps.limits.timestampPeriod;
