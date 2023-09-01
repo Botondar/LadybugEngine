@@ -25,10 +25,10 @@ layout(location = 1) out vec3 ViewP;
 
 void main()
 {
-    vec4 WorldP  = ModelTransform * vec4(aP, 1.0);
-    gl_Position = PerFrame.ViewProjection * WorldP;
+    v3 WorldP  = TransformPoint(ModelTransform, aP);
+    ViewP = TransformPoint(PerFrame.View, WorldP);
     TexCoord = aTexCoord;
-    ViewP = (PerFrame.View * WorldP).xyz;
+    gl_Position = PerFrame.ViewProjection * vec4(WorldP, 1.0);
 }
 
 #elif defined(FS)
