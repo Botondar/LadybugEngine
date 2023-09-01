@@ -44,8 +44,8 @@ layout(location = 0) out vec4 StructureOut;
 vec4 StructureEncode(in float z)
 {
     float h = uintBitsToFloat(floatBitsToUint(z) & 0xFFFFE000u);
-    float dx = dFdx(z);
-    float dy = dFdy(z);
+    float dx = dFdxFine(z);
+    float dy = dFdyFine(z);
     vec4 Result = vec4(dx, dy, h, z - h);
     return Result;
 }
