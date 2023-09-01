@@ -3519,14 +3519,18 @@ internal void SetupSceneRendering(render_frame* Frame)
                 SunX = Normalize(Cross(SunZ, v3{ 0.0f, 0.0f, -1.0f }));
                 SunY = Cross(SunZ, SunX);
             }
-
-            SunTransform.X = v4{ SunX.x, SunX.y, SunX.z, 0.0f };
-            SunTransform.Y = v4{ SunY.x, SunY.y, SunY.z, 0.0f };
-            SunTransform.Z = v4{ SunZ.x, SunZ.y, SunZ.z, 0.0f };
-            SunTransform.P = v4{ 0.0f, 0.0f, 0.0f, 1.0f };
         }
 
-        m4 SunView = AffineOrthonormalInverse(SunTransform);
+        m4 SunTransfrom = M4(
+            SunX.x, SunY.x, SunZ.x, 0.0f,
+            SunX.y, SunY.y, SunZ.y, 0.0f,
+            SunX.z, SunY.z, SunZ.z, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f);
+        m4 SunView = M4(
+            SunX.x, SunX.y, SunX.z, 0.0f,
+            SunY.x, SunY.y, SunY.z, 0.0f,
+            SunZ.x, SunZ.y, SunZ.z, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f);
         m4 CameraToSun = SunView * Frame->Uniforms.CameraTransform;
     
         f32 SplitFactor = 0.15f;
@@ -3567,7 +3571,10 @@ internal void SetupSceneRendering(render_frame* Frame)
         f32 s = Frame->Uniforms.AspectRatio;
         f32 g = Frame->Uniforms.FocalLength;
 
-        m4 Cascade0InverseViewProjection;
+        f32 MinZ0;
+        f32 MaxZ0;
+        v3 CascadeP0;
+        f32 CascadeScale0;
         for (u32 CascadeIndex = 0; CascadeIndex < R_MaxShadowCascadeCount; CascadeIndex++)
         {
             f32 Nd = NdTable[CascadeIndex];
@@ -3579,17 +3586,20 @@ internal void SetupSceneRendering(render_frame* Frame)
             v3 CascadeBoxP[8] = 
             {
                 // Near points in camera space
-                { -NdOverG * s, -NdOverG, Nd },
-                { +NdOverG * s, -NdOverG, Nd },
                 { +NdOverG * s, +NdOverG, Nd },
+                { +NdOverG * s, -NdOverG, Nd },
+                { -NdOverG * s, -NdOverG, Nd },
                 { -NdOverG * s, +NdOverG, Nd },
 
                 // Far points in camera space
-                { -FdOverG * s, -FdOverG, Fd },
-                { +FdOverG * s, -FdOverG, Fd },
                 { +FdOverG * s, +FdOverG, Fd },
+                { +FdOverG * s, -FdOverG, Fd },
+                { -FdOverG * s, -FdOverG, Fd },
                 { -FdOverG * s, +FdOverG, Fd },
             };
+
+            f32 CascadeScale = Ceil(Max(VectorLength(CascadeBoxP[0] - CascadeBoxP[6]),
+                                        VectorLength(CascadeBoxP[4] - CascadeBoxP[6])));
 
             v3 CascadeBoxMin = { +FLT_MAX, +FLT_MAX, +FLT_MAX };
             v3 CascadeBoxMax = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
@@ -3611,8 +3621,6 @@ internal void SetupSceneRendering(render_frame* Frame)
                 };
             }
 
-            f32 CascadeScale = Ceil(Max(VectorLength(CascadeBoxP[0] - CascadeBoxP[6]),
-                                        VectorLength(CascadeBoxP[4] - CascadeBoxP[6])));
             f32 TexelSize = CascadeScale / (f32)R_ShadowResolution;
 
             v3 CascadeP = 
@@ -3631,32 +3639,32 @@ internal void SetupSceneRendering(render_frame* Frame)
                                       0.0f, 0.0f, 1.0f / (CascadeBoxMax.z - CascadeBoxMin.z), 0.0f,
                                       0.0f, 0.0f, 0.0f, 1.0f);
             m4 CascadeViewProjection = CascadeProjection * CascadeView;
+            Frame->Uniforms.CascadeViewProjections[CascadeIndex] = CascadeViewProjection;
+            Frame->Uniforms.CascadeMinDistances[CascadeIndex] = Nd;
+            Frame->Uniforms.CascadeMaxDistances[CascadeIndex] = Fd;
 
             if (CascadeIndex == 0)
             {
-                m4 InverseProjection = CascadeProjection;
-                for (u32 i = 0; i < 3; i++)
-                {
-                    InverseProjection.E[i][i] = 1.0f / InverseProjection.E[i][i];
-                }
-                Cascade0InverseViewProjection = AffineOrthonormalInverse(CascadeView) * InverseProjection;
-                Frame->Uniforms.CascadeViewProjection = CascadeViewProjection;
+                CascadeScale0 = CascadeScale;
+                CascadeP0 = CascadeP;
+                MinZ0 = CascadeBoxMin.z;
+                MaxZ0 = CascadeBoxMax.z;
             }
             else
             {
-                m4 Cascade0ToI = CascadeViewProjection * Cascade0InverseViewProjection;
-
                 Frame->Uniforms.CascadeScales[CascadeIndex - 1] = 
                 {
-                    Cascade0ToI.E[0][0],
-                    Cascade0ToI.E[1][1],
-                    Cascade0ToI.E[2][2],
+                    CascadeScale0 / CascadeScale,
+                    CascadeScale0 / CascadeScale,
+                    (MaxZ0 - MinZ0) / (CascadeBoxMax.z - CascadeBoxMin.z),
                 };
-                Frame->Uniforms.CascadeOffsets[CascadeIndex - 1] = Cascade0ToI.P.xyz;
+                Frame->Uniforms.CascadeOffsets[CascadeIndex - 1] = 
+                {
+                    ((CascadeP0.x - CascadeP.x) / CascadeScale) - (CascadeScale0 / (2.0f * CascadeScale)) + 0.5f,
+                    ((CascadeP0.y - CascadeP.y) / CascadeScale) - (CascadeScale0 / (2.0f * CascadeScale)) + 0.5f,
+                    (CascadeP0.z - CascadeP.z) / (CascadeBoxMax.z - CascadeBoxMin.z),
+                };
             }
-
-            Frame->Uniforms.CascadeMinDistances[CascadeIndex] = Nd;
-            Frame->Uniforms.CascadeMaxDistances[CascadeIndex] = Fd;
         }
     }
 

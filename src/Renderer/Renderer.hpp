@@ -704,9 +704,10 @@ struct frame_uniform_data
     m4 InverseProjectionTransform;
     m4 ViewProjectionTransform;
 
+    m4 CascadeViewProjections[4];
+
     m4 ShadowViewProjections[6*R_MaxShadowCount];
 
-    m4 CascadeViewProjection;
     f32 CascadeMinDistances[4];
     f32 CascadeMaxDistances[4];
     v3 CascadeScales[3];
@@ -728,6 +729,8 @@ struct frame_uniform_data
 
     u32 LightCount;
 };
+static_assert(sizeof(frame_uniform_data) <= KiB(64));
+
 
 struct renderer;
 struct backend_render_frame;

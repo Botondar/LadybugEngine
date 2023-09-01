@@ -33,18 +33,18 @@ layout(location = 6) out vec3 CascadeBlends;
 
 void main()
 {
-    vec4 WorldP = ModelTransform * vec4(aP, 1.0);
+    vec3 WorldP = TransformPoint(ModelTransform, aP);
     TexCoord = aTexCoord;
-    P = (PerFrame.View * WorldP).xyz;
+    P = TransformPoint(PerFrame.View, WorldP);
     N = normalize(mat3(PerFrame.View) * (aN * inverse(mat3(ModelTransform))));
     T = normalize((mat3(PerFrame.View) * (mat3(ModelTransform) * aT.xyz)));
     B = normalize(cross(T, N)) * aT.w;
 
-    ShadowP = (PerFrame.CascadeViewProjection * WorldP).xyz;
-    CascadeBlends = GetCascadeBlends(PerFrame.CascadeMinDistances, 
-                                     PerFrame.CascadeMaxDistances,
-                                     P);
-    gl_Position = PerFrame.ViewProjection * WorldP;
+    ShadowP = TransformPoint(PerFrame.CascadeViewProjections[0], WorldP);
+    ShadowP.xy = 0.5 * ShadowP.xy + v2(0.5);
+    CascadeBlends = GetCascadeBlends(PerFrame.CascadeMinDistances, PerFrame.CascadeMaxDistances, P.z);
+
+    gl_Position = PerFrame.ViewProjection * v4(WorldP, 1.0);
 }
 
 #elif defined(FS)
@@ -78,78 +78,32 @@ layout(location = 6) in vec3 ShadowBlends;
 
 layout(location = 0) out vec4 Out0;
 
-float CalculateShadow(vec3 SP, in vec3 CascadeBlends)
+float CalculateShadow(vec3 CascadeCoord0, in vec3 CascadeBlends)
 {
-#if 1
-    vec3 CascadeCoord0 = vec3(0.5 * SP.xy + vec2(0.5), SP.z);
-    vec3 CascadeCoord1 = PerFrame.CascadeScales[0] * SP + PerFrame.CascadeOffsets[0];
-    vec3 CascadeCoord2 = PerFrame.CascadeScales[1] * SP + PerFrame.CascadeOffsets[1];
-    vec3 CascadeCoord3 = PerFrame.CascadeScales[2] * SP + PerFrame.CascadeOffsets[2];
+    vec3 CascadeCoord1 = PerFrame.CascadeScales[0] * CascadeCoord0 + PerFrame.CascadeOffsets[0];
+    vec3 CascadeCoord2 = PerFrame.CascadeScales[1] * CascadeCoord0 + PerFrame.CascadeOffsets[1];
+    vec3 CascadeCoord3 = PerFrame.CascadeScales[2] * CascadeCoord0 + PerFrame.CascadeOffsets[2];
 
-    CascadeCoord1.xy = 0.5 * CascadeCoord1.xy + vec2(0.5);
-    CascadeCoord2.xy = 0.5 * CascadeCoord2.xy + vec2(0.5);
-    CascadeCoord3.xy = 0.5 * CascadeCoord3.xy + vec2(0.5);
-#else
-    vec3 CascadeCoord0 = vec3(0.5 * SP0.xy + vec2(0.5), SP0.z);
-    vec3 CascadeCoord1 = vec3(0.5 * SP1.xy + vec2(0.5), SP1.z);
-    vec3 CascadeCoord2 = vec3(0.5 * SP2.xy + vec2(0.5), SP2.z);
-    vec3 CascadeCoord3 = vec3(0.5 * SP3.xy + vec2(0.5), SP3.z);
-#endif
     vec2 ShadowMapSize = vec2(textureSize(ShadowSampler, 0).xy);
-    vec2 TexelSize = 1.0 / ShadowMapSize;    
+    vec2 TexelSize = 1.0 / ShadowMapSize;
 
     bool BeyondCascade2 = (CascadeBlends.y >= 0.0);
     bool BeyondCascade3 = (CascadeBlends.z >= 0.0);
 
-    vec3 Blends = clamp(CascadeBlends, vec3(0.0), vec3(1.0));
+    v2 ShadowP1 = (BeyondCascade2) ? CascadeCoord2.xy : CascadeCoord0.xy;
+    v2 ShadowP2 = (BeyondCascade3) ? CascadeCoord3.xy : CascadeCoord1.xy;
+    float Depth1 = (BeyondCascade2) ? CascadeCoord2.z : CascadeCoord0.z;
+    float Depth2 = (BeyondCascade3) ? clamp(CascadeCoord3.z, 0.0, 1.0) : CascadeCoord1.z;
 
-    vec4 P1, P2;
-    float Blend;
-    if (BeyondCascade3)
-    {
-        P1 = vec4(CascadeCoord2.xy, 2.0, CascadeCoord2.z);
-        P2 = vec4(CascadeCoord3.xy, 3.0, CascadeCoord3.z);
-        Blend = Blends.z;
-    }
-    else if (BeyondCascade2)
-    {
-        P1 = vec4(CascadeCoord1.xy, 1.0, CascadeCoord1.z);
-        P2 = vec4(CascadeCoord2.xy, 2.0, CascadeCoord2.z);
-        Blend = Blends.y;
-    }
-    else
-    {
-        P1 = vec4(CascadeCoord0.xy, 0.0, CascadeCoord0.z);
-        P2 = vec4(CascadeCoord1.xy, 1.0, CascadeCoord1.z);
-        Blend = Blends.x;
-    }
+    v3 Blends = clamp(CascadeBlends, v3(0.0), v3(1.0));
+    float Blend = (BeyondCascade2) ? Blends.y - Blends.z : 1.0 - Blends.x;
+
+    v4 P1 = v4(ShadowP1.xy, 2.0 * float(BeyondCascade2),       Depth1);
+    v4 P2 = v4(ShadowP2.xy, 2.0 * float(BeyondCascade3) + 1.0, Depth2);
 
     float Shadow1 = 0.0;
     float Shadow2 = 0.0;
 
-#if 0
-    const float W[3][3] =
-    {
-        { 0.5, 1.0, 0.5 },
-        { 1.0, 1.0, 1.0 },
-        { 0.5, 1.0, 0.5 },
-    };
-    int MinW = -(W.length() / 2);
-    int MaxW = -MinW;
-
-    float SumWeight = 7.0;
-    for (int y = MinW; y <= MaxW; y++)
-    {
-        for (int x = MinW; x <= MaxW; x++)
-        {
-            vec2 SampleOffset = vec2(float(x), float(y)) * TexelSize;
-            float Weight = W[y + MaxW][x + MaxW];
-            Shadow1 += Weight * texture(ShadowSampler, P1 + vec4(SampleOffset, 0.0, 0.0));
-            Shadow2 += Weight * texture(ShadowSampler, P2 + vec4(SampleOffset, 0.0, 0.0));
-            //SumWeight += Weight;
-        }
-    }
-#else
     float SumWeight = 1.0 / 4.0;
     float d = 3.0 / 16.0;
     float o = d * TexelSize.x;
@@ -162,53 +116,23 @@ float CalculateShadow(vec3 SP, in vec3 CascadeBlends)
         v2(+s1*o, +s2*o),
         v2(-s2*o, +s1*o),
     };
-    //Shadow1 += texture(ShadowSampler, P1);
+
     Shadow1 += texture(ShadowSampler, P1 + vec4(SampleOffsets[0], 0.0, 0.0));
     Shadow1 += texture(ShadowSampler, P1 + vec4(SampleOffsets[1], 0.0, 0.0));
     Shadow1 += texture(ShadowSampler, P1 + vec4(SampleOffsets[2], 0.0, 0.0));
     Shadow1 += texture(ShadowSampler, P1 + vec4(SampleOffsets[3], 0.0, 0.0));
 
-    //Shadow2 += texture(ShadowSampler, P2);
     Shadow2 += texture(ShadowSampler, P2 + vec4(SampleOffsets[0], 0.0, 0.0));
     Shadow2 += texture(ShadowSampler, P2 + vec4(SampleOffsets[1], 0.0, 0.0));
     Shadow2 += texture(ShadowSampler, P2 + vec4(SampleOffsets[2], 0.0, 0.0));
     Shadow2 += texture(ShadowSampler, P2 + vec4(SampleOffsets[3], 0.0, 0.0));
-#endif
-    float Result = mix(Shadow1, Shadow2, Blend) * SumWeight;
-    return Result;
-}
 
-// NOTE(boti): Albedo must be weighted by (1 - Metallic) factor!
-v3 CalculateOutgoingLuminance(v3 Li, v3 L, v3 N, v3 V, 
-                              v3 Albedo, in v3 F0, f32 Roughness)
-{
-    // TODO(boti): N.V is independent of the light source, should we just precalculate and pass it in?
-    float NdotV = max(dot(N, V), 1.0);
-    float NdotL = max(dot(L, N), 0.0);
-    vec3 Diffuse = Albedo;
-
-    vec3 H = normalize(L + V);
-    float VdotH = max(dot(V, H), 0.0);
-    vec3 Fresnel = FresnelSchlick(F0, VdotH);
-
-    float NdotH = max(dot(N, H), 0.0);
-    float Distribution = DistributionGGX(Roughness, NdotH);
-    float Geometry = GeometryGGX(Roughness, NdotV, NdotL);
-
-    float SpecularDenominator = max(4.0 * NdotV * NdotL, 1e-4);
-    vec3 Specular = Distribution * Geometry * Fresnel / SpecularDenominator;
-    v3 Result = (Diffuse + Specular) * NdotL * Li;
+    float Result = SumWeight * mix(Shadow2, Shadow1, Blend);
     return(Result);
 }
 
 void main()
 {
-#if 1
-    float SunShadow = CalculateShadow(ShadowP, ShadowBlends);
-#else
-    float SunShadow = 1.0;
-#endif
-
     vec4 BaseColor = UnpackRGBA8(Material.Diffuse);
     vec4 BaseMetallicRoughness = UnpackRGBA8(Material.MetallicRoughness);
 
@@ -228,20 +152,17 @@ void main()
 
     float ScreenSpaceOcclusion = textureLod(OcclusionBuffer, gl_FragCoord.xy, 0).r;
 
-#if 1
     mat3 TBN = mat3(
         normalize(InT),
         normalize(InB),
         normalize(InN));
     vec3 N = TBN * Normal;
-#else
-    vec3 N = normalize(InN);
-#endif
 
     vec3 V = normalize(-P);
     vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);
     vec3 DiffuseBase = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb;
 
+    float SunShadow = CalculateShadow(ShadowP, ShadowBlends);
     vec3 Lo = CalculateOutgoingLuminance(SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
                                          DiffuseBase, F0, Roughness);
 
@@ -290,12 +211,13 @@ void main()
             f32 ProjDepth = f*r - f*n*r / Depth;
             Shadow = texture(PointShadows[ShadowIndex], v4(SampleP, ProjDepth));
 
-#if 1
             f32 dXY = (MaxXY > AbsP.z) ? Offset : 0.0;
             f32 dX = (AbsP.x > AbsP.y) ? dXY : 0.0;
             v2 OffsetXY = v2(Offset - dX, dX);
             v2 OffsetYZ = v2(Offset - dXY, dXY);
 
+            // TODO(boti): Something's wrong here, we're getting seams
+            // at the edge of the cube faces
             v3 Limit = v3(Depth);
             Limit.xy -= OffsetXY * (1.0 / 1024.0);
             Limit.yz -= OffsetYZ * (1.0 / 1024.0);
@@ -311,7 +233,6 @@ void main()
             Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
 
             Shadow = 0.2 * Shadow;
-#endif
             AmbientTerm += 0.05 * E;
         }
 
