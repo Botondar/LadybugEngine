@@ -104,16 +104,25 @@ void main()
 
             if (IntersectAABBSphere(BoxP, HalfExtent, P, R))
             {
-                float MaxZ = clamp(InvDepthRange * (P.z + R - DepthOffset), 0.0, 1.0);
-                float MinZ = clamp(InvDepthRange * (P.z - R - DepthOffset), 0.0, 1.0);
-
-                uint MaxSlice = uint(floor(32.0 * MaxZ));
-                uint MinSlice = uint(floor(32.0 * MinZ));
-
-                uint Mask = (0xFFFFFFFFu >> (31 - (MaxSlice - MinSlice))) << MinSlice;
-                if ((DepthSliceMask & Mask) != 0)
+                // NOTE(boti): Shadow casting lights also participate in volumetrics,
+                // so we don't want to depth cull those
+                if (uint(Lights[LightIndex].P.w) != 0xFF)
                 {
                     Tiles[TileIndex].LightIndices[LightCount++] = LightIndex;
+                }
+                else
+                {
+                    float MaxZ = clamp(InvDepthRange * (P.z + R - DepthOffset), 0.0, 1.0);
+                    float MinZ = clamp(InvDepthRange * (P.z - R - DepthOffset), 0.0, 1.0);
+
+                    uint MaxSlice = uint(floor(32.0 * MaxZ));
+                    uint MinSlice = uint(floor(32.0 * MinZ));
+
+                    uint Mask = (0xFFFFFFFFu >> (31 - (MaxSlice - MinSlice))) << MinSlice;
+                    if ((DepthSliceMask & Mask) != 0)
+                    {
+                        Tiles[TileIndex].LightIndices[LightCount++] = LightIndex;
+                    }
                 }
             }
         }
