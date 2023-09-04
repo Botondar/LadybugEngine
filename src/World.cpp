@@ -52,6 +52,161 @@ lbfn m4 GetTransform(const camera* Camera)
     return Result;
 }
 
+lbfn f32 SampleNoise(noise2* Noise, v2 P)
+{
+    v2 P0 = { Floor(P.x), Floor(P.y) };
+    v2 dP = P - P0;
+
+    u32 X = (u32)(s32)P0.x;
+    u32 Y = (u32)(s32)P0.y;
+
+    // TODO(boti): Pull this out once we have a use for it elsewhere
+    // NOTE(boti): Murmur3
+    auto Hash = [](u32 Seed, u32 X, u32 Y) -> u32
+    {
+        u32 Result = Seed;
+
+        u32 Values[2] = { X, Y };
+        for (u32 Index = 0; Index < 2; Index++)
+        {
+            u32 K = 0xCC9E2D51u * Values[Index];
+            // TODO(boti): Rotate intrinsics
+            K = (K << 15) | (K >> (32 - 15));
+            K *= 0x1B873593u;
+
+            Result ^= K;
+            Result = (Result << 13) | (Result >> (32 - 13));
+            Result = 5u*Result + 0xE6546B64u;
+        }
+
+        // NOTE(boti): Final mix step
+        Result ^= Result >> 16;
+        Result *= 0x85EBCA6Bu;
+        Result ^= Result >> 13;
+        Result *= 0xC2B2AE35u;
+        Result ^= Result >> 16;
+        return(Result);
+    };
+
+    u32 Hash00 = Hash(Noise->Seed, X + 0, Y + 0);
+    u32 Hash10 = Hash(Noise->Seed, X + 1, Y + 0);
+    u32 Hash01 = Hash(Noise->Seed, X + 0, Y + 1);
+    u32 Hash11 = Hash(Noise->Seed, X + 1, Y + 1);
+
+    v2 GradTable[4]
+    {
+        { -1.0f, -1.0f },
+        { +1.0f, -1.0f },
+        { -1.0f, +1.0f },
+        { +1.0f, +1.0f },
+
+    };
+    v2 Grad00 = GradTable[Hash00 & 3];
+    v2 Grad10 = GradTable[Hash10 & 3];
+    v2 Grad01 = GradTable[Hash01 & 3];
+    v2 Grad11 = GradTable[Hash11 & 3];
+
+    f32 D00 = Dot(dP, Grad00);
+    f32 D10 = Dot(dP - v2{ 1.0f, 0.0f }, Grad10);
+    f32 D01 = Dot(dP - v2{ 0.0f, 1.0f }, Grad01);
+    f32 D11 = Dot(dP - v2{ 1.0f, 1.0f }, Grad11);
+
+    auto Fade = [](f32 X) -> f32
+    {
+        f32 Result = X*X*X * ((6.0f*X - 15.0f)*X + 10.0f);
+        return(Result);
+    };
+    f32 U = Fade(dP.x);
+    f32 V = Fade(dP.y);
+    f32 X0 = Lerp(D00, D10, U);
+    f32 X1 = Lerp(D01, D11, U);
+    f32 Result = Lerp(X0, X1, V);
+    return(Result);
+}
+
+internal mesh_data 
+GenerateTerrainChunk(noise2* Noise, s32 BaseX, s32 BaseY, u32 SizeInMeters, memory_arena* Arena)
+{
+    mesh_data Result = {};
+
+    Result.Box = {}; // TODO(boti)
+
+    // NOTE(boti): We need to include the edge of the adjacent chunks as well
+    u32 Size = SizeInMeters + 1;
+    constexpr u32 PointsPerMeter = 4;
+    u32 VertexCountPerRow = Size * PointsPerMeter;
+    Result.VertexCount = VertexCountPerRow*VertexCountPerRow;
+    Result.VertexData = PushArray<vertex>(Arena, Result.VertexCount);
+
+    vertex* VertexAt = Result.VertexData;
+    for (u32 Y = 0; Y < VertexCountPerRow; Y++)
+    {
+        for (u32 X = 0; X < VertexCountPerRow; X++)
+        {
+            v2 dP = (1.0f / PointsPerMeter) * v2{ (f32)X, (f32)Y };
+            v2 P = v2{ (f32)BaseX, (f32)BaseY } + dP;
+
+            constexpr f32 NoiseFrequency = 1.0f / 4.0f;
+            v2 SampleP = NoiseFrequency * P;
+            constexpr f32 HeightScale = 1.0f;
+            f32 Height = HeightScale * SampleNoise(Noise, SampleP);
+
+            v3 P0 = { dP.x, dP.y, Height };
+            v3 P1 = 
+            { 
+                dP.x + (1.0f / PointsPerMeter), 
+                dP.y, 
+                HeightScale * SampleNoise(Noise, SampleP + v2{ NoiseFrequency * (1.0f / PointsPerMeter), 0.0f }),
+            };
+            v3 P2 = 
+            { 
+                dP.x, 
+                dP.y + (1.0f / PointsPerMeter), 
+                HeightScale * SampleNoise(Noise, SampleP + v2{ 0.0f, NoiseFrequency * (1.0f / PointsPerMeter) }),
+            };
+            
+            // TODO(boti): better normal and tangent generation
+            v3 V1 = P1 - P0;
+            v3 V2 = P2 - P0;
+            v3 T = NOZ(V1);
+            v3 N = NOZ(Cross(T, NOZ(V2)));
+
+            *VertexAt++ = 
+            {
+                .P = { dP.x, dP.y, Height },
+                .N = N, 
+                .T = { T.x, T.y, T.z, 1.0f },
+                .TexCoord = { 0.0f, 0.0f },
+                .Color = PackRGBA8(0xFF, 0xFF, 0xFF),
+            };
+        }
+    }
+
+    u32 IndexCountPerRow = VertexCountPerRow - 1;
+    Result.IndexCount = 6 * IndexCountPerRow*IndexCountPerRow;
+    Result.IndexData = PushArray<vert_index>(Arena, Result.IndexCount);
+    auto GetIndex = [=](u32 X, u32 Y) -> u32
+    {
+        u32 Result = X + Y*VertexCountPerRow;
+        return(Result);
+    };
+
+    vert_index* IndexAt = Result.IndexData;
+    for (u32 Y = 0; Y < IndexCountPerRow; Y++)
+    {
+        for (u32 X = 0; X < IndexCountPerRow; X++)
+        {
+            *IndexAt++ = GetIndex(X + 0, Y + 0);
+            *IndexAt++ = GetIndex(X + 1, Y + 0);
+            *IndexAt++ = GetIndex(X + 0, Y + 1);
+            *IndexAt++ = GetIndex(X + 1, Y + 0);
+            *IndexAt++ = GetIndex(X + 1, Y + 1);
+            *IndexAt++ = GetIndex(X + 0, Y + 1);
+        }
+    }
+    return(Result);
+}
+
 lbfn u32 
 MakeParticleSystem(game_world* World, entity_id ParentID, particle_system_type Type, 
                    v3 EmitterOffset, mmbox Bounds)
@@ -120,6 +275,49 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                             0.0f, 0.0f, 0.0f, 1.0f),
         };
 
+        // Terrain generation
+        {
+            World->TerrainNoise = { 0 };
+
+            u32 TerrainMaterialID = Assets->MaterialCount++;
+            material* TerrainMaterial = Assets->Materials + TerrainMaterialID;
+            TerrainMaterial->AlbedoID = Assets->DefaultDiffuseID;
+            TerrainMaterial->NormalID = Assets->DefaultNormalID;
+            TerrainMaterial->MetallicRoughnessID = Assets->DefaultMetallicRoughnessID;
+            TerrainMaterial->Transparency = Transparency_Opaque;
+            TerrainMaterial->Albedo = PackRGBA8(0x20, 0x20, 0x20);
+            TerrainMaterial->MetallicRoughness = PackRGBA8(0xFF, 0xFF, 0x00);
+            TerrainMaterial->Emission = { 0.0f, 0.0f, 0.0f };
+
+            for (s32 Y = -1; Y < 1; Y++)
+            {
+                for (s32 X = -1; X < 1; X++)
+                {
+                    s32 PX = X * World->TerrainChunkSizeInMeters;
+                    s32 PY = Y * World->TerrainChunkSizeInMeters;
+                    mesh_data Chunk = GenerateTerrainChunk(&World->TerrainNoise, PX, PY, World->TerrainChunkSizeInMeters, Scratch);
+
+                    u32 ChunkMeshID = Assets->MeshCount++;
+                    mesh* Mesh = Assets->Meshes + ChunkMeshID;
+                    Mesh->Allocation = AllocateGeometry(Frame->Renderer, Chunk.VertexCount, Chunk.IndexCount);
+                    Mesh->BoundingBox = {};
+                    Mesh->MaterialID = TerrainMaterialID;
+
+                    TransferGeometry(Frame, Mesh->Allocation, Chunk.VertexData, Chunk.IndexData);
+
+                    entity_id ChunkID = { World->EntityCount++ };
+                    entity* ChunkEntity = World->Entities + ChunkID.Value;
+                    ChunkEntity->Flags = EntityFlag_Mesh;
+                    ChunkEntity->Transform = M4(1.0f, 0.0f, 0.0f, (f32)PX,
+                                                0.0f, 1.0f, 0.0f, (f32)PY,
+                                                0.0f, 0.0f, 1.0f, 0.0f,
+                                                0.0f, 0.0f, 0.0f, 1.0f);
+                    ChunkEntity->PieceCount = 1;
+                    ChunkEntity->Pieces[0].MeshID = ChunkMeshID;
+                }
+            }
+        }
+
         {
             World->AdHocLightUpdateRate = 1.0f / 15.0f;
             World->AdHocLightCounter = World->AdHocLightUpdateRate;
@@ -149,6 +347,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             }
         }
 
+#if 0
         m4 YUpToZUp = M4(1.0f, 0.0f, 0.0f, 0.0f,
                          0.0f, 0.0f, -1.0f, 0.0f,
                          0.0f, 1.0f, 0.0f, 0.0f,
@@ -224,6 +423,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             DEBUGLoadTestScene(Scratch, Assets, World, Frame, 
                                "data/Scenes/Fox/Fox.gltf", Transform);
         }
+#endif
 
         World->IsLoaded = true;
     }
@@ -564,54 +764,56 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         }
     }
 
-    
-    particle_cmd* Cmd = nullptr;
-    if ((Frame->ParticleDrawCmdCount < Frame->MaxParticleDrawCmdCount) && 
-        (Frame->ParticleCount + World->AdHocLightCount <= Frame->MaxParticleCount))
+    // Ad-hoc lights
     {
-        Cmd = Frame->ParticleDrawCmds + Frame->ParticleDrawCmdCount++;
-        Cmd->FirstParticle = Frame->ParticleCount;
-        Cmd->ParticleCount = World->AdHocLightCount;
-        Cmd->Mode = Billboard_ViewAligned;
-
-        Frame->ParticleCount += World->AdHocLightCount;
-    }
-
-    b32 DoVelocityUpdate = false;
-    World->AdHocLightCounter += dt;
-    while (World->AdHocLightCounter >= World->AdHocLightUpdateRate)
-    {
-        DoVelocityUpdate = true;
-        World->AdHocLightCounter -= World->AdHocLightUpdateRate;
-    }
-
-    for (u32 LightIndex = 0; LightIndex < World->AdHocLightCount; LightIndex++)
-    {
-        light* Light = World->AdHocLights + LightIndex;
-
-        v3 dP = World->AdHocLightdPs[LightIndex];
-        if (DoVelocityUpdate)
+        particle_cmd* Cmd = nullptr;
+        if ((Frame->ParticleDrawCmdCount < Frame->MaxParticleDrawCmdCount) && 
+            (Frame->ParticleCount + World->AdHocLightCount <= Frame->MaxParticleCount))
         {
-            dP = { RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy) };
-            dP = RandBetween(&World->EffectEntropy, 1.5f, 4.5f) * dP;
-            World->AdHocLightdPs[LightIndex] = dP;
+            Cmd = Frame->ParticleDrawCmds + Frame->ParticleDrawCmdCount++;
+            Cmd->FirstParticle = Frame->ParticleCount;
+            Cmd->ParticleCount = World->AdHocLightCount;
+            Cmd->Mode = Billboard_ViewAligned;
+
+            Frame->ParticleCount += World->AdHocLightCount;
         }
 
-        Light->P.xyz += dP * dt;
-        Light->P.x = Clamp(Light->P.x, World->AdHocLightBounds.Min.x, World->AdHocLightBounds.Max.x);
-        Light->P.y = Clamp(Light->P.y, World->AdHocLightBounds.Min.y, World->AdHocLightBounds.Max.y);
-        Light->P.z = Clamp(Light->P.z, World->AdHocLightBounds.Min.z, World->AdHocLightBounds.Max.z);
-
-        AddLight(Frame, *Light, LightFlag_None);
-        if (Cmd)
+        b32 DoVelocityUpdate = false;
+        World->AdHocLightCounter += dt;
+        if (World->AdHocLightCounter >= World->AdHocLightUpdateRate)
         {
-            Frame->Particles[Cmd->FirstParticle + LightIndex] = 
+            DoVelocityUpdate = true;
+        }
+        World->AdHocLightCounter = Modulo0(World->AdHocLightCounter, World->AdHocLightUpdateRate);
+
+        for (u32 LightIndex = 0; LightIndex < World->AdHocLightCount; LightIndex++)
+        {
+            light* Light = World->AdHocLights + LightIndex;
+
+            v3 dP = World->AdHocLightdPs[LightIndex];
+            if (DoVelocityUpdate)
             {
-                .P = Light->P.xyz,
-                .TextureIndex = Particle_Star06,
-                .Color = { Light->E.x, Light->E.y, Light->E.z, 5.0f },
-                .HalfExtent = { 0.1f, 0.1f },
-            };
+                dP = { RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy), RandBilateral(&World->EffectEntropy) };
+                dP = RandBetween(&World->EffectEntropy, 1.5f, 4.5f) * dP;
+                World->AdHocLightdPs[LightIndex] = dP;
+            }
+
+            Light->P.xyz += dP * dt;
+            Light->P.x = Clamp(Light->P.x, World->AdHocLightBounds.Min.x, World->AdHocLightBounds.Max.x);
+            Light->P.y = Clamp(Light->P.y, World->AdHocLightBounds.Min.y, World->AdHocLightBounds.Max.y);
+            Light->P.z = Clamp(Light->P.z, World->AdHocLightBounds.Min.z, World->AdHocLightBounds.Max.z);
+
+            AddLight(Frame, *Light, LightFlag_None);
+            if (Cmd)
+            {
+                Frame->Particles[Cmd->FirstParticle + LightIndex] = 
+                {
+                    .P = Light->P.xyz,
+                    .TextureIndex = Particle_Star06,
+                    .Color = { Light->E.x, Light->E.y, Light->E.z, 5.0f },
+                    .HalfExtent = { 0.1f, 0.1f },
+                };
+            }
         }
     }
 }

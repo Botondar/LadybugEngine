@@ -18,9 +18,9 @@ TODO: list
 #include "Renderer/Renderer.hpp"
 
 #include "Font.hpp"
+#include "Asset.hpp"
 #include "World.hpp"
 #include "Editor.hpp"
-#include "Asset.hpp"
 
 #define STB_IMAGE_STATIC
 #define STB_IMAGE_RESIZE_STATIC

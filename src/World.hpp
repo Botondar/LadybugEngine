@@ -95,6 +95,13 @@ struct camera
 lbfn m4 GetLocalTransform(const camera* Camera);
 lbfn m4 GetTransform(const camera* Camera);
 
+struct noise2
+{
+    u32 Seed;
+};
+
+lbfn f32 SampleNoise(noise2* Noise, v2 P);
+
 struct game_world
 {
     b32 IsLoaded;
@@ -105,6 +112,9 @@ struct game_world
     v3 SunV;
 
     entropy32 EffectEntropy; // NOTE(boti): for visual effects only
+
+    static constexpr u32 TerrainChunkSizeInMeters = 32;
+    noise2 TerrainNoise;
 
     static constexpr u32 MaxEntityCount = (1u << 18);
     u32 EntityCount;
@@ -128,6 +138,9 @@ MakeParticleSystem(game_world* World, particle_system_type Type, entity_id Paren
                    v3 EmitterOffset, mmbox Bounds);
 
 lbfn void UpdateAndRenderWorld(game_world* World, struct assets* Assets, render_frame* Frame, game_io* IO, memory_arena* Scratch, b32 DrawLights);
+
+internal mesh_data 
+GenerateTerrainChunk(noise2* Noise, s32 BaseX, s32 BaseY, u32 Size, memory_arena* Arena);
 
 //
 // Implementation
