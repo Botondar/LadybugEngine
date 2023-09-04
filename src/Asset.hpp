@@ -158,7 +158,6 @@ struct assets
     memory_arena Arena;
     texture_queue TextureQueue;
 
-#if 1
     u32 WhitenessID;
     u32 DefaultDiffuseID;
     u32 DefaultNormalID;
@@ -167,17 +166,6 @@ struct assets
     u32 ParticleArrayID;
 
     u32 DefaultFontTextureID;
-#else
-    renderer_texture_id Whiteness;
-
-    renderer_texture_id DefaultDiffuseID;
-    renderer_texture_id DefaultNormalID;
-    renderer_texture_id DefaultMetallicRoughnessID;
-
-    renderer_texture_id ParticleArrayID;
-
-    renderer_texture_id DefaultFontTextureID;
-#endif
     font DefaultFont;
 
     u32 ArrowMeshID;
