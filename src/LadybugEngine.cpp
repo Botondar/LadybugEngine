@@ -65,12 +65,6 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         GameState->PostProcessParams.Bloom.FilterRadius = bloom_params::DefaultFilterRadius;
         GameState->PostProcessParams.Bloom.InternalStrength = bloom_params::DefaultInternalStrength;
         GameState->PostProcessParams.Bloom.Strength = bloom_params::DefaultStrength;
-
-        World->Camera.P = { 0.0f, 0.0f, 0.0f };
-        World->Camera.FieldOfView = ToRadians(80.0f);
-        World->Camera.NearZ = 0.1f;
-        World->Camera.FarZ = 50.0f;//1000.0f;
-        World->Camera.Yaw = 0.5f * Pi;
     }
 
     ResetArena(&GameState->TransientArena);

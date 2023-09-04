@@ -281,6 +281,12 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                             0.0f, 0.0f, 0.0f, 1.0f),
         };
 
+        World->Camera.P = { 0.0f, 0.0f, 0.0f };
+        World->Camera.FieldOfView = ToRadians(80.0f);
+        World->Camera.NearZ = 0.1f;
+        World->Camera.FarZ = 250.0f;
+        World->Camera.Yaw = 0.5f * Pi;
+
         // Terrain generation
         {
             World->TerrainNoise = { 0 };
