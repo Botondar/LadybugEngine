@@ -270,6 +270,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         World->Camera.FarZ = 250.0f;
         World->Camera.Yaw = 0.5f * Pi;
 
+#if 0
         // Terrain generation
         {
             // Height field
@@ -333,7 +334,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             TerrainEntity->PieceCount = 1;
             TerrainEntity->Pieces[0].MeshID = ChunkMeshID;
         }
-
+#else
         {
             World->AdHocLightUpdateRate = 1.0f / 15.0f;
             World->AdHocLightCounter = World->AdHocLightUpdateRate;
@@ -363,13 +364,11 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             }
         }
 
-#if 0
         m4 YUpToZUp = M4(1.0f, 0.0f, 0.0f, 0.0f,
                          0.0f, 0.0f, -1.0f, 0.0f,
                          0.0f, 1.0f, 0.0f, 0.0f,
                          0.0f, 0.0f, 0.0f, 1.0f);
         // Sponza scene
-#if 1
         {
             m4 Transform = YUpToZUp;
             DEBUGLoadTestScene(Scratch, Assets, World, Frame,
@@ -428,7 +427,6 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 }
             }
         }
-#endif
 
         // Animated fox
         {
