@@ -138,32 +138,38 @@ GenerateTerrainChunk(noise2* Noise, s32 BaseX, s32 BaseY, u32 SizeInMeters, memo
     Result.VertexCount = VertexCountPerRow*VertexCountPerRow;
     Result.VertexData = PushArray<vertex>(Arena, Result.VertexCount);
 
+    auto SampleHeight = [](noise2* Noise, v2 P, v2 Offset) -> f32
+    {
+        f32 Result = 0.0f;
+
+        constexpr f32 HeightScale = 4.0f;
+        constexpr f32 BaseFrequency = 1.0f / 4.0f;
+
+        for (u32 OctaveIndex = 0; OctaveIndex < 8; OctaveIndex++)
+        {
+            f32 OctaveScale = Pow(1.25f, -(f32)OctaveIndex);
+            f32 Amplitude = HeightScale * OctaveScale;
+            f32 Frequency = BaseFrequency * OctaveScale;
+            Result += Amplitude * SampleNoise(Noise, Frequency * (P + Offset));
+        }
+
+        return(Result);
+    };
+
+    v2 Offset = { (f32)BaseX, (f32)BaseY };
     vertex* VertexAt = Result.VertexData;
     for (u32 Y = 0; Y < VertexCountPerRow; Y++)
     {
         for (u32 X = 0; X < VertexCountPerRow; X++)
         {
             v2 dP = (1.0f / PointsPerMeter) * v2{ (f32)X, (f32)Y };
-            v2 P = v2{ (f32)BaseX, (f32)BaseY } + dP;
 
-            constexpr f32 NoiseFrequency = 1.0f / 4.0f;
-            v2 SampleP = NoiseFrequency * P;
-            constexpr f32 HeightScale = 1.0f;
-            f32 Height = HeightScale * SampleNoise(Noise, SampleP);
-
-            v3 P0 = { dP.x, dP.y, Height };
-            v3 P1 = 
-            { 
-                dP.x + (1.0f / PointsPerMeter), 
-                dP.y, 
-                HeightScale * SampleNoise(Noise, SampleP + v2{ NoiseFrequency * (1.0f / PointsPerMeter), 0.0f }),
-            };
-            v3 P2 = 
-            { 
-                dP.x, 
-                dP.y + (1.0f / PointsPerMeter), 
-                HeightScale * SampleNoise(Noise, SampleP + v2{ 0.0f, NoiseFrequency * (1.0f / PointsPerMeter) }),
-            };
+            v3 P0 = { dP.x, dP.y, 0.0f };
+            P0.z = SampleHeight(Noise, P0.xy, Offset);
+            v3 P1 = { dP.x + (1.0f / PointsPerMeter), dP.y, 0.0f };
+            P1.z = SampleHeight(Noise, P1.xy, Offset);
+            v3 P2 = { dP.x, dP.y + (1.0f / PointsPerMeter), 0.0f };
+            P2.z = SampleHeight(Noise, P2.xy, Offset);
             
             // TODO(boti): better normal and tangent generation
             v3 V1 = P1 - P0;
@@ -173,7 +179,7 @@ GenerateTerrainChunk(noise2* Noise, s32 BaseX, s32 BaseY, u32 SizeInMeters, memo
 
             *VertexAt++ = 
             {
-                .P = { dP.x, dP.y, Height },
+                .P = P0,
                 .N = N, 
                 .T = { T.x, T.y, T.z, 1.0f },
                 .TexCoord = { 0.0f, 0.0f },
