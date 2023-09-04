@@ -125,61 +125,43 @@ lbfn f32 SampleNoise(noise2* Noise, v2 P)
 }
 
 internal mesh_data 
-GenerateTerrainChunk(noise2* Noise, s32 BaseX, s32 BaseY, u32 SizeInMeters, memory_arena* Arena)
+GenerateTerrainChunk(height_field* Field, memory_arena* Arena)
 {
     mesh_data Result = {};
 
     Result.Box = {}; // TODO(boti)
 
-    // NOTE(boti): We need to include the edge of the adjacent chunks as well
-    u32 Size = SizeInMeters + 1;
-    constexpr u32 PointsPerMeter = 4;
-    u32 VertexCountPerRow = Size * PointsPerMeter;
-    Result.VertexCount = VertexCountPerRow*VertexCountPerRow;
+    Result.VertexCount = Field->TexelCountX*Field->TexelCountY;
     Result.VertexData = PushArray<vertex>(Arena, Result.VertexCount);
 
-    auto SampleHeight = [](noise2* Noise, v2 P, v2 Offset) -> f32
+    auto SampleHeight = [](height_field* Field, s32 X, s32 Y)
     {
-        f32 Result = 0.0f;
-
-        constexpr f32 HeightScale = 2.0f;
-        constexpr f32 BaseFrequency = 1.0f / 4.0f;
-
-        for (u32 OctaveIndex = 0; OctaveIndex < 8; OctaveIndex++)
-        {
-            f32 OctaveScale = Pow(1.25f, -(f32)OctaveIndex);
-            f32 Amplitude = HeightScale * OctaveScale;
-            f32 Frequency = BaseFrequency * OctaveScale;
-            Result += Amplitude * SampleNoise(Noise, Frequency * (P + Offset));
-        }
-
+        X = Clamp(X, 0, (s32)Field->TexelCountX - 1);
+        Y = Clamp(Y, 0, (s32)Field->TexelCountY - 1);
+        f32 Result = Field->HeightData[X + Y*Field->TexelCountX];
         return(Result);
     };
 
-    v2 Offset = { (f32)BaseX, (f32)BaseY };
+    f32 dS = 1.0f / Field->TexelsPerMeter;
     vertex* VertexAt = Result.VertexData;
-    for (u32 Y = 0; Y < VertexCountPerRow; Y++)
+    for (s32 Y = 0; Y < (s32)Field->TexelCountY; Y++)
     {
-        for (u32 X = 0; X < VertexCountPerRow; X++)
+        for (s32 X = 0; X < (s32)Field->TexelCountX; X++)
         {
-            v2 dP = (1.0f / PointsPerMeter) * v2{ (f32)X, (f32)Y };
+            v3 P = { dS*X, dS*Y, SampleHeight(Field, X, Y) };
 
-            v3 P0 = { dP.x, dP.y, 0.0f };
-            P0.z = SampleHeight(Noise, P0.xy, Offset);
-            v3 P1 = { dP.x + (1.0f / PointsPerMeter), dP.y, 0.0f };
-            P1.z = SampleHeight(Noise, P1.xy, Offset);
-            v3 P2 = { dP.x, dP.y + (1.0f / PointsPerMeter), 0.0f };
-            P2.z = SampleHeight(Noise, P2.xy, Offset);
-            
-            // TODO(boti): better normal and tangent generation
-            v3 V1 = P1 - P0;
-            v3 V2 = P2 - P0;
-            v3 T = NOZ(V1);
-            v3 N = NOZ(Cross(T, NOZ(V2)));
+            v3 PXn = { P.x - dS, P.y, SampleHeight(Field, X - 1, Y) };
+            v3 PXp = { P.x + dS, P.y, SampleHeight(Field, X + 1, Y) };
+            v3 PYn = { P.x, P.y - dS, SampleHeight(Field, X, Y - 1) };
+            v3 PYp = { P.x, P.y + dS, SampleHeight(Field, X, Y + 1) };
+
+            v3 T = NOZ(PXp - PXn);
+            v3 B = NOZ(PYp - PYn);
+            v3 N = NOZ(Cross(T, B));
 
             *VertexAt++ = 
             {
-                .P = P0,
+                .P = P,
                 .N = N, 
                 .T = { T.x, T.y, T.z, 1.0f },
                 .TexCoord = { 0.0f, 0.0f },
@@ -188,19 +170,20 @@ GenerateTerrainChunk(noise2* Noise, s32 BaseX, s32 BaseY, u32 SizeInMeters, memo
         }
     }
 
-    u32 IndexCountPerRow = VertexCountPerRow - 1;
-    Result.IndexCount = 6 * IndexCountPerRow*IndexCountPerRow;
+    u32 QuadCountX = Field->TexelCountX - 1;
+    u32 QuadCountY = Field->TexelCountY - 1;
+    Result.IndexCount = 6 * QuadCountX*QuadCountY;
     Result.IndexData = PushArray<vert_index>(Arena, Result.IndexCount);
     auto GetIndex = [=](u32 X, u32 Y) -> u32
     {
-        u32 Result = X + Y*VertexCountPerRow;
+        u32 Result = X + Y*Field->TexelCountX;
         return(Result);
     };
 
     vert_index* IndexAt = Result.IndexData;
-    for (u32 Y = 0; Y < IndexCountPerRow; Y++)
+    for (u32 Y = 0; Y < QuadCountY; Y++)
     {
-        for (u32 X = 0; X < IndexCountPerRow; X++)
+        for (u32 X = 0; X < QuadCountX; X++)
         {
             *IndexAt++ = GetIndex(X + 0, Y + 0);
             *IndexAt++ = GetIndex(X + 1, Y + 0);
@@ -289,45 +272,66 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
         // Terrain generation
         {
-            World->TerrainNoise = { 0 };
+            // Height field
+            {
+                World->TerrainNoise = { 0 };
+                World->HeightField.TexelCountX = 128;
+                World->HeightField.TexelCountY = 128;
+                World->HeightField.TexelsPerMeter = 4;
+                u32 TexelCount = World->HeightField.TexelCountX * World->HeightField.TexelCountY;
+                World->HeightField.HeightData = PushArray<f32>(World->Arena, TexelCount);
 
-            u32 TerrainMaterialID = Assets->MaterialCount++;
-            material* TerrainMaterial = Assets->Materials + TerrainMaterialID;
+                for (u32 Y = 0; Y < World->HeightField.TexelCountY; Y++)
+                {
+                    for (u32 X = 0; X < World->HeightField.TexelCountX; X++)
+                    {
+                        u32 Index = X + Y*World->HeightField.TexelCountX;
+
+                        f32 BaseScale = 1.0f / 2.0f;
+                        v2 P = (BaseScale / World->HeightField.TexelsPerMeter) * v2{ (f32)X, (f32)Y };
+                        f32 Height = 0.0f;
+
+                        for (u32 OctaveIndex = 0; OctaveIndex < 8; OctaveIndex++)
+                        {
+                            f32 Mul = 1.0f / (f32)(1 << OctaveIndex);
+                            Height += Mul * SampleNoise(&World->TerrainNoise, Mul*P);
+                            World->HeightField.HeightData[Index] = Height;
+                        }
+                    }
+                }
+            }
+
+            World->TerrainMaterialID = Assets->MaterialCount++;
+            material* TerrainMaterial = Assets->Materials + World->TerrainMaterialID;
             TerrainMaterial->AlbedoID = Assets->DefaultDiffuseID;
             TerrainMaterial->NormalID = Assets->DefaultNormalID;
             TerrainMaterial->MetallicRoughnessID = Assets->DefaultMetallicRoughnessID;
             TerrainMaterial->Transparency = Transparency_Opaque;
-            TerrainMaterial->Albedo = PackRGBA8(0x20, 0x20, 0x20);
+            TerrainMaterial->Albedo = PackRGBA8(0x10, 0x10, 0x10);
             TerrainMaterial->MetallicRoughness = PackRGBA8(0xFF, 0xFF, 0x00);
             TerrainMaterial->Emission = { 0.0f, 0.0f, 0.0f };
 
-            for (s32 Y = -1; Y < 1; Y++)
-            {
-                for (s32 X = -1; X < 1; X++)
-                {
-                    s32 PX = X * World->TerrainChunkSizeInMeters;
-                    s32 PY = Y * World->TerrainChunkSizeInMeters;
-                    mesh_data Chunk = GenerateTerrainChunk(&World->TerrainNoise, PX, PY, World->TerrainChunkSizeInMeters, Scratch);
+            mesh_data TerrainMesh = GenerateTerrainChunk(&World->HeightField, Scratch);
 
-                    u32 ChunkMeshID = Assets->MeshCount++;
-                    mesh* Mesh = Assets->Meshes + ChunkMeshID;
-                    Mesh->Allocation = AllocateGeometry(Frame->Renderer, Chunk.VertexCount, Chunk.IndexCount);
-                    Mesh->BoundingBox = {};
-                    Mesh->MaterialID = TerrainMaterialID;
+            u32 ChunkMeshID = Assets->MeshCount++;
+            mesh* Mesh = Assets->Meshes + ChunkMeshID;
+            Mesh->Allocation = AllocateGeometry(Frame->Renderer, TerrainMesh.VertexCount, TerrainMesh.IndexCount);
+            Mesh->BoundingBox = {};
+            Mesh->MaterialID = World->TerrainMaterialID;
 
-                    TransferGeometry(Frame, Mesh->Allocation, Chunk.VertexData, Chunk.IndexData);
+            TransferGeometry(Frame, Mesh->Allocation, TerrainMesh.VertexData, TerrainMesh.IndexData);
 
-                    entity_id ChunkID = { World->EntityCount++ };
-                    entity* ChunkEntity = World->Entities + ChunkID.Value;
-                    ChunkEntity->Flags = EntityFlag_Mesh;
-                    ChunkEntity->Transform = M4(1.0f, 0.0f, 0.0f, (f32)PX,
-                                                0.0f, 1.0f, 0.0f, (f32)PY,
-                                                0.0f, 0.0f, 1.0f, 0.0f,
-                                                0.0f, 0.0f, 0.0f, 1.0f);
-                    ChunkEntity->PieceCount = 1;
-                    ChunkEntity->Pieces[0].MeshID = ChunkMeshID;
-                }
-            }
+            entity_id EntityID = { World->EntityCount++ };
+            entity* TerrainEntity = World->Entities + EntityID.Value;
+            TerrainEntity->Flags = EntityFlag_Mesh;
+            f32 ExtentX = (f32)World->HeightField.TexelCountX / (f32)World->HeightField.TexelsPerMeter;
+            f32 ExtentY = (f32)World->HeightField.TexelCountY / (f32)World->HeightField.TexelsPerMeter;
+            TerrainEntity->Transform = M4(1.0f, 0.0f, 0.0f, -0.5f * ExtentX,
+                                        0.0f, 1.0f, 0.0f, -0.5f * ExtentY,
+                                        0.0f, 0.0f, 1.0f, 0.0f,
+                                        0.0f, 0.0f, 0.0f, 1.0f);
+            TerrainEntity->PieceCount = 1;
+            TerrainEntity->Pieces[0].MeshID = ChunkMeshID;
         }
 
         {

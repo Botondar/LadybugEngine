@@ -56,6 +56,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         InitializeAssets(Assets, RenderFrame, &GameState->TransientArena);
 
         game_world* World = GameState->World = PushStruct<game_world>(&GameState->TotalArena);
+        World->Arena = &GameState->TotalArena;
 
         InitEditor(GameState, &GameState->TransientArena);
 

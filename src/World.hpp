@@ -102,8 +102,17 @@ struct noise2
 
 lbfn f32 SampleNoise(noise2* Noise, v2 P);
 
+struct height_field
+{
+    u32 TexelCountX;
+    u32 TexelCountY;
+    u32 TexelsPerMeter;
+    f32* HeightData;
+};
+
 struct game_world
 {
+    memory_arena* Arena;
     b32 IsLoaded;
     f32 LightProxyScale; // NOTE(boti): Sphere scale for editor selection and rendering
 
@@ -113,8 +122,9 @@ struct game_world
 
     entropy32 EffectEntropy; // NOTE(boti): for visual effects only
 
-    static constexpr u32 TerrainChunkSizeInMeters = 32;
     noise2 TerrainNoise;
+    u32 TerrainMaterialID;
+    height_field HeightField;
 
     static constexpr u32 MaxEntityCount = (1u << 18);
     u32 EntityCount;
@@ -140,7 +150,7 @@ MakeParticleSystem(game_world* World, particle_system_type Type, entity_id Paren
 lbfn void UpdateAndRenderWorld(game_world* World, struct assets* Assets, render_frame* Frame, game_io* IO, memory_arena* Scratch, b32 DrawLights);
 
 internal mesh_data 
-GenerateTerrainChunk(noise2* Noise, s32 BaseX, s32 BaseY, u32 Size, memory_arena* Arena);
+GenerateTerrainChunk(height_field* Field, memory_arena* Arena);
 
 //
 // Implementation
