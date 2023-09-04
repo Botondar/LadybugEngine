@@ -142,7 +142,7 @@ GenerateTerrainChunk(noise2* Noise, s32 BaseX, s32 BaseY, u32 SizeInMeters, memo
     {
         f32 Result = 0.0f;
 
-        constexpr f32 HeightScale = 4.0f;
+        constexpr f32 HeightScale = 2.0f;
         constexpr f32 BaseFrequency = 1.0f / 4.0f;
 
         for (u32 OctaveIndex = 0; OctaveIndex < 8; OctaveIndex++)
