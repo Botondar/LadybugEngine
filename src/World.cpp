@@ -270,14 +270,14 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         World->Camera.FarZ = 250.0f;
         World->Camera.Yaw = 0.5f * Pi;
 
-#if 0
+#if 1
         // Terrain generation
         {
             // Height field
             {
                 World->TerrainNoise = { 0 };
-                World->HeightField.TexelCountX = 128;
-                World->HeightField.TexelCountY = 128;
+                World->HeightField.TexelCountX = 1024;
+                World->HeightField.TexelCountY = 1024;
                 World->HeightField.TexelsPerMeter = 4;
                 u32 TexelCount = World->HeightField.TexelCountX * World->HeightField.TexelCountY;
                 World->HeightField.HeightData = PushArray<f32>(World->Arena, TexelCount);
@@ -288,14 +288,17 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     {
                         u32 Index = X + Y*World->HeightField.TexelCountX;
 
-                        f32 BaseScale = 1.0f / 2.0f;
-                        v2 P = (BaseScale / World->HeightField.TexelsPerMeter) * v2{ (f32)X, (f32)Y };
+                        f32 BaseFrequency = 1.0f / 256.0f;
+                        f32 BaseAmplitude = 32.0f;
+                        v2 P = (1.0f / World->HeightField.TexelsPerMeter) * v2{ (f32)X, (f32)Y };
                         f32 Height = 0.0f;
 
-                        for (u32 OctaveIndex = 0; OctaveIndex < 8; OctaveIndex++)
+                        for (u32 OctaveIndex = 0; OctaveIndex < 12; OctaveIndex++)
                         {
-                            f32 Mul = 1.0f / (f32)(1 << OctaveIndex);
-                            Height += Mul * SampleNoise(&World->TerrainNoise, Mul*P);
+                            f32 Mul = (f32)(1 << OctaveIndex);
+                            f32 Frequency = BaseFrequency * Mul;
+                            f32 Amplitude = BaseAmplitude / Mul;
+                            Height += Amplitude * SampleNoise(&World->TerrainNoise, Frequency*P);
                             World->HeightField.HeightData[Index] = Height;
                         }
                     }
