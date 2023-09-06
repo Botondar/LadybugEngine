@@ -235,7 +235,7 @@ void main()
             Shadow = 0.2 * Shadow;
             AmbientTerm += 0.05 * E;
 
-#if 0
+#if 1
             // NOTE(boti): This is the code path for volumetric point lights
             float MaxDistance = 3.5;
             int VolCount = 16;
@@ -243,6 +243,8 @@ void main()
             float di = AtmosphereNoise(0.5 * gl_FragCoord.xy);
             float g = 0.76;
             float g2 = g*g;
+
+            float VolLo = 0.0;
             for (int i = 0; i < VolCount; i++)
             {
                 float t = MaxDistance * ((i + di) / float(VolCount));
@@ -258,13 +260,14 @@ void main()
                 VolDepth = f*r - f*n*r / VolDepth;
                 float VolShadow = texture(PointShadows[ShadowIndex], v4(VolP, VolDepth));
 
-                float Attenuation = 1.0 / sqrt(dot(VolL, VolL));
-                v3 VolLi = Attenuation * Lights[LightIndex].E.xyz * Lights[LightIndex].E.w;
+                float Attenuation = clamp(1.0 / sqrt(dot(VolL, VolL)), 0.0, 1.0);
 
                 VolL = normalize(VolL);
                 float Phase = PhaseMie(g, g2, dot(VolL, -V));
-                Lo += 0.20 * VolShadow * VolLi * Phase * W;
+                VolLo += 0.20 * VolShadow * Attenuation * Phase * W;
             }
+
+            Lo += VolLo * Lights[LightIndex].E.xyz * Lights[LightIndex].E.w;
 #endif
         }
 

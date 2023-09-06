@@ -270,7 +270,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         World->Camera.FarZ = 250.0f;
         World->Camera.Yaw = 0.5f * Pi;
 
-#if 1
+#if 0
         // Terrain generation
         {
             // Height field
