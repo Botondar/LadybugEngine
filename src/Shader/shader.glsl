@@ -233,7 +233,7 @@ void main()
             Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
 
             Shadow = 0.2 * Shadow;
-            AmbientTerm += 0.05 * E;
+            //AmbientTerm += 0.05 * E;
 
 #if 1
             // NOTE(boti): This is the code path for volumetric point lights
