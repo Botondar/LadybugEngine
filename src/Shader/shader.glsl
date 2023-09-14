@@ -237,7 +237,7 @@ void main()
 
 #if 1
             // NOTE(boti): This is the code path for volumetric point lights
-            float MaxDistance = 3.5;
+            float MaxDistance = 6.0;
             int VolCount = 16;
             float W = MaxDistance * (1.0 / float(VolCount));
             float di = AtmosphereNoise(0.5 * gl_FragCoord.xy);
