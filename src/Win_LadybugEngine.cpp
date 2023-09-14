@@ -559,14 +559,56 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
                     if (KeyCode == VK_CONTROL)  KeyCode = VK_LCONTROL;
                     if (KeyCode == VK_MENU)     KeyCode = VK_LMENU;
 
-                    u32 ScanCode     = (Message.lParam >> 16) & 0xFF;
-                    bool bIsExtended = (Message.lParam & (1 << 24)) != 0;
-                    bool bIsDown     = (Message.lParam & (1 << 31)) == 0;
-                    bool bWasDown    = (Message.lParam & (1 << 30)) != 0;
+                    u32 ScanCode    = (Message.lParam >> 16) & 0xFF;
+                    b32 IsExtended  = (Message.lParam & (1 << 24)) != 0;
+                    b32 IsDown      = (Message.lParam & (1 << 31)) == 0;
+                    b32 WasDown     = (Message.lParam & (1 << 30)) != 0;
+                    b32 IsAltDown   = (Message.lParam & (1 << 29)) != 0;
 
-                    ScanCode = Win_ScanCodeToKey(ScanCode, bIsExtended);
+                    b32 WasPressed = IsDown && !WasDown;
+                    if (WasPressed && IsAltDown && (KeyCode == VK_RETURN))
+                    {
+                        MONITORINFO MonitorInfo = { sizeof(MONITORINFO) };
+                        GetMonitorInfo(MonitorFromWindow(WinWindow, MONITOR_DEFAULTTOPRIMARY), &MonitorInfo);
 
-                    Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, bIsDown, bWasDown, MessageTime);
+                        s32 MonitorX = MonitorInfo.rcMonitor.left;
+                        s32 MonitorY = MonitorInfo.rcMonitor.top;
+                        s32 MonitorWidth = MonitorInfo.rcMonitor.right- MonitorInfo.rcMonitor.left;
+                        s32 MonitorHeight = MonitorInfo.rcMonitor.bottom - MonitorInfo.rcMonitor.top;
+
+                        DWORD WindowStyle = GetWindowLong(WinWindow, GWL_STYLE);
+                        if (WindowStyle & WS_OVERLAPPEDWINDOW)
+                        {
+                            WindowStyle &= ~WS_OVERLAPPEDWINDOW;
+                            SetWindowLong(WinWindow, GWL_STYLE, WindowStyle);
+                            SetWindowPos(WinWindow, HWND_TOP,
+                                         MonitorX, MonitorY, MonitorWidth, MonitorHeight,
+                                         SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+                        }
+                        else
+                        {
+                            WindowStyle |= WS_OVERLAPPEDWINDOW;
+                            SetWindowLong(WinWindow, GWL_STYLE, WindowStyle);
+
+                            // TODO(boti): Cache the actual resolution when going fullscreen
+                            s32 WindowWidth = 1920;
+                            s32 WindowHeight = 1080;
+                            s32 WindowX = (MonitorWidth - WindowWidth) / 2;
+                            s32 WindowY = (MonitorHeight - WindowHeight) / 2;
+                            RECT WindowRect = { WindowX, WindowY, WindowX + WindowWidth, WindowY + WindowHeight };
+                            AdjustWindowRect(&WindowRect, WindowStyle, FALSE);
+
+                            SetWindowPos(WinWindow, HWND_TOP, 
+                                         WindowRect.left, WindowRect.top, 
+                                         WindowRect.right - WindowRect.left, 
+                                         WindowRect.bottom - WindowRect.top,
+                                         SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+                        }
+                    }
+
+                    ScanCode = Win_ScanCodeToKey(ScanCode, IsExtended);
+
+                    Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, IsDown, WasDown, MessageTime);
                 } break;
 
                 case WM_DROPFILES:
