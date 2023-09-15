@@ -94,7 +94,7 @@ void main()
     vec3 V = normalize(vec3(2.0 * UV - vec2(1.0), 1.0) * vec3(PerFrame.AspectRatio / PerFrame.FocalLength, 1.0 / PerFrame.FocalLength, 1.0));
     //V = V * mat3(PerFrame.View);
 #if 1
-    vec3 Color = CIEClearSky(V, true);
+    vec3 Color = CIEClearSky(V, false);
 #else
     vec3 Color = TraceAtmosphere(V);
 #endif
