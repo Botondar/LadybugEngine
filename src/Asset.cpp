@@ -135,10 +135,26 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
                 {
                     u32 PrevWidth = Max(Entry->Info.Width >> (MipIndex - 1), 1u);
                     u32 PrevHeight = Max(Entry->Info.Height >> (MipIndex - 1), 1u);
-                    // TODO(boti): alpha and srgb correct resize here
-                    stbir_resize_uint8_linear((u8*)SrcAt, PrevWidth, PrevHeight, 0, 
-                                              (u8*)DownscaleBuffer, Width, Height, 0,
-                                              (stbir_pixel_layout)DesiredChannelCount);
+
+                    switch (Entry->TextureType)
+                    {
+                        case TextureType_Diffuse:
+                        {
+                            stbir_resize_uint8_srgb(
+                                (u8*)SrcAt, PrevWidth, PrevHeight, 0, 
+                                (u8*)DownscaleBuffer, Width, Height, 0,
+                                (stbir_pixel_layout)DesiredChannelCount);
+                        } break;
+
+                        case TextureType_Normal:
+                        case TextureType_Material:
+                        {
+                            stbir_resize_uint8_linear(
+                                (u8*)SrcAt, PrevWidth, PrevHeight, 0, 
+                                (u8*)DownscaleBuffer, Width, Height, 0,
+                                (stbir_pixel_layout)DesiredChannelCount);
+                        } break;
+                    }
                     SrcAt = DownscaleBuffer;
                 }
 
