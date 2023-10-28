@@ -813,10 +813,6 @@ struct render_frame
     frustum CameraFrustum;
     v3 SunV; // World-space sun direction
 
-    // TODO(boti): currently there's a renderer and a per-frame
-    // staging buffer, because assets are uploaded through
-    // the renderer directly.
-    // In the future asset loading should probably be done through the frame as well
     umm StagingBufferSize;
     umm StagingBufferAt;
     void* StagingBufferBase;
