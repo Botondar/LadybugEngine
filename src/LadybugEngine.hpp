@@ -26,7 +26,7 @@ TODO: list
 #define STB_IMAGE_RESIZE_STATIC
 #define STB_DXT_STATIC
 #include "stb/stb_image.h"
-#include "stb/stb_image_resize.h"
+#include "stb/stb_image_resize2.h"
 #include "stb/stb_dxt.h"
 
 

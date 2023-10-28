@@ -10,11 +10,16 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #define STB_DXT_IMPLEMENTATION
+
 #pragma warning(push)
 #pragma warning(disable:4244)
 #include "stb/stb_image.h"
 #pragma warning(pop)
-#include "stb/stb_image_resize.h"
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wshadow"
+#include "stb/stb_image_resize2.h"
+#pragma clang diagnostic pop
 #include "stb/stb_dxt.h"
 
 platform_api Platform;

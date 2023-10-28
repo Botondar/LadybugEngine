@@ -71,3 +71,6 @@ stb_image_resize - v0.97 - public domain image resizing
    
 stb_dxt.h - v1.12 - DXT1/DXT5 compressor - public domain
     original by fabian "ryg" giesen - ported to C by stb
+    
+stb_image_resize2 - v2.01 - public domain image resizing
+    by Jeff Roberts (v2) and Jorge L Rodriguez 

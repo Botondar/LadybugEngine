@@ -136,9 +136,9 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
                     u32 PrevWidth = Max(Entry->Info.Width >> (MipIndex - 1), 1u);
                     u32 PrevHeight = Max(Entry->Info.Height >> (MipIndex - 1), 1u);
                     // TODO(boti): alpha and srgb correct resize here
-                    stbir_resize_uint8((u8*)SrcAt, PrevWidth, PrevHeight, 0, 
-                                       (u8*)DownscaleBuffer, Width, Height, 0,
-                                       DesiredChannelCount);
+                    stbir_resize_uint8_linear((u8*)SrcAt, PrevWidth, PrevHeight, 0, 
+                                              (u8*)DownscaleBuffer, Width, Height, 0,
+                                              (stbir_pixel_layout)DesiredChannelCount);
                     SrcAt = DownscaleBuffer;
                 }
 
