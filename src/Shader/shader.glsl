@@ -104,153 +104,17 @@ float CalculateShadow(vec3 CascadeCoord0, in vec3 CascadeBlends)
     float Shadow1 = 0.0;
     float Shadow2 = 0.0;
 
+#if 1
     float Scale = 4.0 * TexelSize.x;
-#if 1
-    // Poisson filter
-    const v2 PoissonOffsets[64] = v2[]
-    (
-        v2(-0.5119625000, -0.4827938),
-        v2(-0.2171264000, -0.4768726),
-        v2(-0.7552931000, -0.2426507),
-        v2(-0.7136765000, -0.4496614),
-        v2(-0.5938849000, -0.6895654),
-        v2(-0.3148003000, -0.7047654),
-        v2(-0.4221500000, -0.2024607),
-        v2(-0.9466816000, -0.2014508),
-        v2(-0.8409063000, -0.03465778),
-        v2(-0.6517572000, -0.07476326),
-        v2(-0.1041822000, -0.02521214),
-        v2(-0.3042712000, -0.02195431),
-        v2(-0.5082307000, +0.1079806),
-        v2(-0.0842987700, -0.2316298),
-        v2(-0.9879128000, +0.1113683),
-        v2(-0.3859636000, +0.3363545),
-        v2(-0.1925334000, +0.1787288),
-        v2(+0.0032561820, +0.138135),
-        v2(-0.8706837000, +0.3010679),
-        v2(-0.6982038000, +0.1904326),
-        v2(+0.1975043000, +0.2221317),
-        v2(+0.1507788000, +0.4204168),
-        v2(+0.3514056000, +0.09865579),
-        v2(+0.1558783000, -0.08460935),
-        v2(-0.0684978000, +0.4461993),
-        v2(+0.3780522000, +0.3478679),
-        v2(+0.3956799000, -0.1469177),
-        v2(+0.5838975000, +0.1054943),
-        v2(+0.6155105000, +0.3245716),
-        v2(+0.3928624000, -0.4417621),
-        v2(+0.1749884000, -0.4202175),
-        v2(+0.6813727000, -0.2424808),
-        v2(-0.6707711000, +0.4912741),
-        v2(+0.0005130528, -0.8058334),
-        v2(+0.0270301300, -0.6010728),
-        v2(-0.1658188000, -0.9695674),
-        v2(+0.4060591000, -0.7100726),
-        v2(+0.7713396000, -0.4713659),
-        v2(+0.5732120000, -0.5154400),
-        v2(-0.3448896000, -0.9046497),
-        v2(+0.1268544000, -0.9874692),
-        v2(+0.7418533000, -0.6667366),
-        v2(+0.3492522000, +0.5924662),
-        v2(+0.5679897000, +0.5343465),
-        v2(+0.5663417000, +0.7708698),
-        v2(+0.7375497000, +0.6691415),
-        v2(+0.2271994000, -0.6163502),
-        v2(+0.2312844000, +0.8725659),
-        v2(+0.4216993000, +0.9002838),
-        v2(+0.4262091000, -0.9013284),
-        v2(+0.2001408000, -0.808381),
-        v2(+0.1493940000, +0.6650763),
-        v2(-0.0964037600, +0.9843736),
-        v2(+0.7682328000, -0.07273844),
-        v2(+0.0414658400, +0.8313184),
-        v2(+0.9705266000, -0.1143304),
-        v2(+0.9670017000, +0.1293385),
-        v2(+0.9015037000, -0.3306949),
-        v2(-0.5085648000, +0.7534177),
-        v2(+0.9055501000, +0.3758393),
-        v2(+0.7599946000, +0.1809109),
-        v2(-0.2483695000, +0.7942952),
-        v2(-0.4241052000, +0.5581087),
-        v2(-0.1020106000, +0.6724468)
-    );
-
-    int TapCount = 64;
-    for (int i = 0; i < TapCount; i++)
-    {
-        v2 Offset = Scale * PoissonOffsets[i];
-        Shadow1 += texture(ShadowSampler, P1 + v4(Offset, 0.0, 0.0));
-        Shadow2 += texture(ShadowSampler, P2 + v4(Offset, 0.0, 0.0));
-    }
-    float InverseSumWeight = 1.0 / float(TapCount);
-
-#elif 0
-    // Disk filter
-#if 1
-    const int FilterHalfSize = 3;
-    const float W[7][7] =
-    {
-        { 0.0,0.0,0.5,1.0,0.5,0.0,0.0 },
-        { 0.0,1.0,1.0,1.0,1.0,1.0,0.0 },
-        { 0.5,1.0,1.0,1.0,1.0,1.0,0.5 },
-        { 1.0,1.0,1.0,1.0,1.0,1.0,1.0 },
-        { 0.5,1.0,1.0,1.0,1.0,1.0,0.5 },
-        { 0.0,1.0,1.0,1.0,1.0,1.0,0.0 },
-        { 0.0,0.0,0.5,1.0,0.5,0.0,0.0 }
-    };
+    Shadow1 = SampleShadowPoisson(ShadowSampler, P1, Scale, 64);
+    Shadow2 = SampleShadowPoisson(ShadowSampler, P2, Scale, 64);
 #else
-    const int FilterHalfSize = 2;
-    const float W[5][5] =
-    {
-        { 0.0, 0.5, 1.0, 0.5, 0.0 },
-        { 0.5, 1.0, 1.0, 1.0, 0.5 },
-        { 1.0, 1.0, 1.0, 1.0, 1.0 },
-        { 0.5, 1.0, 1.0, 1.0, 0.5 },
-        { 0.0, 0.5, 1.0, 0.5, 0.0 },
-    };
+    v2 Jitter = v2(1.0 * (3.0/16.0), 3.0 * (3.0 / 16.0)) * TexelSize.x;
+    Shadow1 = SampleShadowJitter4(ShadowSampler, P1, Jitter);
+    Shadow2 = SampleShadowJitter4(ShadowSampler, P2, Jitter);
 #endif
 
-    float SumWeight = 0.0;
-    for (int y = -FilterHalfSize; y <= +FilterHalfSize; y++)
-    {
-        for (int x = -FilterHalfSize; x <= +FilterHalfSize; x++)
-        {
-            float Weight = W[y + FilterHalfSize][x + FilterHalfSize];
-
-            Shadow1 += Weight * texture(ShadowSampler, P1 + Scale * v4(float(x), float(y), 0.0, 0.0));
-            Shadow2 += Weight * texture(ShadowSampler, P2 + Scale * v4(float(x), float(y), 0.0, 0.0));
-
-            SumWeight += Weight;
-        }
-    }
-    float InverseSumWeight = 1.0 / SumWeight;
-#else
-    // 4-tap jagged filter
-    float InverseSumWeight = 1.0 / 4.0;
-    float d = 3.0 / 16.0;
-    float o = d * TexelSize.x;
-    float s1 = 1.0;
-    float s2 = 3.0;
-    v2 SampleOffsets[4] = 
-    {
-        (d * Scale) * v2(-s1, -s2),
-        (d * Scale) * v2(+s2, -s1),
-        (d * Scale) * v2(+s1, +s2),
-        (d * Scale) * v2(-s2, +s1),
-    };
-
-    Shadow1 += texture(ShadowSampler, P1 + v4(SampleOffsets[0], 0.0, 0.0));
-    Shadow1 += texture(ShadowSampler, P1 + v4(SampleOffsets[1], 0.0, 0.0));
-    Shadow1 += texture(ShadowSampler, P1 + v4(SampleOffsets[2], 0.0, 0.0));
-    Shadow1 += texture(ShadowSampler, P1 + v4(SampleOffsets[3], 0.0, 0.0));
-
-    Shadow2 += texture(ShadowSampler, P2 + v4(SampleOffsets[0], 0.0, 0.0));
-    Shadow2 += texture(ShadowSampler, P2 + v4(SampleOffsets[1], 0.0, 0.0));
-    Shadow2 += texture(ShadowSampler, P2 + v4(SampleOffsets[2], 0.0, 0.0));
-    Shadow2 += texture(ShadowSampler, P2 + v4(SampleOffsets[3], 0.0, 0.0));
-#endif
-
-    float Result = InverseSumWeight * mix(Shadow2, Shadow1, Blend);
+    float Result = mix(Shadow2, Shadow1, Blend);
     return(Result);
 }
 
