@@ -54,8 +54,8 @@ internal bool CreateGeometryMemory(geometry_memory* Memory, geometry_buffer_type
             Memory->MemoryTypeIndex = MemoryTypeIndex;
             Memory->Buffer = Buffer;
             Memory->Stride = Stride;
-            DListInitialize(&Memory->FreeBlocks);
-            DListInitialize(&Memory->UsedBlocks);
+            DList_Initialize(&Memory->FreeBlocks, Next, Prev);
+            DList_Initialize(&Memory->UsedBlocks, Next, Prev);
 
             Buffer = VK_NULL_HANDLE;
 
@@ -265,18 +265,26 @@ internal geometry_buffer_block* AllocateSubBuffer(geometry_memory* Memory, u32 C
     geometry_buffer_block* FreeBlock = FindCandidateBlock(Memory, Count);
     if (FreeBlock)
     {
-        DListRemove(FreeBlock);
+        DList_Remove(FreeBlock, Next, Prev);
 
         if (FreeBlock->Count > Count)
         {
-            geometry_buffer_block* NextFreeBlock = FreeListAllocate(BlockPool);
-            NextFreeBlock->Count = FreeBlock->Count - Count;
-            NextFreeBlock->Offset = FreeBlock->Offset + Count;
-            FreeBlock->Count = Count;
-            DListInsert(&Memory->FreeBlocks, NextFreeBlock);
+            geometry_buffer_block* NextFreeBlock = BlockPool->Next; 
+            if (NextFreeBlock)
+            {
+                DList_Remove(NextFreeBlock, Next, Prev);
+                NextFreeBlock->Count = FreeBlock->Count - Count;
+                NextFreeBlock->Offset = FreeBlock->Offset + Count;
+                FreeBlock->Count = Count;
+                DList_InsertFront(&Memory->FreeBlocks, NextFreeBlock, Next, Prev);
+            }
+            else
+            {
+                UnhandledError("Out of geometry buffer block pool");
+            }
         }
 
-        DListInsert(&Memory->UsedBlocks, FreeBlock);
+        DList_InsertFront(&Memory->UsedBlocks, FreeBlock, Next, Prev);
         Memory->CountInUse += FreeBlock->Count;
         Memory->BlocksInUse++;
 
@@ -311,16 +319,16 @@ internal void DeallocateVertexBuffer(geometry_buffer* GB, geometry_buffer_alloca
 {
     if (Allocation.VertexBlock)
     {
-        DListRemove(Allocation.VertexBlock);
-        DListInsert(&GB->VertexMemory.FreeBlocks, Allocation.VertexBlock);
+        DList_Remove(Allocation.VertexBlock, Next, Prev);
+        DList_InsertFront(&GB->VertexMemory.FreeBlocks, Allocation.VertexBlock, Next, Prev);
         GB->VertexMemory.CountInUse -= Allocation.VertexBlock->Count;
         GB->VertexMemory.BlocksInUse--;
     }
 
     if (Allocation.IndexBlock)
     {
-        DListRemove(Allocation.IndexBlock);
-        DListInsert(&GB->IndexMemory.FreeBlocks, Allocation.IndexBlock);
+        DList_Remove(Allocation.IndexBlock, Next, Prev);
+        DList_InsertFront(&GB->IndexMemory.FreeBlocks, Allocation.IndexBlock, Next, Prev);
         GB->IndexMemory.CountInUse -= Allocation.IndexBlock->Count;
         GB->IndexMemory.BlocksInUse--;
     }

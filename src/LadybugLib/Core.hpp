@@ -196,26 +196,21 @@ inline void ResetArena(memory_arena* Arena);
 #define PushArray(Arena, Flags, Type, Count) (Type*)PushSize_(Arena, Flags, (umm)Count * sizeof(Type), alignof(Type))
 inline void* PushSize_(memory_arena* Arena, memory_push_flags Flags, umm Size, umm Alignment);
 
-template<typename T>
-inline T* FreeListInitialize(T* Head, u32 Count);
+#define DList_Initialize(pSentinel, Next, Prev) \
+    (pSentinel)->Prev = (pSentinel)->Next = (pSentinel)
 
-template<typename T>
-inline T* FreeListAllocate(T*& List);
+#define DList_IsEmpty(pSentinel, Next, Prev) ((pSentinel)->Next == pSentinel)
 
-template<typename T>
-inline void FreeListFree(T*& List, T* Elem);
+#define DList_InsertFront(pSentinel, pElem, Next, Prev) \
+    (pElem)->Next = (pSentinel)->Next; \
+    (pElem)->Prev = (pSentinel); \
+    (pElem)->Next->Prev = (pElem); \
+    (pElem)->Prev->Next = (pElem)
 
-template<typename T>
-inline T* DListInitialize(T* Sentinel);
-
-template<typename T>
-inline bool DListIsEmpty(const T* Sentinel);
-
-template<typename T>
-inline T* DListInsert(T* Sentinel, T* Elem);
-
-template<typename T>
-inline T* DListRemove(T* Elem);
+#define DList_Remove(pElem, Next, Prev) \
+    (pElem)->Next->Prev = (pElem)->Prev; \
+    (pElem)->Prev->Next = (pElem)->Next; \
+    (pElem)->Next = (pElem)->Prev = nullptr
 
 
 //
@@ -537,80 +532,6 @@ PushSize_(memory_arena* Arena, memory_push_flags Flags, umm Size, umm Alignment)
         }
     }
     return Result;
-}
-
-template<typename T>
-inline T* FreeListInitialize(T* Head, size_t Count)
-{
-    if (Count)
-    {
-        T* At = Head;
-        for (size_t i = 0; i < Count - 1; i++)
-        {
-            At->Next = Head + i + 1;
-            At++;
-        }
-        At->Next = nullptr;
-    }
-    return Head;
-}
-
-template<typename T>
-inline T* FreeListAllocate(T*& List)
-{
-    T* Result = List;
-    if (Result)
-    {
-        List = Result->Next;
-        Result->Next = nullptr;
-    }
-    return Result;
-}
-
-template<typename T>
-inline void FreeListFree(T*& List, T* Elem)
-{
-    if (Elem)
-    {
-        Elem->Next = List;
-        List = Elem;
-    }
-}
-
-template<typename T>
-inline T* DListInitialize(T* Sentinel)
-{
-    Sentinel->Next = Sentinel->Prev = Sentinel;
-    return Sentinel;
-}
-
-template<typename T>
-inline bool DListIsEmpty(const T* Sentinel)
-{
-    bool Result = (Sentinel->Next == Sentinel);
-    return Result;
-}
-
-template<typename T>
-inline T* DListInsert(T* Sentinel, T* Elem)
-{
-    Elem->Next = Sentinel->Next;
-    Elem->Prev = Sentinel;
-    Elem->Next->Prev = Elem;
-    Elem->Prev->Next = Elem;
-    return Elem;
-}
-
-template<typename T>
-inline T* DListRemove(T* Elem)
-{
-    if (Elem)
-    {
-        Elem->Next->Prev = Elem->Prev;
-        Elem->Prev->Next = Elem->Next;
-        Elem->Next = Elem->Prev = nullptr;
-    }
-    return Elem;
 }
 
 //
