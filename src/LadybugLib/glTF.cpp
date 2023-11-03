@@ -93,7 +93,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         }
 
         GLTF->BufferCount = (u32)Buffers->Array.ElementCount;
-        GLTF->Buffers = PushArray<gltf_buffer>(Arena, GLTF->BufferCount, MemPush_Clear);
+        GLTF->Buffers = PushArray(Arena, MemPush_Clear, gltf_buffer, GLTF->BufferCount);
         for (u32 i = 0; i < GLTF->BufferCount; i++)
         {
             gltf_buffer* Dst = GLTF->Buffers + i;
@@ -123,7 +123,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         }
 
         GLTF->BufferViewCount = (u32)BufferViews->Array.ElementCount;
-        GLTF->BufferViews = PushArray<gltf_buffer_view>(Arena, GLTF->BufferViewCount, MemPush_Clear);
+        GLTF->BufferViews = PushArray(Arena, MemPush_Clear, gltf_buffer_view, GLTF->BufferViewCount);
         for (u32 i = 0; i < GLTF->BufferViewCount; i++)
         {
             gltf_buffer_view* Dst = GLTF->BufferViews + i;
@@ -158,7 +158,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         }
 
         GLTF->AccessorCount = (u32)Accessors->Array.ElementCount;
-        GLTF->Accessors = PushArray<gltf_accessor>(Arena, GLTF->AccessorCount, MemPush_Clear);
+        GLTF->Accessors = PushArray(Arena, MemPush_Clear, gltf_accessor, GLTF->AccessorCount);
         for (u32 i = 0; i < GLTF->AccessorCount; i++)
         {
             gltf_accessor* Dst = GLTF->Accessors + i;
@@ -200,7 +200,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         }
 
         GLTF->SamplerCount = (u32)Samplers->Array.ElementCount;
-        GLTF->Samplers = PushArray<gltf_sampler>(Arena, GLTF->SamplerCount, MemPush_Clear);
+        GLTF->Samplers = PushArray(Arena, MemPush_Clear, gltf_sampler, GLTF->SamplerCount);
         for (u32 i = 0; i < GLTF->SamplerCount; i++)
         {
             gltf_sampler* Dst = GLTF->Samplers + i;
@@ -232,7 +232,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         }
 
         GLTF->TextureCount = (u32)Textures->Array.ElementCount;
-        GLTF->Textures = PushArray<gltf_texture>(Arena, GLTF->TextureCount, MemPush_Clear);
+        GLTF->Textures = PushArray(Arena, MemPush_Clear, gltf_texture, GLTF->TextureCount);
         for (u32 i = 0; i < GLTF->TextureCount; i++)
         {
             gltf_texture* Dst = GLTF->Textures + i;
@@ -258,7 +258,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         }
 
         GLTF->ImageCount = (u32)Images->Array.ElementCount;
-        GLTF->Images = PushArray<gltf_image>(Arena, GLTF->ImageCount, MemPush_Clear);
+        GLTF->Images = PushArray(Arena, MemPush_Clear, gltf_image, GLTF->ImageCount);
         for (u32 i = 0; i < GLTF->ImageCount; i++)
         {
             gltf_image* Dst = GLTF->Images + i;
@@ -286,7 +286,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         }
 
         GLTF->MaterialCount = (u32)Materials->Array.ElementCount;
-        GLTF->Materials = PushArray<gltf_material>(Arena, GLTF->MaterialCount, MemPush_Clear);
+        GLTF->Materials = PushArray(Arena, MemPush_Clear, gltf_material, GLTF->MaterialCount);
         for (u32 i = 0; i < GLTF->MaterialCount; i++)
         {
             gltf_material* Dst = GLTF->Materials + i;
@@ -333,7 +333,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         }
 
         GLTF->MeshCount = (u32)Meshes->Array.ElementCount;
-        GLTF->Meshes = PushArray<gltf_mesh>(Arena, GLTF->MeshCount, MemPush_Clear);
+        GLTF->Meshes = PushArray(Arena, MemPush_Clear, gltf_mesh, GLTF->MeshCount);
         for (u32 MeshIndex = 0; MeshIndex < GLTF->MeshCount; MeshIndex++)
         {
             gltf_mesh* MeshDst = GLTF->Meshes + MeshIndex;
@@ -354,7 +354,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                 }
 
                 MeshDst->PrimitiveCount = (u32)Primitives->Array.ElementCount;
-                MeshDst->Primitives = PushArray<gltf_mesh_primitive>(Arena, MeshDst->PrimitiveCount, MemPush_Clear);
+                MeshDst->Primitives = PushArray(Arena, MemPush_Clear, gltf_mesh_primitive, MeshDst->PrimitiveCount);
 
                 for (u32 PrimitiveIndex = 0; PrimitiveIndex < MeshDst->PrimitiveCount; PrimitiveIndex++)
                 {
@@ -419,7 +419,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         Assert(Skins->Type == json_element_type::Array);
 
         GLTF->SkinCount = Skins->Array.ElementCount;
-        GLTF->Skins = PushArray<gltf_skin>(Arena, GLTF->SkinCount, MemPush_Clear);
+        GLTF->Skins = PushArray(Arena, MemPush_Clear, gltf_skin, GLTF->SkinCount);
 
         for (u32 SkinIndex = 0; SkinIndex < GLTF->SkinCount; SkinIndex++)
         {
@@ -437,7 +437,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
 
             Skin->JointCount = JointArray->Array.ElementCount;
             Verify(Skin->JointCount > 0);
-            Skin->JointIndices = PushArray<u32>(Arena, Skin->JointCount);
+            Skin->JointIndices = PushArray(Arena, 0, u32, Skin->JointCount);
             for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
             {
                 Skin->JointIndices[JointIndex] = ParseU32(JointArray->Array.Elements + JointIndex, GLTF_Required);
@@ -449,7 +449,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
     {
         Verify(Animations->Type == json_element_type::Array);
         GLTF->AnimationCount = Animations->Array.ElementCount;
-        GLTF->Animations = PushArray<gltf_animation>(Arena, GLTF->AnimationCount, MemPush_Clear);
+        GLTF->Animations = PushArray(Arena, MemPush_Clear, gltf_animation, GLTF->AnimationCount);
 
         for (u32 AnimationIndex = 0; AnimationIndex < GLTF->AnimationCount; AnimationIndex++)
         {
@@ -466,7 +466,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                        (Channels->Array.ElementCount > 0));
 
                 Animation->ChannelCount = Channels->Array.ElementCount;
-                Animation->Channels = PushArray<gltf_animation_channel>(Arena, Animation->ChannelCount, MemPush_Clear);
+                Animation->Channels = PushArray(Arena, MemPush_Clear, gltf_animation_channel, Animation->ChannelCount);
                     
                 for (u32 ChannelIndex = 0; ChannelIndex < Animation->ChannelCount; ChannelIndex++)
                 {
@@ -495,7 +495,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                        (SamplersElem->Array.ElementCount > 0));
 
                 Animation->SamplerCount = Channels->Array.ElementCount;
-                Animation->Samplers = PushArray<gltf_animation_sampler>(Arena, Animation->ChannelCount, MemPush_Clear);
+                Animation->Samplers = PushArray(Arena, MemPush_Clear, gltf_animation_sampler, Animation->ChannelCount);
 
                 for (u32 SamplerIndex = 0; SamplerIndex < Animation->SamplerCount; SamplerIndex++)
                 {
@@ -522,7 +522,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         }
 
         GLTF->NodeCount = (u32)Nodes->Array.ElementCount;
-        GLTF->Nodes = PushArray<gltf_node>(Arena, GLTF->NodeCount, MemPush_Clear);
+        GLTF->Nodes = PushArray(Arena, MemPush_Clear, gltf_node, GLTF->NodeCount);
         for (u32 NodeIndex = 0; NodeIndex < GLTF->NodeCount; NodeIndex++)
         {
             gltf_node* Dst = GLTF->Nodes + NodeIndex;
@@ -562,7 +562,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                 }
 
                 Dst->ChildrenCount = (u32)Children->Array.ElementCount;
-                Dst->Children = PushArray<u32>(Arena, Dst->ChildrenCount, MemPush_Clear);
+                Dst->Children = PushArray(Arena, MemPush_Clear, u32, Dst->ChildrenCount);
 
                 for (u32 i = 0; i < Dst->ChildrenCount; i++)
                 {
@@ -587,7 +587,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
         }
 
         GLTF->SceneCount = (u32)Scenes->Array.ElementCount;
-        GLTF->Scenes = PushArray<gltf_scene>(Arena, GLTF->SceneCount, MemPush_Clear);
+        GLTF->Scenes = PushArray(Arena, MemPush_Clear, gltf_scene, GLTF->SceneCount);
         for (u32 SceneIndex = 0; SceneIndex < GLTF->SceneCount; SceneIndex++)
         {
             gltf_scene* Dst = GLTF->Scenes + SceneIndex;
@@ -606,7 +606,7 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
                 }
 
                 Dst->RootNodeCount = (u32)SceneNodes->Array.ElementCount;
-                Dst->RootNodes = PushArray<u32>(Arena, Dst->RootNodeCount, MemPush_Clear);
+                Dst->RootNodes = PushArray(Arena, MemPush_Clear, u32, Dst->RootNodeCount);
                 for (u32 i = 0; i < Dst->RootNodeCount; i++)
                 {
                     json_element* Node = SceneNodes->Array.Elements + i;

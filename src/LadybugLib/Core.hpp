@@ -166,7 +166,8 @@ struct buffer
 // Memory
 //
 
-enum memory_push_flags : flags32
+typedef flags32 memory_push_flags;
+enum memory_push_flag_bits : memory_push_flags
 {
     MemPush_None = 0,
     MemPush_Clear = 1 << 0,
@@ -174,8 +175,8 @@ enum memory_push_flags : flags32
 
 struct memory_arena
 {
-    size_t Size;
-    size_t Used;
+    umm Size;
+    umm Used;
     void* Base;
 };
 
@@ -183,21 +184,17 @@ inline memory_arena InitializeArena(size_t Size, void* Base);
 
 struct memory_arena_checkpoint
 {
-    size_t Used;
+    umm Used;
     memory_arena* Arena;
 };
 
 inline memory_arena_checkpoint ArenaCheckpoint(memory_arena* Arena);
 inline void RestoreArena(memory_arena* Arena, memory_arena_checkpoint Checkpoint);
-
-template<typename T>
-inline T* PushStruct(memory_arena* Arena, flags32 Flags = 0, const T* InitialData = nullptr);
-
-template<typename T>
-inline T* PushArray(memory_arena* Arena, size_t Count, flags32 Flags = 0, const T* InitialData = nullptr);
-
 inline void ResetArena(memory_arena* Arena);
-inline void* PushSize(memory_arena* Arena, size_t Size, size_t Alignment = 0, flags32 Flags = 0, const void* Data = nullptr);
+
+#define PushStruct(Arena, Flags, Type) (Type*)PushSize_(Arena, Flags, sizeof(Type), alignof(Type))
+#define PushArray(Arena, Flags, Type, Count) (Type*)PushSize_(Arena, Flags, (umm)Count * sizeof(Type), alignof(Type))
+inline void* PushSize_(memory_arena* Arena, memory_push_flags Flags, umm Size, umm Alignment);
 
 template<typename T>
 inline T* FreeListInitialize(T* Head, u32 Count);
@@ -494,59 +491,6 @@ inline void ResetArena(memory_arena* Arena)
     Arena->Used = 0;
 }
 
-inline void* PushSize(memory_arena* Arena, 
-                      size_t Size, 
-                      size_t Alignment /*= 0*/, 
-                      flags32 Flags /*= 0*/, 
-                      const void* Data /*= nullptr*/)
-{
-    void* Result = nullptr;
-    if (Size)
-    {
-        if ((Arena->Size - Arena->Used) >= Size)
-        {
-            Result = OffsetPtr(Arena->Base, Arena->Used);
-            Arena->Used += Size;
-            if (Alignment)
-            {
-                void* ResultAligned = AlignPtr(Result, Alignment);
-                Arena->Used += (size_t)((u8*)ResultAligned - (u8*)Result);
-                Result = ResultAligned;
-            }
-        
-            if (Data)
-            {
-                memcpy(Result, Data, Size);
-            }
-            else if (Flags & MemPush_Clear)
-            {
-                memset(Result, 0, Size);
-            }
-        }
-        else
-        {
-#if DEVELOPER
-            UnhandledError("Arena out of memory");
-#endif
-        }
-    }
-    return Result;
-}
-
-template<typename T>
-inline T* PushStruct(memory_arena* Arena, flags32 Flags /*= 0*/, const T* InitialData /*= nullptr*/)
-{
-    T* Result = (T*)PushSize(Arena, sizeof(T), alignof(T), Flags, InitialData);
-    return Result;
-}
-
-template<typename T>
-inline T* PushArray(memory_arena* Arena, size_t Count, flags32 Flags /*= 0*/, const T* InitialData /*= nullptr*/)
-{
-    T* Result = (T*)PushSize(Arena, sizeof(T) * Count, alignof(T), Flags, InitialData);
-    return Result;
-}
-
 inline memory_arena_checkpoint ArenaCheckpoint(memory_arena* Arena)
 {
     memory_arena_checkpoint Checkpoint = {};
@@ -561,6 +505,38 @@ inline void RestoreArena(memory_arena* Arena, memory_arena_checkpoint Checkpoint
 {
     Assert(Arena == Checkpoint.Arena);
     Arena->Used = Checkpoint.Used;
+}
+
+inline void* 
+PushSize_(memory_arena* Arena, memory_push_flags Flags, umm Size, umm Alignment)
+{
+    void* Result = nullptr;
+    if (Size)
+    {
+        if ((Arena->Size - Arena->Used) >= Size)
+        {
+            Result = OffsetPtr(Arena->Base, Arena->Used);
+            Arena->Used += Size;
+            if (Alignment)
+            {
+                void* ResultAligned = AlignPtr(Result, Alignment);
+                Arena->Used += (umm)((u8*)ResultAligned - (u8*)Result);
+                Result = ResultAligned;
+            }
+        
+            if (Flags & MemPush_Clear)
+            {
+                memset(Result, 0, Size);
+            }
+        }
+        else
+        {
+#if DEVELOPER
+            UnhandledError("Arena out of memory");
+#endif
+        }
+    }
+    return Result;
 }
 
 template<typename T>

@@ -52,7 +52,7 @@ static buffer Win_LoadEntireFile(const char* Path, memory_arena* Arena)
                 u64 Size = (u64)FileSize.QuadPart;
 
                 memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Arena);
-                void* Memory = PushSize(Arena, Size, 64);
+                void* Memory = PushSize_(Arena, 0, Size, 64);
                 if (Memory)
                 {
 

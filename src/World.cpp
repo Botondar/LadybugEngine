@@ -132,7 +132,7 @@ GenerateTerrainChunk(height_field* Field, memory_arena* Arena)
     Result.Box = {}; // TODO(boti)
 
     Result.VertexCount = Field->TexelCountX*Field->TexelCountY;
-    Result.VertexData = PushArray<vertex>(Arena, Result.VertexCount);
+    Result.VertexData = PushArray(Arena, 0, vertex, Result.VertexCount);
 
     auto SampleHeight = [](height_field* Field, s32 X, s32 Y)
     {
@@ -173,7 +173,7 @@ GenerateTerrainChunk(height_field* Field, memory_arena* Arena)
     u32 QuadCountX = Field->TexelCountX - 1;
     u32 QuadCountY = Field->TexelCountY - 1;
     Result.IndexCount = 6 * QuadCountX*QuadCountY;
-    Result.IndexData = PushArray<vert_index>(Arena, Result.IndexCount);
+    Result.IndexData = PushArray(Arena, 0, vert_index, Result.IndexCount);
     auto GetIndex = [=](u32 X, u32 Y) -> u32
     {
         u32 Result = X + Y*Field->TexelCountX;

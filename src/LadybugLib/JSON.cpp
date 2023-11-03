@@ -82,7 +82,7 @@ lbfn json_element* ParseJSON(const void* Data, u64 DataSize, memory_arena* Arena
     json_element* Root = nullptr;
     memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Arena);
 
-    Root = PushStruct<json_element>(Arena, MemPush_Clear);
+    Root = PushStruct(Arena, MemPush_Clear, json_element);
 
     json_tokenizer Tokenizer = { DataSize, (const char*)Data };
     if (ParseElement(&Tokenizer, Root, Arena))
@@ -148,7 +148,8 @@ internal bool ParseElement(json_tokenizer* Tokenizer, json_element* Element, mem
             // TODO(boti): Escape char conversion
             Element->Type = json_element_type::String;
             Element->String.Length = Token.Length;
-            Element->String.String = PushArray<char>(Arena, Token.Length, 0, Token.Begin);
+            Element->String.String = PushArray(Arena, 0, char, Token.Length);
+            memcpy(Element->String.String, Token.Begin, Token.Length);
         }
         else if (Token.Type == json_token_type::OpenBrace)
         {
@@ -158,8 +159,8 @@ internal bool ParseElement(json_tokenizer* Tokenizer, json_element* Element, mem
             bool IsObjectValid = VerifyObjectAndCountElements(&ObjectTokenizer, &Element->Object.ElementCount);
             if (IsObjectValid)
             {
-                Element->Object.Keys = PushArray<string>(Arena, Element->Object.ElementCount);
-                Element->Object.Elements = PushArray<json_element>(Arena, Element->Object.ElementCount);
+                Element->Object.Keys = PushArray(Arena, 0, string, Element->Object.ElementCount);
+                Element->Object.Elements = PushArray(Arena, 0, json_element, Element->Object.ElementCount);
 
                 for (u64 i = 0; i < Element->Object.ElementCount; i++)
                 {
@@ -184,7 +185,8 @@ internal bool ParseElement(json_tokenizer* Tokenizer, json_element* Element, mem
 
                     // TODO(boti): escape char conversion
                     Element->Object.Keys[i].Length = Token.Length;
-                    Element->Object.Keys[i].String = PushArray<char>(Arena, Token.Length, 0, Token.Begin);
+                    Element->Object.Keys[i].String = PushArray(Arena, 0, char, Token.Length);
+                    memcpy(Element->Object.Keys[i].String, Token.Begin, Token.Length);
 
                     Token = GetToken(Tokenizer);
                     if (Token.Type != json_token_type::Colon)
@@ -221,7 +223,7 @@ internal bool ParseElement(json_tokenizer* Tokenizer, json_element* Element, mem
             bool IsArrayValid = VerifyArrayAndCountElements(&ArrayTokenizer, &Element->Array.ElementCount);
             if (IsArrayValid)
             {
-                Element->Array.Elements = PushArray<json_element>(Arena, Element->Array.ElementCount);
+                Element->Array.Elements = PushArray(Arena, 0, json_element, Element->Array.ElementCount);
                 for (u64 i = 0; i < Element->Array.ElementCount; i++)
                 {
                     if (i > 0)

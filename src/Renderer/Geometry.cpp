@@ -86,7 +86,7 @@ internal bool CreateGeometryBuffer(u64 MaxBlockCount, memory_arena* Arena, geome
 
     if (VertexBufferResult && IndexBufferResult)
     {
-        geometry_buffer_block* BlockPool = PushArray<geometry_buffer_block>(Arena, MaxBlockCount);
+        geometry_buffer_block* BlockPool = PushArray(Arena, 0, geometry_buffer_block, MaxBlockCount);
         if (BlockPool)
         {
             for (u64 i = 0; i < MaxBlockCount; i++)

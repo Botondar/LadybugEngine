@@ -318,7 +318,7 @@ const char* GetDeviceName(renderer* Renderer)
 
 renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
 {
-    renderer* Renderer = PushStruct<renderer>(Arena);
+    renderer* Renderer = PushStruct(Arena, 0, renderer);
     if (!Renderer) return nullptr;
     VkResult Result = InitializeVulkan(&Renderer->Vulkan);
     ReturnOnFailure();
@@ -1730,31 +1730,31 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
 
         Frame->MaxLightCount = R_MaxLightCount;
         Frame->LightCount = 0;
-        Frame->Lights = PushArray<light>(Arena, Frame->MaxLightCount);
+        Frame->Lights = PushArray(Arena, 0, light, Frame->MaxLightCount);
 
         Frame->MaxShadowCount = R_MaxShadowCount;
         Frame->ShadowCount = 0;
-        Frame->Shadows = PushArray<u32>(Arena, Frame->MaxShadowCount);
+        Frame->Shadows = PushArray(Arena, 0, u32, Frame->MaxShadowCount);
 
         Frame->MaxDrawCmdCount = 1u << 20;
         Frame->DrawCmdCount = 0;
-        Frame->DrawCmds = PushArray<draw_cmd>(Arena, Frame->MaxDrawCmdCount);
+        Frame->DrawCmds = PushArray(Arena, 0, draw_cmd, Frame->MaxDrawCmdCount);
     
         Frame->MaxSkinnedDrawCmdCount = 1u << 20;
         Frame->SkinnedDrawCmdCount = 0;
-        Frame->SkinnedDrawCmds = PushArray<draw_cmd>(Arena, Frame->MaxSkinnedDrawCmdCount);
+        Frame->SkinnedDrawCmds = PushArray(Arena, 0, draw_cmd, Frame->MaxSkinnedDrawCmdCount);
 
         Frame->MaxSkinningCmdCount = Frame->MaxSkinnedDrawCmdCount;
         Frame->SkinningCmdCount = 0;
-        Frame->SkinningCmds = PushArray<skinning_cmd>(Arena, Frame->MaxSkinningCmdCount);
+        Frame->SkinningCmds = PushArray(Arena, 0, skinning_cmd, Frame->MaxSkinningCmdCount);
 
         Frame->MaxParticleDrawCmdCount = 8192u;
         Frame->ParticleDrawCmdCount = 0;
-        Frame->ParticleDrawCmds = PushArray<particle_cmd>(Arena, Frame->MaxParticleDrawCmdCount);
+        Frame->ParticleDrawCmds = PushArray(Arena, 0, particle_cmd, Frame->MaxParticleDrawCmdCount);
 
         Frame->MaxDrawWidget3DCmdCount = 1u << 16;
         Frame->DrawWidget3DCmdCount = 0;
-        Frame->DrawWidget3DCmds = PushArray<draw_widget3d_cmd>(Arena, Frame->MaxDrawWidget3DCmdCount);
+        Frame->DrawWidget3DCmds = PushArray(Arena, 0, draw_widget3d_cmd, Frame->MaxDrawWidget3DCmdCount);
 
         Frame->Backend->UniformBuffer = Renderer->PerFrameUniformBuffers[FrameID];
         Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
@@ -1984,7 +1984,7 @@ void EndRenderFrame(render_frame* Frame)
                 umm TotalSize = GetMipChainSize(Info->Width, Info->Height, Info->MipCount, Info->ArrayCount, ByteRate);
 
                 u32 CopyCount = Info->MipCount * Info->ArrayCount;
-                VkBufferImageCopy* Copies = PushArray<VkBufferImageCopy>(Frame->Arena, CopyCount);
+                VkBufferImageCopy* Copies = PushArray(Frame->Arena, 0, VkBufferImageCopy, CopyCount);
                 VkBufferImageCopy* CopyAt = Copies;
 
                 u64 Offset = Op->SourceOffset;
@@ -2342,7 +2342,7 @@ void EndRenderFrame(render_frame* Frame)
     // TODO(boti): This descriptor set update could just be done at init, no need to do it every frame
     VkDescriptorSet PointShadowsDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PointShadows]);
     {
-        VkDescriptorImageInfo* DescriptorImages = PushArray<VkDescriptorImageInfo>(Frame->Arena, Frame->MaxShadowCount);
+        VkDescriptorImageInfo* DescriptorImages = PushArray(Frame->Arena, 0, VkDescriptorImageInfo, Frame->MaxShadowCount);
         for (u32 ShadowIndex = 0; ShadowIndex < Frame->MaxShadowCount; ShadowIndex++)
         {
             point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;
@@ -2761,7 +2761,7 @@ void EndRenderFrame(render_frame* Frame)
 
     // Point shadows
     {
-        VkImageMemoryBarrier2* Barriers = PushArray<VkImageMemoryBarrier2>(Frame->Arena, Frame->MaxShadowCount);
+        VkImageMemoryBarrier2* Barriers = PushArray(Frame->Arena, 0, VkImageMemoryBarrier2, Frame->MaxShadowCount);
         for (u32 ShadowIndex = 0; ShadowIndex < Frame->ShadowCount; ShadowIndex++)
         {
             point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;

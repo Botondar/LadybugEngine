@@ -123,7 +123,9 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
 
             u32 BlockSize = 16 * ByteRate.Numerator / ByteRate.Denominator;
 
-            rgba8* DownscaleBuffer = PushArray<rgba8>(Scratch, Entry->Info.Width*Entry->Info.Height, 64);
+            // TODO(boti): This was originally 64 byte (cache) aligned for multithreading purposes
+            // Move to PushSize_?
+            rgba8* DownscaleBuffer = PushArray(Scratch, 0, rgba8, Entry->Info.Width*Entry->Info.Height);
             rgba8* SrcAt = SrcImage;
             u8* DstAt = MipChain;
             for (u32 MipIndex = 0; MipIndex < Entry->Info.MipCount; MipIndex++)
@@ -238,10 +240,10 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         texture_queue* Queue = &Assets->TextureQueue;
         Queue->Semaphore = Platform.CreateSemaphore(0, 1);
         umm ScratchSize = MiB(64);
-        Queue->Scratch = InitializeArena(ScratchSize, PushSize(&Assets->Arena, ScratchSize, KiB(4)));
+        Queue->Scratch = InitializeArena(ScratchSize, PushSize_(&Assets->Arena, 0, ScratchSize, KiB(4)));
 
         Queue->RingBufferSize = MiB(128);
-        Queue->RingBufferMemory = (u8*)PushSize(&Assets->Arena, Queue->RingBufferSize, KiB(4));
+        Queue->RingBufferMemory = (u8*)PushSize_(&Assets->Arena, 0, Queue->RingBufferSize, KiB(4));
 
         Platform.CreateThread(&AssetThread, Assets, L"AssetThread");
     }
@@ -304,9 +306,9 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         NullAnimation->KeyFrameCount = 1;
         NullAnimation->MinTimestamp = 0.0f;
         NullAnimation->MaxTimestamp = 0.0f;
-        NullAnimation->KeyFrameTimestamps = PushArray<f32>(&Assets->Arena, 1);
+        NullAnimation->KeyFrameTimestamps = PushArray(&Assets->Arena, 0, f32, 1);
         NullAnimation->KeyFrameTimestamps[0] = 0.0f;
-        NullAnimation->KeyFrames = PushArray<animation_key_frame>(&Assets->Arena, 1);
+        NullAnimation->KeyFrames = PushArray(&Assets->Arena, 0, animation_key_frame, 1);
         for (u32 JointIndex = 0; JointIndex < skin::MaxJointCount; JointIndex++)
         {
             NullAnimation->KeyFrames[0].JointTransforms[JointIndex] = 
@@ -339,7 +341,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 
         umm ImageSize = Info.Width * Info.Height;
         umm MemorySize = ImageSize * Particle_COUNT;
-        void* Memory = PushSize(Scratch, MemorySize, 0x100);
+        void* Memory = PushSize_(Scratch, 0, MemorySize, 0x100);
 
         u8* MemoryAt = (u8*)Memory;
         for (u32 ParticleIndex = 0; ParticleIndex < Particle_COUNT; ParticleIndex++)
@@ -522,7 +524,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
     u32 BaseMaterialIndex   = Assets->MaterialCount;
     u32 BaseSkinIndex       = Assets->SkinCount;
 
-    buffer* Buffers = PushArray<buffer>(Scratch, GLTF.BufferCount, MemPush_Clear);
+    buffer* Buffers = PushArray(Scratch, MemPush_Clear, buffer, GLTF.BufferCount);
     for (u32 BufferIndex = 0; BufferIndex < GLTF.BufferCount; BufferIndex++)
     {
         string URI = GLTF.Buffers[BufferIndex].URI;
@@ -575,7 +577,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         return Result;
     };
 
-    u32* TextureTable = PushArray<u32>(Scratch, GLTF.TextureCount, MemPush_Clear);
+    u32* TextureTable = PushArray(Scratch, MemPush_Clear, u32, GLTF.TextureCount);
 
     for (u32 MaterialIndex = 0; MaterialIndex < GLTF.MaterialCount; MaterialIndex++)
     {
@@ -695,7 +697,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 Box.Max.E[i] = PAccessor->Max.EE[i];
             }
 
-            vertex* VertexData = PushArray<vertex>(Scratch, VertexCount);
+            vertex* VertexData = PushArray(Scratch, 0, vertex, VertexCount);
             for (u32 i = 0; i < VertexCount; i++)
             {
                 vertex* V = VertexData + i;
@@ -788,7 +790,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             if (Primitive->IndexBufferIndex == U32_MAX)
             {
                 IndexCount = VertexCount;
-                IndexData = PushArray<u32>(Scratch, IndexCount);
+                IndexData = PushArray(Scratch, 0, u32, IndexCount);
                 for (u32 i = 0; i < IndexCount; i++)
                 {
                     IndexData[i] = i;
@@ -800,7 +802,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 gltf_iterator ItIndex = MakeGLTFAttribIterator(&GLTF, IndexAccessor, Buffers);
 
                 IndexCount = (u32)ItIndex.Count;
-                IndexData = PushArray<u32>(Scratch, IndexCount);
+                IndexData = PushArray(Scratch, 0, u32, IndexCount);
                 for (u32 i = 0; i < IndexCount; i++)
                 {
                     switch (IndexAccessor->ComponentType)
@@ -823,8 +825,8 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
             if (ItT.Count == 0)
             {
-                v3* Tangents   = PushArray<v3>(Scratch, VertexCount, MemPush_Clear);
-                v3* Bitangents = PushArray<v3>(Scratch, VertexCount, MemPush_Clear);
+                v3* Tangents   = PushArray(Scratch, MemPush_Clear, v3, VertexCount);
+                v3* Bitangents = PushArray(Scratch, MemPush_Clear, v3, VertexCount);
                 for (u32 i = 0; i < IndexCount; i += 3)
                 {
                     u32 Index0 = IndexData[i + 0];
@@ -1069,7 +1071,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             MaxKeyFrameCount += TimestampAccessor->Count;
         }
 
-        f32* KeyFrameTimestamps = PushArray<f32>(Scratch, MaxKeyFrameCount);
+        f32* KeyFrameTimestamps = PushArray(Scratch, 0, f32, MaxKeyFrameCount);
         u32 KeyFrameCount = 1;
         KeyFrameTimestamps[0] = 0.0f;
         for (u32 SamplerIndex = 0; SamplerIndex < Animation->SamplerCount; SamplerIndex++)
@@ -1124,8 +1126,8 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             animation* AnimationAsset = Assets->Animations + Assets->AnimationCount++;
             AnimationAsset->SkinID = BaseSkinIndex + SkinIndex;
             AnimationAsset->KeyFrameCount = KeyFrameCount;
-            AnimationAsset->KeyFrameTimestamps = PushArray<f32>(&Assets->Arena, KeyFrameCount);
-            AnimationAsset->KeyFrames = PushArray<animation_key_frame>(&Assets->Arena, KeyFrameCount);
+            AnimationAsset->KeyFrameTimestamps = PushArray(&Assets->Arena, 0, f32, KeyFrameCount);
+            AnimationAsset->KeyFrames = PushArray(&Assets->Arena, 0, animation_key_frame, KeyFrameCount);
             memcpy(AnimationAsset->KeyFrameTimestamps, KeyFrameTimestamps, KeyFrameCount * sizeof(f32));
 
             memset(&AnimationAsset->ActiveJoints, 0x00, sizeof(AnimationAsset->ActiveJoints));
@@ -1306,11 +1308,11 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
     gltf_scene* Scene = GLTF.Scenes + GLTF.DefaultSceneIndex;
 
-    m4* ParentTransforms = PushArray<m4>(Scratch, GLTF.NodeCount);
-    u32* NodeParents = PushArray<u32>(Scratch, GLTF.NodeCount);
+    m4* ParentTransforms = PushArray(Scratch, 0, m4, GLTF.NodeCount);
+    u32* NodeParents = PushArray(Scratch, 0, u32, GLTF.NodeCount);
 
     u32 NodeQueueCount = 0;
-    u32* NodeQueue = PushArray<u32>(Scratch, GLTF.NodeCount);
+    u32* NodeQueue = PushArray(Scratch, 0, u32, GLTF.NodeCount);
     for (u32 It = 0; It < Scene->RootNodeCount; It++)
     {
         u32 NodeIndex = Scene->RootNodes[It];
@@ -1439,11 +1441,11 @@ internal mesh_data CreateCubeMesh(memory_arena* Arena)
     }
 
     Result.VertexCount = CountOf(VertexData);
-    Result.VertexData = PushArray<vertex>(Arena, Result.VertexCount);
+    Result.VertexData = PushArray(Arena, 0, vertex, Result.VertexCount);
     memcpy(Result.VertexData, VertexData, sizeof(VertexData));
 
     Result.IndexCount = IndexCount;
-    Result.IndexData = PushArray<u32>(Arena, Result.IndexCount);
+    Result.IndexData = PushArray(Arena, 0, u32, Result.IndexCount);
     memcpy(Result.IndexData, IndexData, sizeof(IndexData));
 
     return(Result);
@@ -1459,10 +1461,10 @@ internal mesh_data CreateSphereMesh(memory_arena* Arena)
     constexpr u32 YCount = 16;
 
     Result.VertexCount = XCount * YCount;
-    Result.VertexData = PushArray<vertex>(Arena, Result.VertexCount);
+    Result.VertexData = PushArray(Arena, 0, vertex, Result.VertexCount);
 
     Result.IndexCount = 6 * Result.VertexCount;
-    Result.IndexData = PushArray<u32>(Arena, Result.IndexCount);
+    Result.IndexData = PushArray(Arena, 0, u32, Result.IndexCount);
 
     vertex* VertexAt = Result.VertexData;
     vert_index* IndexAt = Result.IndexData;
@@ -1540,8 +1542,8 @@ internal mesh_data CreateArrowMesh(memory_arena* Arena)
     u32 TipIndexCount = 2 * 3 * RadiusDivisionCount + 3 * RadiusDivisionCount;
     Result.IndexCount = CapIndexCount + CylinderIndexCount + TipIndexCount;
 
-    Result.VertexData = PushArray<vertex>(Arena, Result.VertexCount);
-    Result.IndexData = PushArray<u32>(Arena, Result.IndexCount);
+    Result.VertexData = PushArray(Arena, 0, vertex, Result.VertexCount);
+    Result.IndexData = PushArray(Arena, 0, u32, Result.IndexCount);
 
     u32* IndexAt = Result.IndexData;
     vertex* VertexAt = Result.VertexData;
