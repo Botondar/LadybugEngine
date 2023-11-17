@@ -10,16 +10,6 @@
 // frames in flight, we're in a mess right now
 //
 
-struct vulkan_buffer
-{
-    size_t Size;
-    VkDeviceMemory Memory;
-    VkBuffer Buffer;
-
-    size_t Offset;
-    void* Mapping;
-};
-
 struct gpu_memory_arena
 {
     VkDeviceMemory Memory;
