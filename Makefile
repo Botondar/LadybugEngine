@@ -22,7 +22,7 @@ LIBS = kernel32.lib user32.lib gdi32.lib Shell32.lib advapi32.lib vulkan-1.lib
 SRC_BASE = "$(SRC)/*.cpp" "$(SRC)/*.hpp"
 SRC_RENDERER = "$(SRC)/Renderer/*.cpp" "$(SRC)/Renderer/*.hpp"
 SRC_LBLIB = "$(SRC)/LadybugLib/*.hpp" "$(SRC)/LadybugLib/*.cpp"
-SRC_ALL = $(SRC_BASE) $(SRC_RENDERER) $(SRC_LBLIB)
+SRC_ALL = $(SRC_BASE) $(SRC_RENDERER) $(SRC_LBLIB) "$(SRC)/Shader/ShaderInterop.h"
 
 GAME_EXPORT = -EXPORT:Game_UpdateAndRender
 

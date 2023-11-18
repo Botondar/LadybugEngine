@@ -446,7 +446,7 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Fra
 
                 // TODO(boti): This is the way Direct2D specifies that the bounds are empty,
                 //             we probably shouldn't be exporting the glyph bounds this way in the first place!
-                if (Font->Glyphs[i].P0.x > Font->Glyphs[i].P1.x)
+                if (Font->Glyphs[i].P0.X > Font->Glyphs[i].P1.X)
                 {
                     Font->Glyphs[i].P0 = { 0.0f, 0.0f };
                     Font->Glyphs[i].P1 = { 0.0f, 0.0f };
@@ -851,20 +851,20 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                     v2 dT1 = V1->TexCoord - V0->TexCoord;
                     v2 dT2 = V2->TexCoord - V0->TexCoord;
 
-                    f32 InvDetT = 1.0f / (dT1.x * dT2.y - dT1.y * dT2.x);
+                    f32 InvDetT = 1.0f / (dT1.X * dT2.Y - dT1.Y * dT2.X);
 
                     v3 Tangent = 
                     {
-                        (dP1.x * dT2.y - dP2.x * dT1.y) * InvDetT,
-                        (dP1.y * dT2.y - dP2.y * dT1.y) * InvDetT,
-                        (dP1.z * dT2.y - dP2.z * dT1.y) * InvDetT,
+                        (dP1.X * dT2.Y - dP2.X * dT1.Y) * InvDetT,
+                        (dP1.Y * dT2.Y - dP2.Y * dT1.Y) * InvDetT,
+                        (dP1.Z * dT2.Y - dP2.Z * dT1.Y) * InvDetT,
                     };
 
                     v3 Bitangent = 
                     {
-                        (dP1.x * dT2.x - dP2.x * dT1.x) * InvDetT,
-                        (dP1.y * dT2.x - dP2.y * dT1.x) * InvDetT,
-                        (dP1.z * dT2.x - dP2.z * dT1.x) * InvDetT,
+                        (dP1.Z * dT2.X - dP2.X * dT1.X) * InvDetT,
+                        (dP1.Y * dT2.X - dP2.Y * dT1.X) * InvDetT,
+                        (dP1.Z * dT2.X - dP2.Z * dT1.X) * InvDetT,
                     };
 
                     Tangents[Index0] += Tangent;
@@ -890,8 +890,8 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                     }
 
                     v3 B = Cross(V->N, Tangents[i]);
-                    f32 w = Dot(B, Bitangents[i]) < 0.0f ? -1.0f : 1.0f;
-                    V->T = { T.x, T.y, T.z, w };
+                    f32 W = Dot(B, Bitangents[i]) < 0.0f ? -1.0f : 1.0f;
+                    V->T = { T.X, T.Y, T.Z, W };
                 }
             }
 
@@ -1491,7 +1491,7 @@ internal mesh_data CreateSphereMesh(memory_arena* Arena)
             {
                 .P = P,
                 .N = N,
-                .T = { T.x, T.y, T.z, 1.0f }, 
+                .T = { T.X, T.Y, T.Z, 1.0f }, 
                 .TexCoord = { U, V },
                 .Weights = {},
                 .Joints = {},

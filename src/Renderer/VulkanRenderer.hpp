@@ -35,12 +35,6 @@ PushBuffer(gpu_memory_arena* Arena,
 
 extern vulkan VK;
 
-struct screen_tile
-{
-    u32 LightCount;
-    u32 LightIndices[R_MaxLightCountPerTile];
-};
-
 struct point_shadow_map
 {
     VkImage Image;

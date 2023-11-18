@@ -10,7 +10,7 @@ layout(set = 2, binding = 0, scalar) uniform PerFrameBlock
 layout(push_constant) uniform PushConstants
 {
     mat4 ModelTransform;
-    material Material;
+    renderer_material Material;
 };
 
 #if defined(VS)
@@ -120,8 +120,8 @@ float CalculateShadow(vec3 CascadeCoord0, in vec3 CascadeBlends)
 
 void main()
 {
-    vec4 BaseColor = UnpackRGBA8(Material.Diffuse);
-    vec4 BaseMetallicRoughness = UnpackRGBA8(Material.MetallicRoughness);
+    vec4 BaseColor = UnpackRGBA8(Material.DiffuseColor);
+    vec4 BaseMetallicRoughness = UnpackRGBA8(Material.BaseMaterial);
 
     vec4 Albedo = texture(sampler2D(Textures[Material.DiffuseID], Sampler), TexCoord);
     Albedo.rgb *= BaseColor.rgb;

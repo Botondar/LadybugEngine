@@ -1894,7 +1894,7 @@ void EndRenderFrame(render_frame* Frame)
     for (u32 ShadowIndex = 0; ShadowIndex < Frame->ShadowCount; ShadowIndex++)
     {
         light* Light = Frame->Lights + Frame->Shadows[ShadowIndex];
-        v3 P = Light->P.xyz;
+        v3 P = Light->P.XYZ;
 
         // TODO(boti): Get the far plane from the luminance and the light threshold
         f32 n = 0.05f;
@@ -1949,9 +1949,9 @@ void EndRenderFrame(render_frame* Frame)
         for (u32 LayerIndex = 0; LayerIndex < 6; LayerIndex++)
         {
             m3 M = Bases[LayerIndex];
-            m4 View = M4(M.X.x, M.X.y, M.X.z, -Dot(M.X, P),
-                         M.Y.x, M.Y.y, M.Y.z, -Dot(M.Y, P),
-                         M.Z.x, M.Z.y, M.Z.z, -Dot(M.Z, P),
+            m4 View = M4(M.X.X, M.X.Y, M.X.Z, -Dot(M.X, P),
+                         M.Y.X, M.Y.Y, M.Y.Z, -Dot(M.Y, P),
+                         M.Z.X, M.Z.Y, M.Z.Z, -Dot(M.Z, P),
                          0.0f, 0.0f, 0.0f, 1.0f);
             m4 ViewProjection = Projection * View;
             Frame->Uniforms.ShadowViewProjections[6*ShadowIndex + LayerIndex] = ViewProjection;
@@ -2228,15 +2228,15 @@ void EndRenderFrame(render_frame* Frame)
                     ShadowIndex = ShadowAt++;
             }
 
-            f32 L = Light->E.w * Max(Max(Light->E.x, Light->E.y), Light->E.z);
+            f32 L = Light->E.W * Max(Max(Light->E.X, Light->E.Y), Light->E.Z);
             f32 R = Sqrt(Max((L / R_LuminanceThreshold), 0.0f));
-            if (IntersectFrustumSphere(&CameraFrustum, Light->P.xyz, R))
+            if (IntersectFrustumSphere(&CameraFrustum, Light->P.XYZ, R))
             {
                 v4 P = Frame->Uniforms.ViewTransform * Light->P;
                 u32 DstIndex = Frame->Uniforms.LightCount++;
                 LightBuffer[DstIndex] = 
                 {
-                    .P = { P.x, P.y, P.z, (f32)ShadowIndex }, // HACK(boti): the shadow index shouldn't be a float
+                    .P = { P.X, P.Y, P.Z, (f32)ShadowIndex }, // HACK(boti): the shadow index shouldn't be a float
                     .E = Light->E,
                 };
 
@@ -3498,7 +3498,7 @@ void SetRenderCamera(render_frame* Frame, const render_camera* CameraIn)
     Frame->Uniforms.NearZ = Camera->NearZ;
     Frame->Uniforms.FarZ = Camera->FarZ;
 
-    Frame->Uniforms.CameraP = Camera->CameraTransform.P.xyz;
+    Frame->Uniforms.CameraP = Camera->CameraTransform.P.XYZ;
 }
 
 internal void SetupSceneRendering(render_frame* Frame)
@@ -3522,14 +3522,14 @@ internal void SetupSceneRendering(render_frame* Frame)
         }
 
         m4 SunTransfrom = M4(
-            SunX.x, SunY.x, SunZ.x, 0.0f,
-            SunX.y, SunY.y, SunZ.y, 0.0f,
-            SunX.z, SunY.z, SunZ.z, 0.0f,
+            SunX.X, SunY.X, SunZ.X, 0.0f,
+            SunX.Y, SunY.Y, SunZ.Y, 0.0f,
+            SunX.Z, SunY.Z, SunZ.Z, 0.0f,
             0.0f, 0.0f, 0.0f, 1.0f);
         m4 SunView = M4(
-            SunX.x, SunX.y, SunX.z, 0.0f,
-            SunY.x, SunY.y, SunY.z, 0.0f,
-            SunZ.x, SunZ.y, SunZ.z, 0.0f,
+            SunX.X, SunX.Y, SunX.Z, 0.0f,
+            SunY.X, SunY.Y, SunY.Z, 0.0f,
+            SunZ.X, SunZ.Y, SunZ.Z, 0.0f,
             0.0f, 0.0f, 0.0f, 1.0f);
         m4 CameraToSun = SunView * Frame->Uniforms.CameraTransform;
     
@@ -3609,15 +3609,15 @@ internal void SetupSceneRendering(render_frame* Frame)
                 v3 P = TransformPoint(CameraToSun, CascadeBoxP[i]);
                 CascadeBoxMin = 
                 {
-                    Min(P.x, CascadeBoxMin.x),
-                    Min(P.y, CascadeBoxMin.y),
-                    Min(P.z, CascadeBoxMin.z),
+                    Min(P.X, CascadeBoxMin.X),
+                    Min(P.Y, CascadeBoxMin.Y),
+                    Min(P.Z, CascadeBoxMin.Z),
                 };
                 CascadeBoxMax = 
                 {
-                    Max(P.x, CascadeBoxMax.x),
-                    Max(P.y, CascadeBoxMax.y),
-                    Max(P.z, CascadeBoxMax.z),
+                    Max(P.X, CascadeBoxMax.X),
+                    Max(P.Y, CascadeBoxMax.Y),
+                    Max(P.Z, CascadeBoxMax.Z),
                 };
             }
 
@@ -3625,18 +3625,18 @@ internal void SetupSceneRendering(render_frame* Frame)
 
             v3 CascadeP = 
             {
-                TexelSize * Floor((CascadeBoxMax.x + CascadeBoxMin.x) / (2.0f * TexelSize)),
-                TexelSize * Floor((CascadeBoxMax.y + CascadeBoxMin.y) / (2.0f * TexelSize)),
-                CascadeBoxMin.z,
+                TexelSize * Floor((CascadeBoxMax.X + CascadeBoxMin.X) / (2.0f * TexelSize)),
+                TexelSize * Floor((CascadeBoxMax.Y + CascadeBoxMin.Y) / (2.0f * TexelSize)),
+                CascadeBoxMin.Z,
             };
 
-            m4 CascadeView = M4(SunX.x, SunX.y, SunX.z, -CascadeP.x,
-                                SunY.x, SunY.y, SunY.z, -CascadeP.y,
-                                SunZ.x, SunZ.y, SunZ.z, -CascadeP.z,
+            m4 CascadeView = M4(SunX.X, SunX.Y, SunX.Z, -CascadeP.X,
+                                SunY.X, SunY.Y, SunY.Z, -CascadeP.Y,
+                                SunZ.X, SunZ.Y, SunZ.Z, -CascadeP.Z,
                                 0.0f, 0.0f, 0.0f, 1.0f);
             m4 CascadeProjection = M4(2.0f / CascadeScale, 0.0f, 0.0f, 0.0f,
                                       0.0f, 2.0f / CascadeScale, 0.0f, 0.0f,
-                                      0.0f, 0.0f, 1.0f / (CascadeBoxMax.z - CascadeBoxMin.z), 0.0f,
+                                      0.0f, 0.0f, 1.0f / (CascadeBoxMax.Z - CascadeBoxMin.Z), 0.0f,
                                       0.0f, 0.0f, 0.0f, 1.0f);
             m4 CascadeViewProjection = CascadeProjection * CascadeView;
             Frame->Uniforms.CascadeViewProjections[CascadeIndex] = CascadeViewProjection;
@@ -3647,8 +3647,8 @@ internal void SetupSceneRendering(render_frame* Frame)
             {
                 CascadeScale0 = CascadeScale;
                 CascadeP0 = CascadeP;
-                MinZ0 = CascadeBoxMin.z;
-                MaxZ0 = CascadeBoxMax.z;
+                MinZ0 = CascadeBoxMin.Z;
+                MaxZ0 = CascadeBoxMax.Z;
             }
             else
             {
@@ -3656,13 +3656,13 @@ internal void SetupSceneRendering(render_frame* Frame)
                 {
                     CascadeScale0 / CascadeScale,
                     CascadeScale0 / CascadeScale,
-                    (MaxZ0 - MinZ0) / (CascadeBoxMax.z - CascadeBoxMin.z),
+                    (MaxZ0 - MinZ0) / (CascadeBoxMax.Z - CascadeBoxMin.Z),
                 };
                 Frame->Uniforms.CascadeOffsets[CascadeIndex - 1] = 
                 {
-                    ((CascadeP0.x - CascadeP.x) / CascadeScale) - (CascadeScale0 / (2.0f * CascadeScale)) + 0.5f,
-                    ((CascadeP0.y - CascadeP.y) / CascadeScale) - (CascadeScale0 / (2.0f * CascadeScale)) + 0.5f,
-                    (CascadeP0.z - CascadeP.z) / (CascadeBoxMax.z - CascadeBoxMin.z),
+                    ((CascadeP0.X - CascadeP.X) / CascadeScale) - (CascadeScale0 / (2.0f * CascadeScale)) + 0.5f,
+                    ((CascadeP0.Y - CascadeP.Y) / CascadeScale) - (CascadeScale0 / (2.0f * CascadeScale)) + 0.5f,
+                    (CascadeP0.Z - CascadeP.Z) / (CascadeBoxMax.Z - CascadeBoxMin.Z),
                 };
             }
         }

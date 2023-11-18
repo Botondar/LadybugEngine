@@ -70,9 +70,9 @@ static bool IntersectRayBox(ray Ray, v3 P, v3 HalfExtent, m4 Transform, f32 tMax
 
     v3 Axes[3] = 
     {
-        Transform.X.xyz,
-        Transform.Y.xyz,
-        Transform.Z.xyz,
+        Transform.X.XYZ,
+        Transform.Y.XYZ,
+        Transform.Z.XYZ,
     };
     f32 AxisLengths[3] = 
     {

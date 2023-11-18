@@ -4,29 +4,43 @@
 #include <LadybugLib/Intrinsics.hpp>
 #include <LadybugLib/String.hpp>
 
+// HACK(boti): These are part of the high-level rendering API,
+// but we need them in ShaderInterop so they're defined here at the top for now
+struct renderer_texture_id
+{
+    u32 Value;
+};
+
+union rgba8
+{
+    u32 Color;
+    struct
+    {
+        u8 R;
+        u8 G;
+        u8 B;
+        u8 A;
+    };
+};
+static_assert(sizeof(rgba8) == sizeof(u32));
+#include <Shader/ShaderInterop.h>
+
 //
 // Config
 //
-constexpr u32 R_TileSizeX = 16;
-constexpr u32 R_TileSizeY = 16;
 constexpr u32 R_MaxRenderTargetSizeX = 3840;
 constexpr u32 R_MaxRenderTargetSizeY = 2160;
 constexpr u32 R_MaxTileCountX = CeilDiv(R_MaxRenderTargetSizeX, R_TileSizeX);
 constexpr u32 R_MaxTileCountY = CeilDiv(R_MaxRenderTargetSizeY, R_TileSizeY);
-constexpr u32 R_MaxLightCountPerTile = 255;
-
-constexpr f32 R_LuminanceThreshold = 1e-2f;
 
 constexpr u64 R_RenderTargetMemorySize      = MiB(320);
 constexpr u64 R_TextureMemorySize           = MiB(1024llu);
 constexpr u64 R_ShadowMapMemorySize         = MiB(256);
 constexpr u32 R_MaxShadowCascadeCount       = 4;
 constexpr u32 R_ShadowResolution            = 2048u; // TODO(boti): Rename, this only applies to the cascades
-constexpr u32 R_MaxShadowCount              = 64u;
 constexpr u32 R_PointShadowResolution       = 256u;
 constexpr u64 R_VertexBufferMaxBlockCount   = (1llu << 18);
 constexpr u64 R_SkinningBufferSize          = MiB(128);
-constexpr u32 R_MaxLightCount               = (1u << 14);
 
 //
 // Limits
@@ -489,10 +503,6 @@ inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 P, f32 r);
 // Render API
 //
 
-struct renderer_texture_id
-{
-    u32 Value;
-};
 inline bool IsValid(renderer_texture_id ID) { return ID.Value != U32_MAX; }
 
 
@@ -548,19 +558,6 @@ struct render_camera
     f32 FarZ;
 };
 
-union rgba8
-{
-    u32 Color;
-    struct
-    {
-        u8 R;
-        u8 G;
-        u8 B;
-        u8 A;
-    };
-};
-static_assert(sizeof(rgba8) == sizeof(u32));
-
 typedef u32 vert_index;
 
 struct vertex
@@ -609,16 +606,6 @@ struct particle_cmd
     billboard_mode Mode;
 };
 
-struct renderer_material
-{
-    v3 Emissive;
-    rgba8 DiffuseColor;
-    rgba8 BaseMaterial;
-    renderer_texture_id DiffuseID;
-    renderer_texture_id NormalID;
-    renderer_texture_id MetallicRoughnessID;
-};
-
 // TODO(boti): Rename this. we'd probably want pipeline-specific push constant types
 struct alignas(4) push_constants
 {
@@ -631,13 +618,6 @@ enum light_flag_bits : light_flags
 {
     LightFlag_None = 0,
     LightFlag_ShadowCaster = (1 << 0),
-};
-
-// NOTE(boti): point light
-struct light
-{
-    v4 P;
-    v4 E; // NOTE(boti): w is the multiplier
 };
 
 // NOTE(boti): binary-compatible with Vulkan/D3D12
@@ -1012,10 +992,10 @@ inline rgba8 PackRGBA(v4 Color)
 {
     rgba8 Result = 
     {
-        .R = (u8)Round(Clamp(Color.x, 0.0f, 1.0f) * 255.0f),
-        .G = (u8)Round(Clamp(Color.y, 0.0f, 1.0f) * 255.0f),
-        .B = (u8)Round(Clamp(Color.z, 0.0f, 1.0f) * 255.0f),
-        .A = (u8)Round(Clamp(Color.w, 0.0f, 1.0f) * 255.0f),
+        .R = (u8)Round(Clamp(Color.X, 0.0f, 1.0f) * 255.0f),
+        .G = (u8)Round(Clamp(Color.Y, 0.0f, 1.0f) * 255.0f),
+        .B = (u8)Round(Clamp(Color.Z, 0.0f, 1.0f) * 255.0f),
+        .A = (u8)Round(Clamp(Color.W, 0.0f, 1.0f) * 255.0f),
     };
     return Result;
 }
@@ -1293,14 +1273,14 @@ inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box)
     if (Dot(HalfExtent, HalfExtent) > 1e-6f)
     {
         v3 CenterP3 = 0.5f * (Box.Min + Box.Max);
-        v4 CenterP = { CenterP3.x, CenterP3.y, CenterP3.z, 1.0f };
+        v4 CenterP = { CenterP3.X, CenterP3.Y, CenterP3.Z, 1.0f };
 
         for (u32 i = 0; i < 6; i++)
         {
             f32 EffectiveRadius = 
-                Abs(Frustum->Planes[i].x * HalfExtent.x) + 
-                Abs(Frustum->Planes[i].y * HalfExtent.y) +
-                Abs(Frustum->Planes[i].z * HalfExtent.z);
+                Abs(Frustum->Planes[i].X * HalfExtent.X) + 
+                Abs(Frustum->Planes[i].Y * HalfExtent.Y) +
+                Abs(Frustum->Planes[i].Z * HalfExtent.Z);
 
             if (Dot(CenterP, Frustum->Planes[i]) < -EffectiveRadius)
             {
@@ -1315,7 +1295,7 @@ inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box)
 inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 Center, f32 r)
 {
     b32 Result = true;
-    v4 P = { Center.x, Center.y, Center.z, 1.0f };
+    v4 P = { Center.X, Center.Y, Center.Z, 1.0f };
     for (u32 i = 0; i < 6; i++)
     {
         if (Dot(Frustum->Planes[i], P) <= -r)

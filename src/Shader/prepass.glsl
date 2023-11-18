@@ -10,7 +10,7 @@ layout(set = 2, binding = 0, scalar) uniform PerFrameBlock
 layout(push_constant) uniform PushConstants
 {
     mat4 ModelTransform;
-    material Material;
+    renderer_material Material;
 };
 
 #if defined(VS)
@@ -54,7 +54,7 @@ void main()
 {
     StructureOut = StructureEncode(ViewP.z);
     vec4 Albedo = texture(sampler2D(Textures[Material.DiffuseID], Sampler), TexCoord);
-    if (Albedo.a < ALPHA_TEST_THRESHOLD)
+    if (Albedo.a < R_AlphaTestThreshold)
     {
         discard;
     }

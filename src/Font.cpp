@@ -15,33 +15,33 @@ lbfn mmrect2 GetTextRect(const font* Font, const char* Text, font_layout_type La
         f32 AdvanceX = 0.0f;
         if (*At == '\n')
         {
-            P.x = 0.0f;
-            P.y += Font->BaselineDistance;
-            Result.Max.y += Font->BaselineDistance;
+            P.X = 0.0f;
+            P.Y += Font->BaselineDistance;
+            Result.Max.Y += Font->BaselineDistance;
         }
         else
         {
             const font_glyph* Glyph = Font->Glyphs + Font->CharMapping[*At].GlyphIndex;
-            MinX = Glyph->P0.x;
-            MaxX = Glyph->P1.x;
+            MinX = Glyph->P0.X;
+            MaxX = Glyph->P1.X;
             AdvanceX += Glyph->AdvanceX;
         }
         
-        Result.Min.x = Min(Result.Min.x, P.x + Min(MinX, 0.0f));
-        Result.Max.x = Max(Result.Max.x, P.x + Max(MaxX, AdvanceX));
+        Result.Min.X = Min(Result.Min.X, P.X + Min(MinX, 0.0f));
+        Result.Max.X = Max(Result.Max.X, P.X + Max(MaxX, AdvanceX));
 
-        P.x += AdvanceX;
+        P.X += AdvanceX;
     }
 
     if (Layout == font_layout_type::Top)
     {
-        Result.Min.y += Font->Ascent;
-        Result.Max.y += Font->Ascent;
+        Result.Min.Y += Font->Ascent;
+        Result.Max.Y += Font->Ascent;
     }
     else if (Layout == font_layout_type::Bottom)
     {
-        Result.Min.y -= Font->Descent;
-        Result.Max.y -= Font->Descent;
+        Result.Min.Y -= Font->Descent;
+        Result.Max.Y -= Font->Descent;
     }
 
     return Result;

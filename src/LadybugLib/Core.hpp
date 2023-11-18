@@ -242,6 +242,7 @@ constexpr f32 F32_EPSILON = 1.19209290e-7f;
 
 #include <cmath>
 
+union v2u;
 union v2;
 union v3;
 union v4;
@@ -305,19 +306,25 @@ inline constexpr f32 ToDegrees(f32 Radians);
 
 inline bool PointRectOverlap(v2 P, mmrect2 Rect);
 
+union v2u
+{
+    u32 E[2];
+    struct { u32 X, Y; };
+};
+
 union v2
 {
     f32 E[2];
-    struct { f32 x, y; };
+    struct { f32 X, Y; };
 };
 
 union v3
 {
     f32 E[3];
-    struct { f32 x, y, z; };
+    struct { f32 X, Y, Z; };
     struct 
     { 
-        v2 xy;
+        v2 XY;
         f32 Ignored0_;
     };
 };
@@ -325,10 +332,10 @@ union v3
 union v4
 {
     f32 E[4];
-    struct { f32 x, y, z, w; };
+    struct { f32 X, Y, Z, W; };
     struct 
     {
-        v3 xyz;
+        v3 XYZ;
         f32 Ignored0_;
     };
 };
@@ -598,7 +605,7 @@ inline f32 Ratio0(f32 Numerator, f32 Denominator)
 inline constexpr u32 CeilDiv(u32 x, u32 y)
 {
     u32 Result = (x / y) + ((x % y) != 0);
-    return Result;
+    return(Result);
 }
 
 template<typename T>
@@ -614,78 +621,78 @@ inline constexpr T Max(T a, T b)
 }
 
 template<>
-inline constexpr v2 Min<v2>(v2 a, v2 b)
+inline constexpr v2 Min<v2>(v2 A, v2 B)
 {
-    v2 Result = { Min(a.x, b.x), Min(a.y, b.y) };
-    return Result;
+    v2 Result = { Min(A.X, B.X), Min(A.Y, B.Y) };
+    return(Result);
 }
 
 template<>
-inline constexpr v2 Max<v2>(v2 a, v2 b)
+inline constexpr v2 Max<v2>(v2 A, v2 B)
 {
-    v2 Result = { Max(a.x, b.x), Max(a.y, b.y) };
-    return Result;
+    v2 Result = { Max(A.X, B.X), Max(A.Y, B.Y) };
+    return(Result);
 }
 
 template<typename T>
 inline constexpr T Clamp(T x, T e0, T e1)
 {
     T Result = Min(Max(x, e0), e1);
-    return Result;
+    return(Result);
 }
 
 template<typename T> inline constexpr
 T Lerp(T a, T b, f32 t)
 {
     T Result = (1.0f - t)*a + t*b;
-    return Result;
+    return(Result);
 }
 
 inline constexpr f32 ToRadians(f32 Degrees)
 {
     f32 Result = Pi * Degrees / 180.0f;
-    return Result;
+    return(Result);
 }
 inline constexpr f32 ToDegrees(f32 Radians)
 {
     f32 Result = 180.0f * Radians / Pi;
-    return Result;
+    return(Result);
 }
 
-inline v2 operator-(v2 v)
+inline v2 operator-(v2 V)
 {
-    v2 Result = { -v.x, -v.y };
-    return Result;
+    v2 Result = { -V.X, -V.Y };
+    return(Result);
 }
 
-inline v2 operator*(v2 v, f32 s)
+inline v2 operator*(v2 V, f32 s)
 {
-    v2 Result = { v.x * s, v.y * s };
-    return Result;
+    v2 Result = { V.X * s, V.Y * s };
+    return(Result);
 }
 
-inline v2 operator*(f32 s, v2 v)
+inline v2 operator*(f32 s, v2 V)
 {
-    v2 Result = v * s;
-    return Result;
+    v2 Result = V * s;
+    return(Result);
 }
 
-inline v2 operator+(v2 a, v2 b)
+inline v2 operator+(v2 A, v2 B)
 {
-    v2 Result = { a.x + b.x, a.y + b.y };
-    return Result;
+    v2 Result = { A.X + B.X, A.Y + B.Y };
+    return(Result);
 }
 
-inline v2 operator-(v2 a, v2 b)
+inline v2 operator-(v2 A, v2 B)
 {
-    v2 Result = { a.x - b.x, a.y - b.y };
-    return Result;
+    v2 Result = { A.X - B.X, A.Y - B.Y };
+    return(Result);
 }
 
-inline v2& operator*=(v2& a, f32 s)
+inline v2& operator*=(v2& A, f32 s)
 {
-    a = a * s;
-    return a;
+    A = A * s;
+    return(A);
 }
 
 inline v2& operator+=(v2& a, v2 b)
@@ -700,9 +707,9 @@ inline v2& operator-=(v2& a, v2 b)
     return a;
 }
 
-inline f32 Dot(v2 a, v2 b)
+inline f32 Dot(v2 A, v2 B)
 {
-    f32 Result = a.x*b.x + a.y*b.y;
+    f32 Result = A.X*B.X + A.Y*B.Y;
     return Result;
 }
 
@@ -733,40 +740,40 @@ inline v2 NOZ(v2 v)
     return(Result);
 }
 
-inline v2 Hadamard(v2 a, v2 b)
+inline v2 Hadamard(v2 A, v2 B)
 {
-    v2 Result = { a.x*b.x, a.y*b.y };
+    v2 Result = { A.X*B.X, A.Y*B.Y };
     return(Result);
 }
 
-inline v3 operator-(v3 v)
+inline v3 operator-(v3 V)
 {
-    v3 Result = { -v.x, -v.y, -v.z };
-    return Result;
+    v3 Result = { -V.X, -V.Y, -V.Z };
+    return(Result);
 }
 
-inline v3 operator*(v3 v, f32 s)
+inline v3 operator*(v3 V, f32 s)
 {
-    v3 Result = { v.x * s, v.y * s, v.z * s };
-    return Result;
+    v3 Result = { V.X * s, V.Y * s, V.Z * s };
+    return(Result);
 }
 
-inline v3 operator*(f32 s, v3 v)
+inline v3 operator*(f32 s, v3 V)
 {
-    v3 Result = v*s;
-    return Result;
+    v3 Result = V*s;
+    return(Result);
 }
 
-inline v3 operator+(v3 a, v3 b)
+inline v3 operator+(v3 A, v3 B)
 {
-    v3 Result = { a.x + b.x, a.y + b.y, a.z + b.z };
-    return Result;
+    v3 Result = { A.X + B.X, A.Y + B.Y, A.Z + B.Z };
+    return(Result);
 }
 
-inline v3 operator-(v3 a, v3 b)
+inline v3 operator-(v3 A, v3 B)
 {
-    v3 Result = { a.x - b.x, a.y - b.y, a.z - b.z };
-    return Result;
+    v3 Result = { A.X - B.X, A.Y - B.Y, A.Z - B.Z };
+    return(Result);
 }
 
 inline v3& operator+=(v3& a, v3 b)
@@ -781,29 +788,29 @@ inline v3& operator-=(v3& a, v3 b)
     return a;
 }
 
-inline bool IsZeroVector(v3 v)
+inline bool IsZeroVector(v3 V)
 {
-    bool Result = (v.x == 0.0f) && (v.y == 0.0f) && (v.z == 0.0f);
-    return Result;
+    bool Result = (V.X == 0.0f) && (V.Y == 0.0f) && (V.Z == 0.0f);
+    return(Result);
 }
 
-inline f32 Dot(v3 a, v3 b)
+inline f32 Dot(v3 A, v3 B)
 {
-    f32 Result = a.x*b.x + a.y*b.y + a.z*b.z;
-    return Result;
+    f32 Result = A.X*B.X + A.Y*B.Y + A.Z*B.Z;
+    return(Result);
 }
 
-inline f32 VectorLength(v3 v)
+inline f32 VectorLength(v3 V)
 {
-    f32 Result = Sqrt(Dot(v, v));
-    return Result;
+    f32 Result = Sqrt(Dot(V, V));
+    return(Result);
 }
 
 inline v3 Normalize(v3 v)
 {
     f32 InvLength = 1.0f / VectorLength(v);
     v3 Result = v * InvLength;
-    return Result;
+    return(Result);
 }
 
 inline v3 NOZ(v3 v)
@@ -820,49 +827,49 @@ inline v3 NOZ(v3 v)
     return(Result);
 }
 
-inline v3 Cross(v3 a, v3 b)
+inline v3 Cross(v3 A, v3 B)
 {
     v3 Result = 
     {
-        a.y * b.z - a.z * b.y,
-        a.z * b.x - a.x * b.z,
-        a.x * b.y - a.y * b.x,
+        A.Y * B.Z - A.Z * B.Y,
+        A.Z * B.X - A.X * B.Z,
+        A.X * B.Y - A.Y * B.X,
     };
-    return Result;
-}
-
-inline v3 Hadamard(v3 a, v3 b)
-{
-    v3 Result = { a.x*b.x, a.y*b.y, a.z*b.z };
     return(Result);
 }
 
-inline v4 operator-(v4 v)
+inline v3 Hadamard(v3 A, v3 B)
 {
-    v4 Result = { -v.x, -v.y, -v.z, -v.w };
+    v3 Result = { A.X*B.X, A.Y*B.Z, A.Z*B.Z };
+    return(Result);
+}
+
+inline v4 operator-(v4 V)
+{
+    v4 Result = { -V.X, -V.Y, -V.Z, -V.W };
     return Result;
 }
-inline v4 operator*(v4 v, f32 s)
+inline v4 operator*(v4 V, f32 s)
 {
-    v4 Result = { s*v.x, s*v.y, s*v.z, s*v.w };
+    v4 Result = { s*V.X, s*V.Y, s*V.Z, s*V.W };
     return Result;
 }
 
-inline v4 operator*(f32 s, v4 v)
+inline v4 operator*(f32 s, v4 V)
 {
-    v4 Result = { s*v.x, s*v.y, s*v.z, s*v.w };
+    v4 Result = { s*V.X, s*V.Y, s*V.Z, s*V.W };
     return Result;
 }
 
-inline v4 operator+(v4 a, v4 b)
+inline v4 operator+(v4 A, v4 B)
 {
-    v4 Result = { a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w };
+    v4 Result = { A.X + B.X, A.Y + B.Y, A.Z + B.Z, A.W + B.W };
     return Result;
 }
 
-inline v4 operator-(v4 a, v4 b)
+inline v4 operator-(v4 A, v4 B)
 {
-    v4 Result = { a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w };
+    v4 Result = { A.X - B.X, A.Y - B.Y, A.Z - B.Z, A.W - B.W };
     return Result;
 }
 
@@ -877,9 +884,9 @@ inline v4& operator-=(v4& a, v4 b)
     return(a);
 }
 
-inline f32 Dot(v4 a, v4 b)
+inline f32 Dot(v4 A, v4 B)
 {
-    f32 Result = a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
+    f32 Result = A.X*B.X + A.Y*B.Y + A.Z*B.Z + A.W*B.W;
     return Result;
 }
 
@@ -925,17 +932,17 @@ inline m4 operator*(const m4& A, const m4& B)
     for (int Column = 0; Column < 4; Column++)
     {
         Result.C[Column] = 
-            A.X * B.C[Column].x +
-            A.Y * B.C[Column].y + 
-            A.Z * B.C[Column].z +
-            A.P * B.C[Column].w;
+            A.X * B.C[Column].X +
+            A.Y * B.C[Column].Y + 
+            A.Z * B.C[Column].Z +
+            A.P * B.C[Column].W;
     }
     return Result;
 }
 
-inline v4 operator*(const m4& M, const v4& v)
+inline v4 operator*(const m4& M, const v4& V)
 {
-    v4 Result = M.X * v.x + M.Y * v.y + M.Z * v.z + M.P * v.w;
+    v4 Result = M.X * V.X + M.Y * V.Y + M.Z * V.Z + M.P * V.W;
     return Result;
 }
 
@@ -945,42 +952,42 @@ inline v4 operator*(const v4& v, const m4& M)
     return Result;
 }
 
-inline v3 TransformPoint(const m4& M, v3 v)
+inline v3 TransformPoint(const m4& M, v3 V)
 {
-    v3 Result = M.X.xyz * v.x + M.Y.xyz * v.y + M.Z.xyz * v.z + M.P.xyz;
+    v3 Result = M.X.XYZ * V.X + M.Y.XYZ * V.Y + M.Z.XYZ * V.Z + M.P.XYZ;
     return Result;
 }
 
-inline v3 TransformDirection(const m4& M, v3 v)
+inline v3 TransformDirection(const m4& M, v3 V)
 {
-    v3 Result = M.X.xyz * v.x + M.Y.xyz * v.y + M.Z.xyz * v.z;
+    v3 Result = M.X.XYZ * V.X + M.Y.XYZ * V.Y + M.Z.XYZ * V.Z;
     return Result;
 }
 
 inline m4 AffineOrthonormalInverse(const m4& M)
 {
     m4 Result = M4(
-        M.X.x, M.X.y, M.X.z, -Dot(M.X.xyz, M.P.xyz),
-        M.Y.x, M.Y.y, M.Y.z, -Dot(M.Y.xyz, M.P.xyz),
-        M.Z.x, M.Z.y, M.Z.z, -Dot(M.Z.xyz, M.P.xyz),
+        M.X.X, M.X.Y, M.X.Z, -Dot(M.X.XYZ, M.P.XYZ),
+        M.Y.X, M.Y.Y, M.Y.Z, -Dot(M.Y.XYZ, M.P.XYZ),
+        M.Z.X, M.Z.Y, M.Z.Z, -Dot(M.Z.XYZ, M.P.XYZ),
         0.0f, 0.0f, 0.0f, 1.0f);
     return Result;
 }
 
 inline m4 AffineInverse(const m4& M)
 {
-    v3 X = M.X.xyz;
-    v3 Y = M.Y.xyz;
-    v3 Z = M.Z.xyz;
-    v3 P = M.P.xyz;
+    v3 X = M.X.XYZ;
+    v3 Y = M.Y.XYZ;
+    v3 Z = M.Z.XYZ;
+    v3 P = M.P.XYZ;
     X = X * (1.0f / Dot(X, X));
     Y = Y * (1.0f / Dot(Y, Y));
     Z = Z * (1.0f / Dot(Z, Z));
 
     m4 Result = M4(
-        X.x, X.y, X.z, -Dot(X, P),
-        Y.x, Y.y, Y.z, -Dot(Y, P),
-        Z.x, Z.y, Z.z, -Dot(Z, P),
+        X.X, X.Y, X.Z, -Dot(X, P),
+        Y.X, Y.Y, Y.Z, -Dot(Y, P),
+        Z.X, Z.Y, Z.Z, -Dot(Z, P),
         0.0f, 0.0f, 0.0f, 1.0f);
     return(Result);
 }
@@ -1010,17 +1017,17 @@ inline m4 Identity4()
 
 inline bool PointRectOverlap(v2 P, mmrect2 Rect)
 {
-    bool Result = (Rect.Min.x <= P.x) && (P.x < Rect.Max.x) &&
-        (Rect.Min.y <= P.y) && (P.y < Rect.Max.y);
-    return Result;
+    bool Result = (Rect.Min.X <= P.X) && (P.X < Rect.Max.X) &&
+        (Rect.Min.Y <= P.Y) && (P.Y < Rect.Max.Y);
+    return(Result);
 }
 
 inline m4 QuaternionToM4(v4 Q)
 {
-    f32 x = Q.x;
-    f32 y = Q.y;
-    f32 z = Q.z;
-    f32 w = Q.w;
+    f32 x = Q.X;
+    f32 y = Q.Y;
+    f32 z = Q.Z;
+    f32 w = Q.W;
     f32 x2 = x*x;
     f32 y2 = y*y;
     f32 z2 = z*z;

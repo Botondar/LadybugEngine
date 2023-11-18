@@ -3,16 +3,9 @@
 #extension GL_EXT_shader_8bit_storage : require
 #extension GL_EXT_shader_16bit_storage : require
 
-#define PI 3.14159265359
-#define ALPHA_TEST_THRESHOLD 0.5
-
-#define f32 float
-#define v2 vec2
-#define v3 vec3
-#define v4 vec4
-#define m2 mat2
-#define m3 mat3
-#define m4 mat4
+#if 1
+#include "ShaderInterop.h"
+#else
 
 // TODO(boti): Create a shared header between the C++ and the shaders
 // NOTE(boti): These constants need to be kept in sync with the ones Renderer.hpp
@@ -25,58 +18,60 @@
 
 struct light
 {
-    vec4 P; // NOTE(boti): w is shadow index
-    vec4 E;
+    v4 P; // NOTE(boti): w is shadow index
+    v4 E;
 };
 
 struct screen_tile
 {
-    uint LightCount;
-    uint LightIndices[R_MaxLightCountPerTile];
+    u32 LightCount;
+    u32 LightIndices[R_MaxLightCountPerTile];
 };
 
 struct per_frame
 {
-    mat4 CameraTransform;
-    mat4 View;
-    mat4 Projection;
-    mat4 InverseProjection;
-    mat4 ViewProjection;
+    m4 CameraTransform;
+    m4 View;
+    m4 Projection;
+    m4 InverseProjection;
+    m4 ViewProjection;
 
-    mat4 CascadeViewProjections[4];
+    m4 CascadeViewProjections[4];
 
-    mat4 ShadowViewProjections[6*R_MaxShadowCount];
+    m4 ShadowViewProjections[6*R_MaxShadowCount];
 
-    float CascadeMinDistances[4];
-    float CascadeMaxDistances[4];
-    vec3 CascadeScales[3];
-    vec3 CascadeOffsets[3];
+    f32 CascadeMinDistances[4];
+    f32 CascadeMaxDistances[4];
+    v3 CascadeScales[3];
+    v3 CascadeOffsets[3];
 
-    float FocalLength;
-    float AspectRatio;
-    float NearZ;
-    float FarZ;
+    f32 FocalLength;
+    f32 AspectRatio;
+    f32 NearZ;
+    f32 FarZ;
 
-    vec3 CameraP;
-    vec3 SunV;
-    vec3 SunL;
+    v3 CameraP;
+    v3 SunV;
+    v3 SunL;
 
-    vec2 ScreenSize;
-    uvec2 TileCount;
+    v2 ScreenSize;
+    v2u TileCount;
 
-    uint LightCount;
+    u32 LightCount;
 
 };
 
 struct material
 {
-    vec3 Emissive;
-    uint Diffuse;
-    uint MetallicRoughness;
-    uint DiffuseID;
-    uint NormalID;
-    uint MetallicRoughnessID;
+    v3 Emissive;
+    u32 Diffuse;
+    u32 MetallicRoughness;
+    u32 DiffuseID;
+    u32 NormalID;
+    u32 MetallicRoughnessID;
 };
+
+#endif
 
 //
 // Common
@@ -97,10 +92,10 @@ v3 TransformDirection(m4 M, v3 V)
 vec4 UnpackRGBA8(in uint Color) 
 {
     vec4 Result = vec4(
-        (Color & 0xFF) / 255.0,
-        ((Color >> 8) & 0xFF) / 255.0,
-        ((Color >> 16) & 0xFF) / 255.0,
-        (Color >> 24) / 255.0);
+        (Color          & 0xFF) / 255.0,
+        ((Color >> 8)   & 0xFF) / 255.0,
+        ((Color >> 16)  & 0xFF) / 255.0,
+        ((Color >> 24)        ) / 255.0);
     return Result;
 }
 

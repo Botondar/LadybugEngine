@@ -295,14 +295,14 @@ inline m4 TRSToM4(trs_transform Transform)
 {
     m4 Result;
 
-    m4 S = M4(Transform.Scale.x, 0.0f, 0.0f, 0.0f,
-              0.0f, Transform.Scale.y, 0.0f, 0.0f,
-              0.0f, 0.0f, Transform.Scale.z, 0.0f,
+    m4 S = M4(Transform.Scale.X, 0.0f, 0.0f, 0.0f,
+              0.0f, Transform.Scale.Y, 0.0f, 0.0f,
+              0.0f, 0.0f, Transform.Scale.Z, 0.0f,
               0.0f, 0.0f, 0.0f, 1.0f);
     m4 R = QuaternionToM4(Transform.Rotation);
-    m4 T = M4(1.0f, 0.0f, 0.0f, Transform.Position.x,
-              0.0f, 1.0f, 0.0f, Transform.Position.y,
-              0.0f, 0.0f, 1.0f, Transform.Position.z,
+    m4 T = M4(1.0f, 0.0f, 0.0f, Transform.Position.X,
+              0.0f, 1.0f, 0.0f, Transform.Position.Y,
+              0.0f, 0.0f, 1.0f, Transform.Position.Z,
               0.0f, 0.0f, 0.0f, 1.0f);
 
     Result = T * R * S;
@@ -313,52 +313,52 @@ inline trs_transform M4ToTRS(m4 M)
 {
     trs_transform Result = {};
 
-    Result.Position = M.P.xyz;
-    Result.Scale.x = Sqrt(Dot(M.X.xyz, M.X.xyz));
-    Result.Scale.y = Sqrt(Dot(M.Y.xyz, M.Y.xyz));
-    Result.Scale.z = Sqrt(Dot(M.Z.xyz, M.Z.xyz));
-    v3 X = M.X.xyz * (1.0f / Result.Scale.x);
-    v3 Y = M.Y.xyz * (1.0f / Result.Scale.y);
-    v3 Z = M.Z.xyz * (1.0f / Result.Scale.z);
+    Result.Position = M.P.XYZ;
+    Result.Scale.X = Sqrt(Dot(M.X.XYZ, M.X.XYZ));
+    Result.Scale.Y = Sqrt(Dot(M.Y.XYZ, M.Y.XYZ));
+    Result.Scale.Z = Sqrt(Dot(M.Z.XYZ, M.Z.XYZ));
+    v3 X = M.X.XYZ * (1.0f / Result.Scale.X);
+    v3 Y = M.Y.XYZ * (1.0f / Result.Scale.Y);
+    v3 Z = M.Z.XYZ * (1.0f / Result.Scale.Z);
 
     // NOTE(boti): Enable this assert to check whether the matrix does reflection or not
 #if 0
-    f32 Det = X.x * (Y.y*Z.z - Y.z*Z.y) - Y.x * (X.y*Z.z - X.z*Z.y) + Z.x * (X.y*Y.z - X.z*Y.y);
+    f32 Det = X.X * (Y.Y*Z.Z - Y.Z*Z.Y) - Y.X * (X.Y*Z.Z - X.Z*Z.Y) + Z.X * (X.Y*Y.Z - X.Z*Y.Y);
     Assert(Det > 0.0f);
 #endif
 
-    f32 Sum = X.x + Y.y + Z.z;
+    f32 Sum = X.X + Y.Y + Z.Z;
     if (Sum > 0.0f)
     {
-        Result.Rotation.w = 0.5f * Sqrt(Sum + 1.0f);
-        f32 f = 0.25f / Result.Rotation.w;
-        Result.Rotation.x = f * (Y.z - Z.y);
-        Result.Rotation.y = f * (Z.x - X.z);
-        Result.Rotation.z = f * (X.y - Y.x);
+        Result.Rotation.W = 0.5f * Sqrt(Sum + 1.0f);
+        f32 f = 0.25f / Result.Rotation.W;
+        Result.Rotation.X = f * (Y.Z - Z.Y);
+        Result.Rotation.Y = f * (Z.X - X.Z);
+        Result.Rotation.Z = f * (X.Y - Y.X);
     }
-    else if ((X.x > Y.y) && (X.x > Z.z))
+    else if ((X.X> Y.Y) && (X.Z > Z.Z))
     {
-        Result.Rotation.x = 0.5f * Sqrt(X.x - Y.y - Z.z + 1.0f);
-        f32 f = 0.25f / Result.Rotation.x;
-        Result.Rotation.x = f * (X.y + Y.x);
-        Result.Rotation.y = f * (Y.z + Z.y);
-        Result.Rotation.w = f * (Z.x - X.z);
+        Result.Rotation.X = 0.5f * Sqrt(X.X - Y.Y - Z.Z + 1.0f);
+        f32 f = 0.25f / Result.Rotation.X;
+        Result.Rotation.X = f * (X.Y + Y.X);
+        Result.Rotation.Y = f * (Y.Z + Z.Y);
+        Result.Rotation.W = f * (Z.X - X.Z);
     }
-    else if (Y.y > Z.z)
+    else if (Y.Y > Z.Z)
     {
-        Result.Rotation.y = 0.5f * Sqrt(Y.y - X.x - Z.z + 1.0f);
-        f32 f = 0.25f / Result.Rotation.y;
-        Result.Rotation.x = f * (X.y + Y.x);
-        Result.Rotation.z = f * (Y.z + Z.y);
-        Result.Rotation.w = f * (Z.x - X.z);
+        Result.Rotation.Y = 0.5f * Sqrt(Y.Y - X.X - Z.Z + 1.0f);
+        f32 f = 0.25f / Result.Rotation.Y;
+        Result.Rotation.X = f * (X.Y + Y.X);
+        Result.Rotation.Z = f * (Y.Z + Z.Y);
+        Result.Rotation.W = f * (Z.X - X.Z);
     }
     else
     {
-        Result.Rotation.z = 0.5f * Sqrt(Z.z - X.x - Y.y + 1.0f);
-        f32 f = 0.25f / Result.Rotation.z;
-        Result.Rotation.x = f * (X.z + Z.x);
-        Result.Rotation.y = f * (Y.z + Z.y);
-        Result.Rotation.w = f * (X.y - Y.x);
+        Result.Rotation.Z = 0.5f * Sqrt(Z.Z - X.X - Y.Y + 1.0f);
+        f32 f = 0.25f / Result.Rotation.Z;
+        Result.Rotation.X = f * (X.Z + Z.X);
+        Result.Rotation.Y = f * (Y.Y + Z.Y);
+        Result.Rotation.W = f * (X.Y - Y.X);
     }
     return(Result);
 }

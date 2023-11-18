@@ -11,14 +11,14 @@ lbfn m4 GetLocalTransform(const camera* Camera)
     LocalY = Cross(LocalZ, LocalX);
 
     m4 BasisTransform = M4(
-        LocalX.x, LocalY.x, LocalZ.x, 0.0f,
-        LocalX.y, LocalY.y, LocalZ.y, 0.0f,
-        LocalX.z, LocalY.z, LocalZ.z, 0.0f,
+        LocalX.X, LocalY.X, LocalZ.X, 0.0f,
+        LocalX.Y, LocalY.Y, LocalZ.Y, 0.0f,
+        LocalX.Z, LocalY.Z, LocalZ.Z, 0.0f,
         0.0f, 0.0f, 0.0f, 1.0f);
     m4 Translation = M4(
-        1.0f, 0.0f, 0.0f, Camera->P.x,
-        0.0f, 1.0f, 0.0f, Camera->P.y,
-        0.0f, 0.0f, 1.0f, Camera->P.z,
+        1.0f, 0.0f, 0.0f, Camera->P.X,
+        0.0f, 1.0f, 0.0f, Camera->P.Y,
+        0.0f, 0.0f, 1.0f, Camera->P.Z,
         0.0f, 0.0f, 0.0f, 1.0f);
 
     m4 Result = Translation * BasisTransform;
@@ -38,14 +38,14 @@ lbfn m4 GetTransform(const camera* Camera)
     Up = Cross(Right, Forward);
 
     m4 BasisTransform = M4(
-        Right.x, -Up.x, Forward.x, 0.0f,
-        Right.y, -Up.y, Forward.y, 0.0f,
-        Right.z, -Up.z, Forward.z, 0.0f,
+        Right.X, -Up.X, Forward.X, 0.0f,
+        Right.Y, -Up.Y, Forward.Y, 0.0f,
+        Right.Z, -Up.Z, Forward.Z, 0.0f,
         0.0f, 0.0f, 0.0f, 1.0f);
     m4 Translation = M4(
-        1.0f, 0.0f, 0.0f, Camera->P.x,
-        0.0f, 1.0f, 0.0f, Camera->P.y,
-        0.0f, 0.0f, 1.0f, Camera->P.z,
+        1.0f, 0.0f, 0.0f, Camera->P.X,
+        0.0f, 1.0f, 0.0f, Camera->P.Y,
+        0.0f, 0.0f, 1.0f, Camera->P.Z,
         0.0f, 0.0f, 0.0f, 1.0f);
 
     m4 Result = Translation * BasisTransform;
@@ -54,11 +54,11 @@ lbfn m4 GetTransform(const camera* Camera)
 
 lbfn f32 SampleNoise(noise2* Noise, v2 P)
 {
-    v2 P0 = { Floor(P.x), Floor(P.y) };
+    v2 P0 = { Floor(P.X), Floor(P.Y) };
     v2 dP = P - P0;
 
-    u32 X = (u32)(s32)P0.x;
-    u32 Y = (u32)(s32)P0.y;
+    u32 X = (u32)(s32)P0.X;
+    u32 Y = (u32)(s32)P0.Y;
 
     // TODO(boti): Pull this out once we have a use for it elsewhere
     // NOTE(boti): Murmur3
@@ -116,8 +116,8 @@ lbfn f32 SampleNoise(noise2* Noise, v2 P)
         f32 Result = X*X*X * ((6.0f*X - 15.0f)*X + 10.0f);
         return(Result);
     };
-    f32 U = Fade(dP.x);
-    f32 V = Fade(dP.y);
+    f32 U = Fade(dP.X);
+    f32 V = Fade(dP.Y);
     f32 X0 = Lerp(D00, D10, U);
     f32 X1 = Lerp(D01, D11, U);
     f32 Result = Lerp(X0, X1, V);
@@ -150,10 +150,10 @@ GenerateTerrainChunk(height_field* Field, memory_arena* Arena)
         {
             v3 P = { dS*X, dS*Y, SampleHeight(Field, X, Y) };
 
-            v3 PXn = { P.x - dS, P.y, SampleHeight(Field, X - 1, Y) };
-            v3 PXp = { P.x + dS, P.y, SampleHeight(Field, X + 1, Y) };
-            v3 PYn = { P.x, P.y - dS, SampleHeight(Field, X, Y - 1) };
-            v3 PYp = { P.x, P.y + dS, SampleHeight(Field, X, Y + 1) };
+            v3 PXn = { P.X - dS, P.Y, SampleHeight(Field, X - 1, Y) };
+            v3 PXp = { P.X + dS, P.Y, SampleHeight(Field, X + 1, Y) };
+            v3 PYn = { P.X, P.Y - dS, SampleHeight(Field, X, Y - 1) };
+            v3 PYp = { P.X, P.Y + dS, SampleHeight(Field, X, Y + 1) };
 
             v3 T = NOZ(PXp - PXn);
             v3 B = NOZ(PYp - PYn);
@@ -163,7 +163,7 @@ GenerateTerrainChunk(height_field* Field, memory_arena* Arena)
             {
                 .P = P,
                 .N = N, 
-                .T = { T.x, T.y, T.z, 1.0f },
+                .T = { T.X, T.Y, T.Z, 1.0f },
                 .TexCoord = { 0.0f, 0.0f },
                 .Color = PackRGBA8(0xFF, 0xFF, 0xFF),
             };
@@ -351,9 +351,9 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 {
                     .P = 
                     { 
-                        RandBetween(R, Bounds.Min.x, Bounds.Max.x), 
-                        RandBetween(R, Bounds.Min.y, Bounds.Max.y), 
-                        RandBetween(R, Bounds.Min.z, Bounds.Max.z),
+                        RandBetween(R, Bounds.Min.X, Bounds.Max.X),
+                        RandBetween(R, Bounds.Min.Y, Bounds.Max.Y),
+                        RandBetween(R, Bounds.Min.Z, Bounds.Max.Z),
                         1.0f 
                     },
                     .E = 
@@ -401,9 +401,9 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     World->Entities[ID.Value] = 
                     {
                         .Flags = EntityFlag_LightSource,
-                        .Transform = M4(1.0f, 0.0f, 0.0f, Light->P.x,
-                                        0.0f, 1.0f, 0.0f, Light->P.y,
-                                        0.0f, 0.0f, 1.0f, Light->P.z,
+                        .Transform = M4(1.0f, 0.0f, 0.0f, Light->P.X,
+                                        0.0f, 1.0f, 0.0f, Light->P.Y,
+                                        0.0f, 0.0f, 1.0f, Light->P.Z,
                                         0.0f, 0.0f, 0.0f, 1.0f),
                         .LightEmission = Light->E,
                     };
@@ -453,31 +453,31 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     {
         camera* Camera = &World->Camera;
         v3 MoveDirection = {};
-        if (IO->Keys[SC_W].bIsDown) { MoveDirection.z += 1.0f; }
-        if (IO->Keys[SC_S].bIsDown) { MoveDirection.z -= 1.0f; }
-        if (IO->Keys[SC_D].bIsDown) { MoveDirection.x += 1.0f; }
-        if (IO->Keys[SC_A].bIsDown) { MoveDirection.x -= 1.0f; }
+        if (IO->Keys[SC_W].bIsDown) { MoveDirection.Z += 1.0f; }
+        if (IO->Keys[SC_S].bIsDown) { MoveDirection.Z -= 1.0f; }
+        if (IO->Keys[SC_D].bIsDown) { MoveDirection.X += 1.0f; }
+        if (IO->Keys[SC_A].bIsDown) { MoveDirection.X -= 1.0f; }
 
         if (IO->Keys[SC_MouseLeft].bIsDown)
         {
             constexpr f32 MouseTurnSpeed = 1e-2f;
-            Camera->Yaw -= -MouseTurnSpeed * IO->Mouse.dP.x;
-            Camera->Pitch -= MouseTurnSpeed * IO->Mouse.dP.y;
+            Camera->Yaw -= -MouseTurnSpeed * IO->Mouse.dP.X;
+            Camera->Pitch -= MouseTurnSpeed * IO->Mouse.dP.Y;
         }
 
         constexpr f32 PitchClamp = 0.5f * Pi - 1e-3f;
         Camera->Pitch = Clamp(Camera->Pitch, -PitchClamp, PitchClamp);
 
         m4 CameraTransform = GetTransform(Camera);
-        v3 Forward = CameraTransform.Z.xyz;
-        v3 Right = CameraTransform.X.xyz;
+        v3 Forward = CameraTransform.Z.XYZ;
+        v3 Right = CameraTransform.X.XYZ;
 
         constexpr f32 MoveSpeed = 1.0f;
         f32 SpeedMul = IO->Keys[SC_LeftShift].bIsDown ? 3.5f : 2.0f;
-        Camera->P += (Right * MoveDirection.x + Forward * MoveDirection.z) * SpeedMul * MoveSpeed * dt;
+        Camera->P += (Right * MoveDirection.X + Forward * MoveDirection.Z) * SpeedMul * MoveSpeed * dt;
 
-        if (IO->Keys[SC_Space].bIsDown) { Camera->P.z += SpeedMul * MoveSpeed * dt; }
-        if (IO->Keys[SC_LeftControl].bIsDown) { Camera->P.z -= SpeedMul * MoveSpeed * dt; }
+        if (IO->Keys[SC_Space].bIsDown) { Camera->P.Z += SpeedMul * MoveSpeed * dt; }
+        if (IO->Keys[SC_LeftControl].bIsDown) { Camera->P.Z -= SpeedMul * MoveSpeed * dt; }
 
         CameraTransform = GetTransform(Camera);
         m4 ViewTransform = AffineOrthonormalInverse(CameraTransform);
@@ -659,7 +659,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         if (IsValid(ParticleSystem->ParentID))
         {
             entity* Parent = World->Entities + ParticleSystem->ParentID.Value;
-            BaseP = Parent->Transform.P.xyz;
+            BaseP = Parent->Transform.P.XYZ;
             if (Parent->Flags & EntityFlag_LightSource)
             {
                 Color = Parent->LightEmission;
@@ -691,8 +691,8 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     } break;
                     case ParticleSystem_Magic:
                     {
-                        v2 XY = 0.5f * Hadamard((Bounds.Max.xy - Bounds.Min.xy), RandInUnitCircle(&World->EffectEntropy));
-                        v3 ParticleP = { XY.x, XY.y, 0.0f };
+                        v2 XY = 0.5f * Hadamard((Bounds.Max.XY - Bounds.Min.XY), RandInUnitCircle(&World->EffectEntropy));
+                        v3 ParticleP = { XY.X, XY.Y, 0.0f };
                         ParticleSystem->Particles[ParticleSystem->NextParticle] = 
                         {
                             .P = BaseP + ParticleSystem->EmitterOffset + ParticleP,
@@ -749,9 +749,9 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             if (ParticleSystem->CullOutOfBoundsParticles)
             {
                 CullParticle = 
-                    Particle->P.x < CullBounds.Min.x || Particle->P.x >= CullBounds.Max.x ||
-                    Particle->P.y < CullBounds.Min.y || Particle->P.y >= CullBounds.Max.y ||
-                    Particle->P.z < CullBounds.Min.z || Particle->P.z >= CullBounds.Max.z;
+                    Particle->P.X < CullBounds.Min.X || Particle->P.X >= CullBounds.Max.X ||
+                    Particle->P.Y < CullBounds.Min.Y || Particle->P.Y >= CullBounds.Max.Y ||
+                    Particle->P.Z < CullBounds.Min.Z || Particle->P.Z >= CullBounds.Max.Z;
             }
 
             if (!CullParticle)
@@ -762,10 +762,10 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     {
                         v4 PColor = 
                         {
-                            Max(Particle->Color.x, 0.0f),
-                            Max(Particle->Color.y, 0.0f),
-                            Max(Particle->Color.z, 0.0f),
-                            Max(Particle->Color.w, 0.0f),
+                            Max(Particle->Color.X, 0.0f),
+                            Max(Particle->Color.Y, 0.0f),
+                            Max(Particle->Color.Z, 0.0f),
+                            Max(Particle->Color.W, 0.0f),
                         };
                         Cmd->ParticleCount++;
                         Frame->Particles[Frame->ParticleCount++] = 
@@ -815,19 +815,19 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 World->AdHocLightdPs[LightIndex] = dP;
             }
 
-            Light->P.xyz += dP * dt;
-            Light->P.x = Clamp(Light->P.x, World->AdHocLightBounds.Min.x, World->AdHocLightBounds.Max.x);
-            Light->P.y = Clamp(Light->P.y, World->AdHocLightBounds.Min.y, World->AdHocLightBounds.Max.y);
-            Light->P.z = Clamp(Light->P.z, World->AdHocLightBounds.Min.z, World->AdHocLightBounds.Max.z);
+            Light->P.XYZ += dP * dt;
+            Light->P.X = Clamp(Light->P.X, World->AdHocLightBounds.Min.X, World->AdHocLightBounds.Max.X);
+            Light->P.Y = Clamp(Light->P.Y, World->AdHocLightBounds.Min.Y, World->AdHocLightBounds.Max.Y);
+            Light->P.Z = Clamp(Light->P.Z, World->AdHocLightBounds.Min.Z, World->AdHocLightBounds.Max.Z);
 
             AddLight(Frame, *Light, LightFlag_None);
             if (Cmd)
             {
                 Frame->Particles[Cmd->FirstParticle + LightIndex] = 
                 {
-                    .P = Light->P.xyz,
+                    .P = Light->P.XYZ,
                     .TextureIndex = Particle_Star06,
-                    .Color = { Light->E.x, Light->E.y, Light->E.z, 5.0f },
+                    .Color = { Light->E.X, Light->E.Y, Light->E.Z, 5.0f },
                     .HalfExtent = { 0.1f, 0.1f },
                 };
             }

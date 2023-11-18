@@ -10,7 +10,7 @@ layout(set = 2, binding = 0, scalar) uniform PerFrameBlock
 layout(push_constant) uniform PushConstants
 {
     mat4 ModelTransform;
-    material Material;
+    renderer_material Material;
     uint CascadeIndex;
 };
 
@@ -37,7 +37,7 @@ layout(location = 0) in vec2 TexCoord;
 void main()
 {
 #if 1
-    if (texture(sampler2D(Textures[Material.DiffuseID], Sampler), TexCoord).a < ALPHA_TEST_THRESHOLD)
+    if (texture(sampler2D(Textures[Material.DiffuseID], Sampler), TexCoord).a < R_AlphaTestThreshold)
     {
         discard;
     }

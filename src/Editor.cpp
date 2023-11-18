@@ -135,8 +135,8 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         Editor->ActiveMenuID = 0;
     }
 
-    Context.CurrentP.x = 0.0f;
-    Context.CurrentP.y += TextSize * Font->BaselineDistance; // TODO(boti): this is kind of a hack
+    Context.CurrentP.X = 0.0f;
+    Context.CurrentP.Y += TextSize * Font->BaselineDistance; // TODO(boti): this is kind of a hack
     TextSize = 24.0f;
 
     if (Editor->SelectedMenuID == CPUMenuID)
@@ -204,13 +204,13 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
     ray Ray;
     {
         v2 P = IO->Mouse.P;
-        P.x /= (f32)Frame->RenderWidth;
-        P.y /= (f32)Frame->RenderHeight;
-        P.x = 2.0f * P.x - 1.0f;
-        P.y = 2.0f * P.y - 1.0f;
-        P.x *= AspectRatio;
+        P.X /= (f32)Frame->RenderWidth;
+        P.Y /= (f32)Frame->RenderHeight;
+        P.X = 2.0f * P.X - 1.0f;
+        P.Y = 2.0f * P.Y - 1.0f;
+        P.X *= AspectRatio;
 
-        v3 V = Normalize(v3{ P.x, P.y, g });
+        v3 V = Normalize(v3{ P.X, P.Y, g });
 
         Ray = { World->Camera.P, TransformDirection(CameraTransform, V) };
     }
@@ -305,10 +305,10 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             
             v2 ScreenExtent = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
             f32 OutlineSize = 1.0f;
-            f32 MinX = 0.1f * ScreenExtent.x;
-            f32 MaxX = 0.9f * ScreenExtent.x;
-            f32 MaxY = ScreenExtent.y - 60.0f;
-            f32 MinY = ScreenExtent.y - 140.0f;
+            f32 MinX = 0.1f * ScreenExtent.X;
+            f32 MaxX = 0.9f * ScreenExtent.X;
+            f32 MaxY = ScreenExtent.Y - 60.0f;
+            f32 MinY = ScreenExtent.Y - 140.0f;
             PushRect(Frame, { MinX, MinY }, { MaxX, MaxY }, {}, {}, PackRGBA8(0x00, 0x00, 0x00, 0xC0));
             PushRect(Frame, { MinX, MinY - OutlineSize }, { MaxX, MinY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
             PushRect(Frame, { MinX, MaxY - OutlineSize }, { MaxX, MaxY + OutlineSize }, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF));
@@ -340,7 +340,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             
             if (Context.ActiveID == PlaybackID)
             {
-                Entity->AnimationCounter = Clamp(MaxTimestamp * (IO->Mouse.P.x - MinX) / ExtentX, 0.0f, MaxTimestamp);
+                Entity->AnimationCounter = Clamp(MaxTimestamp * (IO->Mouse.P.X - MinX) / ExtentX, 0.0f, MaxTimestamp);
                 if (Context.MouseLeft.bIsDown == false)
                 {
                     Context.ActiveID = 0;
@@ -349,13 +349,13 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         }
 
         m4 Transform = Entity->Transform;
-        v3 InstanceP = Transform.P.xyz;
+        v3 InstanceP = Transform.P.XYZ;
 
         if (Editor->Gizmo.IsGlobal)
         {
-            Transform = M4(1.0f, 0.0f, 0.0f, InstanceP.x,
-                           0.0f, 1.0f, 0.0f, InstanceP.y,
-                           0.0f, 0.0f, 1.0f, InstanceP.z,
+            Transform = M4(1.0f, 0.0f, 0.0f, InstanceP.X,
+                           0.0f, 1.0f, 0.0f, InstanceP.Y,
+                           0.0f, 0.0f, 1.0f, InstanceP.Z,
                            0.0f, 0.0f, 0.0f, 1.0f);
         }
 
@@ -363,10 +363,10 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         // Orthogonalize the transform, we don't want the gizmos size to change with the scale
         for (u32 AxisIndex = 0; AxisIndex < 3; AxisIndex++)
         {
-            Axes[AxisIndex] = NOZ(Transform.C[AxisIndex].xyz);
-            Transform.C[AxisIndex].x = Axes[AxisIndex].x;
-            Transform.C[AxisIndex].y = Axes[AxisIndex].y;
-            Transform.C[AxisIndex].z = Axes[AxisIndex].z;
+            Axes[AxisIndex] = NOZ(Transform.C[AxisIndex].XYZ);
+            Transform.C[AxisIndex].X = Axes[AxisIndex].X;
+            Transform.C[AxisIndex].Y = Axes[AxisIndex].Y;
+            Transform.C[AxisIndex].Z = Axes[AxisIndex].Z;
         }
 
         mmbox Box = Assets->Meshes[Assets->ArrowMeshID].BoundingBox;
@@ -421,15 +421,15 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             plane ProjectionPlane = { .Plane = { 0.0f, 0.0f, 1.0f, g } };
             line ScreenLine = ProjectTo(AxisLine, ProjectionPlane);
 
-            v2 ScreenAxis = { ScreenLine.Direction.x, ScreenLine.Direction.y };
+            v2 ScreenAxis = { ScreenLine.Direction.X, ScreenLine.Direction.Y };
 
             // TODO(boti): Translate by the actual amount that the user dragged along the axis (i.e. reproject to world space)
             constexpr f32 TranslationSpeed = 1e-2f;
             f32 TranslationAmount = TranslationSpeed * Dot(IO->Mouse.dP, ScreenAxis);
 
-            Entity->Transform.P.x += TranslationAmount*Axes[Editor->Gizmo.Selection].x;
-            Entity->Transform.P.y += TranslationAmount*Axes[Editor->Gizmo.Selection].y;
-            Entity->Transform.P.z += TranslationAmount*Axes[Editor->Gizmo.Selection].z;
+            Entity->Transform.P.X += TranslationAmount*Axes[Editor->Gizmo.Selection].X;
+            Entity->Transform.P.Y += TranslationAmount*Axes[Editor->Gizmo.Selection].Y;
+            Entity->Transform.P.Z += TranslationAmount*Axes[Editor->Gizmo.Selection].Z;
 
             IO->Mouse.dP = {}; // Don't propagate the mouse dP to the game
         }
@@ -476,12 +476,12 @@ internal void PushRect(render_frame* Frame, v2 P1, v2 P2, v2 UV1, v2 UV2, rgba8 
 {
     vertex_2d VertexData[] = 
     {
-        { { P1.x, P1.y }, { UV1.x, UV1.y }, Color },
-        { { P2.x, P1.y }, { UV2.x, UV1.y }, Color },
-        { { P2.x, P2.y }, { UV2.x, UV2.y }, Color },
-        { { P1.x, P1.y }, { UV1.x, UV1.y }, Color },
-        { { P2.x, P2.y }, { UV2.x, UV2.y }, Color },
-        { { P1.x, P2.y }, { UV1.x, UV2.y }, Color },
+        { { P1.X, P1.Y }, { UV1.X, UV1.Y }, Color },
+        { { P2.X, P1.Y }, { UV2.X, UV1.Y }, Color },
+        { { P2.X, P2.Y }, { UV2.X, UV2.Y }, Color },
+        { { P1.X, P1.Y }, { UV1.X, UV1.Y }, Color },
+        { { P2.X, P2.Y }, { UV2.X, UV2.Y }, Color },
+        { { P1.X, P2.Y }, { UV1.X, UV2.Y }, Color },
     };
 
     DrawTriangleList2D(Frame, CountOf(VertexData), VertexData);
@@ -494,11 +494,11 @@ internal mmrect2 PushText(render_frame* Frame, const char* Text, const font* Fon
     v2 CurrentP = P;
     if (Layout == font_layout_type::Top)
     {
-        CurrentP.y += Size * Font->Ascent;
+        CurrentP.Y += Size * Font->Ascent;
     }
     else if (Layout == font_layout_type::Bottom)
     {
-        CurrentP.y -= Size * Font->Descent;
+        CurrentP.Y -= Size * Font->Descent;
     }
 
     for (const char* At = Text; *At; At++)
@@ -506,8 +506,8 @@ internal mmrect2 PushText(render_frame* Frame, const char* Text, const font* Fon
         const font_glyph* Glyph = Font->Glyphs + Font->CharMapping[*At].GlyphIndex;
         if (*At == '\n')
         {
-            CurrentP.y += Size * Font->BaselineDistance;
-            CurrentP.x = P.x;
+            CurrentP.Y += Size * Font->BaselineDistance;
+            CurrentP.X = P.X;
         }
         else
         {
@@ -516,7 +516,7 @@ internal mmrect2 PushText(render_frame* Frame, const char* Text, const font* Fon
                      CurrentP + Size * Glyph->P1,
                      Glyph->UV0, Glyph->UV1,
                      Color);
-            CurrentP.x += Size * Glyph->AdvanceX;
+            CurrentP.X += Size * Glyph->AdvanceX;
         }
     }
 
@@ -625,11 +625,11 @@ internal v2 AdvanceCursor(gui_context* Context, f32 Size, mmrect2 Rect)
     {
         case Flow_Vertical:
         {
-            P.y += Size * Context->Font->BaselineDistance;
+            P.Y += Size * Context->Font->BaselineDistance;
         } break;
         case Flow_Horizontal:
         {
-            P.x = Context->IsRightAligned ? Rect.Min.x : Rect.Max.x;
+            P.X = Context->IsRightAligned ? Rect.Min.X : Rect.Max.X;
         } break;
         InvalidDefaultCase;
     }
@@ -649,11 +649,11 @@ internal u32 TextGUI(gui_context* Context, f32 Size, const char* Format, ...)
     Rect.Max *= Size;
     Rect.Min += Context->CurrentP;
     Rect.Max += Context->CurrentP;
-    f32 Width = Rect.Max.x - Rect.Min.x;
+    f32 Width = Rect.Max.X - Rect.Min.X;
     v2 P = Context->CurrentP;
     if (Context->IsRightAligned)
     {
-        P.x -= Width;
+        P.X -= Width;
     }
     PushTextWithShadow(Context->Frame, Context->TextBuffer, Context->Font, Size, P, 
                        Context->DefaultForegroundColor, Context->CurrentLayout);
@@ -698,7 +698,7 @@ internal u32 ButtonGUI(gui_context* Context, f32 Size, const char* Format, ...)
 
     PushRect(Context->Frame, Rect.Min, Rect.Max, { 0.0f, 0.0f }, { 0.0f, 0.0f }, Color);
     PushTextWithShadow(Context->Frame, Context->TextBuffer, Context->Font, 
-                       Size, { Context->CurrentP.x + Context->Margin, Context->CurrentP.y },
+                       Size, { Context->CurrentP.X + Context->Margin, Context->CurrentP.Y },
                        Context->DefaultForegroundColor,
                        Context->CurrentLayout);
     Context->CurrentP = AdvanceCursor(Context, Size, Rect);
@@ -733,7 +733,7 @@ internal u32 F32Slider(gui_context* Context, f32 Size, const char* Name, f32* Va
     }
     if (Context->ActiveID == RectID)
     {
-        *Value += Step * Context->MousedP.x;
+        *Value += Step * Context->MousedP.X;
         *Value = Clamp(*Value, MinValue, MaxValue);
     }
 
@@ -745,7 +745,7 @@ internal u32 F32Slider(gui_context* Context, f32 Size, const char* Name, f32* Va
     }
 
     PushTextWithShadow(Context->Frame, Context->TextBuffer, Context->Font, Size, Context->CurrentP, TextColor, Context->CurrentLayout);
-    Context->CurrentP.x = StartP.x;
-    Context->CurrentP.y = TextRect.Max.y;
+    Context->CurrentP.X = StartP.X;
+    Context->CurrentP.Y = TextRect.Max.Y;
     return(RectID);
 }
