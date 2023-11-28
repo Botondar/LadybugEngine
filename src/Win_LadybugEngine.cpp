@@ -409,7 +409,6 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     GameMemory.PlatformAPI.ElapsedSeconds = &Win_ElapsedSeconds;
     GameMemory.PlatformAPI.LoadEntireFile = &Win_LoadEntireFile;
     GameMemory.PlatformAPI.CreateVulkanSurface = &Win_CreateVulkanSurface;
-    GameMemory.PlatformAPI.CreateVulkanSurface = &Win_CreateVulkanSurface;
     GameMemory.PlatformAPI.CreateThread = &Win_CreateThread;
     GameMemory.PlatformAPI.CreateSemaphore = &Win_CreateSemaphore;
     GameMemory.PlatformAPI.WaitForSemaphore = &Win_WaitForSemaphore;
