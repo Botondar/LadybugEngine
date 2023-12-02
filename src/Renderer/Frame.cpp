@@ -98,6 +98,15 @@ PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, renderer_
 
 internal void BeginPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer)
 {
+    VkDebugUtilsLabelEXT BeginLabel = 
+    {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pNext = nullptr,
+        .pLabelName = "Prepass",
+        .color = {},
+    };
+    vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, &BeginLabel);
+
     VkImageMemoryBarrier2 BeginBarriers[] = 
     {
         // Structure buffer
@@ -211,6 +220,7 @@ internal void BeginPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer)
 internal void EndPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer)
 {
     vkCmdEndRendering(CmdBuffer);
+    vkCmdEndDebugUtilsLabelEXT(CmdBuffer);
 }
 
 internal void BeginCascade(render_frame* Frame, VkCommandBuffer CmdBuffer, u32 CascadeIndex)
@@ -296,6 +306,15 @@ RenderSSAO(render_frame* Frame,
            VkPipeline BlurPipeline, VkPipelineLayout BlurPipelineLayout,
            VkDescriptorSetLayout BlurSetLayout)
 {
+    VkDebugUtilsLabelEXT SSAOLabel = 
+    {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pNext = nullptr,
+        .pLabelName = "SSAO",
+        .color = {},
+    };
+    vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, &SSAOLabel);
+
     // Transition depth + G-buffers
     VkImageMemoryBarrier2 GBufferReadBarriers[] = 
     {
@@ -578,6 +597,8 @@ RenderSSAO(render_frame* Frame,
 
         vkCmdDispatch(CmdBuffer, DispatchX, DispatchY, 1);
     }
+
+    vkCmdEndDebugUtilsLabelEXT(CmdBuffer);
 }
 
 internal void BeginForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer)
@@ -730,6 +751,15 @@ internal void RenderBloom(
     VkDescriptorSetLayout DownsampleSetLayout,
     VkDescriptorSetLayout UpsampleSetLayout)
 {
+    VkDebugUtilsLabelEXT BloomLabel = 
+    {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pNext = nullptr,
+        .pLabelName = "Bloom",
+        .color = {},
+    };
+    vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, &BloomLabel);
+
     u32 Width = Frame->RenderWidth;
     u32 Height = Frame->RenderHeight;
 
@@ -1215,4 +1245,6 @@ internal void RenderBloom(
         };
         vkCmdPipelineBarrier2(CmdBuffer, &EndDependency);
     }
+
+    vkCmdEndDebugUtilsLabelEXT(CmdBuffer);
 }

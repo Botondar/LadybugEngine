@@ -1,14 +1,21 @@
-#pragma once
+//
+// TODO(boti): Rework the relationship between SwapchainImageCount and the number of 
+// frames in flight, we're in a mess right now
+//
 
 #include "Renderer/Renderer.hpp"
 #include "Renderer/Pipelines.hpp"
 
 #include <vulkan/vulkan.h>
 
-//
-// TODO(boti): Rework the relationship between SwapchainImageCount and the number of 
-// frames in flight, we're in a mess right now
-//
+PFN_vkCmdDebugMarkerBeginEXT            vkCmdDebugMarkerBeginEXT_;
+PFN_vkCmdDebugMarkerEndEXT              vkCmdDebugMarkerEndEXT_;
+PFN_vkCmdBeginDebugUtilsLabelEXT        vkCmdBeginDebugUtilsLabelEXT_;
+PFN_vkCmdEndDebugUtilsLabelEXT          vkCmdEndDebugUtilsLabelEXT_;
+#define vkCmdDebugMarkerBeginEXT        vkCmdDebugMarkerBeginEXT_
+#define vkCmdDebugMarkerEndEXT          vkCmdDebugMarkerEndEXT_
+#define vkCmdBeginDebugUtilsLabelEXT    vkCmdBeginDebugUtilsLabelEXT_
+#define vkCmdEndDebugUtilsLabelEXT      vkCmdEndDebugUtilsLabelEXT_
 
 struct gpu_memory_arena
 {

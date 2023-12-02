@@ -16,6 +16,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
     {
         VK_KHR_SURFACE_EXTENSION_NAME,
         "VK_KHR_win32_surface",
+        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
     };
 
     const char* RequiredDeviceExtensions[] = 
@@ -321,6 +322,11 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                 vkGetDeviceQueue(Vulkan->Device, Vulkan->GraphicsQueueIdx, 0, &Vulkan->GraphicsQueue);
                 vkGetDeviceQueue(Vulkan->Device, Vulkan->ComputeQueueIdx, ComputeQueueIdx, &Vulkan->ComputeQueue);
                 vkGetDeviceQueue(Vulkan->Device, Vulkan->TransferQueueIdx, 0, &Vulkan->TransferQueue);
+
+                vkCmdDebugMarkerBeginEXT = (PFN_vkCmdDebugMarkerBeginEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdDebugMarkerBeginEXT");
+                vkCmdDebugMarkerEndEXT = (PFN_vkCmdDebugMarkerEndEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdDebugMarkerEndEXT");
+                vkCmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdBeginDebugUtilsLabelEXT");
+                vkCmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdEndDebugUtilsLabelEXT");
             }
             else
             {
