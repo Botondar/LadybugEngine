@@ -323,10 +323,8 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                 vkGetDeviceQueue(Vulkan->Device, Vulkan->ComputeQueueIdx, ComputeQueueIdx, &Vulkan->ComputeQueue);
                 vkGetDeviceQueue(Vulkan->Device, Vulkan->TransferQueueIdx, 0, &Vulkan->TransferQueue);
 
-                vkCmdDebugMarkerBeginEXT = (PFN_vkCmdDebugMarkerBeginEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdDebugMarkerBeginEXT");
-                vkCmdDebugMarkerEndEXT = (PFN_vkCmdDebugMarkerEndEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdDebugMarkerEndEXT");
-                vkCmdBeginDebugUtilsLabelEXT = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdBeginDebugUtilsLabelEXT");
-                vkCmdEndDebugUtilsLabelEXT = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdEndDebugUtilsLabelEXT");
+                vkCmdBeginDebugUtilsLabelEXT_ = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdBeginDebugUtilsLabelEXT");
+                vkCmdEndDebugUtilsLabelEXT_ = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdEndDebugUtilsLabelEXT");
             }
             else
             {

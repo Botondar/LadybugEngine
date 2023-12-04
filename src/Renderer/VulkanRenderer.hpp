@@ -8,14 +8,12 @@
 
 #include <vulkan/vulkan.h>
 
-PFN_vkCmdDebugMarkerBeginEXT            vkCmdDebugMarkerBeginEXT_;
-PFN_vkCmdDebugMarkerEndEXT              vkCmdDebugMarkerEndEXT_;
 PFN_vkCmdBeginDebugUtilsLabelEXT        vkCmdBeginDebugUtilsLabelEXT_;
 PFN_vkCmdEndDebugUtilsLabelEXT          vkCmdEndDebugUtilsLabelEXT_;
-#define vkCmdDebugMarkerBeginEXT        vkCmdDebugMarkerBeginEXT_
-#define vkCmdDebugMarkerEndEXT          vkCmdDebugMarkerEndEXT_
-#define vkCmdBeginDebugUtilsLabelEXT    vkCmdBeginDebugUtilsLabelEXT_
+//#define vkCmdBeginDebugUtilsLabelEXT    vkCmdBeginDebugUtilsLabelEXT_
 #define vkCmdEndDebugUtilsLabelEXT      vkCmdEndDebugUtilsLabelEXT_
+
+inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* Label);
 
 struct gpu_memory_arena
 {
@@ -201,6 +199,22 @@ struct renderer
 };
 
 lbfn void SetupSceneRendering(render_frame* Frame);
+
+//
+// Implementation
+//
+
+inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* Label)
+{
+    VkDebugUtilsLabelEXT UtilsLabel = 
+    {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pNext = nullptr,
+        .pLabelName = Label,
+        .color = {},
+    };
+    vkCmdBeginDebugUtilsLabelEXT_(CmdBuffer, &UtilsLabel);
+}
 
 // NOTE(boti): See Vulkan spec. 16.5.4. Table 17. to find where these transforms come from
 m3 GlobalCubeFaceBases[Layer_Count]

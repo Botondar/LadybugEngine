@@ -98,14 +98,7 @@ PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, renderer_
 
 internal void BeginPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer)
 {
-    VkDebugUtilsLabelEXT BeginLabel = 
-    {
-        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-        .pNext = nullptr,
-        .pLabelName = "Prepass",
-        .color = {},
-    };
-    vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, &BeginLabel);
+    vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, "Prepass");
 
     VkImageMemoryBarrier2 BeginBarriers[] = 
     {
@@ -306,14 +299,7 @@ RenderSSAO(render_frame* Frame,
            VkPipeline BlurPipeline, VkPipelineLayout BlurPipelineLayout,
            VkDescriptorSetLayout BlurSetLayout)
 {
-    VkDebugUtilsLabelEXT SSAOLabel = 
-    {
-        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-        .pNext = nullptr,
-        .pLabelName = "SSAO",
-        .color = {},
-    };
-    vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, &SSAOLabel);
+    vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, "SSAO");
 
     // Transition depth + G-buffers
     VkImageMemoryBarrier2 GBufferReadBarriers[] = 
@@ -751,14 +737,7 @@ internal void RenderBloom(
     VkDescriptorSetLayout DownsampleSetLayout,
     VkDescriptorSetLayout UpsampleSetLayout)
 {
-    VkDebugUtilsLabelEXT BloomLabel = 
-    {
-        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-        .pNext = nullptr,
-        .pLabelName = "Bloom",
-        .color = {},
-    };
-    vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, &BloomLabel);
+    vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, "Bloom");
 
     u32 Width = Frame->RenderWidth;
     u32 Height = Frame->RenderHeight;

@@ -2348,14 +2348,7 @@ void EndRenderFrame(render_frame* Frame)
 
     // Skinning
     {
-        VkDebugUtilsLabelEXT SkinningLabel = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-            .pNext = nullptr,
-            .pLabelName = "Skinning",
-            .color = {},
-        };
-        vkCmdBeginDebugUtilsLabelEXT(PrepassCmd, &SkinningLabel);
+        vkCmdBeginDebugUtilsLabelEXT(PrepassCmd, "Skinning");
         VkDescriptorSet JointDescriptorSet = 
             PushBufferDescriptor(Frame, 
                                  Renderer->SetLayouts[SetLayout_PoseTransform], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 
@@ -2559,14 +2552,7 @@ void EndRenderFrame(render_frame* Frame)
 
     // Light binning
     {
-        VkDebugUtilsLabelEXT LightBinningLabel = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-            .pNext = nullptr,
-            .pLabelName = "Light binning",
-            .color = {},
-        };
-        vkCmdBeginDebugUtilsLabelEXT(PreLightCmd, &LightBinningLabel);
+        vkCmdBeginDebugUtilsLabelEXT(PreLightCmd, "Light binning");
 
         VkBufferMemoryBarrier2 BeginBarriers[] = 
         {
@@ -2707,14 +2693,7 @@ void EndRenderFrame(render_frame* Frame)
 
     // Cascaded shadows
     {
-        VkDebugUtilsLabelEXT CSMLabel = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-            .pNext = nullptr,
-            .pLabelName = "CSM",
-            .color = {},
-        };
-        vkCmdBeginDebugUtilsLabelEXT(ShadowCmd, &CSMLabel);
+        vkCmdBeginDebugUtilsLabelEXT(ShadowCmd, "CSM");
 
         pipeline_with_layout ShadowPipeline = Renderer->Pipelines[Pipeline_Shadow];
         vkCmdBindPipeline(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Pipeline);
@@ -2754,14 +2733,7 @@ void EndRenderFrame(render_frame* Frame)
 
     // Point shadows
     {
-        VkDebugUtilsLabelEXT PointShadowLabel = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-            .pNext = nullptr,
-            .pLabelName = "Point shadows",
-            .color = {},
-        };
-        vkCmdBeginDebugUtilsLabelEXT(ShadowCmd, &PointShadowLabel);
+        vkCmdBeginDebugUtilsLabelEXT(ShadowCmd, "Point shadows");
 
         VkImageMemoryBarrier2* Barriers = PushArray(Frame->Arena, 0, VkImageMemoryBarrier2, Frame->MaxShadowCount);
         for (u32 ShadowIndex = 0; ShadowIndex < Frame->ShadowCount; ShadowIndex++)
@@ -2985,14 +2957,7 @@ void EndRenderFrame(render_frame* Frame)
     vkCmdSetScissor(RenderCmd, 0, 1, &FrameScissor);
     BeginForwardPass(Frame, RenderCmd);
     {
-        VkDebugUtilsLabelEXT ForwardLightingLabel = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-            .pNext = nullptr,
-            .pLabelName = "Forward Lighting",
-            .color = {},
-        };
-        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, &ForwardLightingLabel);
+        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Shading");
 
         pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Simple];
         vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
@@ -3005,16 +2970,8 @@ void EndRenderFrame(render_frame* Frame)
         vkCmdEndDebugUtilsLabelEXT(RenderCmd);
 
         // Render sky
-#if 1
         {
-            VkDebugUtilsLabelEXT SkyLabel = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-                .pNext = nullptr,
-                .pLabelName = "Sky",
-                .color = {},
-            };
-            vkCmdBeginDebugUtilsLabelEXT(RenderCmd, &SkyLabel);
+            vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Sky");
 
             pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
@@ -3030,18 +2987,10 @@ void EndRenderFrame(render_frame* Frame)
 
             vkCmdEndDebugUtilsLabelEXT(RenderCmd);
         }
-#endif
 
         // Particles
         {
-            VkDebugUtilsLabelEXT ParticleLabel = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-                .pNext = nullptr,
-                .pLabelName = "Particle",
-                .color = {},
-            };
-            vkCmdBeginDebugUtilsLabelEXT(RenderCmd, &ParticleLabel);
+            vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Particle");
 
             VkImageView ParticleView = *GetImageView(&Renderer->TextureManager, Frame->ParticleTextureID);
             VkDescriptorSet TextureSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS]);
@@ -3110,14 +3059,7 @@ void EndRenderFrame(render_frame* Frame)
 
     // Blit + UI
     {
-        VkDebugUtilsLabelEXT BlitLabel = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-            .pNext = nullptr,
-            .pLabelName = "Blit",
-            .color = {},
-        };
-        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, &BlitLabel);
+        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Blit");
 
         VkImageMemoryBarrier2 BeginBarriers[] = 
         {
@@ -3263,14 +3205,7 @@ void EndRenderFrame(render_frame* Frame)
         }
         vkCmdEndDebugUtilsLabelEXT(RenderCmd);
 
-        VkDebugUtilsLabelEXT UILabel = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-            .pNext = nullptr,
-            .pLabelName = "UI",
-            .color = {},
-        };
-        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, &UILabel);
+        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "UI");
 
         // 3D widget render
         {
