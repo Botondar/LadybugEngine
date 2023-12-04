@@ -1276,8 +1276,6 @@ inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 Center, f32 r)
 inline b32 IntersectFrustumFrustum(const frustum* A, const frustum* B)
 {
     b32 Result = true;
-
-
-
+    UnimplementedCodePath;
     return(Result);
 }

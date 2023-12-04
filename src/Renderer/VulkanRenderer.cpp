@@ -1896,9 +1896,11 @@ void EndRenderFrame(render_frame* Frame)
         light* Light = Frame->Lights + Frame->Shadows[ShadowIndex];
         v3 P = Light->P.XYZ;
 
+        f32 L = Light->E.W * Max(Max(Light->E.X, Light->E.Y), Light->E.Z);
+        f32 R = Sqrt(Max((L / R_LuminanceThreshold), 0.0f));
         // TODO(boti): Get the far plane from the luminance and the light threshold
         f32 n = 0.05f;
-        f32 f = 10.0f;
+        f32 f = R + 1e-6f;
         f32 r = 1.0f / (f - n);
         m4 Projection = M4(1.0f, 0.0f, 0.0f, 0.0f,
                            0.0f, 1.0f, 0.0f, 0.0f,
