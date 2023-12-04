@@ -2198,8 +2198,7 @@ void EndRenderFrame(render_frame* Frame)
 
     u32 TileCountX = CeilDiv(Frame->RenderWidth, R_TileSizeX);
     u32 TileCountY = CeilDiv(Frame->RenderHeight, R_TileSizeY);
-    Frame->Uniforms.TileCountX = TileCountX;
-    Frame->Uniforms.TileCountY = TileCountY;
+    Frame->Uniforms.TileCount = { TileCountX, TileCountY };
     {
         f32 s = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
         frustum CameraFrustum = Frame->CameraFrustum;

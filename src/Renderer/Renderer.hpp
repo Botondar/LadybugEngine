@@ -25,6 +25,8 @@ union rgba8
 static_assert(sizeof(rgba8) == sizeof(u32));
 #include <Shader/ShaderInterop.h>
 
+static_assert(sizeof(per_frame) <= KiB(64));
+
 //
 // Config
 //
@@ -676,42 +678,6 @@ struct geometry_buffer_allocation
     geometry_buffer_block* IndexBlock;
 };
 
-struct frame_uniform_data
-{
-    m4 CameraTransform;
-    m4 ViewTransform;
-    m4 ProjectionTransform;
-    m4 InverseProjectionTransform;
-    m4 ViewProjectionTransform;
-
-    m4 CascadeViewProjections[4];
-
-    m4 ShadowViewProjections[6*R_MaxShadowCount];
-
-    f32 CascadeMinDistances[4];
-    f32 CascadeMaxDistances[4];
-    v3 CascadeScales[3];
-    v3 CascadeOffsets[3];
-
-    f32 FocalLength;
-    f32 AspectRatio;
-    f32 NearZ;
-    f32 FarZ;
-
-    v3 CameraP;
-
-    v3 SunV; // NOTE(boti): view space
-    v3 SunL;
-
-    v2 ScreenSize;
-    u32 TileCountX;
-    u32 TileCountY;
-
-    u32 LightCount;
-};
-static_assert(sizeof(frame_uniform_data) <= KiB(64));
-
-
 struct renderer;
 struct backend_render_frame;
 
@@ -850,7 +816,7 @@ struct render_frame
     vertex_2d* Vertex2DArray;
 
     void* UniformData; // GPU-backed frame_uniform_data
-    frame_uniform_data Uniforms;
+    per_frame Uniforms;
 };
 
 extern renderer* 
@@ -1304,5 +1270,14 @@ inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 Center, f32 r)
             break;
         }
     }
+    return(Result);
+}
+
+inline b32 IntersectFrustumFrustum(const frustum* A, const frustum* B)
+{
+    b32 Result = true;
+
+
+
     return(Result);
 }

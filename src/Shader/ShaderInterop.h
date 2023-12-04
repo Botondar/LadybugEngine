@@ -46,10 +46,10 @@ struct screen_tile
 struct per_frame
 {
     m4 CameraTransform;
-    m4 View;
-    m4 Projection;
-    m4 InverseProjection;
-    m4 ViewProjection;
+    m4 ViewTransform;
+    m4 ProjectionTransform;
+    m4 InverseProjectionTransform;
+    m4 ViewProjectionTransform;
 
     m4 CascadeViewProjections[4];
 

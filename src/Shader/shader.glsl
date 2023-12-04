@@ -35,16 +35,16 @@ void main()
 {
     vec3 WorldP = TransformPoint(ModelTransform, aP);
     TexCoord = aTexCoord;
-    P = TransformPoint(PerFrame.View, WorldP);
-    N = normalize(mat3(PerFrame.View) * (aN * inverse(mat3(ModelTransform))));
-    T = normalize((mat3(PerFrame.View) * (mat3(ModelTransform) * aT.xyz)));
+    P = TransformPoint(PerFrame.ViewTransform, WorldP);
+    N = normalize(mat3(PerFrame.ViewTransform) * (aN * inverse(mat3(ModelTransform))));
+    T = normalize((mat3(PerFrame.ViewTransform) * (mat3(ModelTransform) * aT.xyz)));
     B = normalize(cross(T, N)) * aT.w;
 
     ShadowP = TransformPoint(PerFrame.CascadeViewProjections[0], WorldP);
     ShadowP.xy = 0.5 * ShadowP.xy + v2(0.5);
     CascadeBlends = GetCascadeBlends(PerFrame.CascadeMinDistances, PerFrame.CascadeMaxDistances, P.z);
 
-    gl_Position = PerFrame.ViewProjection * v4(WorldP, 1.0);
+    gl_Position = PerFrame.ViewProjectionTransform * v4(WorldP, 1.0);
 }
 
 #elif defined(FS)

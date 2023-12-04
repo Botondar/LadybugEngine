@@ -26,11 +26,11 @@ layout(location = 2) out vec3 SrcColor;
 
 void main()
 {
-    P = (PerFrame.View * (Transform * vec4(aP, 1.0))).xyz;
+    P = (PerFrame.ViewTransform * (Transform * vec4(aP, 1.0))).xyz;
     // TODO(boti): determine whether we'll need Inv/Transpose here
-    N = normalize((PerFrame.View * (Transform * vec4(aN, 0.0))).xyz);
+    N = normalize((PerFrame.ViewTransform * (Transform * vec4(aN, 0.0))).xyz);
     SrcColor = UnpackRGBA8(iSrcColor).rgb;
-    gl_Position = PerFrame.Projection * vec4(P, 1.0);
+    gl_Position = PerFrame.ProjectionTransform * vec4(P, 1.0);
     
 }
 

@@ -41,7 +41,7 @@ void main()
         uint uMaxX = uMinX + R_TileSizeX;
         uint uMaxY = uMinY + R_TileSizeY;
 
-        mat2 ProjectZ = mat2(PerFrame.Projection[2].zw, PerFrame.Projection[3].zw);
+        mat2 ProjectZ = mat2(PerFrame.ProjectionTransform[2].zw, PerFrame.ProjectionTransform[3].zw);
 
         float Depths[R_TileSizeX*R_TileSizeY];
         float MinDepth = 1e9;
@@ -82,8 +82,8 @@ void main()
         float MaxX = 2.0 * (float(uMaxX) / PerFrame.ScreenSize.x) - 1.0;
         float MaxY = 2.0 * (float(uMaxY) / PerFrame.ScreenSize.y) - 1.0;
 
-        v4 P0 = PerFrame.InverseProjection * v4(MinX, MinY, MinDepthClipSpace, 1.0);
-        v4 P1 = PerFrame.InverseProjection * v4(MaxX, MaxY, MaxDepthClipSpace, 1.0);
+        v4 P0 = PerFrame.InverseProjectionTransform * v4(MinX, MinY, MinDepthClipSpace, 1.0);
+        v4 P1 = PerFrame.InverseProjectionTransform * v4(MaxX, MaxY, MaxDepthClipSpace, 1.0);
         P0.xyz /= P0.w;
         P1.xyz /= P1.w;
         v3 MinP = min(P0.xyz, P1.xyz);

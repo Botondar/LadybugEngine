@@ -67,7 +67,7 @@ void main()
         Y = v3(0.0, 0.0, 1.0);
     }
     v3 P = Particle.HalfExtent.x * BaseP.x * X + Particle.HalfExtent.y * BaseP.y * Y + Particle.P;
-    P = TransformPoint(PerFrame.View, P);
+    P = TransformPoint(PerFrame.ViewTransform, P);
 
     TexCoord = 0.5 * (BaseP.xy + vec2(1.0, 1.0));
     ParticleColor = Particle.Color;
@@ -76,7 +76,7 @@ void main()
 
     if (ParticleColor.a > 0.0)
     {
-        gl_Position = PerFrame.Projection * vec4(P, 1.0);
+        gl_Position = PerFrame.ProjectionTransform * vec4(P, 1.0);
     }
     else
     {

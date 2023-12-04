@@ -35,7 +35,7 @@ layout(location = 0) out vec4 Out0;
 
 vec3 CIEClearSky(vec3 V, bool DoSun)
 {
-    vec3 Up = PerFrame.View[2].xyz;//Viewvec3(0.0, 0.0, 1.0)
+    vec3 Up = PerFrame.ViewTransform[2].xyz;//Viewvec3(0.0, 0.0, 1.0)
 
     vec3 SkyV = dot(V, Up) >= 0.0 ? V : reflect(V, Up);
     float CosGamma = dot(V, PerFrame.SunV);
