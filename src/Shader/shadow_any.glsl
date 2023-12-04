@@ -24,7 +24,9 @@ layout(location = 0) out vec2 TexCoord;
 void main()
 {
     TexCoord = aTexCoord;
-    gl_Position = PerFrame.ShadowViewProjections[Index] * (ModelTransform * vec4(aP, 1.0));
+    uint ShadowIndex = Index / 6;
+    uint LayerIndex = Index % 6;
+    gl_Position = PerFrame.PointShadows[ShadowIndex].ViewProjections[LayerIndex] * (ModelTransform * vec4(aP, 1.0));
 }
 
 #elif defined(FS)

@@ -43,6 +43,13 @@ struct screen_tile
     u32 LightIndices[R_MaxLightCountPerTile];
 };
 
+struct point_shadow_data
+{
+    m4 ViewProjections[6];
+    f32 Near;
+    f32 Far;
+};
+
 struct per_frame
 {
     m4 CameraTransform;
@@ -53,7 +60,7 @@ struct per_frame
 
     m4 CascadeViewProjections[4];
 
-    m4 ShadowViewProjections[6*R_MaxShadowCount];
+    point_shadow_data PointShadows[R_MaxShadowCount];
 
     f32 CascadeMinDistances[4];
     f32 CascadeMaxDistances[4];

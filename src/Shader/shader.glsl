@@ -191,9 +191,8 @@ void main()
             f32 TexelSize = 1.0 / float(ShadowResolution.x);
             f32 Offset = 2.0 * TexelSize;
 
-            // HACK(boti): These will need to be stored and fetched from the per-frame uniform buffer
-            f32 n = 0.05;
-            f32 f = 10.0;
+            f32 n = PerFrame.PointShadows[ShadowIndex].Near;
+            f32 f = PerFrame.PointShadows[ShadowIndex].Far;
             f32 r = 1.0 / (f - n);
             f32 ProjDepth = f*r - f*n*r / Depth;
             Shadow = texture(PointShadows[ShadowIndex], v4(SampleP, ProjDepth));

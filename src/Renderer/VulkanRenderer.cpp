@@ -1946,6 +1946,9 @@ void EndRenderFrame(render_frame* Frame)
             },
         };
 
+        point_shadow_data* Shadow = Frame->Uniforms.PointShadows + ShadowIndex;
+        Shadow->Near = n;
+        Shadow->Far = f;
         for (u32 LayerIndex = 0; LayerIndex < 6; LayerIndex++)
         {
             m3 M = Bases[LayerIndex];
@@ -1954,7 +1957,7 @@ void EndRenderFrame(render_frame* Frame)
                          M.Z.X, M.Z.Y, M.Z.Z, -Dot(M.Z, P),
                          0.0f, 0.0f, 0.0f, 1.0f);
             m4 ViewProjection = Projection * View;
-            Frame->Uniforms.ShadowViewProjections[6*ShadowIndex + LayerIndex] = ViewProjection;
+            Shadow->ViewProjections[LayerIndex] = ViewProjection;
         }
     }
 
