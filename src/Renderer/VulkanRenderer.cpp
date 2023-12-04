@@ -1906,54 +1906,12 @@ void EndRenderFrame(render_frame* Frame)
                            0.0f, 1.0f, 0.0f, 0.0f,
                            0.0f, 0.0f, f*r, -f*n*r,
                            0.0f, 0.0f, 1.0f, 0.0f);
-
-        // NOTE(boti): See Vulkan spec. 16.5.4. Table 17. to find where these transforms come from
-        m3 Bases[6] = 
-        {
-            // +X
-            {
-                .X = {  0.0f,  0.0f, -1.0f },
-                .Y = {  0.0f, -1.0f,  0.0f },
-                .Z = { +1.0f,  0.0f,  0.0f },
-            },
-            // -X
-            {
-                .X = {  0.0f,  0.0f, +1.0f },
-                .Y = {  0.0f, -1.0f,  0.0f },
-                .Z = { -1.0f,  0.0f,  0.0f },
-            },
-            // +Y
-            {
-                .X = { +1.0f,  0.0f,  0.0f },
-                .Y = {  0.0f,  0.0f, +1.0f },
-                .Z = {  0.0f, +1.0f,  0.0f },
-            },
-            // -Y
-            {
-                .X = { +1.0f,  0.0f,  0.0f },
-                .Y = {  0.0f,  0.0f, -1.0f },
-                .Z = {  0.0f, -1.0f,  0.0f },
-            },
-            // +Z
-            {
-                .X = { +1.0f,  0.0f,  0.0f },
-                .Y = {  0.0f, -1.0f,  0.0f },
-                .Z = {  0.0f,  0.0f, +1.0f },
-            },
-            // -Z
-            {
-                .X = { -1.0f,  0.0f,  0.0f },
-                .Y = {  0.0f, -1.0f,  0.0f },
-                .Z = {  0.0f,  0.0f, -1.0f },
-            },
-        };
-
         point_shadow_data* Shadow = Frame->Uniforms.PointShadows + ShadowIndex;
         Shadow->Near = n;
         Shadow->Far = f;
-        for (u32 LayerIndex = 0; LayerIndex < 6; LayerIndex++)
+        for (u32 LayerIndex = 0; LayerIndex < Layer_Count; LayerIndex++)
         {
-            m3 M = Bases[LayerIndex];
+            m3 M = GlobalCubeFaceBases[LayerIndex];
             m4 View = M4(M.X.X, M.X.Y, M.X.Z, -Dot(M.X, P),
                          M.Y.X, M.Y.Y, M.Y.Z, -Dot(M.Y, P),
                          M.Z.X, M.Z.Y, M.Z.Z, -Dot(M.Z, P),
@@ -2871,7 +2829,7 @@ void EndRenderFrame(render_frame* Frame)
             light* Light = Frame->Lights + LightIndex;
             point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;
 
-            for (u32 LayerIndex = 0; LayerIndex < 6; LayerIndex++)
+            for (u32 LayerIndex = 0; LayerIndex < Layer_Count; LayerIndex++)
             {
                 VkRenderingAttachmentInfo DepthAttachment = 
                 {

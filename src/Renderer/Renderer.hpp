@@ -447,6 +447,17 @@ struct pipeline_info
     format StencilAttachment;
 };
 
+enum cube_layer : u32
+{
+    Layer_PositiveX = 0,
+    Layer_NegativeX,
+    Layer_PositiveY,
+    Layer_NegativeY,
+    Layer_PositiveZ,
+    Layer_NegativeZ,
+
+    Layer_Count,
+};
 
 enum texture_swizzle_type : u8
 {

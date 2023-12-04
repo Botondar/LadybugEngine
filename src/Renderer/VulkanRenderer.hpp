@@ -33,6 +33,8 @@ PushBuffer(gpu_memory_arena* Arena,
            VkBuffer* Buffer, 
            void** Mapping = nullptr);
 
+extern m3 GlobalCubeFaceBases[Layer_Count];
+
 #include "Renderer/RenderDevice.hpp"
 #include "Renderer/RenderTarget.hpp"
 #include "Renderer/Geometry.hpp"
@@ -199,3 +201,44 @@ struct renderer
 };
 
 lbfn void SetupSceneRendering(render_frame* Frame);
+
+// NOTE(boti): See Vulkan spec. 16.5.4. Table 17. to find where these transforms come from
+m3 GlobalCubeFaceBases[Layer_Count]
+{
+    // +X
+    {
+        .X = {  0.0f,  0.0f, -1.0f },
+        .Y = {  0.0f, -1.0f,  0.0f },
+        .Z = { +1.0f,  0.0f,  0.0f },
+    },
+    // -X
+    {
+        .X = {  0.0f,  0.0f, +1.0f },
+        .Y = {  0.0f, -1.0f,  0.0f },
+        .Z = { -1.0f,  0.0f,  0.0f },
+    },
+    // +Y
+    {
+        .X = { +1.0f,  0.0f,  0.0f },
+        .Y = {  0.0f,  0.0f, +1.0f },
+        .Z = {  0.0f, +1.0f,  0.0f },
+    },
+    // -Y
+    {
+        .X = { +1.0f,  0.0f,  0.0f },
+        .Y = {  0.0f,  0.0f, -1.0f },
+        .Z = {  0.0f, -1.0f,  0.0f },
+    },
+    // +Z
+    {
+        .X = { +1.0f,  0.0f,  0.0f },
+        .Y = {  0.0f, -1.0f,  0.0f },
+        .Z = {  0.0f,  0.0f, +1.0f },
+    },
+    // -Z
+    {
+        .X = { -1.0f,  0.0f,  0.0f },
+        .Y = {  0.0f, -1.0f,  0.0f },
+        .Z = {  0.0f,  0.0f, -1.0f },
+    },
+};
