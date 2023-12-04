@@ -17,11 +17,11 @@ layout(push_constant) uniform PushConstants
 
 invariant gl_Position;
 
-layout(location = 0) in vec3 aP;
-layout(location = 1) in vec3 aN;
-layout(location = 2) in vec4 aT;
-layout(location = 4) in vec2 aTexCoord;
-layout(location = 5) in vec4 aColor;
+layout(location = Attrib_Position)      in vec3 aP;
+layout(location = Attrib_Normal)        in vec3 aN;
+layout(location = Attrib_TangentSign)   in vec4 aT;
+layout(location = Attrib_TexCoord)      in vec2 aTexCoord;
+layout(location = Attrib_Color)         in vec4 aColor;
 
 layout(location = 0) out vec3 P;
 layout(location = 1) out vec2 TexCoord;

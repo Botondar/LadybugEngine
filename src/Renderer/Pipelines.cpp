@@ -14,31 +14,31 @@ vertex_state InputState_vertex =
     .Attribs = 
     {
         {
-            .Index = 0,
+            .Index = Attrib_Position,
             .Binding = 0,
             .Format = Format_R32G32B32_Float,
             .ByteOffset = OffsetOf(vertex, P),
         },
         {
-            .Index = 1,
+            .Index = Attrib_Normal,
             .Binding = 0,
             .Format = Format_R32G32B32_Float,
             .ByteOffset = OffsetOf(vertex, N),
         },
         {
-            .Index = 2,
+            .Index = Attrib_TangentSign,
             .Binding = 0,
             .Format = Format_R32G32B32A32_Float,
             .ByteOffset = OffsetOf(vertex, T),
         },
         {
-            .Index = 4,
+            .Index = Attrib_TexCoord,
             .Binding = 0,
             .Format = Format_R32G32_Float,
             .ByteOffset = OffsetOf(vertex, TexCoord),
         },
         {
-            .Index = 5,
+            .Index = Attrib_Color,
             .Binding = 0,
             .Format = Format_R8G8B8A8_UNorm,
             .ByteOffset = OffsetOf(vertex, Color),
@@ -56,43 +56,43 @@ vertex_state InputState_skinned =
     .Attribs = 
     {
         {
-            .Index = 0,
+            .Index = Attrib_Position,
             .Binding = 0,
             .Format = Format_R32G32B32_Float,
             .ByteOffset = OffsetOf(vertex, P),
         },
         {
-            .Index = 1,
+            .Index = Attrib_Normal,
             .Binding = 0,
             .Format = Format_R32G32B32_Float,
             .ByteOffset = OffsetOf(vertex, N),
         },
         {
-            .Index = 2,
+            .Index = Attrib_TangentSign,
             .Binding = 0,
             .Format = Format_R32G32B32A32_Float,
             .ByteOffset = OffsetOf(vertex, T),
         },
         {
-            .Index = 4,
+            .Index = Attrib_TexCoord,
             .Binding = 0,
             .Format = Format_R32G32_Float,
             .ByteOffset = OffsetOf(vertex, TexCoord),
         },
         {
-            .Index = 5,
+            .Index = Attrib_Color,
             .Binding = 0,
             .Format = Format_R8G8B8A8_UNorm,
             .ByteOffset = OffsetOf(vertex, Color),
         },
         {
-            .Index = 6,
+            .Index = Attrib_JointWeights,
             .Binding = 0,
             .Format = Format_R32G32B32A32_Float,
             .ByteOffset = OffsetOf(vertex, Weights),
         },
         {
-            .Index = 7,
+            .Index = Attrib_JointIndices,
             .Binding = 0,
             .Format = Format_R8G8B8A8_UInt,
             .ByteOffset = OffsetOf(vertex, Joints),

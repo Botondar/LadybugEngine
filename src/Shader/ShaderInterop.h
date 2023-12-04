@@ -24,12 +24,21 @@
 //
 #define R_AlphaTestThreshold 0.5f
 
-#define R_TileSizeX 16
-#define R_TileSizeY 16
-#define R_MaxLightCountPerTile 255
-#define R_LuminanceThreshold 1e-2f
-#define R_MaxLightCount 16384
-#define R_MaxShadowCount 64
+#define R_TileSizeX             16
+#define R_TileSizeY             16
+#define R_MaxLightCountPerTile  255
+#define R_LuminanceThreshold    1e-2f
+#define R_MaxLightCount         16384
+#define R_MaxShadowCount        64
+
+#define Attrib_Position         0
+#define Attrib_Normal           1
+#define Attrib_TangentSign      2
+#define Attrib_TexCoord         3
+#define Attrib_Color            4
+#define Attrib_JointWeights     5
+#define Attrib_JointIndices     6
+
 
 struct light
 {

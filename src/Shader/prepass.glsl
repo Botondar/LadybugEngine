@@ -17,8 +17,8 @@ layout(push_constant) uniform PushConstants
 
 invariant gl_Position;
 
-layout(location = 0) in vec3 aP;
-layout(location = 4) in vec2 aTexCoord;
+layout(location = Attrib_Position) in vec3 aP;
+layout(location = Attrib_TexCoord) in vec2 aTexCoord;
 
 layout(location = 0) out vec2 TexCoord;
 layout(location = 1) out vec3 ViewP;
