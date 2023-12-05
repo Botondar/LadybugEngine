@@ -1803,7 +1803,7 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
 
 void EndRenderFrame(render_frame* Frame)
 {
-    auto DrawMeshes = [](render_frame* Frame, VkCommandBuffer CmdBuffer, VkPipelineLayout PipelineLayout)
+    auto DrawMeshes = [](render_frame* Frame, VkCommandBuffer CmdBuffer, VkPipelineLayout PipelineLayout, const frustum* Frustum)
     {
         const VkDeviceSize ZeroOffset = 0;
         vkCmdBindIndexBuffer(CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
@@ -1812,15 +1812,24 @@ void EndRenderFrame(render_frame* Frame)
         for (u32 CmdIndex = 0; CmdIndex < Frame->DrawCmdCount; CmdIndex++)
         {
             draw_cmd* Cmd = Frame->DrawCmds + CmdIndex;
-            push_constants PushConstants = 
-            {
-                .Transform = Cmd->Transform,
-                .Material = Cmd->Material,
-            };
 
-            vkCmdPushConstants(CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                               0, sizeof(PushConstants), &PushConstants);
-            vkCmdDrawIndexed(CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
+            b32 IsVisible = true;
+            if (Frustum)
+            {
+                IsVisible = IntersectFrustumBox(Frustum, Cmd->BoundingBox, Cmd->Transform);
+            }
+
+            if (IsVisible)
+            {
+                push_constants PushConstants = 
+                {
+                    .Transform = Cmd->Transform,
+                    .Material = Cmd->Material,
+                };
+                vkCmdPushConstants(CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                                   0, sizeof(PushConstants), &PushConstants);
+                vkCmdDrawIndexed(CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
+            }
 
         }
 
@@ -2500,7 +2509,7 @@ void EndRenderFrame(render_frame* Frame)
         vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                 0, 3, DescriptorSets,
                                 0, nullptr);
-        DrawMeshes(Frame, PrepassCmd, Pipeline.Layout);
+        DrawMeshes(Frame, PrepassCmd, Pipeline.Layout, &Frame->CameraFrustum);
     }
     EndPrepass(Frame, PrepassCmd);
 
@@ -2723,7 +2732,7 @@ void EndRenderFrame(render_frame* Frame)
                                sizeof(push_constants), sizeof(u32), &Cascade);
             vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Layout,
                                     0, 3, DescriptorSets, 0, nullptr);
-            DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout);
+            DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout, nullptr);
 
             EndCascade(Frame, ShadowCmd);
         }
@@ -2834,7 +2843,7 @@ void EndRenderFrame(render_frame* Frame)
                 u32 Index = 6*ShadowIndex + LayerIndex;
                 vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                    sizeof(push_constants), sizeof(Index), &Index);
-                DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout);
+                DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout, nullptr);
 
                 vkCmdEndRendering(ShadowCmd);
             }
@@ -2965,7 +2974,8 @@ void EndRenderFrame(render_frame* Frame)
                                 0, CountOf(DescriptorSets), DescriptorSets,
                                 0, nullptr);
 
-        DrawMeshes(Frame, RenderCmd, Pipeline.Layout);
+        // TOOD(boti): We're doing frustum culling twice here (first one is the prepass)
+        DrawMeshes(Frame, RenderCmd, Pipeline.Layout, &Frame->CameraFrustum);
 
         vkCmdEndDebugUtilsLabelEXT(RenderCmd);
 

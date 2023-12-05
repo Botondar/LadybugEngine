@@ -619,11 +619,11 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 };
                 if (DrawSkinned)
                 {
-                    DrawSkinnedMesh(Frame, Mesh->Allocation, Entity->Transform, RenderMaterial, JointCount, Pose);
+                    DrawSkinnedMesh(Frame, Mesh->Allocation, Entity->Transform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
                 }
                 else
                 {
-                    DrawMesh(Frame, Mesh->Allocation, Entity->Transform, RenderMaterial);
+                    DrawMesh(Frame, Mesh->Allocation, Entity->Transform, Mesh->BoundingBox, RenderMaterial);
                 }
 
             }

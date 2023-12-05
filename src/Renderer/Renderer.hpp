@@ -510,6 +510,7 @@ union frustum
 };
 
 inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box);
+inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box, m4 Transform);
 inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 P, f32 r);
 
 //
@@ -656,6 +657,7 @@ struct draw_cmd
 {
     draw_indirect_index_cmd Base;
     m4 Transform;
+    mmbox BoundingBox;
     renderer_material Material;
 };
 
@@ -775,7 +777,7 @@ struct render_frame
     void* StagingBufferBase;
 
     // Limits
-    static constexpr u32 MaxTransferOpCount           = (1u << 15);
+    static constexpr u32 MaxTransferOpCount         = (1u << 15);
     static constexpr u32 MaxParticleCount           = (1u << 18);
     static constexpr u32 MaxJointCount              = (1u << 17);
     u32 MaxLightCount;
@@ -862,12 +864,16 @@ inline b32 TransferGeometry(render_frame* Frame, geometry_buffer_allocation Allo
 inline b32 
 DrawMesh(render_frame* Frame,
          geometry_buffer_allocation Allocation, 
-         m4 Transform, renderer_material Material);
+         m4 Transform,
+         mmbox BoundingBox,
+         renderer_material Material);
 
 inline b32 
 DrawSkinnedMesh(render_frame* Frame,
                 geometry_buffer_allocation Allocation,
-                m4 Transform, renderer_material Material,
+                m4 Transform,
+                mmbox BoundingBox,
+                renderer_material Material,
                 u32 JointCount, m4* Pose);
 
 inline b32 
@@ -1112,7 +1118,9 @@ inline b32 TransferGeometry(render_frame* Frame, geometry_buffer_allocation Allo
 inline b32 
 DrawMesh(render_frame* Frame, 
          geometry_buffer_allocation Allocation,
-         m4 Transform, renderer_material Material)
+         m4 Transform,
+         mmbox BoundingBox,
+         renderer_material Material)
 {
     b32 Result = false;
     if (Frame->DrawCmdCount < Frame->MaxDrawCmdCount)
@@ -1128,6 +1136,7 @@ DrawMesh(render_frame* Frame,
                 .InstanceOffset = 0,
             },
             .Transform = Transform,
+            .BoundingBox = BoundingBox,
             .Material = Material,
         };
         Result = true;
@@ -1138,7 +1147,9 @@ DrawMesh(render_frame* Frame,
 inline b32 
 DrawSkinnedMesh(render_frame* Frame,
                 geometry_buffer_allocation Allocation,
-                m4 Transform, renderer_material Material,
+                m4 Transform,
+                mmbox BoundingBox,
+                renderer_material Material,
                 u32 JointCount, m4* Pose)
 {
     b32 Result = false;
@@ -1174,6 +1185,7 @@ DrawSkinnedMesh(render_frame* Frame,
                 .InstanceOffset = 0,
             },
             .Transform = Transform,
+            .BoundingBox = BoundingBox,
             .Material = Material,
         };
         Result = true;
@@ -1252,14 +1264,14 @@ inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box)
         v3 CenterP3 = 0.5f * (Box.Min + Box.Max);
         v4 CenterP = { CenterP3.X, CenterP3.Y, CenterP3.Z, 1.0f };
 
-        for (u32 i = 0; i < 6; i++)
+        for (u32 PlaneIndex = 0; PlaneIndex < 6; PlaneIndex++)
         {
             f32 EffectiveRadius = 
-                Abs(Frustum->Planes[i].X * HalfExtent.X) + 
-                Abs(Frustum->Planes[i].Y * HalfExtent.Y) +
-                Abs(Frustum->Planes[i].Z * HalfExtent.Z);
+                Abs(Frustum->Planes[PlaneIndex].X * HalfExtent.X) + 
+                Abs(Frustum->Planes[PlaneIndex].Y * HalfExtent.Y) +
+                Abs(Frustum->Planes[PlaneIndex].Z * HalfExtent.Z);
 
-            if (Dot(CenterP, Frustum->Planes[i]) < -EffectiveRadius)
+            if (Dot(CenterP, Frustum->Planes[PlaneIndex]) < -EffectiveRadius)
             {
                 Result = false;
                 break;
@@ -1269,13 +1281,36 @@ inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box)
     return(Result);
 }
 
+inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box, m4 Transform)
+{
+    b32 Result = true;
+
+    v3 P = TransformPoint(Transform, 0.5f * (Box.Max + Box.Min));
+    v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
+    for (u32 PlaneIndex = 0; PlaneIndex < 6; PlaneIndex++)
+    {
+        v4 Plane = Frustum->Planes[PlaneIndex];
+        f32 EffectiveRadius = 
+            HalfExtent.X * Abs(Dot(Plane, Transform.X)) +
+            HalfExtent.Y * Abs(Dot(Plane, Transform.Y)) +
+            HalfExtent.Z * Abs(Dot(Plane, Transform.Z));
+        if (Dot(Plane, v4{ P.X, P.Y, P.Z, 1.0f }) <= -EffectiveRadius)
+        {
+            Result = false;
+            break;
+        }
+    }
+
+    return(Result);
+}
+
 inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 Center, f32 r)
 {
     b32 Result = true;
     v4 P = { Center.X, Center.Y, Center.Z, 1.0f };
-    for (u32 i = 0; i < 6; i++)
+    for (u32 PlaneIndex = 0; PlaneIndex < 6; PlaneIndex++)
     {
-        if (Dot(Frustum->Planes[i], P) <= -r)
+        if (Dot(Frustum->Planes[PlaneIndex], P) <= -r)
         {
             Result = false;
             break;
