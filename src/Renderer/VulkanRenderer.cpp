@@ -1580,19 +1580,19 @@ internal VkResult ResizeRenderTargets(renderer* Renderer)
                     
                     if (i == 0)
                     {
-                        Frame->Backend->DepthBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
-                        Frame->Backend->StructureBuffer = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[STRUCTURE_BUFFER_FORMAT], Color|Sampled, 1);
-                        Frame->Backend->HDRRenderTargets[0] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
-                        Frame->Backend->HDRRenderTargets[1] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
+                        Frame->Backend->DepthBuffer         = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
+                        Frame->Backend->StructureBuffer     = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[STRUCTURE_BUFFER_FORMAT], Color|Sampled, 1);
+                        Frame->Backend->HDRRenderTarget     = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
+                        Frame->Backend->BloomTarget         = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
                         Frame->Backend->OcclusionBuffers[0] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
                         Frame->Backend->OcclusionBuffers[1] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
                     }
                     else
                     {
-                        Frame->Backend->DepthBuffer = Renderer->Frames[0].Backend->DepthBuffer;
-                        Frame->Backend->StructureBuffer = Renderer->Frames[0].Backend->StructureBuffer;
-                        Frame->Backend->HDRRenderTargets[0] = Renderer->Frames[0].Backend->HDRRenderTargets[0];
-                        Frame->Backend->HDRRenderTargets[1] = Renderer->Frames[0].Backend->HDRRenderTargets[1];
+                        Frame->Backend->DepthBuffer         = Renderer->Frames[0].Backend->DepthBuffer;
+                        Frame->Backend->StructureBuffer     = Renderer->Frames[0].Backend->StructureBuffer;
+                        Frame->Backend->HDRRenderTarget     = Renderer->Frames[0].Backend->HDRRenderTarget;
+                        Frame->Backend->BloomTarget         = Renderer->Frames[0].Backend->BloomTarget;
                         Frame->Backend->OcclusionBuffers[0] = Renderer->Frames[0].Backend->OcclusionBuffers[0];
                         Frame->Backend->OcclusionBuffers[1] = Renderer->Frames[0].Backend->OcclusionBuffers[1];
                     }
@@ -3048,8 +3048,8 @@ void EndRenderFrame(render_frame* Frame)
 
     RenderBloom(Frame, RenderCmd,
                 Frame->PostProcess.Bloom,
-                Frame->Backend->HDRRenderTargets[0],
-                Frame->Backend->HDRRenderTargets[1],
+                Frame->Backend->HDRRenderTarget,
+                Frame->Backend->BloomTarget,
                 Renderer->Pipelines[Pipeline_BloomDownsample].Layout,
                 Renderer->Pipelines[Pipeline_BloomDownsample].Pipeline,
                 Renderer->Pipelines[Pipeline_BloomUpsample].Layout,
@@ -3165,12 +3165,12 @@ void EndRenderFrame(render_frame* Frame)
             {
                 {
                     .sampler = VK_NULL_HANDLE,
-                    .imageView = Frame->Backend->HDRRenderTargets[0]->MipViews[0],
+                    .imageView = Frame->Backend->HDRRenderTarget->MipViews[0],
                     .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 },
                 {
                     .sampler = VK_NULL_HANDLE,
-                    .imageView = Frame->Backend->HDRRenderTargets[1]->MipViews[0],
+                    .imageView = Frame->Backend->BloomTarget->MipViews[0],
                     .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 },
             };

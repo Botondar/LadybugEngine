@@ -603,7 +603,7 @@ internal void BeginForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer)
             .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->Backend->HDRRenderTargets[0]->Image,
+            .image = Frame->Backend->HDRRenderTarget->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -679,7 +679,7 @@ internal void BeginForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer)
     {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
-        .imageView = Frame->Backend->HDRRenderTargets[0]->MipViews[0],
+        .imageView = Frame->Backend->HDRRenderTarget->MipViews[0],
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .resolveMode = VK_RESOLVE_MODE_NONE,
         .resolveImageView = VK_NULL_HANDLE,

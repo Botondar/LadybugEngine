@@ -78,7 +78,8 @@ struct backend_render_frame
     VkImageView SwapchainImageView;
     render_target* DepthBuffer;
     render_target* StructureBuffer;
-    render_target* HDRRenderTargets[2];
+    render_target* HDRRenderTarget;
+    render_target* BloomTarget;
     render_target* OcclusionBuffers[2];
 
     u32 ShadowCascadeCount;
