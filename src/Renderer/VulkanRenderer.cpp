@@ -1900,6 +1900,8 @@ void EndRenderFrame(render_frame* Frame)
         Frame->Backend->SwapchainImageView = Renderer->SwapchainImageViews[Frame->Backend->SwapchainImageIndex];
     }
 
+    frustum* ShadowFrustums = PushArray(Frame->Arena, 0, frustum, R_MaxShadowCount);
+
     for (u32 ShadowIndex = 0; ShadowIndex < Frame->ShadowCount; ShadowIndex++)
     {
         light* Light = Frame->Lights + Frame->Shadows[ShadowIndex];
@@ -1915,18 +1917,53 @@ void EndRenderFrame(render_frame* Frame)
                            0.0f, 1.0f, 0.0f, 0.0f,
                            0.0f, 0.0f, f*r, -f*n*r,
                            0.0f, 0.0f, 1.0f, 0.0f);
+        m4 InverseProjection = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                                  0.0f, 1.0f, 0.0f, 0.0f,
+                                  0.0f, 0.0f, 0.0f, 1.0f,
+                                  0.0f, 0.0f, -1.0f / (f*n*r), 1.0f / n);
         point_shadow_data* Shadow = Frame->Uniforms.PointShadows + ShadowIndex;
         Shadow->Near = n;
         Shadow->Far = f;
+
         for (u32 LayerIndex = 0; LayerIndex < Layer_Count; LayerIndex++)
         {
             m3 M = GlobalCubeFaceBases[LayerIndex];
+            m4 InverseView = M4(M.X.X, M.Y.X, M.Z.X, P.X,
+                                M.X.Y, M.Y.Y, M.Z.Y, P.Y,
+                                M.X.Z, M.Y.Z, M.Z.Z, P.Z,
+                                0.0f, 0.0f, 0.0f ,1.0f);
             m4 View = M4(M.X.X, M.X.Y, M.X.Z, -Dot(M.X, P),
                          M.Y.X, M.Y.Y, M.Y.Z, -Dot(M.Y, P),
                          M.Z.X, M.Z.Y, M.Z.Z, -Dot(M.Z, P),
                          0.0f, 0.0f, 0.0f, 1.0f);
             m4 ViewProjection = Projection * View;
             Shadow->ViewProjections[LayerIndex] = ViewProjection;
+
+            m4 InverseViewProjection = InverseView * InverseProjection;
+
+            v4 ClipSpacePlanes[6] = 
+            {
+#if 1
+                { +1.0f,  0.0f,   0.0f, -1.0f },
+                { -1.0f,  0.0f,   0.0f, +1.0f },
+                {  0.0f, +1.0f,   0.0f, -1.0f },
+                {  0.0f, -1.0f,   0.0f, +1.0f },
+                {  0.0f,  0.0f,  +1.0f,  0.0f },
+                {  0.0f,  0.0f,  -1.0f, -1.0f },
+#else
+                { +1.0f,  0.0f,   0.0f, -1.0f },
+                { -1.0f,  0.0f,   0.0f, -1.0f },
+                {  0.0f, +1.0f,   0.0f, -1.0f },
+                {  0.0f, -1.0f,   0.0f, -1.0f },
+                {  0.0f,  0.0f,  -1.0f,  0.0f },
+                {  0.0f,  0.0f,  +1.0f, -1.0f },
+#endif
+            };
+            frustum* Frustum = &ShadowFrustums[6 * ShadowIndex + LayerIndex];
+            for (u32 PlaneIndex = 0; PlaneIndex < 6; PlaneIndex++)
+            {
+                Frustum->Planes[PlaneIndex] = ClipSpacePlanes[PlaneIndex] * InverseViewProjection;
+            }
         }
     }
 
@@ -2839,11 +2876,12 @@ void EndRenderFrame(render_frame* Frame)
                     .pStencilAttachment = nullptr,
                 };
                 vkCmdBeginRendering(ShadowCmd, &ShadowRendering);
-                
+
                 u32 Index = 6*ShadowIndex + LayerIndex;
+                frustum Frustum = ShadowFrustums[Index];
                 vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                    sizeof(push_constants), sizeof(Index), &Index);
-                DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout, nullptr);
+                DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout, &Frustum);
 
                 vkCmdEndRendering(ShadowCmd);
             }
