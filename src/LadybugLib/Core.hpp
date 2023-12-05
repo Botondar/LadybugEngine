@@ -355,6 +355,16 @@ union m3
     };
 };
 
+union m3x4
+{
+    f32 E[4][3];
+    f32 EE[12];
+    struct
+    {
+        v3 X, Y, Z, P;
+    };
+};
+
 union m4
 {
     f32 E[4][4];
