@@ -509,6 +509,8 @@ union frustum
     };
 };
 
+inline frustum GetClipSpaceFrustum();
+
 inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box);
 inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box, m4 Transform);
 inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 P, f32 r);
@@ -1254,6 +1256,20 @@ inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* V
     return(Result);
 }
 
+inline frustum GetClipSpaceFrustum()
+{
+    frustum Result = 
+    {
+        .Left   = { -1.0f,  0.0f,   0.0f, +1.0f },
+        .Right  = { +1.0f,  0.0f,   0.0f, +1.0f },
+        .Top    = {  0.0f, -1.0f,   0.0f, +1.0f },
+        .Bottom = {  0.0f, +1.0f,   0.0f, +1.0f },
+        .Near   = {  0.0f,  0.0f,  +1.0f,  0.0f },
+        .Far    = {  0.0f,  0.0f,  -1.0f, +1.0f },
+    };
+    return(Result);
+}
+
 inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box)
 {
     b32 Result = true;
@@ -1294,7 +1310,7 @@ inline b32 IntersectFrustumBox(const frustum* Frustum, mmbox Box, m4 Transform)
             HalfExtent.X * Abs(Dot(Plane, Transform.X)) +
             HalfExtent.Y * Abs(Dot(Plane, Transform.Y)) +
             HalfExtent.Z * Abs(Dot(Plane, Transform.Z));
-        if (Dot(Plane, v4{ P.X, P.Y, P.Z, 1.0f }) <= -EffectiveRadius)
+        if (Dot(Plane, v4{ P.X, P.Y, P.Z, 1.0f }) < -EffectiveRadius)
         {
             Result = false;
             break;

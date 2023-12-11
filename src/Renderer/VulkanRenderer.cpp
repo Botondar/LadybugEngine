@@ -178,6 +178,18 @@ internal VkShaderStageFlags PipelineStagesToVulkan(flags32 Stages)
 #include "Pipelines.cpp"
 
 internal VkMemoryRequirements 
+GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInfo);
+
+internal VkResult 
+ResizeRenderTargets(renderer* Renderer);
+
+internal void 
+DrawMeshes(render_frame* Frame, 
+           VkCommandBuffer CmdBuffer, 
+           VkPipelineLayout PipelineLayout, 
+           const frustum* Frustum);
+
+internal VkMemoryRequirements 
 GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInfo)
 {
     VkMemoryRequirements Result = {};
@@ -194,8 +206,6 @@ GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInf
 
     return(Result);
 }
-
-internal VkResult ResizeRenderTargets(renderer* Renderer);
 
 internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTypes, size_t Size, 
                                           VkBuffer* pBuffer, VkDeviceMemory* pMemory)
@@ -1679,6 +1689,55 @@ internal VkResult ResizeRenderTargets(renderer* Renderer)
 
 #undef ReturnOnFailure
 
+internal void 
+DrawMeshes(render_frame* Frame, 
+           VkCommandBuffer CmdBuffer, 
+           VkPipelineLayout PipelineLayout, 
+           const frustum* Frustum)
+{
+    const VkDeviceSize ZeroOffset = 0;
+    vkCmdBindIndexBuffer(CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
+    vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &Frame->Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
+    
+    for (u32 CmdIndex = 0; CmdIndex < Frame->DrawCmdCount; CmdIndex++)
+    {
+        draw_cmd* Cmd = Frame->DrawCmds + CmdIndex;
+    
+        b32 IsVisible = true;
+        if (Frustum)
+        {
+            IsVisible = IntersectFrustumBox(Frustum, Cmd->BoundingBox, Cmd->Transform);
+        }
+    
+        if (IsVisible)
+        {
+            push_constants PushConstants = 
+            {
+                .Transform = Cmd->Transform,
+                .Material = Cmd->Material,
+            };
+            vkCmdPushConstants(CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                               0, sizeof(PushConstants), &PushConstants);
+            vkCmdDrawIndexed(CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
+        }
+    
+    }
+    
+    vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &Frame->Backend->SkinnedMeshVB, &ZeroOffset);
+    for (u32 CmdIndex = 0; CmdIndex < Frame->SkinnedDrawCmdCount; CmdIndex++)
+    {
+        draw_cmd* Cmd = Frame->SkinnedDrawCmds + CmdIndex;
+        push_constants PushConstants = 
+        {
+            .Transform = Cmd->Transform,
+            .Material = Cmd->Material,
+        };
+        vkCmdPushConstants(CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
+                           0, sizeof(PushConstants), &PushConstants);
+        vkCmdDrawIndexed(CmdBuffer, Cmd->Base.IndexCount, 1, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, 0);
+    }
+}
+
 //
 // Rendering interface implementation
 //
@@ -1803,51 +1862,6 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
 
 void EndRenderFrame(render_frame* Frame)
 {
-    auto DrawMeshes = [](render_frame* Frame, VkCommandBuffer CmdBuffer, VkPipelineLayout PipelineLayout, const frustum* Frustum)
-    {
-        const VkDeviceSize ZeroOffset = 0;
-        vkCmdBindIndexBuffer(CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
-        vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &Frame->Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
-
-        for (u32 CmdIndex = 0; CmdIndex < Frame->DrawCmdCount; CmdIndex++)
-        {
-            draw_cmd* Cmd = Frame->DrawCmds + CmdIndex;
-
-            b32 IsVisible = true;
-            if (Frustum)
-            {
-                IsVisible = IntersectFrustumBox(Frustum, Cmd->BoundingBox, Cmd->Transform);
-            }
-
-            if (IsVisible)
-            {
-                push_constants PushConstants = 
-                {
-                    .Transform = Cmd->Transform,
-                    .Material = Cmd->Material,
-                };
-                vkCmdPushConstants(CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                                   0, sizeof(PushConstants), &PushConstants);
-                vkCmdDrawIndexed(CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
-            }
-
-        }
-
-        vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &Frame->Backend->SkinnedMeshVB, &ZeroOffset);
-        for (u32 CmdIndex = 0; CmdIndex < Frame->SkinnedDrawCmdCount; CmdIndex++)
-        {
-            draw_cmd* Cmd = Frame->SkinnedDrawCmds + CmdIndex;
-            push_constants PushConstants = 
-            {
-                .Transform = Cmd->Transform,
-                .Material = Cmd->Material,
-            };
-            vkCmdPushConstants(CmdBuffer, PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                               0, sizeof(PushConstants), &PushConstants);
-            vkCmdDrawIndexed(CmdBuffer, Cmd->Base.IndexCount, 1, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, 0);
-        }
-    };
-
     renderer* Renderer = Frame->Renderer;
     // NOTE(boti): This is currently also the initial transfer and skinning cmd buffer
     VkCommandBuffer PrepassCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
@@ -1941,28 +1955,11 @@ void EndRenderFrame(render_frame* Frame)
 
             m4 InverseViewProjection = InverseView * InverseProjection;
 
-            v4 ClipSpacePlanes[6] = 
-            {
-#if 1
-                { +1.0f,  0.0f,   0.0f, -1.0f },
-                { -1.0f,  0.0f,   0.0f, +1.0f },
-                {  0.0f, +1.0f,   0.0f, -1.0f },
-                {  0.0f, -1.0f,   0.0f, +1.0f },
-                {  0.0f,  0.0f,  +1.0f,  0.0f },
-                {  0.0f,  0.0f,  -1.0f, -1.0f },
-#else
-                { +1.0f,  0.0f,   0.0f, -1.0f },
-                { -1.0f,  0.0f,   0.0f, -1.0f },
-                {  0.0f, +1.0f,   0.0f, -1.0f },
-                {  0.0f, -1.0f,   0.0f, -1.0f },
-                {  0.0f,  0.0f,  -1.0f,  0.0f },
-                {  0.0f,  0.0f,  +1.0f, -1.0f },
-#endif
-            };
+            frustum ClipSpaceFrustum = GetClipSpaceFrustum();
             frustum* Frustum = &ShadowFrustums[6 * ShadowIndex + LayerIndex];
             for (u32 PlaneIndex = 0; PlaneIndex < 6; PlaneIndex++)
             {
-                Frustum->Planes[PlaneIndex] = ClipSpacePlanes[PlaneIndex] * InverseViewProjection;
+                Frustum->Planes[PlaneIndex] = ClipSpaceFrustum.Planes[PlaneIndex] * Projection * View;
             }
         }
     }
@@ -2319,7 +2316,8 @@ void EndRenderFrame(render_frame* Frame)
         vkCmdPipelineBarrier2(PrepassCmd, &EndDependency);
     }
 
-    SetupSceneRendering(Frame);
+    frustum CascadeFrustums[R_MaxShadowCascadeCount];
+    SetupSceneRendering(Frame, CascadeFrustums);
 
     VkDescriptorSet LightBufferDescriptorSet = PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_StructuredBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                                                     Renderer->LightBuffer, 0, VK_WHOLE_SIZE);
@@ -2760,16 +2758,16 @@ void EndRenderFrame(render_frame* Frame)
         };
         vkCmdSetViewport(ShadowCmd, 0, 1, &ShadowViewport);
         vkCmdSetScissor(ShadowCmd, 0, 1, &ShadowScissor);
-        for (u32 Cascade = 0; Cascade < R_MaxShadowCascadeCount; Cascade++)
+        for (u32 CascadeIndex = 0; CascadeIndex < R_MaxShadowCascadeCount; CascadeIndex++)
         {
-            BeginCascade(Frame, ShadowCmd, Cascade);
+            BeginCascade(Frame, ShadowCmd, CascadeIndex);
 
             vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout,
                                VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
-                               sizeof(push_constants), sizeof(u32), &Cascade);
+                               sizeof(push_constants), sizeof(u32), &CascadeIndex);
             vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Layout,
                                     0, 3, DescriptorSets, 0, nullptr);
-            DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout, nullptr);
+            DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout, CascadeFrustums + CascadeIndex);
 
             EndCascade(Frame, ShadowCmd);
         }
@@ -2878,10 +2876,9 @@ void EndRenderFrame(render_frame* Frame)
                 vkCmdBeginRendering(ShadowCmd, &ShadowRendering);
 
                 u32 Index = 6*ShadowIndex + LayerIndex;
-                frustum Frustum = ShadowFrustums[Index];
                 vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                    sizeof(push_constants), sizeof(Index), &Index);
-                DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout, &Frustum);
+                DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout, ShadowFrustums + Index);
 
                 vkCmdEndRendering(ShadowCmd);
             }
@@ -3522,8 +3519,8 @@ void SetRenderCamera(render_frame* Frame, const render_camera* CameraIn)
         {
             .Left   = v4{ -gmx, 0.0f, smx, 0.0f } * Camera->ViewTransform,
             .Right  = v4{ +gmx, 0.0f, smx, 0.0f } * Camera->ViewTransform,
-            .Top    = v4{ 0.0f, -gmy, my, 0.0f } * Camera->ViewTransform,
-            .Bottom = v4{ 0.0f, +gmy, my, 0.0f } * Camera->ViewTransform,
+            .Top    = v4{ 0.0f, -gmy,  my, 0.0f } * Camera->ViewTransform,
+            .Bottom = v4{ 0.0f, +gmy,  my, 0.0f } * Camera->ViewTransform,
             .Near   = v4{ 0.0f, 0.0f, +1.0f, -n } * Camera->ViewTransform,
             .Far    = v4{ 0.0f, 0.0f, -1.0f, +f } * Camera->ViewTransform,
         };
@@ -3543,7 +3540,7 @@ void SetRenderCamera(render_frame* Frame, const render_camera* CameraIn)
     Frame->Uniforms.CameraP = Camera->CameraTransform.P.XYZ;
 }
 
-internal void SetupSceneRendering(render_frame* Frame)
+internal void SetupSceneRendering(render_frame* Frame, frustum* CascadeFrustums)
 {
     // Shadow cascade setup
     {
@@ -3680,10 +3677,24 @@ internal void SetupSceneRendering(render_frame* Frame)
                                       0.0f, 2.0f / CascadeScale, 0.0f, 0.0f,
                                       0.0f, 0.0f, 1.0f / (CascadeBoxMax.Z - CascadeBoxMin.Z), 0.0f,
                                       0.0f, 0.0f, 0.0f, 1.0f);
+            m4 InverseCascadeView = AffineOrthonormalInverse(CascadeView);
+            m4 InverseCascadeProjection = M4(CascadeScale / 2.0f, 0.0f, 0.0f, 0.0f,
+                                             0.0f, CascadeScale / 2.0f, 0.0f, 0.0f,
+                                             0.0f, 0.0f, (CascadeBoxMax.Z - CascadeBoxMin.Z) / 1.0f, 0.0f,
+                                             0.0f, 0.0f, 0.0f, 1.0f);
+
             m4 CascadeViewProjection = CascadeProjection * CascadeView;
             Frame->Uniforms.CascadeViewProjections[CascadeIndex] = CascadeViewProjection;
             Frame->Uniforms.CascadeMinDistances[CascadeIndex] = Nd;
             Frame->Uniforms.CascadeMaxDistances[CascadeIndex] = Fd;
+
+            m4 InverseCascadeViewProjection = InverseCascadeView * InverseCascadeProjection;
+            frustum ClipSpaceFrustum = GetClipSpaceFrustum();
+            ClipSpaceFrustum.Near = {};
+            for (u32 PlaneIndex = 0; PlaneIndex < 6; PlaneIndex++)
+            {
+                CascadeFrustums[CascadeIndex].Planes[PlaneIndex] = ClipSpaceFrustum.Planes[PlaneIndex] * CascadeProjection * CascadeView;
+            }
 
             if (CascadeIndex == 0)
             {

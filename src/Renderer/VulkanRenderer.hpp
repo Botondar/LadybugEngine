@@ -199,7 +199,8 @@ struct renderer
     backend_render_frame BackendFrames[MaxSwapchainImageCount];
 };
 
-lbfn void SetupSceneRendering(render_frame* Frame);
+internal void 
+SetupSceneRendering(render_frame* Frame, frustum* CascadeFrustums);
 
 //
 // Implementation
