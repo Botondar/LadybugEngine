@@ -560,20 +560,6 @@ struct post_process_params
     bloom_params Bloom;
 };
 
-struct render_camera
-{
-    m4 CameraTransform;
-    m4 ViewTransform; // aka Inverse camera transform
-
-    // NOTE(boti): Projection transform is filled by the backend
-    m4 ProjectionTransform;
-    m4 InverseProjectionTransform;
-
-    f32 FocalLength;
-    f32 NearZ;
-    f32 FarZ;
-};
-
 typedef u32 vert_index;
 
 struct vertex
@@ -770,9 +756,22 @@ struct render_frame
 
     post_process_params PostProcess;
 
-    render_camera Camera;
-    frustum CameraFrustum;
+    m4 CameraTransform;
+    f32 CameraFocalLength;
+    f32 CameraFarPlane;
+    f32 CameraNearPlane;
+    v3 SunL;
     v3 SunV; // World-space sun direction
+
+    // Backend-calculated/cached values
+    // TODO(boti): move these out of the API
+    struct
+    {
+        frustum CameraFrustum;
+        m4 ViewTransform;
+        m4 ProjectionTransform;
+        m4 InverseProjectionTransform;
+    };
 
     umm StagingBufferSize;
     umm StagingBufferAt;
@@ -830,6 +829,7 @@ struct render_frame
     u32 Vertex2DCount;
     vertex_2d* Vertex2DArray;
 
+    // TODO(boti): Remove these from the API (should be backend only)
     void* UniformData; // GPU-backed frame_uniform_data
     per_frame Uniforms;
 };
@@ -854,8 +854,6 @@ render_frame*
 BeginRenderFrame(renderer* Renderer, memory_arena* arena,
                  u32 OutputWidth, u32 OutputHeight);
 void EndRenderFrame(render_frame* Frame);
-
-void SetRenderCamera(render_frame* Frame, const render_camera* Camera);
 
 inline b32 
 TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_info Info, 

@@ -1873,6 +1873,76 @@ void EndRenderFrame(render_frame* Frame)
     vkResetDescriptorPool(VK.Device, Frame->Backend->DescriptorPool, 0);
     Frame->Backend->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrameUniformData]);
 
+    f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
+
+    // Calculate camera parameters
+    {
+        f32 n = Frame->CameraNearPlane;
+        f32 f = Frame->CameraFarPlane;
+        f32 r = 1.0f / (f - n);
+        f32 s = AspectRatio;
+        f32 g = Frame->CameraFocalLength;
+
+        Frame->ViewTransform = AffineOrthonormalInverse(Frame->CameraTransform);
+
+#if 1
+        // Reverse Z
+        Frame->ProjectionTransform = M4(
+            g / s, 0.0f, 0.0f, 0.0f,
+            0.0f, g, 0.0f, 0.0f,
+            0.0f, 0.0f, -n*r, n*f*r,
+            0.0f, 0.0f, 1.0f, 0.0f);
+        Frame->InverseProjectionTransform = M4(
+            s / g,  0.0f,       0.0f,           0.0f,
+            0.0f,   1.0f / g,   0.0f,           0.0f,
+            0.0f,   0.0f,       0.0f,           1.0f,
+            0.0f,   0.0f,       1.0f / (n*f*r), 1.0f / f);
+#else
+        // Forward Z
+        Frame->ProjectionTransform = M4(
+            g / s, 0.0f, 0.0f, 0.0f,
+            0.0f, g, 0.0f, 0.0f,
+            0.0f, 0.0f, f * r, -f*n * r,
+            0.0f, 0.0f, 1.0f, 0.0f);
+        Frame->InverseProjectionTransform = M4(
+            s / g, 0.0f,     0.0f,            0.0f,
+            0.0f,  1.0f / g, 0.0f,            0.0f,
+            0.0f,  0.0f,     0.0f,            1.0f,
+            0.0f,  0.0f,     1.0f / (-f*n*r), 1.0f / n);
+#endif
+
+        f32 g2 = g*g;
+        f32 mx = 1.0f / Sqrt(g2 + s*s);
+        f32 my = 1.0f / Sqrt(g2 + 1.0f);
+        f32 gmx = g*mx;
+        f32 gmy = g*my;
+        f32 smx = s*mx;
+        Frame->CameraFrustum = 
+        {
+            .Left   = v4{ -gmx, 0.0f, smx, 0.0f } * Frame->ViewTransform,
+            .Right  = v4{ +gmx, 0.0f, smx, 0.0f } * Frame->ViewTransform,
+            .Top    = v4{ 0.0f, -gmy,  my, 0.0f } * Frame->ViewTransform,
+            .Bottom = v4{ 0.0f, +gmy,  my, 0.0f } * Frame->ViewTransform,
+            .Near   = v4{ 0.0f, 0.0f, +1.0f, -n } * Frame->ViewTransform,
+            .Far    = v4{ 0.0f, 0.0f, -1.0f, +f } * Frame->ViewTransform,
+        };
+
+        Frame->Uniforms.CameraTransform = Frame->CameraTransform;
+        Frame->Uniforms.ViewTransform = Frame->ViewTransform;
+        Frame->Uniforms.ProjectionTransform = Frame->ProjectionTransform;
+        Frame->Uniforms.InverseProjectionTransform = Frame->InverseProjectionTransform;
+        Frame->Uniforms.ViewProjectionTransform = Frame->ProjectionTransform * Frame->ViewTransform;
+        
+        Frame->Uniforms.FocalLength = Frame->CameraFocalLength;
+        Frame->Uniforms.AspectRatio = AspectRatio;
+        Frame->Uniforms.NearZ = Frame->CameraNearPlane;
+        Frame->Uniforms.FarZ = Frame->CameraFarPlane;
+        
+        Frame->Uniforms.CameraP = Frame->CameraTransform.P.XYZ;
+        Frame->Uniforms.SunV = TransformDirection(Frame->ViewTransform, Frame->SunV);
+        Frame->Uniforms.SunL = Frame->SunL;
+    }
+
     // Acquire image
     {
         vkWaitForFences(VK.Device, 1, &Frame->Backend->ImageAcquiredFence, VK_TRUE, UINT64_MAX);
@@ -3470,76 +3540,6 @@ AllocateTextureName(renderer* Renderer, texture_flags Flags)
     return(Result);
 }
 
-void SetRenderCamera(render_frame* Frame, const render_camera* CameraIn)
-{
-    render_camera* Camera = &Frame->Camera;
-    *Camera = *CameraIn;
-
-    f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
-
-    f32 n = Camera->NearZ;
-    f32 f = Camera->FarZ;
-    f32 r = 1.0f / (f - n);
-    f32 s = AspectRatio;
-    f32 g = Camera->FocalLength;
-
-#if 1
-    Camera->ProjectionTransform = M4(
-        g / s, 0.0f, 0.0f, 0.0f,
-        0.0f, g, 0.0f, 0.0f,
-        0.0f, 0.0f, -n*r, n*f*r,
-        0.0f, 0.0f, 1.0f, 0.0f);
-    Camera->InverseProjectionTransform = M4(
-        s / g,  0.0f,       0.0f,           0.0f,
-        0.0f,   1.0f / g,   0.0f,           0.0f,
-        0.0f,   0.0f,       0.0f,           1.0f,
-        0.0f,   0.0f,       1.0f / (n*f*r), 1.0f / f);
-#else
-    Camera->ProjectionTransform = M4(
-        g / s, 0.0f, 0.0f, 0.0f,
-        0.0f, g, 0.0f, 0.0f,
-        0.0f, 0.0f, f * r, -f*n * r,
-        0.0f, 0.0f, 1.0f, 0.0f);
-    Camera->InverseProjectionTransform = M4(
-        s / g, 0.0f,     0.0f,            0.0f,
-        0.0f,  1.0f / g, 0.0f,            0.0f,
-        0.0f,  0.0f,     0.0f,            1.0f,
-        0.0f,  0.0f,     1.0f / (-f*n*r), 1.0f / n);
-#endif
-
-    // Calculate camera frustum
-    {
-        f32 g2 = g*g;
-        f32 mx = 1.0f / Sqrt(g2 + s*s);
-        f32 my = 1.0f / Sqrt(g2 + 1.0f);
-        f32 gmx = g*mx;
-        f32 gmy = g*my;
-        f32 smx = s*mx;
-        Frame->CameraFrustum = 
-        {
-            .Left   = v4{ -gmx, 0.0f, smx, 0.0f } * Camera->ViewTransform,
-            .Right  = v4{ +gmx, 0.0f, smx, 0.0f } * Camera->ViewTransform,
-            .Top    = v4{ 0.0f, -gmy,  my, 0.0f } * Camera->ViewTransform,
-            .Bottom = v4{ 0.0f, +gmy,  my, 0.0f } * Camera->ViewTransform,
-            .Near   = v4{ 0.0f, 0.0f, +1.0f, -n } * Camera->ViewTransform,
-            .Far    = v4{ 0.0f, 0.0f, -1.0f, +f } * Camera->ViewTransform,
-        };
-    }
-
-    Frame->Uniforms.CameraTransform = Camera->CameraTransform;
-    Frame->Uniforms.ViewTransform = Camera->ViewTransform;
-    Frame->Uniforms.ProjectionTransform = Camera->ProjectionTransform;
-    Frame->Uniforms.InverseProjectionTransform = Camera->InverseProjectionTransform;
-    Frame->Uniforms.ViewProjectionTransform = Camera->ProjectionTransform * Camera->ViewTransform;
-
-    Frame->Uniforms.FocalLength = Camera->FocalLength;
-    Frame->Uniforms.AspectRatio = AspectRatio;
-    Frame->Uniforms.NearZ = Camera->NearZ;
-    Frame->Uniforms.FarZ = Camera->FarZ;
-
-    Frame->Uniforms.CameraP = Camera->CameraTransform.P.XYZ;
-}
-
 internal void SetupSceneRendering(render_frame* Frame, frustum* CascadeFrustums)
 {
     // Shadow cascade setup
@@ -3570,7 +3570,7 @@ internal void SetupSceneRendering(render_frame* Frame, frustum* CascadeFrustums)
             SunY.X, SunY.Y, SunY.Z, 0.0f,
             SunZ.X, SunZ.Y, SunZ.Z, 0.0f,
             0.0f, 0.0f, 0.0f, 1.0f);
-        m4 CameraToSun = SunView * Frame->Uniforms.CameraTransform;
+        m4 CameraToSun = SunView * Frame->CameraTransform;
     
         f32 SplitFactor = 0.25f;
         f32 Splits[] = { 4.0f, 8.0f, 16.0f, 30.0f };

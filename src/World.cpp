@@ -479,26 +479,18 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         if (IO->Keys[SC_Space].bIsDown) { Camera->P.Z += SpeedMul * MoveSpeed * dt; }
         if (IO->Keys[SC_LeftControl].bIsDown) { Camera->P.Z -= SpeedMul * MoveSpeed * dt; }
 
-        CameraTransform = GetTransform(Camera);
-        m4 ViewTransform = AffineOrthonormalInverse(CameraTransform);
-        render_camera RenderCamera = 
-        {
-            .CameraTransform = CameraTransform,
-            .ViewTransform = ViewTransform,
-            .FocalLength = 1.0f / Tan(0.5f * Camera->FieldOfView),
-            .NearZ = Camera->NearZ,
-            .FarZ = Camera->FarZ,
-        };
-        SetRenderCamera(Frame, &RenderCamera);
+        Frame->CameraTransform = GetTransform(Camera);
+        Frame->CameraFocalLength = 1.0f / Tan(0.5f * Camera->FieldOfView);
+        Frame->CameraNearPlane = Camera->NearZ;
+        Frame->CameraFarPlane = Camera->FarZ;
     }
 
     // Sun update
     {
         World->SunL = 2.0f * v3{ 10.0f, 7.0f, 5.0f };
         World->SunV = Normalize(v3{ +4.25f, -0.5f, 10.0f });
+        Frame->SunL = World->SunL;
         Frame->SunV = World->SunV;
-        Frame->Uniforms.SunV = TransformDirection(Frame->Uniforms.ViewTransform, World->SunV);
-        Frame->Uniforms.SunL = World->SunL;
     }
 
     //
