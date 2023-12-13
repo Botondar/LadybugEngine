@@ -65,6 +65,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
         InitEditor(GameState, &GameState->TransientArena);
 
+        GameState->Exposure = GameState->DefaultExposure;
         GameState->PostProcessParams.SSAO.Intensity = ssao_params::DefaultIntensity;
         GameState->PostProcessParams.SSAO.MaxDistance = ssao_params::DefaultMaxDistance;
         GameState->PostProcessParams.SSAO.TangentTau = ssao_params::DefaultTangentTau;
@@ -117,6 +118,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     }
     
     UpdateEditor(GameState, GameIO, RenderFrame);
+    RenderFrame->Exposure = GameState->Exposure;
     RenderFrame->PostProcess = GameState->PostProcessParams;
 
     // Asset update

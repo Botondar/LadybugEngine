@@ -754,6 +754,7 @@ struct render_frame
     renderer_texture_id ImmediateTextureID;
     renderer_texture_id ParticleTextureID; // TODO(boti): Move this to the particle command?
 
+    f32 Exposure;
     post_process_params PostProcess;
 
     m4 CameraTransform;

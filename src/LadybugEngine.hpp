@@ -46,6 +46,8 @@ struct game_state
     editor_state Editor;
 
     post_process_params PostProcessParams;
+    static constexpr f32 DefaultExposure = 0.55f;
+    f32 Exposure;
 
     assets* Assets;
     game_world* World;

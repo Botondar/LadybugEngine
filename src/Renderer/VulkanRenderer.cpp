@@ -1875,7 +1875,7 @@ void EndRenderFrame(render_frame* Frame)
 
     f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
 
-    Frame->Uniforms.Exposure                = 0.55f;
+    Frame->Uniforms.Exposure                = Frame->Exposure;
     Frame->Uniforms.SSAOIntensity           = Frame->PostProcess.SSAO.Intensity;
     Frame->Uniforms.SSAOInverseMaxDistance  = 1.0f / Frame->PostProcess.SSAO.MaxDistance;
     Frame->Uniforms.SSAOTangentTau          = Frame->PostProcess.SSAO.TangentTau;

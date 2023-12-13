@@ -173,6 +173,10 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         // but that's not the actual flow of this menu item...
         Context.CurrentFlow = Flow_Horizontal;
 
+        F32Slider(&Context, TextSize,
+                  "Exposure", &Game->Exposure,
+                  Game->DefaultExposure, 1e-3f, 10.0f, 1e-3f);
+
         F32Slider(&Context, TextSize, 
                   "Bloom filter radius", &Game->PostProcessParams.Bloom.FilterRadius, 
                   bloom_params::DefaultFilterRadius, 0.0f, 1.0f, 1e-4f);
