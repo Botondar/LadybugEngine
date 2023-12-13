@@ -1875,6 +1875,14 @@ void EndRenderFrame(render_frame* Frame)
 
     f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
 
+    Frame->Uniforms.Exposure                = 0.55f;
+    Frame->Uniforms.SSAOIntensity           = Frame->PostProcess.SSAO.Intensity;
+    Frame->Uniforms.SSAOInverseMaxDistance  = 1.0f / Frame->PostProcess.SSAO.MaxDistance;
+    Frame->Uniforms.SSAOTangentTau          = Frame->PostProcess.SSAO.TangentTau;
+    Frame->Uniforms.BloomFilterRadius       = Frame->PostProcess.Bloom.FilterRadius;
+    Frame->Uniforms.BloomInternalStrength   = Frame->PostProcess.Bloom.InternalStrength;
+    Frame->Uniforms.BloomStrength           = Frame->PostProcess.Bloom.Strength;
+
     // Calculate camera parameters
     {
         f32 n = Frame->CameraNearPlane;
@@ -3261,8 +3269,6 @@ void EndRenderFrame(render_frame* Frame)
         {
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Blit];
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdPushConstants(RenderCmd, Pipeline.Layout, VK_SHADER_STAGE_FRAGMENT_BIT, 
-                               0, sizeof(f32), &Frame->PostProcess.Bloom.Strength);
 
             VkDescriptorSet BlitDescriptorSet = VK_NULL_HANDLE;
             VkDescriptorSetAllocateInfo BlitSetInfo = 
@@ -3314,8 +3320,13 @@ void EndRenderFrame(render_frame* Frame)
             };
             vkUpdateDescriptorSets(VK.Device, CountOf(SetWrites), SetWrites, 0, nullptr);
 
+            VkDescriptorSet BlitDescriptorSets[] = 
+            {
+                BlitDescriptorSet,
+                Frame->Backend->UniformDescriptorSet,
+            };
             vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
-                                    0, 1, &BlitDescriptorSet, 0, nullptr);
+                                    0, CountOf(BlitDescriptorSets), BlitDescriptorSets, 0, nullptr);
             vkCmdDraw(RenderCmd, 3, 1, 0, 0);
         }
         vkCmdEndDebugUtilsLabelEXT(RenderCmd);

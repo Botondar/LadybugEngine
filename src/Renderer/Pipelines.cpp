@@ -931,17 +931,10 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Graphics,
         .Layout = 
         {
-            .PushConstantRangeCount = 1,
-            .DescriptorSetCount = 1,
-            .PushConstantRanges = 
-            {
-                {
-                    .Stages = PipelineStage_PS,
-                    .ByteSize = sizeof(f32),
-                    .ByteOffset = 0,
-                },
-            },
-            .DescriptorSets = { SetLayout_Blit },
+            .PushConstantRangeCount = 0,
+            .DescriptorSetCount = 2,
+            .PushConstantRanges = {},
+            .DescriptorSets = { SetLayout_Blit, SetLayout_PerFrameUniformData },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = 
@@ -997,17 +990,10 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Compute,
         .Layout = 
         {
-            .PushConstantRangeCount = 1,
-            .DescriptorSetCount = 1,
-            .PushConstantRanges = 
-            { 
-                {
-                    .Stages = PipelineStage_CS,
-                    .ByteSize = 2 * sizeof(f32),
-                    .ByteOffset = 0,
-                }
-            },
-            .DescriptorSets = { SetLayout_BloomUpsample },
+            .PushConstantRangeCount = 0,
+            .DescriptorSetCount = 2,
+            .PushConstantRanges = {},
+            .DescriptorSets = { SetLayout_BloomUpsample, SetLayout_PerFrameUniformData },
         },
     },
 
@@ -1017,16 +1003,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Compute,
         .Layout = 
         {
-            .PushConstantRangeCount = 1,
+            .PushConstantRangeCount = 0,
             .DescriptorSetCount = 2,
-            .PushConstantRanges = 
-            {
-                {
-                    .Stages = PipelineStage_CS,
-                    .ByteSize = 3 * sizeof(f32),
-                    .ByteOffset = 0,
-                },
-            },
+            .PushConstantRanges = {},
             .DescriptorSets = 
             {
                 SetLayout_SSAO,

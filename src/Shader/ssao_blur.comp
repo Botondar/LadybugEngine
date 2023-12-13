@@ -39,12 +39,6 @@ void main()
         }
     }
 
-    float Result = Occlusion.y > 0.0 ? 
-        Occlusion.x / Occlusion.y : 
-        0.25 * Occlusion.z;
-#if 0
-    float rSample = textureLod(OcclusionBuffer, P, 0).x;
-    Result = rSample;
-#endif
+    float Result = (Occlusion.y > 0.0) ? Occlusion.x / Occlusion.y : 0.25 * Occlusion.z;
     imageStore(OcclusionOut, iP, Result.xxxx);
 }

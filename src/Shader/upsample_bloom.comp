@@ -1,15 +1,16 @@
 #version 460 core
 
+#include "common.glsli"
+
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(set = 0, binding = 0) uniform sampler2D PrevMip;
 layout(set = 0, binding = 1) uniform sampler2D Input;
 layout(set = 0, binding = 2) uniform restrict writeonly image2D Output;
 
-layout(push_constant) uniform PushConstants
+layout(set = 1, binding = 0, scalar) uniform PerFrameBlock
 {
-    float R;
-    float Strength;
+    per_frame PerFrame;
 };
 
 void main()
@@ -17,8 +18,8 @@ void main()
     ivec2 InputSize = textureSize(Input, 0);
     ivec2 OutputSize = imageSize(Output);
 
-    float RX = R * (float(OutputSize.y) / float(OutputSize.x));
-    float RY = R;
+    float RX = PerFrame.BloomFilterRadius * (float(OutputSize.y) / float(OutputSize.x));
+    float RY = PerFrame.BloomFilterRadius;
 
     ivec2 P = ivec2(gl_GlobalInvocationID.xy);
     vec2 SampleP = (vec2(P) + vec2(0.5, 0.5)) / vec2(OutputSize);
@@ -41,9 +42,9 @@ void main()
             (a + c + g + i) * (1.0 / 16.0);
 
         #if 1
-        vec4 DstColor = vec4(SrcColor + BlurColor * Strength, 1.0);
+        vec4 DstColor = vec4(SrcColor + BlurColor * PerFrame.BloomInternalStrength, 1.0);
         #else
-        vec4 DstColor = vec4(mix(SrcColor, BlurColor, Strength), 1.0);
+        vec4 DstColor = vec4(mix(SrcColor, BlurColor, PerFrame.BloomInternalStrength), 1.0);
         #endif
         imageStore(Output, P, DstColor);
     }

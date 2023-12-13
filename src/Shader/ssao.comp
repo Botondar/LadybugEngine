@@ -12,13 +12,6 @@ layout(set = 1, binding = 0, scalar) uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-layout(push_constant) uniform PushConstants
-{
-    f32 Intensity;
-    f32 InvMaxDistance;
-    f32 TangentTau;
-};
-
 // Sample offset table
 const vec2 d[4] = { vec2(0.1, 0.0), vec2(0.0, 0.2), vec2(-0.3, 0.0 ), vec2(0.0, -0.4), };
 
@@ -77,14 +70,14 @@ void main()
             v.z = Depth2.x + Depth2.y - Structure.z;
             
             float NdotV = dot(N, v);
-            float w = clamp(1.0 - InvMaxDistance * NdotV, 0.0, 1.0);
-            float c = clamp(NdotV * inversesqrt(dot(v, v)) - TangentTau, 0.0, 1.0);
+            float w = clamp(1.0 - PerFrame.SSAOInverseMaxDistance * NdotV, 0.0, 1.0);
+            float c = clamp(NdotV * inversesqrt(dot(v, v)) - PerFrame.SSAOTangentTau, 0.0, 1.0);
 
             Occlusion += w - w * sqrt(1.0 - c*c);
             Weight += w;
         }
 
-        float Result = 1.0 - Occlusion * Intensity / max(Weight, 0.0001);
+        float Result = 1.0 - Occlusion * PerFrame.SSAOIntensity / max(Weight, 0.0001);
         imageStore(SSAOImage, P, Result.xxxx);
     }
 }

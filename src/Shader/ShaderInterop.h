@@ -1,6 +1,10 @@
 #if defined(__cplusplus)
 
+#   define StaticAssert(expr) static_assert(expr)
+
 #else
+
+#   define StaticAssert(expr)
 
 #   define PI 3.14159265359
 
@@ -90,7 +94,15 @@ struct per_frame
 
     u32 LightCount;
 
+    f32 Exposure;
+    f32 SSAOIntensity;
+    f32 SSAOInverseMaxDistance;
+    f32 SSAOTangentTau;
+    f32 BloomFilterRadius;
+    f32 BloomInternalStrength;
+    f32 BloomStrength;
 };
+StaticAssert(sizeof(per_frame) <= KiB(64));
 
 struct renderer_material
 {

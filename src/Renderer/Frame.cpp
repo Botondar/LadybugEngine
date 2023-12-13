@@ -436,8 +436,6 @@ RenderSSAO(render_frame* Frame,
         vkCmdPipelineBarrier2(CmdBuffer, &SSAOBeginDependency);
 
         vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline);
-        f32 PushConstants[3] = { Params.Intensity, 1.0f / Params.MaxDistance, Params.TangentTau };
-        vkCmdPushConstants(CmdBuffer, PipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), PushConstants);
         VkDescriptorSet SSAODescriptorSets[] = 
         {
             SSAODescriptorSet,
@@ -1081,8 +1079,8 @@ internal void RenderBloom(
     }
 
     vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, UpsamplePipeline);
-    f32 PushConstants[2] = { Params.FilterRadius, Params.InternalStrength };
-    vkCmdPushConstants(CmdBuffer, UpsamplePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), PushConstants);
+    vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, UpsamplePipelineLayout,
+                            1, 1, &Frame->Backend->UniformDescriptorSet, 0, nullptr);
     for (u32 Index = 1; Index < BloomMipCount; Index++)
     {
         u32 Mip = BloomMipCount - Index - 1;

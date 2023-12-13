@@ -23,13 +23,13 @@ void main()
 
 #elif defined(FS)
 
-layout(push_constant) uniform PushConstants
-{
-    f32 BloomStrength;
-};
-
 layout(set = 0, binding = 0) uniform sampler2D Texture;
 layout(set = 0, binding = 1) uniform sampler2D BloomTexture;
+
+layout(set = 1, binding = 0, scalar) uniform PerFrameBlock
+{
+    per_frame PerFrame;
+};
 
 layout(location = 0) in vec2 TexCoord;
 
@@ -81,10 +81,9 @@ void main()
 {
     vec3 Sample = textureLod(Texture, TexCoord, 0).rgb;
     vec3 SampleBloom = textureLod(BloomTexture, TexCoord, 0).rgb;
-    Sample = mix(Sample, SampleBloom, BloomStrength);
+    Sample = mix(Sample, SampleBloom, PerFrame.BloomStrength);
 
-    float Exposure = 0.55;
-    vec3 Exposed = Sample * Exposure;
+    vec3 Exposed = Sample * PerFrame.Exposure;
 #if 0
     Exposed = vec3(1.0) - exp(-Exposed);
 #elif 0
