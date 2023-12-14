@@ -181,7 +181,7 @@ internal VkMemoryRequirements
 GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInfo);
 
 internal VkResult 
-ResizeRenderTargets(renderer* Renderer);
+ResizeRenderTargets(renderer* Renderer, b32 Forced);
 
 internal void 
 DrawMeshes(render_frame* Frame, 
@@ -384,7 +384,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         {
             Renderer->Frames[i].Backend = Renderer->BackendFrames + i;
         }
-        Result = ResizeRenderTargets(Renderer);
+        Result = ResizeRenderTargets(Renderer, false);
         ReturnOnFailure();
     }
 
@@ -1549,15 +1549,17 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
     return(Renderer);
 }
 
-internal VkResult ResizeRenderTargets(renderer* Renderer)
+internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
 {
     VkResult Result = VK_SUCCESS;
 
     VkSurfaceCapabilitiesKHR SurfaceCaps = {};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VK.PhysicalDevice, Renderer->Surface, &SurfaceCaps);
 
-    if (Renderer->SurfaceExtent.width != SurfaceCaps.currentExtent.width ||
-        Renderer->SurfaceExtent.height != SurfaceCaps.currentExtent.height)
+    b32 ExtentChanged = 
+        (Renderer->SurfaceExtent.width != SurfaceCaps.currentExtent.width) ||
+        (Renderer->SurfaceExtent.height != SurfaceCaps.currentExtent.height);
+    if (ExtentChanged || Forced)
     {
         Renderer->SurfaceExtent = SurfaceCaps.currentExtent;
         if (Renderer->SurfaceExtent.width != 0 && Renderer->SurfaceExtent.height != 0)
@@ -1959,7 +1961,7 @@ void EndRenderFrame(render_frame* Frame)
         if (Frame->RenderWidth != Renderer->SurfaceExtent.width ||
             Frame->RenderHeight != Renderer->SurfaceExtent.height)
         {
-            ResizeRenderTargets(Renderer);
+            ResizeRenderTargets(Renderer, false);
         }
 
         for (;;)
@@ -1978,7 +1980,7 @@ void EndRenderFrame(render_frame* Frame)
             else if (ImageAcquireResult == VK_SUBOPTIMAL_KHR ||
                 ImageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR)
             {
-                ResizeRenderTargets(Renderer);
+                ResizeRenderTargets(Renderer, true);
                 Frame->RenderWidth = Renderer->SurfaceExtent.width;
                 Frame->RenderHeight = Renderer->SurfaceExtent.height;
             }
