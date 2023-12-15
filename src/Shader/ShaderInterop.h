@@ -85,7 +85,6 @@ struct per_frame
     f32 NearZ;
     f32 FarZ;
 
-    v3 CameraP;
     v3 SunV;
     v3 SunL;
 

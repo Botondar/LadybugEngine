@@ -1948,7 +1948,6 @@ void EndRenderFrame(render_frame* Frame)
         Frame->Uniforms.NearZ = Frame->CameraNearPlane;
         Frame->Uniforms.FarZ = Frame->CameraFarPlane;
         
-        Frame->Uniforms.CameraP = Frame->CameraTransform.P.XYZ;
         Frame->Uniforms.SunV = TransformDirection(Frame->ViewTransform, Frame->SunV);
         Frame->Uniforms.SunL = Frame->SunL;
     }
