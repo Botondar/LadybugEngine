@@ -1877,13 +1877,13 @@ void EndRenderFrame(render_frame* Frame)
 
     f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
 
-    Frame->Uniforms.Exposure                = Frame->Exposure;
-    Frame->Uniforms.SSAOIntensity           = Frame->PostProcess.SSAO.Intensity;
-    Frame->Uniforms.SSAOInverseMaxDistance  = 1.0f / Frame->PostProcess.SSAO.MaxDistance;
-    Frame->Uniforms.SSAOTangentTau          = Frame->PostProcess.SSAO.TangentTau;
-    Frame->Uniforms.BloomFilterRadius       = Frame->PostProcess.Bloom.FilterRadius;
-    Frame->Uniforms.BloomInternalStrength   = Frame->PostProcess.Bloom.InternalStrength;
-    Frame->Uniforms.BloomStrength           = Frame->PostProcess.Bloom.Strength;
+    Frame->Uniforms.Exposure                = Frame->Config.Exposure;
+    Frame->Uniforms.SSAOIntensity           = Frame->Config.SSAOIntensity;
+    Frame->Uniforms.SSAOInverseMaxDistance  = 1.0f / Frame->Config.SSAOMaxDistance;
+    Frame->Uniforms.SSAOTangentTau          = Frame->Config.SSAOTangentTau;
+    Frame->Uniforms.BloomFilterRadius       = Frame->Config.BloomFilterRadius;
+    Frame->Uniforms.BloomInternalStrength   = Frame->Config.BloomInternalStrength;
+    Frame->Uniforms.BloomStrength           = Frame->Config.BloomStrength;
 
     // Calculate camera parameters
     {
@@ -2666,7 +2666,6 @@ void EndRenderFrame(render_frame* Frame)
     vkBeginCommandBuffer(PreLightCmd, &CmdBufferBegin);
 
     RenderSSAO(Frame, PreLightCmd,
-               Frame->PostProcess.SSAO,
                Renderer->Pipelines[Pipeline_SSAO].Pipeline, 
                Renderer->Pipelines[Pipeline_SSAO].Layout, 
                Renderer->SetLayouts[SetLayout_SSAO],
@@ -3172,7 +3171,6 @@ void EndRenderFrame(render_frame* Frame)
     
 
     RenderBloom(Frame, RenderCmd,
-                Frame->PostProcess.Bloom,
                 Frame->Backend->HDRRenderTarget,
                 Frame->Backend->BloomTarget,
                 Renderer->Pipelines[Pipeline_BloomDownsample].Layout,

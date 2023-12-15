@@ -116,7 +116,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
 
     u32 CPUMenuID = ButtonGUI(&Context, TextSize, "CPU");
     u32 GPUMenuID = ButtonGUI(&Context, TextSize, "GPU");
-    u32 PostProcessMenuID = ButtonGUI(&Context, TextSize, "PostProcess");
+    u32 RenderMenuID = ButtonGUI(&Context, TextSize, "Render");
 
     if (WasReleased(Context.MouseLeft))
     {
@@ -167,35 +167,35 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             TextGUI(&Context, TextSize, "%s memory: %llu/%llu MB", Entry->Name, Entry->UsedSize >> 20, Entry->AllocationSize >> 20);
         }
     }
-    else if (Editor->SelectedMenuID == PostProcessMenuID)
+    else if (Editor->SelectedMenuID == RenderMenuID)
     {
         // HACK(boti): The horizontal flow here makes the button and text _within_ the widget behave correctly,
         // but that's not the actual flow of this menu item...
         Context.CurrentFlow = Flow_Horizontal;
 
         F32Slider(&Context, TextSize,
-                  "Exposure", &Game->Exposure,
+                  "Exposure", &Game->RenderConfig.Exposure,
                   Game->DefaultExposure, 1e-3f, 10.0f, 1e-3f);
 
         F32Slider(&Context, TextSize, 
-                  "Bloom filter radius", &Game->PostProcessParams.Bloom.FilterRadius, 
-                  bloom_params::DefaultFilterRadius, 0.0f, 1.0f, 1e-4f);
+                  "Bloom filter radius", &Game->RenderConfig.BloomFilterRadius, 
+                  Game->RenderConfig.DefaultBloomFilterRadius, 0.0f, 1.0f, 1e-4f);
         F32Slider(&Context, TextSize, 
-                  "Bloom internal strength", &Game->PostProcessParams.Bloom.InternalStrength, 
-                  bloom_params::DefaultInternalStrength, 0.0f, 1.0f, 1e-3f);
+                  "Bloom internal strength", &Game->RenderConfig.BloomInternalStrength, 
+                  Game->RenderConfig.DefaultBloomInternalStrength, 0.0f, 1.0f, 1e-3f);
         F32Slider(&Context, TextSize, 
-                  "Bloom strength", &Game->PostProcessParams.Bloom.Strength, 
-                  bloom_params::DefaultStrength, 0.0f, 1.0f, 1e-3f);
+                  "Bloom strength", &Game->RenderConfig.BloomStrength, 
+                  Game->RenderConfig.DefaultBloomStrength, 0.0f, 1.0f, 1e-3f);
 
         F32Slider(&Context, TextSize, 
-                  "SSAO intensity", &Game->PostProcessParams.SSAO.Intensity, 
-                  ssao_params::DefaultIntensity, 0.0f, 20.0f, 1e-2f);
+                  "SSAO intensity", &Game->RenderConfig.SSAOIntensity, 
+                  Game->RenderConfig.DefaultSSAOIntensity, 0.0f, 20.0f, 1e-2f);
         F32Slider(&Context, TextSize, 
-                  "SSAO max distance", &Game->PostProcessParams.SSAO.MaxDistance, 
-                  ssao_params::DefaultMaxDistance, 1e-3f, 10.0f, 1e-3f);
+                  "SSAO max distance", &Game->RenderConfig.SSAOMaxDistance, 
+                  Game->RenderConfig.DefaultSSAOMaxDistance, 1e-3f, 10.0f, 1e-3f);
         F32Slider(&Context, TextSize, 
-                  "SSAO tangent tau", &Game->PostProcessParams.SSAO.TangentTau, 
-                  ssao_params::DefaultTangentTau, 0.0f, 1.0f, 1e-3f);
+                  "SSAO tangent tau", &Game->RenderConfig.SSAOTangentTau, 
+                  Game->RenderConfig.DefaultSSAOTangentTau, 0.0f, 1.0f, 1e-3f);
     }
 
     // TODO(boti): This shouldn't be done this way, 

@@ -3,75 +3,7 @@
 #extension GL_EXT_shader_8bit_storage : require
 #extension GL_EXT_shader_16bit_storage : require
 
-#if 1
 #include "ShaderInterop.h"
-#else
-
-// TODO(boti): Create a shared header between the C++ and the shaders
-// NOTE(boti): These constants need to be kept in sync with the ones Renderer.hpp
-#define R_TileSizeX 16
-#define R_TileSizeY 16
-#define R_MaxLightCountPerTile 255
-#define R_LuminanceThreshold 1e-2
-#define R_MaxLightCount 16384
-#define R_MaxShadowCount 64
-
-struct light
-{
-    v4 P; // NOTE(boti): w is shadow index
-    v4 E;
-};
-
-struct screen_tile
-{
-    u32 LightCount;
-    u32 LightIndices[R_MaxLightCountPerTile];
-};
-
-struct per_frame
-{
-    m4 CameraTransform;
-    m4 View;
-    m4 Projection;
-    m4 InverseProjection;
-    m4 ViewProjection;
-
-    m4 CascadeViewProjections[4];
-
-    m4 ShadowViewProjections[6*R_MaxShadowCount];
-
-    f32 CascadeMinDistances[4];
-    f32 CascadeMaxDistances[4];
-    v3 CascadeScales[3];
-    v3 CascadeOffsets[3];
-
-    f32 FocalLength;
-    f32 AspectRatio;
-    f32 NearZ;
-    f32 FarZ;
-
-    v3 CameraP;
-    v3 SunV;
-    v3 SunL;
-
-    v2 ScreenSize;
-    v2u TileCount;
-
-    u32 LightCount;
-
-};
-
-struct material
-{
-    v3 Emissive;
-    u32 Diffuse;
-    u32 MetallicRoughness;
-    u32 DiffuseID;
-    u32 NormalID;
-    u32 MetallicRoughnessID;
-};
-
-#endif
 
 //
 // Common
@@ -89,9 +21,9 @@ v3 TransformDirection(m4 M, v3 V)
     return(Result);
 }
 
-vec4 UnpackRGBA8(in uint Color) 
+v4 UnpackRGBA8(in u32 Color) 
 {
-    vec4 Result = vec4(
+    v4 Result = vec4(
         (Color          & 0xFF) / 255.0,
         ((Color >> 8)   & 0xFF) / 255.0,
         ((Color >> 16)  & 0xFF) / 255.0,
@@ -99,17 +31,17 @@ vec4 UnpackRGBA8(in uint Color)
     return Result;
 }
 
-float GetLuminance(in vec3 Color)
+f32 GetLuminance(in v3 Color)
 {
-    vec3 Factors = vec3(0.212639, 0.715169, 0.072192);
-    float Result = dot(Factors, Color);
+    v3 Factors = vec3(0.212639f, 0.715169f, 0.072192f);
+    f32 Result = dot(Factors, Color);
     return Result;
 }
 
-vec3 SetLuminance(in vec3 Color, in vec3 TargetLuminance)
+v3 SetLuminance(in v3 Color, f32 TargetLuminance)
 {
-    float CurrentLuminance = GetLuminance(Color);
-    vec3 Result = Color * (TargetLuminance / CurrentLuminance);
+    f32 CurrentLuminance = GetLuminance(Color);
+    v3 Result = Color * (TargetLuminance / CurrentLuminance);
     return Result;
 }
 

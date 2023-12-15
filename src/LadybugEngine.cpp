@@ -65,13 +65,13 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
         InitEditor(GameState, &GameState->TransientArena);
 
-        GameState->Exposure = GameState->DefaultExposure;
-        GameState->PostProcessParams.SSAO.Intensity = ssao_params::DefaultIntensity;
-        GameState->PostProcessParams.SSAO.MaxDistance = ssao_params::DefaultMaxDistance;
-        GameState->PostProcessParams.SSAO.TangentTau = ssao_params::DefaultTangentTau;
-        GameState->PostProcessParams.Bloom.FilterRadius = bloom_params::DefaultFilterRadius;
-        GameState->PostProcessParams.Bloom.InternalStrength = bloom_params::DefaultInternalStrength;
-        GameState->PostProcessParams.Bloom.Strength = bloom_params::DefaultStrength;
+        GameState->RenderConfig.Exposure                = GameState->DefaultExposure;
+        GameState->RenderConfig.SSAOIntensity           = render_config::DefaultSSAOIntensity;
+        GameState->RenderConfig.SSAOMaxDistance         = render_config::DefaultSSAOMaxDistance;
+        GameState->RenderConfig.SSAOTangentTau          = render_config::DefaultSSAOTangentTau;
+        GameState->RenderConfig.BloomFilterRadius       = render_config::DefaultBloomFilterRadius;
+        GameState->RenderConfig.BloomInternalStrength   = render_config::DefaultBloomInternalStrength;
+        GameState->RenderConfig.BloomStrength           = render_config::DefaultBloomStrength;
     }
 
     ResetArena(&GameState->TransientArena);
@@ -118,8 +118,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     }
     
     UpdateEditor(GameState, GameIO, RenderFrame);
-    RenderFrame->Exposure = GameState->Exposure;
-    RenderFrame->PostProcess = GameState->PostProcessParams;
+    RenderFrame->Config = GameState->RenderConfig;
 
     // Asset update
     {

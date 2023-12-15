@@ -293,7 +293,6 @@ internal void EndCascade(render_frame* Frame, VkCommandBuffer CmdBuffer)
 internal void 
 RenderSSAO(render_frame* Frame,
            VkCommandBuffer CmdBuffer,
-           ssao_params Params,
            VkPipeline Pipeline, VkPipelineLayout PipelineLayout, 
            VkDescriptorSetLayout SetLayout,
            VkPipeline BlurPipeline, VkPipelineLayout BlurPipelineLayout,
@@ -725,7 +724,6 @@ internal void EndForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer)
 internal void RenderBloom(
     render_frame* Frame,
     VkCommandBuffer CmdBuffer,
-    bloom_params Params,
     render_target* SrcRT,
     render_target* DstRT,
     VkPipelineLayout DownsamplePipelineLayout,

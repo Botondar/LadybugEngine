@@ -246,7 +246,7 @@ enum descriptor_type : u32
     Descriptor_StorageBuffer = 7,
     Descriptor_DynamicUniformBuffer = 8,
     Descriptor_DynamicStorageBuffer = 9,
-    //  Descriptor_InputAttachment, 
+//  Descriptor_InputAttachment, 
     Descriptor_InlineUniformBlock = 11,
 };
 
@@ -532,32 +532,25 @@ enum texture_flag_bits : texture_flags
     TextureFlag_Special = (1 << 0),
 };
 
-struct ssao_params
+struct render_config
 {
-    f32 Intensity;
-    f32 MaxDistance;
-    f32 TangentTau;
+    f32 Exposure;
 
-    static constexpr f32 DefaultIntensity = 8.0f;
-    static constexpr f32 DefaultMaxDistance = 0.5f;
-    static constexpr f32 DefaultTangentTau = 0.03125;
-};
+    f32 SSAOIntensity;
+    f32 SSAOMaxDistance;
+    f32 SSAOTangentTau;
 
-struct bloom_params
-{
-    f32 FilterRadius;
-    f32 InternalStrength;
-    f32 Strength;
+    f32 BloomFilterRadius;
+    f32 BloomInternalStrength;
+    f32 BloomStrength;
 
-    static constexpr f32 DefaultFilterRadius = 0.005f;
-    static constexpr f32 DefaultInternalStrength = 0.65f;
-    static constexpr f32 DefaultStrength = 0.1f;
-};
+    static constexpr f32 DefaultSSAOIntensity = 8.0f;
+    static constexpr f32 DefaultSSAOMaxDistance = 0.5f;
+    static constexpr f32 DefaultSSAOTangentTau = 0.03125;
 
-struct post_process_params
-{
-    ssao_params SSAO;
-    bloom_params Bloom;
+    static constexpr f32 DefaultBloomFilterRadius = 0.005f;
+    static constexpr f32 DefaultBloomInternalStrength = 0.65f;
+    static constexpr f32 DefaultBloomStrength = 0.1f;
 };
 
 typedef u32 vert_index;
@@ -754,8 +747,7 @@ struct render_frame
     renderer_texture_id ImmediateTextureID;
     renderer_texture_id ParticleTextureID; // TODO(boti): Move this to the particle command?
 
-    f32 Exposure;
-    post_process_params PostProcess;
+    render_config Config;
 
     m4 CameraTransform;
     f32 CameraFocalLength;
