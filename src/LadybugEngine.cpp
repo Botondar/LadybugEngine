@@ -52,7 +52,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             GameIO->QuitMessage = "Renderer creation failed";
             return;
         }
-        RenderFrame = BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputWidth, GameIO->OutputHeight);
+        RenderFrame = BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputExtent);
 
         constexpr umm AssetArenaSize = GiB(1);
         memory_arena AssetArena = InitializeArena(AssetArenaSize, PushSize_(&GameState->TotalArena, 0, AssetArenaSize, KiB(4)));
@@ -88,7 +88,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
     if (!RenderFrame)
     {
-        RenderFrame = BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputWidth, GameIO->OutputHeight);
+        RenderFrame = BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputExtent);
     }
     RenderFrame->ImmediateTextureID = GameState->Assets->Textures[GameState->Assets->DefaultFontTextureID].RendererID;
     RenderFrame->ParticleTextureID = GameState->Assets->Textures[GameState->Assets->ParticleArrayID].RendererID;

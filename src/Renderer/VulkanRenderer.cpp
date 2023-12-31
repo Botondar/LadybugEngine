@@ -1765,7 +1765,7 @@ AllocateGeometry(renderer* Renderer, u32 VertexCount, u32 IndexCount)
     return(Result);
 }
 
-render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 OutputWidth, u32 OutputHeight)
+render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, v2u OutputExtent)
 {
     u32 FrameID = (u32)(Renderer->CurrentFrameID++ % Renderer->SwapchainImageCount);
     render_frame* Frame = Renderer->Frames + FrameID;

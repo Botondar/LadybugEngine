@@ -322,40 +322,43 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
         MONITORINFO MonitorInfo = { sizeof(MONITORINFO) };
         GetMonitorInfo(PrimaryMonitor, &MonitorInfo);
 
-        int MonitorWidth = MonitorInfo.rcMonitor.right - MonitorInfo.rcMonitor.left;
-        int MonitorHeight = MonitorInfo.rcMonitor.bottom - MonitorInfo.rcMonitor.top;
+        v2u MonitorExtent = 
+        {
+            (u32)(MonitorInfo.rcMonitor.right - MonitorInfo.rcMonitor.left),
+            (u32)(MonitorInfo.rcMonitor.bottom - MonitorInfo.rcMonitor.top),
+        };
 
-        int InitialWindowWidth = 1280;
-        int InitialWindowHeight = 720;
-        if (MonitorWidth < 1280 || MonitorHeight < 720)
+        v2u WindowMonitorExtentPairs[][2] = 
+        {
+            { { 1280,  720 }, { 1600,  900 } },
+            { { 1600,  900 }, { 1920, 1080 } },
+            { { 1920, 1080 }, { 2560, 1440 } },
+            { { 2560, 1440 }, { 3840, 2160 } },
+        };
+
+        if ((MonitorExtent.X < WindowMonitorExtentPairs[0][1].X) ||
+            (MonitorExtent.Y < WindowMonitorExtentPairs[0][1].Y))
         {
             MessageBoxA(nullptr, "Tiny monitor", "LadybugEngine", MB_OK|MB_ICONERROR);
             return((DWORD)-1);
         }
-        else if (MonitorWidth <= 1600 || MonitorHeight <= 900)
-        {
-            InitialWindowWidth = 1280;
-            InitialWindowHeight = 720;
-        }
-        else if (MonitorWidth <= 1920 || MonitorHeight <= 1080)
-        {
-            InitialWindowWidth = 1600;
-            InitialWindowHeight = 900;
-        }
-        else if (MonitorWidth <= 2560 || MonitorHeight <= 1440)
-        {
-            InitialWindowWidth = 1920;
-            InitialWindowHeight = 1080;
-        }
 
-        GameIO.OutputWidth = InitialWindowWidth;
-        GameIO.OutputHeight = InitialWindowHeight;
+        v2u InitialWindowExtent = WindowMonitorExtentPairs[0][0];
+        for (u32 Index = 1; Index < CountOf(WindowMonitorExtentPairs); Index++)
+        {
+            if ((WindowMonitorExtentPairs[Index][1].X <= MonitorExtent.X) ||
+                (WindowMonitorExtentPairs[Index][1].Y <= MonitorExtent.Y))
+            {
+                InitialWindowExtent = WindowMonitorExtentPairs[Index][0];
+            }
+        }
+        GameIO.OutputExtent = InitialWindowExtent;
 
         RECT WindowRect;
-        WindowRect.left = (MonitorWidth - InitialWindowWidth) / 2;
-        WindowRect.top = (MonitorHeight - InitialWindowHeight) / 2;
-        WindowRect.right = WindowRect.left + InitialWindowWidth;
-        WindowRect.bottom = WindowRect.top + InitialWindowHeight;
+        WindowRect.left = ((s32)MonitorExtent.X - (s32)InitialWindowExtent.X) / 2;
+        WindowRect.top  = ((s32)MonitorExtent.Y - (s32)InitialWindowExtent.Y) / 2;
+        WindowRect.right    = WindowRect.left + (s32)InitialWindowExtent.X;
+        WindowRect.bottom   = WindowRect.top  + (s32)InitialWindowExtent.Y;
 
         AdjustWindowRect(&WindowRect, WindowStyle, FALSE);
 
@@ -447,8 +450,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
                     else if (Message.wParam == SIZE_RESTORED || Message.wParam == SIZE_MAXIMIZED)
                     {
                         GameIO.bIsMinimized = false;
-                        GameIO.OutputWidth = LOWORD(Message.lParam);
-                        GameIO.OutputHeight = HIWORD(Message.lParam);
+                        GameIO.OutputExtent = { (u32)LOWORD(Message.lParam), (u32)HIWORD(Message.lParam) };
                     }
                 } break;
 

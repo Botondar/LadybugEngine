@@ -850,10 +850,8 @@ AllocateTextureName(renderer* Renderer, texture_flags Flags);
 // Frame rendering
 //
 
-render_frame* 
-BeginRenderFrame(renderer* Renderer, memory_arena* arena,
-                 u32 OutputWidth, u32 OutputHeight);
-void EndRenderFrame(render_frame* Frame);
+extern render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* arena, v2u OutputExtent);
+extern void EndRenderFrame(render_frame* Frame);
 
 inline b32 
 TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_info Info, 
