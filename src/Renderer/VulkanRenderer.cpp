@@ -3169,6 +3169,7 @@ void EndRenderFrame(render_frame* Frame)
         }
     }
     EndForwardPass(Frame, RenderCmd);
+    
 
     RenderBloom(Frame, RenderCmd,
                 Frame->Renderer->HDRRenderTarget,
