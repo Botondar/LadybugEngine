@@ -77,11 +77,6 @@ struct backend_render_frame
     render_target* BloomTarget;
     render_target* OcclusionBuffers[2];
 
-    u32 ShadowCascadeCount;
-    VkImage ShadowMap;
-    VkImageView ShadowMapView;
-    VkImageView ShadowCascadeViews[R_MaxShadowCascadeCount];
-
     VkBuffer StagingBuffer;
     VkBuffer UniformBuffer;
     VkBuffer ParticleBuffer;

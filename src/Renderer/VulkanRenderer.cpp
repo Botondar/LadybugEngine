@@ -1791,14 +1791,6 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, v2u Outp
 
     Frame->Backend->DescriptorPool = Renderer->PerFrameDescriptorPool[FrameID];    
 
-    Frame->Backend->ShadowCascadeCount = Renderer->ShadowCascadeCount;
-    Frame->Backend->ShadowMap = Renderer->ShadowMap;
-    Frame->Backend->ShadowMapView = Renderer->ShadowView;
-    for (u32 i = 0; i < Frame->Backend->ShadowCascadeCount; i++)
-    {
-        Frame->Backend->ShadowCascadeViews[i] = Renderer->ShadowCascadeViews[i];
-    }
-
     // Reset buffers
     {
         Frame->StagingBufferAt = 0;
@@ -2449,7 +2441,7 @@ void EndRenderFrame(render_frame* Frame)
         Frame,
         Renderer->SetLayouts[SetLayout_ShadowPS],
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        Frame->Backend->ShadowMapView,
+        Frame->Renderer->ShadowView,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     // TODO(boti): This descriptor set update could just be done at init, no need to do it every frame

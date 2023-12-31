@@ -231,7 +231,7 @@ internal void BeginCascade(render_frame* Frame, VkCommandBuffer CmdBuffer, u32 C
             .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->Backend->ShadowMap,
+            .image = Frame->Renderer->ShadowMap,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -258,7 +258,7 @@ internal void BeginCascade(render_frame* Frame, VkCommandBuffer CmdBuffer, u32 C
     {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
-        .imageView = Frame->Backend->ShadowCascadeViews[CascadeIndex],
+        .imageView = Frame->Renderer->ShadowCascadeViews[CascadeIndex],
         .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         .resolveMode = VK_RESOLVE_MODE_NONE,
         .resolveImageView = VK_NULL_HANDLE,
@@ -622,14 +622,14 @@ internal void BeginForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer)
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->Backend->ShadowMap,
+            .image = Frame->Renderer->ShadowMap,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
                 .baseMipLevel = 0,
                 .levelCount = 1,
                 .baseArrayLayer = 0,
-                .layerCount = Frame->Backend->ShadowCascadeCount,
+                .layerCount = Frame->Renderer->ShadowCascadeCount,
             },
         },
 
