@@ -343,11 +343,6 @@ RenderSSAO(render_frame* Frame,
 
     // Calculate AO
     {
-        constexpr u32 GroupSizeX = 8;
-        constexpr u32 GroupSizeY = 8;
-        u32 DispatchX = CeilDiv(Frame->RenderWidth, GroupSizeX);
-        u32 DispatchY = CeilDiv(Frame->RenderHeight, GroupSizeY);
-
         // Allocate the descriptor set
         VkDescriptorSet SSAODescriptorSet = VK_NULL_HANDLE;
         {
@@ -443,6 +438,8 @@ RenderSSAO(render_frame* Frame,
         vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, PipelineLayout, 
                                 0, CountOf(SSAODescriptorSets), SSAODescriptorSets, 0, nullptr);
 
+        u32 DispatchX = CeilDiv(Frame->RenderWidth, SSAO_GroupSizeX);
+        u32 DispatchY = CeilDiv(Frame->RenderHeight, SSAO_GroupSizeY);
         vkCmdDispatch(CmdBuffer, DispatchX, DispatchY, 1);
 
         VkDescriptorSet SSAOBlurDescriptorSet = VK_NULL_HANDLE;
@@ -578,7 +575,9 @@ RenderSSAO(render_frame* Frame,
         vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, BlurPipelineLayout, 
                                 0, CountOf(SSAOBlurDescriptorSets), SSAOBlurDescriptorSets, 0, nullptr);
 
-        vkCmdDispatch(CmdBuffer, DispatchX, DispatchY, 1);
+        u32 BlurDispatchX = CeilDiv(Frame->RenderWidth, SSAOBlur_GroupSizeX);
+        u32 BlurDispatchY = CeilDiv(Frame->RenderHeight, SSAOBlur_GroupSizeY);
+        vkCmdDispatch(CmdBuffer, BlurDispatchX, BlurDispatchY, 1);
     }
 
     vkCmdEndDebugUtilsLabelEXT(CmdBuffer);
@@ -884,8 +883,8 @@ internal void RenderBloom(
         vkCmdPushConstants(CmdBuffer, DownsamplePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 
                            0, sizeof(DoKarisAverage), &DoKarisAverage);
 
-        u32 DispatchX = CeilDiv(Width, 8);
-        u32 DispatchY = CeilDiv(Height, 8);
+        u32 DispatchX = CeilDiv(Width, DownsampleBloom_GroupSizeX);
+        u32 DispatchY = CeilDiv(Height, DownsampleBloom_GroupSizeY);
         vkCmdDispatch(CmdBuffer, DispatchX, DispatchY, 1);
 
         DoKarisAverage = 0;
@@ -1179,8 +1178,8 @@ internal void RenderBloom(
         Width = Max(Frame->RenderWidth >> Mip, 1u);
         Height = Max(Frame->RenderHeight >> Mip, 1u);
 
-        u32 DispatchX = CeilDiv(Width, 8);
-        u32 DispatchY = CeilDiv(Height, 8);
+        u32 DispatchX = CeilDiv(Width, UpsampleBloom_GroupSizeX);
+        u32 DispatchY = CeilDiv(Height, UpsampleBloom_GroupSizeY);
         vkCmdDispatch(CmdBuffer, DispatchX, DispatchY, 1);
 
         VkImageMemoryBarrier2 End = 

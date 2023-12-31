@@ -2594,9 +2594,7 @@ void EndRenderFrame(render_frame* Frame)
             vkCmdPushConstants(PrepassCmd, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
                                0, sizeof(PushConstants), PushConstants);
 
-
-            constexpr u32 SkinningGroupSize = 64;
-            vkCmdDispatch(PrepassCmd, CeilDiv(Cmd->VertexCount, SkinningGroupSize), 1, 1);
+            vkCmdDispatch(PrepassCmd, CeilDiv(Cmd->VertexCount, Skin_GroupSizeX), 1, 1);
         }
 
         VkBufferMemoryBarrier2 EndBarriers[] =
@@ -2763,7 +2761,7 @@ void EndRenderFrame(render_frame* Frame)
         vkCmdBindDescriptorSets(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout, 
                                 0, CountOf(BinningDescriptorSets), BinningDescriptorSets, 0, nullptr);
 
-        vkCmdDispatch(PreLightCmd, CeilDiv(TileCountX, 32), TileCountY, 1);
+        vkCmdDispatch(PreLightCmd, CeilDiv(TileCountX, LightBin_GroupSizeX), CeilDiv(TileCountY, LightBin_GroupSizeY), 1);
 
         VkBufferMemoryBarrier2 EndBarriers[] = 
         {

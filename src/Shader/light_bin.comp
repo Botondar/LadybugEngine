@@ -2,7 +2,7 @@
 
 #include "common.glsli"
 
-layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = LightBin_GroupSizeX, local_size_y = LightBin_GroupSizeY, local_size_z = LightBin_GroupSizeZ) in;
 
 layout(set = 0, binding = 0, scalar)
 uniform PerFrameBlock

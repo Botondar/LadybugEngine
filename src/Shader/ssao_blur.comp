@@ -2,7 +2,7 @@
 
 #include "common.glsli"
 
-layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(local_size_x = SSAOBlur_GroupSizeX, local_size_y = SSAOBlur_GroupSizeY, local_size_z = SSAOBlur_GroupSizeZ) in;
 
 layout(set = 0, binding = 0) uniform sampler2D StructureBuffer;
 layout(set = 0, binding = 1) uniform sampler2D OcclusionBuffer;

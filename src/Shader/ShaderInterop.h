@@ -48,10 +48,40 @@
 #define Attrib_JointIndices     6
 
 #define light_flags flags32
-CONSTEXPR light_flags LightFlag_None            = 0;
-CONSTEXPR light_flags LightFlag_ShadowCaster    = (1u << 0);
-CONSTEXPR light_flags LightFlag_Volumetric      = (1u << 1);
+#define LightFlag_None          0x00u
+#define LightFlag_ShadowCaster  0x01u
+#define LightFlag_Volumetric    0x02u
 
+//
+// Shader specific
+//
+#define LightBin_GroupSizeX         32
+#define LightBin_GroupSizeY         1
+#define LightBin_GroupSizeZ         1
+
+#define SSAO_GroupSizeX             8
+#define SSAO_GroupSizeY             8
+#define SSAO_GroupSizeZ             1
+
+#define SSAOBlur_GroupSizeX         8
+#define SSAOBlur_GroupSizeY         8
+#define SSAOBlur_GroupSizeZ         1
+
+#define Skin_GroupSizeX             64
+#define Skin_GroupSizeY             1
+#define Skin_GroupSizeZ             1
+
+#define DownsampleBloom_GroupSizeX  8
+#define DownsampleBloom_GroupSizeY  8
+#define DownsampleBloom_GroupSizeZ  1
+
+#define UpsampleBloom_GroupSizeX    8
+#define UpsampleBloom_GroupSizeY    8
+#define UpsampleBloom_GroupSizeZ    1
+
+//
+// Data
+//
 struct light
 {
     v3 P;
