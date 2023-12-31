@@ -10,6 +10,15 @@ PFN_vkCmdEndDebugUtilsLabelEXT          vkCmdEndDebugUtilsLabelEXT_;
 
 inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* Label);
 
+// TODO(boti): Maybe we should just have an indirected enum for this too?
+constexpr format DEPTH_FORMAT = Format_D32;
+constexpr format HDR_FORMAT = Format_R16G16B16A16_Float;
+constexpr format STRUCTURE_BUFFER_FORMAT = Format_R16G16B16A16_Float;
+constexpr format SSAO_FORMAT = Format_R8_UNorm;
+constexpr format SHADOW_FORMAT = Format_D16;
+// HACK(boti): The swapchain format is unknown at compile time, so we use this special value to refer to it
+constexpr format SWAPCHAIN_FORMAT = (format)0xFFFFFFFF;
+
 struct gpu_memory_arena
 {
     VkDeviceMemory Memory;
