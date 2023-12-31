@@ -30,6 +30,8 @@ static_assert(sizeof(per_frame) <= KiB(64));
 //
 // Config
 //
+constexpr u32 R_MaxFramesInFlight = 2u;
+
 constexpr u32 R_MaxRenderTargetSizeX = 3840;
 constexpr u32 R_MaxRenderTargetSizeY = 2160;
 constexpr u32 R_MaxTileCountX = CeilDiv(R_MaxRenderTargetSizeX, R_TileSizeX);

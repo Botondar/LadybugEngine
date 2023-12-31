@@ -782,26 +782,26 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         Result = vkGetPhysicalDeviceSurfaceFormatsKHR(VK.PhysicalDevice, Renderer->Surface, &SurfaceFormatCount, SurfaceFormats);
         ReturnOnFailure();
 
-        for (u32 i = 0; i < SurfaceFormatCount; i++)
+        for (u32 SurfaceFormatIndex = 0; SurfaceFormatIndex < SurfaceFormatCount; SurfaceFormatIndex++)
         {
-            if (SurfaceFormats[i].format == VK_FORMAT_R8G8B8A8_SRGB ||
-                SurfaceFormats[i].format == VK_FORMAT_B8G8R8A8_SRGB)
+            if (SurfaceFormats[SurfaceFormatIndex].format == VK_FORMAT_R8G8B8A8_SRGB ||
+                SurfaceFormats[SurfaceFormatIndex].format == VK_FORMAT_B8G8R8A8_SRGB)
             {
-                Renderer->SurfaceFormat = SurfaceFormats[i];
+                Renderer->SurfaceFormat = SurfaceFormats[SurfaceFormatIndex];
             }
         }
 
-        Renderer->SwapchainImageCount = Renderer->MaxSwapchainImageCount;
+        Renderer->SwapchainImageCount = 2;
         // HACK(boti):
-        for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+        for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
         {
-            Renderer->Frames[i].Backend = Renderer->BackendFrames + i;
+            Renderer->Frames[FrameIndex].Backend = Renderer->BackendFrames + FrameIndex;
         }
         Result = ResizeRenderTargets(Renderer, false);
         ReturnOnFailure();
     }
 
-    for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+    for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
     {
         VkFenceCreateInfo ImageFenceInfo = 
         {
@@ -809,7 +809,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
             .pNext = nullptr,
             .flags = VK_FENCE_CREATE_SIGNALED_BIT,
         };
-        Result = vkCreateFence(VK.Device, &ImageFenceInfo, nullptr, &Renderer->ImageAcquiredFences[i]);
+        Result = vkCreateFence(VK.Device, &ImageFenceInfo, nullptr, &Renderer->ImageAcquiredFences[FrameIndex]);
         ReturnOnFailure();
 
         VkSemaphoreCreateInfo SemaphoreInfo = 
@@ -818,7 +818,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
             .pNext = nullptr,
             .flags = 0,
         };
-        Result = vkCreateSemaphore(VK.Device, &SemaphoreInfo, nullptr, &Renderer->ImageAcquiredSemaphores[i]);
+        Result = vkCreateSemaphore(VK.Device, &SemaphoreInfo, nullptr, &Renderer->ImageAcquiredSemaphores[FrameIndex]);
         ReturnOnFailure();
 
         VkSemaphoreTypeCreateInfo SemaphoreTypeInfo = 
@@ -851,7 +851,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
                 .flags = 0,
                 .queueFamilyIndex = VK.GraphicsQueueIdx,
             };
-            Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->CmdPools[i]);
+            Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->CmdPools[FrameIndex]);
             ReturnOnFailure();
         
             for (u32 BufferIndex = 0; BufferIndex < backend_render_frame::MaxCmdBufferCount; BufferIndex++)
@@ -860,11 +860,11 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
                 {
                     .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
                     .pNext = nullptr,
-                    .commandPool = Renderer->CmdPools[i],
+                    .commandPool = Renderer->CmdPools[FrameIndex],
                     .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
                     .commandBufferCount = 1,
                 };
-                Result = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->CmdBuffers[i][BufferIndex]);
+                Result = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->CmdBuffers[FrameIndex][BufferIndex]);
                 ReturnOnFailure();
             }
         }
@@ -878,18 +878,18 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
                 .flags = 0,
                 .queueFamilyIndex = VK.ComputeQueueIdx,
             };
-            Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->ComputeCmdPools[i]);
+            Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->ComputeCmdPools[FrameIndex]);
             ReturnOnFailure();
         
             VkCommandBufferAllocateInfo BufferInfo = 
             {
                 .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
                 .pNext = nullptr,
-                .commandPool = Renderer->ComputeCmdPools[i],
+                .commandPool = Renderer->ComputeCmdPools[FrameIndex],
                 .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
                 .commandBufferCount = 1,
             };
-            Result = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->ComputeCmdBuffers[i]);
+            Result = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->ComputeCmdBuffers[FrameIndex]);
             ReturnOnFailure();
         }
         
@@ -1043,14 +1043,14 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
                 {
                     .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
                     .pNext = nullptr,
-                    .allocationSize = Renderer->SwapchainImageCount * BufferInfo.size,
+                    .allocationSize = R_MaxFramesInFlight * BufferInfo.size,
                     .memoryTypeIndex = MemoryType,
                 };
                 Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->StagingMemory);
                 ReturnOnFailure();
 
                 Result = vkMapMemory(VK.Device, Renderer->StagingMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->StagingMemoryMapping);
-                for (u32 FrameIndex = 0; FrameIndex < Renderer->SwapchainImageCount; FrameIndex++)
+                for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
                 {
                     Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->StagingBuffers[FrameIndex]);
                     ReturnOnFailure();
@@ -1103,7 +1103,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         // Vertex stack
         {
             umm Size = MiB(8);
-            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+            for (u32 i = 0; i < R_MaxFramesInFlight; i++)
             {
                 b32 PushResult = PushBuffer(&Renderer->BARMemory, Size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
                            Renderer->PerFrameVertex2DBuffers + i, 
@@ -1119,7 +1119,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         // Joint buffers
         {
             u64 BufferSizePerFrame = render_frame::MaxJointCount * sizeof(m4);
-            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+            for (u32 i = 0; i < R_MaxFramesInFlight; i++)
             {
                 b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSizePerFrame, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                             Renderer->PerFrameJointBuffers + i, 
@@ -1134,7 +1134,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         // Particle buffers
         {
             u64 BufferSizePerFrame = render_frame::MaxParticleCount * sizeof(render_particle);
-            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+            for (u32 i = 0; i < R_MaxFramesInFlight; i++)
             {
                 b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSizePerFrame, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                                             Renderer->PerFrameParticleBuffers + i, 
@@ -1149,7 +1149,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         // Per frame uniform data
         {
             constexpr u64 BufferSize = KiB(64);
-            for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+            for (u32 i = 0; i < R_MaxFramesInFlight; i++)
             {
                 b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSize,  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                             Renderer->PerFrameUniformBuffers + i,
@@ -1163,7 +1163,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         }
 
         // Per frame descriptors
-        for (u32 i = 0; i < 2; i++)
+        for (u32 i = 0; i < R_MaxFramesInFlight; i++)
         {
             VkDescriptorPoolSize PoolSizes[] = 
             {
@@ -1596,7 +1596,7 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
                     return VK_ERROR_INITIALIZATION_FAILED;
                 }
 
-                for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
+                for (u32 i = 0; i < R_MaxFramesInFlight; i++)
                 {
                     render_frame* Frame = Renderer->Frames + i;
                     constexpr VkImageUsageFlagBits DepthStencil = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -1767,7 +1767,7 @@ AllocateGeometry(renderer* Renderer, u32 VertexCount, u32 IndexCount)
 
 render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, v2u OutputExtent)
 {
-    u32 FrameID = (u32)(Renderer->CurrentFrameID++ % Renderer->SwapchainImageCount);
+    u32 FrameID = (u32)(Renderer->CurrentFrameID++ % R_MaxFramesInFlight);
     render_frame* Frame = Renderer->Frames + FrameID;
     Frame->Renderer = Renderer;
     Frame->Arena = Arena;

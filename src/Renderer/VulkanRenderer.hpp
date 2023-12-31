@@ -1,8 +1,3 @@
-//
-// TODO(boti): Rework the relationship between SwapchainImageCount and the number of 
-// frames in flight, we're in a mess right now
-//
-
 #include "Renderer/Renderer.hpp"
 #include "Renderer/Pipelines.hpp"
 
@@ -102,12 +97,12 @@ struct renderer
     VkSurfaceFormatKHR SurfaceFormat;
     VkSurfaceKHR Surface;
 
-    static constexpr u32 MaxSwapchainImageCount = 2;
+    static constexpr u32 MaxSwapchainImageCount = 8;
     u32 SwapchainImageCount;
     VkSwapchainKHR Swapchain;
 
-    VkImage SwapchainImages[MaxSwapchainImageCount];
-    VkImageView SwapchainImageViews[MaxSwapchainImageCount];
+    VkImage         SwapchainImages[MaxSwapchainImageCount];
+    VkImageView     SwapchainImageViews[MaxSwapchainImageCount];
 
     VkAllocationCallbacks* Allocator;
 
@@ -155,18 +150,18 @@ struct renderer
 
     // NOTE(boti): These are all allocated from BAR memory
     // TODO(boti): These memory mappings should probably just be stored in render_frame directly
-    VkBuffer PerFrameUniformBuffers[MaxSwapchainImageCount];
-    void* PerFrameUniformBufferMappings[MaxSwapchainImageCount];
-    VkBuffer PerFrameJointBuffers[MaxSwapchainImageCount];
-    void* PerFrameJointBufferMappings[MaxSwapchainImageCount];
-    VkBuffer PerFrameParticleBuffers[MaxSwapchainImageCount];
-    void* PerFrameParticleBufferMappings[MaxSwapchainImageCount];
-    VkBuffer PerFrameVertex2DBuffers[MaxSwapchainImageCount];
-    void* PerFrameVertex2DMappings[MaxSwapchainImageCount];
+    VkBuffer    PerFrameUniformBuffers[R_MaxFramesInFlight];
+    void*       PerFrameUniformBufferMappings[R_MaxFramesInFlight];
+    VkBuffer    PerFrameJointBuffers[R_MaxFramesInFlight];
+    void*       PerFrameJointBufferMappings[R_MaxFramesInFlight];
+    VkBuffer    PerFrameParticleBuffers[R_MaxFramesInFlight];
+    void*       PerFrameParticleBufferMappings[R_MaxFramesInFlight];
+    VkBuffer    PerFrameVertex2DBuffers[R_MaxFramesInFlight];
+    void*       PerFrameVertex2DMappings[R_MaxFramesInFlight];
 
     VkDeviceMemory StagingMemory;
     void* StagingMemoryMapping;
-    VkBuffer StagingBuffers[MaxSwapchainImageCount];
+    VkBuffer StagingBuffers[R_MaxFramesInFlight];
 
     umm SkinningMemorySize;
     VkDeviceMemory SkinningMemory;
@@ -180,8 +175,8 @@ struct renderer
     VkDeviceMemory TileMemory;
     VkBuffer TileBuffer;
 
-    VkSemaphore ImageAcquiredSemaphores[MaxSwapchainImageCount];
-    VkFence ImageAcquiredFences[MaxSwapchainImageCount];
+    VkSemaphore ImageAcquiredSemaphores[R_MaxFramesInFlight];
+    VkFence ImageAcquiredFences[R_MaxFramesInFlight];
     VkSemaphore TimelineSemaphore;
     u64 TimelineSemaphoreCounter;
     VkSemaphore ComputeTimelineSemaphore;
@@ -195,8 +190,8 @@ struct renderer
     VkSampler Samplers[Sampler_Count];
 
     u64 CurrentFrameID;
-    render_frame Frames[MaxSwapchainImageCount];
-    backend_render_frame BackendFrames[MaxSwapchainImageCount];
+    render_frame Frames[R_MaxFramesInFlight];
+    backend_render_frame BackendFrames[R_MaxFramesInFlight];
 };
 
 internal void 
