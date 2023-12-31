@@ -1,13 +1,17 @@
 #if defined(__cplusplus)
 
+#   define CONSTEXPR constexpr
 #   define StaticAssert(expr) static_assert(expr)
 
 #else
 
+#   define CONSTEXPR const
 #   define StaticAssert(expr)
+
 
 #   define PI 3.14159265359
 
+#   define flags32  uint
 #   define u32      uint
 #   define f32      float
 #   define v2       vec2
@@ -43,11 +47,17 @@
 #define Attrib_JointWeights     5
 #define Attrib_JointIndices     6
 
+#define light_flags flags32
+CONSTEXPR light_flags LightFlag_None            = 0;
+CONSTEXPR light_flags LightFlag_ShadowCaster    = (1u << 0);
+CONSTEXPR light_flags LightFlag_Volumetric      = (1u << 1);
 
 struct light
 {
-    v4 P;
-    v4 E;
+    v3 P;
+    u32 ShadowIndex;
+    v3 E;
+    light_flags Flags;
 };
 
 struct screen_tile
@@ -93,6 +103,8 @@ struct per_frame
 
     u32 LightCount;
 
+    v3 Ambience;
+
     f32 Exposure;
     f32 SSAOIntensity;
     f32 SSAOInverseMaxDistance;
@@ -100,6 +112,11 @@ struct per_frame
     f32 BloomFilterRadius;
     f32 BloomInternalStrength;
     f32 BloomStrength;
+
+    f32 ConstantFogDensity;
+    f32 LinearFogDensityAtBottom;
+    f32 LinearFogMinZ;
+    f32 LinearFogMaxZ;
 };
 StaticAssert(sizeof(per_frame) <= KiB(64));
 

@@ -129,7 +129,7 @@ GenerateTerrainChunk(height_field* Field, memory_arena* Arena)
 {
     mesh_data Result = {};
 
-    Result.Box = {}; // TODO(boti)
+    Result.Box = { { +F32_MAX_NORMAL, +F32_MAX_NORMAL, +F32_MAX_NORMAL }, { -F32_MAX_NORMAL, -F32_MAX_NORMAL, -F32_MAX_NORMAL } };
 
     Result.VertexCount = Field->TexelCountX*Field->TexelCountY;
     Result.VertexData = PushArray(Arena, 0, vertex, Result.VertexCount);
@@ -149,6 +149,18 @@ GenerateTerrainChunk(height_field* Field, memory_arena* Arena)
         for (s32 X = 0; X < (s32)Field->TexelCountX; X++)
         {
             v3 P = { dS*X, dS*Y, SampleHeight(Field, X, Y) };
+            Result.Box.Min = 
+            { 
+                Min(Result.Box.Min.X, P.X),
+                Min(Result.Box.Min.Y, P.Y),
+                Min(Result.Box.Min.Z, P.Z),
+            };
+            Result.Box.Max = 
+            { 
+                Max(Result.Box.Max.X, P.X),
+                Max(Result.Box.Max.Y, P.Y),
+                Max(Result.Box.Max.Z, P.Z),
+            };
 
             v3 PXn = { P.X - dS, P.Y, SampleHeight(Field, X - 1, Y) };
             v3 PXp = { P.X + dS, P.Y, SampleHeight(Field, X + 1, Y) };
@@ -280,7 +292,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 World->HeightField.TexelCountY = 1024;
                 World->HeightField.TexelsPerMeter = 4;
                 u32 TexelCount = World->HeightField.TexelCountX * World->HeightField.TexelCountY;
-                World->HeightField.HeightData = PushArray<f32>(World->Arena, TexelCount);
+                World->HeightField.HeightData = PushArray(World->Arena, 0, f32, TexelCount);
 
                 for (u32 Y = 0; Y < World->HeightField.TexelCountY; Y++)
                 {
@@ -320,7 +332,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             u32 ChunkMeshID = Assets->MeshCount++;
             mesh* Mesh = Assets->Meshes + ChunkMeshID;
             Mesh->Allocation = AllocateGeometry(Frame->Renderer, TerrainMesh.VertexCount, TerrainMesh.IndexCount);
-            Mesh->BoundingBox = {};
+            Mesh->BoundingBox = TerrainMesh.Box;
             Mesh->MaterialID = World->TerrainMaterialID;
 
             TransferGeometry(Frame, Mesh->Allocation, TerrainMesh.VertexData, TerrainMesh.IndexData);
@@ -354,15 +366,8 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                         RandBetween(R, Bounds.Min.X, Bounds.Max.X),
                         RandBetween(R, Bounds.Min.Y, Bounds.Max.Y),
                         RandBetween(R, Bounds.Min.Z, Bounds.Max.Z),
-                        1.0f 
                     },
-                    .E = 
-                    { 
-                        RandBetween(R, 0.1f, 1.0f), 
-                        RandBetween(R, 0.1f, 1.0f), 
-                        RandBetween(R, 0.1f, 1.0f), 
-                        RandBetween(R, 0.1f, 0.3f),
-                    },
+                    .E = SetLuminance(v3{ RandBetween(R, 0.1f, 1.0f), RandBetween(R, 0.1f, 1.0f), RandBetween(R, 0.1f, 1.0f) }, RandBetween(R, 0.1f, 0.3f)),
                 };
             }
         }
@@ -380,16 +385,16 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             const light LightSources[] = 
             {
                 // "Fire" lights on top of the metal hangers
-                { { -4.95f, -1.15f, 1.40f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
-                { { +3.90f, -1.15f, 1.40f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
-                { { -4.95f, +1.75f, 1.40f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
-                { { +3.90f, +1.75f, 1.40f, 1.0f }, { 2.0f, 0.8f, 0.2f, 3.0f } },
+                { .P = { -4.95f, -1.15f, 1.40f }, .E = SetLuminance(v3{ 2.0f, 0.8f, 0.2f }, 3.0f) },
+                { .P = { +3.90f, -1.15f, 1.40f }, .E = SetLuminance(v3{ 2.0f, 0.8f, 0.2f }, 3.0f) },
+                { .P = { -4.95f, +1.75f, 1.40f }, .E = SetLuminance(v3{ 2.0f, 0.8f, 0.2f }, 3.0f) },
+                { .P = { +3.90f, +1.75f, 1.40f }, .E = SetLuminance(v3{ 2.0f, 0.8f, 0.2f }, 3.0f) },
 
                 // "Magic" lights on top of the wells
-                { { +8.95f, +3.60f, 1.30f, 1.0f }, { 0.2f, 0.6f, 1.0f, 2.5f } },
-                { { +8.95f, -3.20f, 1.30f, 1.0f }, { 0.6f, 0.2f, 1.0f, 2.5f } },
-                { { -9.65f, +3.60f, 1.30f, 1.0f }, { 0.4f, 1.0f, 0.4f, 2.5f } },
-                { { -9.65f, -3.20f, 1.30f, 1.0f }, { 1.0f, 0.1f, 0.1f, 7.5f } },
+                { .P = { +8.95f, +3.60f, 1.30f }, .E = SetLuminance(v3{ 0.2f, 0.6f, 1.0f }, 2.5f) },
+                { .P = { +8.95f, -3.20f, 1.30f }, .E = SetLuminance(v3{ 0.6f, 0.2f, 1.0f }, 2.5f) },
+                { .P = { -9.65f, +3.60f, 1.30f }, .E = SetLuminance(v3{ 0.4f, 1.0f, 0.4f }, 2.5f) },
+                { .P = { -9.65f, -3.20f, 1.30f }, .E = SetLuminance(v3{ 1.0f, 0.1f, 0.1f }, 7.5f) },
             };
 
             for (u32 LightIndex = 0; LightIndex < CountOf(LightSources); LightIndex++)
@@ -623,7 +628,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
         if (Entity->Flags & EntityFlag_LightSource)
         {
-            AddLight(Frame, { Entity->Transform.P, Entity->LightEmission }, LightFlag_ShadowCaster);
+            AddLight(Frame, Entity->Transform.P.XYZ, Entity->LightEmission, LightFlag_ShadowCaster);
             if (DrawLights)
             {
                 mesh* Mesh = Assets->Meshes + Assets->SphereMeshID;
@@ -632,7 +637,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                                                       0.0f, S, 0.0f, 0.0f,
                                                       0.0f, 0.0f, S, 0.0f,
                                                       0.0f, 0.0f, 0.0f, 1.0f);
-                DrawWidget3D(Frame, Mesh->Allocation, Transform, PackRGBA(Entity->LightEmission));
+                DrawWidget3D(Frame, Mesh->Allocation, Transform, PackRGBA(NOZ(Entity->LightEmission)));
             }
         }
     }
@@ -647,7 +652,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
         // TODO(boti): we should probably just pull in the entire parent transform
         v3 BaseP = { 0.0f, 0.0f, 0.0f };
-        v4 Color = { 1.0f, 1.0f, 1.0f, 1.0f };
+        v3 Color = { 1.0f, 1.0f, 1.0f };
         if (IsValid(ParticleSystem->ParentID))
         {
             entity* Parent = World->Entities + ParticleSystem->ParentID.Value;
@@ -690,7 +695,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                             .P = BaseP + ParticleSystem->EmitterOffset + ParticleP,
                             .dP = { 0.0f, 0.0f, RandBetween(&World->EffectEntropy, 0.25f, 2.25f) },
                             .Color = Color,
-                            .dColor = { 0.0f, 0.0f, 0.0f, 0.0f },
+                            .dColor = { 0.0f, 0.0f, 0.0f },
                             .TextureIndex = Particle_Trace02,
                         };
                     } break;
@@ -711,8 +716,8 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                                 RandBetween(&World->EffectEntropy, 0.25f, 1.20f) 
                             },
                             .ddP = { 0.5f, 0.2f, 0.0f },
-                            .Color = { Color },
-                            .dColor = { -1.00f, -1.25f, -1.00f, -4.00f },
+                            .Color = Color,
+                            .dColor = 6.0f * v3{ -1.00f, -1.25f, -1.00f },
                             .TextureIndex = FirstTexture + (RandU32(&World->EffectEntropy) % TextureCount),
                         };
                     } break;
@@ -757,7 +762,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                             Max(Particle->Color.X, 0.0f),
                             Max(Particle->Color.Y, 0.0f),
                             Max(Particle->Color.Z, 0.0f),
-                            Max(Particle->Color.W, 0.0f),
+                            1.0,
                         };
                         Cmd->ParticleCount++;
                         Frame->Particles[Frame->ParticleCount++] = 
@@ -774,6 +779,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     }
 
     // Ad-hoc lights
+    if (1)
     {
         particle_cmd* Cmd = nullptr;
         if ((Frame->ParticleDrawCmdCount < Frame->MaxParticleDrawCmdCount) && 
@@ -807,17 +813,17 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 World->AdHocLightdPs[LightIndex] = dP;
             }
 
-            Light->P.XYZ += dP * dt;
+            Light->P += dP * dt;
             Light->P.X = Clamp(Light->P.X, World->AdHocLightBounds.Min.X, World->AdHocLightBounds.Max.X);
             Light->P.Y = Clamp(Light->P.Y, World->AdHocLightBounds.Min.Y, World->AdHocLightBounds.Max.Y);
             Light->P.Z = Clamp(Light->P.Z, World->AdHocLightBounds.Min.Z, World->AdHocLightBounds.Max.Z);
 
-            AddLight(Frame, *Light, LightFlag_None);
+            AddLight(Frame, Light->P, Light->E, LightFlag_None);
             if (Cmd)
             {
                 Frame->Particles[Cmd->FirstParticle + LightIndex] = 
                 {
-                    .P = Light->P.XYZ,
+                    .P = Light->P,
                     .TextureIndex = Particle_Star06,
                     .Color = { Light->E.X, Light->E.Y, Light->E.Z, 5.0f },
                     .HalfExtent = { 0.1f, 0.1f },

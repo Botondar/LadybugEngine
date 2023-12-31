@@ -120,174 +120,208 @@ float CalculateShadow(vec3 CascadeCoord0, in vec3 CascadeBlends)
 
 void main()
 {
-    vec4 BaseColor = UnpackRGBA8(Material.DiffuseColor);
-    vec4 BaseMetallicRoughness = UnpackRGBA8(Material.BaseMaterial);
-
-    vec4 Albedo = texture(sampler2D(Textures[Material.DiffuseID], Sampler), TexCoord);
-    Albedo.rgb *= BaseColor.rgb;
-
-    // NOTE(boti): Light sources contribute to this term, to produce a fake GI effect
-    vec3 AmbientTerm = vec3(0.25);
-
-    vec3 Normal;
-    Normal.xy = texture(sampler2D(Textures[Material.NormalID], Sampler), TexCoord).xy;
-    Normal.xy = 2.0 * Normal.xy - vec2(1.0);
-    Normal.z = sqrt(1.0 - dot(Normal.xy, Normal.xy));
-    vec4 MetallicRoughness = texture(sampler2D(Textures[Material.MetallicRoughnessID], Sampler), TexCoord);
-    float Roughness = MetallicRoughness.g * BaseMetallicRoughness.g;
-    float Metallic = MetallicRoughness.b * BaseMetallicRoughness.b;
-
-    float ScreenSpaceOcclusion = textureLod(OcclusionBuffer, gl_FragCoord.xy, 0).r;
-
-    mat3 TBN = mat3(
-        normalize(InT),
-        normalize(InB),
-        normalize(InN));
-    vec3 N = TBN * Normal;
-
-    vec3 V = normalize(-P);
-    vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);
-    vec3 DiffuseBase = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb;
-
-    float SunShadow = CalculateShadow(ShadowP, ShadowBlends);
-    vec3 Lo = CalculateOutgoingLuminance(SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
-                                         DiffuseBase, F0, Roughness);
+    v3 Lo = vec3(0.0);
+    v3 V = normalize(-P);
 
     uint TileX = uint(gl_FragCoord.x) / R_TileSizeX;
     uint TileY = uint(gl_FragCoord.y) / R_TileSizeY;
     uint TileIndex = TileX + TileY * PerFrame.TileCount.x;
-    for (uint i = 0; i < Tiles[TileIndex].LightCount; i++)
-    {
-        uint LightIndex = Tiles[TileIndex].LightIndices[i];
-        v3 dP = Lights[LightIndex].P.xyz - P;
-        v3 E = Lights[LightIndex].E.xyz * Lights[LightIndex].E.w;
-        float DistSq = dot(dP, dP);
-        float InvDistSq = 1.0 / DistSq;
-        v3 L = dP * sqrt(InvDistSq);
-        E = E * InvDistSq;
 
-        // NOTE(boti): When there are a lot of light sources close together,
-        // their cumulative effect can be seen on quite far away texels from the source,
-        // which produces "blocky" artefacts when only certain portions of a screen tile
-        // pass the binning check.
-        // To counteract this, we set the luminance of those lights to 0,
-        // but a better way in the future would probably be to have an attenuation
-        // that actually falls to 0.
-        if (max(E.x, max(E.y, E.z)) < R_LuminanceThreshold)
+    {
+        vec4 BaseColor = UnpackRGBA8(Material.DiffuseColor);
+        vec4 BaseMetallicRoughness = UnpackRGBA8(Material.BaseMaterial);
+        vec4 Albedo = BaseColor * texture(sampler2D(Textures[Material.DiffuseID], Sampler), TexCoord);
         {
-            E = vec3(0.0);
+            float ScreenSpaceOcclusion = textureLod(OcclusionBuffer, gl_FragCoord.xy, 0).r;
+            vec3 Ambient = PerFrame.Ambience * Albedo.rgb * ScreenSpaceOcclusion;
+            Lo += Ambient + Material.Emissive;
         }
 
-        uint ShadowIndex = uint(Lights[LightIndex].P.w);
-        float Shadow = 1.0;
-        if (ShadowIndex != 0xFF)
+        vec3 Normal;
+        Normal.xy = texture(sampler2D(Textures[Material.NormalID], Sampler), TexCoord).xy;
+        Normal.xy = 2.0 * Normal.xy - vec2(1.0);
+        Normal.z = sqrt(1.0 - dot(Normal.xy, Normal.xy));
+        vec4 MetallicRoughness = texture(sampler2D(Textures[Material.MetallicRoughnessID], Sampler), TexCoord);
+        float Roughness = MetallicRoughness.g * BaseMetallicRoughness.g;
+        float Metallic = MetallicRoughness.b * BaseMetallicRoughness.b;
+
+        mat3 TBN = mat3(
+            normalize(InT),
+            normalize(InB),
+            normalize(InN));
+        vec3 N = TBN * Normal;
+
+        vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);
+        vec3 DiffuseBase = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb;
+
+        float SunShadow = CalculateShadow(ShadowP, ShadowBlends);
+        Lo += CalculateOutgoingLuminance(SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
+                                         DiffuseBase, F0, Roughness);
+
+        for (uint i = 0; i < Tiles[TileIndex].LightCount; i++)
         {
-            v3 SampleP = TransformDirection(PerFrame.CameraTransform, -dP);
-            v3 AbsP = abs(SampleP);
-            f32 MaxXY = max(AbsP.x, AbsP.y);
-            f32 Depth = max(MaxXY, AbsP.z);
+            uint LightIndex = Tiles[TileIndex].LightIndices[i];
+            v3 dP = Lights[LightIndex].P.xyz - P;
+            v3 E = Lights[LightIndex].E;
+            float DistSq = dot(dP, dP);
+            float InvDistSq = 1.0 / DistSq;
+            v3 L = dP * sqrt(InvDistSq);
+            E = E * InvDistSq;
 
-            ivec2 ShadowResolution = textureSize(PointShadows[ShadowIndex], 0);
-            f32 TexelSize = 1.0 / float(ShadowResolution.x);
-            f32 Offset = 2.0 * TexelSize;
-
-            f32 n = PerFrame.PointShadows[ShadowIndex].Near;
-            f32 f = PerFrame.PointShadows[ShadowIndex].Far;
-            f32 r = 1.0 / (f - n);
-            f32 ProjDepth = f*r - f*n*r / Depth;
-            Shadow = texture(PointShadows[ShadowIndex], v4(SampleP, ProjDepth));
-
-            f32 dXY = (MaxXY > AbsP.z) ? Offset : 0.0;
-            f32 dX = (AbsP.x > AbsP.y) ? dXY : 0.0;
-            v2 OffsetXY = v2(Offset - dX, dX);
-            v2 OffsetYZ = v2(Offset - dXY, dXY);
-
-            // TODO(boti): Something's wrong here, we're getting seams
-            // at the edge of the cube faces
-            v3 Limit = v3(Depth);
-            Limit.xy -= OffsetXY * (1.0 / 1024.0);
-            Limit.yz -= OffsetYZ * (1.0 / 1024.0);
-
-            SampleP.xy -= OffsetXY;
-            SampleP.yz -= OffsetYZ;
-            Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
-            SampleP.xy += 2.0 * OffsetXY;
-            Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
-            SampleP.yz += 2.0 * OffsetYZ;
-            Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
-            SampleP.xy -= 2.0 * OffsetXY;
-            Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
-
-            Shadow = 0.2 * Shadow;
-            //AmbientTerm += 0.05 * E;
-
-#if 0
-            // NOTE(boti): This is the code path for volumetric point lights
-            float MaxDistance = 6.0;
-            int VolCount = 16;
-            float W = MaxDistance * (1.0 / float(VolCount));
-            float di = AtmosphereNoise(0.5 * gl_FragCoord.xy);
-            float g = 0.76;
-            float g2 = g*g;
-
-            float VolLo = 0.0;
-            for (int i = 0; i < VolCount; i++)
+            // NOTE(boti): When there are a lot of light sources close together,
+            // their cumulative effect can be seen on quite far away texels from the source,
+            // which produces "blocky" artefacts when only certain portions of a screen tile
+            // pass the binning check.
+            // To counteract this, we set the luminance of those lights to 0,
+            // but a better way in the future would probably be to have an attenuation
+            // that actually falls to 0.
+            if (GetLuminance(E) < R_LuminanceThreshold)
             {
-                float t = MaxDistance * ((i + di) / float(VolCount));
-                v3 CurrentP = -V * t;
-                if (CurrentP.z >= P.z - 1e-2)
-                {
-                    break;
-                }
-
-                v3 VolL = Lights[LightIndex].P.xyz - CurrentP;
-                v3 VolP = TransformDirection(PerFrame.CameraTransform, -VolL);
-                float VolDepth = max(max(abs(VolP.x), abs(VolP.y)), abs(VolP.z));
-                VolDepth = f*r - f*n*r / VolDepth;
-                float VolShadow = texture(PointShadows[ShadowIndex], v4(VolP, VolDepth));
-
-                float Attenuation = clamp(1.0 / sqrt(dot(VolL, VolL)), 0.0, 1.0);
-
-                VolL = normalize(VolL);
-                float Phase = PhaseMie(g, g2, dot(VolL, -V));
-                VolLo += 0.20 * VolShadow * Attenuation * Phase * W;
+                E = vec3(0.0);
             }
 
-            Lo += VolLo * Lights[LightIndex].E.xyz * Lights[LightIndex].E.w;
-#endif
-        }
+            uint ShadowIndex = Lights[LightIndex].ShadowIndex;
+            float Shadow = 1.0;
+            if (ShadowIndex != 0xFFFFFFFFu)
+            {
+                v3 SampleP = TransformDirection(PerFrame.CameraTransform, -dP);
+                v3 AbsP = abs(SampleP);
+                f32 MaxXY = max(AbsP.x, AbsP.y);
+                f32 Depth = max(MaxXY, AbsP.z);
 
-        Lo += Shadow * CalculateOutgoingLuminance(Shadow * E, L, N, V,
-                                                  DiffuseBase, F0, Roughness);
-    }
+                ivec2 ShadowResolution = textureSize(PointShadows[ShadowIndex], 0);
+                f32 TexelSize = 1.0 / float(ShadowResolution.x);
+                f32 Offset = 2.0 * TexelSize;
 
-    vec3 Ambient = AmbientTerm * Albedo.rgb * ScreenSpaceOcclusion;
-    Lo += Ambient + Material.Emissive;
+                f32 n = PerFrame.PointShadows[ShadowIndex].Near;
+                f32 f = PerFrame.PointShadows[ShadowIndex].Far;
+                f32 r = 1.0 / (f - n);
+                f32 ProjDepth = f*r - f*n*r / Depth;
+                Shadow = texture(PointShadows[ShadowIndex], v4(SampleP, ProjDepth));
 
-    {
+                f32 dXY = (MaxXY > AbsP.z) ? Offset : 0.0;
+                f32 dX = (AbsP.x > AbsP.y) ? dXY : 0.0;
+                v2 OffsetXY = v2(Offset - dX, dX);
+                v2 OffsetYZ = v2(Offset - dXY, dXY);
+
+                // TODO(boti): Something's wrong here, we're getting seams
+                // at the edge of the cube faces
+                v3 Limit = v3(Depth);
+                Limit.xy -= OffsetXY * (1.0 / 512.0);
+                Limit.yz -= OffsetYZ * (1.0 / 512.0);
+
+                SampleP.xy -= OffsetXY;
+                SampleP.yz -= OffsetYZ;
+                Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+                SampleP.xy += 2.0 * OffsetXY;
+                Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+                SampleP.yz += 2.0 * OffsetYZ;
+                Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+                SampleP.xy -= 2.0 * OffsetXY;
+                Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+                Shadow = 0.2 * Shadow;
+
 #if 0
-        vec3 La = vec3(AmbientFactor);
+                // NOTE(boti): This is the code path for volumetric point lights
+                float MaxDistance = 6.0;
+                int VolCount = 16;
+                float W = MaxDistance * (1.0 / float(VolCount));
+                float di = AtmosphereNoise(0.5 * gl_FragCoord.xy);
+                float g = 0.76;
+                float g2 = g*g;
 
-        const vec3 BetaR0 = vec3(3.8e-6, 13.5e-6, 33.1e-6);
-        const vec3 BetaM0 = vec3(21e-4);
-        float Distance = length(P);
+                float VolLo = 0.0;
+                for (int i = 0; i < VolCount; i++)
+                {
+                    float t = MaxDistance * ((i + di) / float(VolCount));
+                    v3 CurrentP = -V * t;
+                    if (CurrentP.z >= P.z - 1e-2)
+                    {
+                        break;
+                    }
 
-        const float g = 0.76;
-        const float g2 = g*g;
-        float Denom0 = 1.0 + g2 + 2*g/* * 1.0*/;
-        float Denom = sqrt(Denom0) * Denom0;;
-        float PhaseMieOut = 1.0 - 0.07957747 * ((1.0 - g) / Denom);
+                    v3 VolL = Lights[LightIndex].P.xyz - CurrentP;
+                    v3 VolP = TransformDirection(PerFrame.CameraTransform, -VolL);
+                    float VolDepth = max(max(abs(VolP.x), abs(VolP.y)), abs(VolP.z));
+                    VolDepth = f*r - f*n*r / VolDepth;
+                    float VolShadow = texture(PointShadows[ShadowIndex], v4(VolP, VolDepth));
 
-        // NOTE(boti): BetaM0 is the scattering coefficient of Mie scattering
-        // 1.1111 * BetaM0 is the full extinction
-        vec3 fMie = vec3(exp(-1.1111 * BetaM0 * (PhaseMieOut * Distance)));
-        Lo = Lo * fMie + La * (vec3(1.0) - fMie);
-#else
-        Lo += 0.02 * PerFrame.SunL * CalculateAtmosphere(P, PerFrame, ShadowSampler);
+                    float Attenuation = clamp(1.0 / sqrt(dot(VolL, VolL)), 0.0, 1.0);
+
+                    VolL = normalize(VolL);
+                    float Phase = PhaseMie(g, g2, dot(VolL, -V));
+                    VolLo += 0.20 * VolShadow * Attenuation * Phase * W;
+                }
+
+                Lo += VolLo * Lights[LightIndex].E.xyz * Lights[LightIndex].E.w;
 #endif
+            }
+
+            Lo += Shadow * CalculateOutgoingLuminance(Shadow * E, L, N, V,
+                                                      DiffuseBase, F0, Roughness);
+        }
     }
-    
+
+#if 0
+    {
+        uint StepCount = 64;
+        f32 InvStepCount = 1.0 / float(StepCount);
+        f32 MaxDistance = length(P);
+        f32 InvMaxDistance = 1.0 / MaxDistance;
+        f32 StepDistance = MaxDistance / float(StepCount);
+
+        f32 MieExtinction = (1.0 / 0.9) * MieBetaFactor;
+        f32 MieAbsorption = MieExtinction - MieBetaFactor;
+
+        f32 CosSun = dot(V, PerFrame.SunV);
+        const f32 g = 0.0;
+        const f32 g2 = g*g;
+        f32 PhaseIn = PhaseMie(g, g2, CosSun);
+        f32 PhaseOut = max(1.0 - PhaseMie(g, g2, 1.0), 0.0);
+
+        v3 UpDirection = PerFrame.ViewTransform[2].xyz;
+
+        uint SunCascadeIndex = 0;
+        m4 CameraToSun = PerFrame.CascadeViewProjections[0] * PerFrame.CameraTransform;
+
+
+        Lo = Lo * exp(-PerFrame.ConstantFogDensity * MieBetaFactor * 1.111111 * MaxDistance);
+        for (uint Step = 0; Step < StepCount; Step++)
+        {
+            f32 t = (float(Step) + 0.5) * InvStepCount;
+            v3 CurrentP = P * t;
+
+            f32 Height = dot(CurrentP, UpDirection);
+
+            while ((SunCascadeIndex < 3) && (CurrentP.z > PerFrame.CascadeMaxDistances[SunCascadeIndex]))
+            {
+                SunCascadeIndex++;
+            }
+
+            vec3 SunShadowP = TransformPoint(CameraToSun, CurrentP);
+            vec4 SunShadowCoord = vec4(0.5 * SunShadowP.xy + vec2(0.5), float(SunCascadeIndex), SunShadowP.z);
+            if (SunCascadeIndex > 0)
+            {
+                // FIXME
+                SunShadowCoord.xyw = PerFrame.CascadeScales[SunCascadeIndex - 1] * SunShadowCoord.xyw + PerFrame.CascadeOffsets[SunCascadeIndex - 1];
+            }
+            float SunShadow = texture(ShadowSampler, SunShadowCoord);
+
+            f32 CurrentHeight = TransformPoint(PerFrame.CameraTransform, CurrentP).z;
+            f32 tFog = clamp(Ratio1(CurrentHeight - PerFrame.LinearFogMinZ, PerFrame.LinearFogMaxZ - PerFrame.LinearFogMinZ), 0.0, 1.0);
+            f32 Density = (1.0 - tFog) * PerFrame.LinearFogDensityAtBottom * MieBetaFactor;
+            
+            f32 Extinction = PhaseOut * exp(Density * StepDistance * t);
+            f32 InScatterAmbience = 1.0 - exp(-Density * StepDistance);
+            f32 InScatterSun = PhaseIn * (1.0 - exp(-Density * StepDistance));
+
+            Lo += Extinction * (InScatterAmbience * PerFrame.Ambience + 0.0 * InScatterSun * SunShadow * PerFrame.SunL);
+        }
+    }
+#endif
     Out0 = vec4(Lo, 1.0);
+    //f32 LightOccupancy = float(Tiles[TileIndex].LightCount) / float( R_MaxLightCountPerTile);
+    //Out0 = vec4(LightOccupancy.rrr, 1.0);
 }
 
 #endif

@@ -521,6 +521,8 @@ inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 P, f32 r);
 
 inline bool IsValid(renderer_texture_id ID) { return ID.Value != U32_MAX; }
 
+inline f32 GetLuminance(v3 RGB);
+inline v3 SetLuminance(v3 RGB, f32 Luminance);
 
 // NOTE(boti): Normally textures get put into the bindless descriptor heap,
 // specifying a texture as "Special" prevents this, and it will be the user code's
@@ -606,13 +608,6 @@ struct alignas(4) push_constants
 {
     m4 Transform;
     renderer_material Material;
-};
-
-typedef flags32 light_flags;
-enum light_flag_bits : light_flags
-{
-    LightFlag_None = 0,
-    LightFlag_ShadowCaster = (1 << 0),
 };
 
 // NOTE(boti): binary-compatible with Vulkan/D3D12
@@ -740,6 +735,8 @@ struct render_frame
 
     render_stats Stats;
 
+    b32 ReloadShaders;
+
     u32 FrameID;
     u32 RenderWidth;
     u32 RenderHeight;
@@ -749,12 +746,22 @@ struct render_frame
 
     render_config Config;
 
+    // Environment
+    struct
+    {
+        v3 SunL;
+        v3 SunV; // World-space sun direction
+
+        f32 ConstantFogDensity;
+        f32 LinearFogDensityAtBottom;
+        f32 LinearFogMinZ;
+        f32 LinearFogMaxZ;
+    };
+
     m4 CameraTransform;
     f32 CameraFocalLength;
     f32 CameraFarPlane;
     f32 CameraNearPlane;
-    v3 SunL;
-    v3 SunV; // World-space sun direction
 
     // Backend-calculated/cached values
     // TODO(boti): move these out of the API
@@ -873,7 +880,7 @@ inline b32
 DrawWidget3D(render_frame* Frame,
              geometry_buffer_allocation Allocation,
              m4 Transform, rgba8 Color);
-inline b32 AddLight(render_frame* Frame, light Light, light_flags Flags);
+inline b32 AddLight(render_frame* Frame, v3 P, v3 E, light_flags Flags);
 
 inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* VertexArray);
 
@@ -974,6 +981,30 @@ inline rgba8 PackRGBA(v4 Color)
         .A = (u8)Round(Clamp(Color.W, 0.0f, 1.0f) * 255.0f),
     };
     return Result;
+}
+
+inline rgba8 PackRGBA(v3 Color)
+{
+    rgba8 Result = 
+    {
+        .R = (u8)Round(Clamp(Color.X, 0.0f, 1.0f) * 255.0f),
+        .G = (u8)Round(Clamp(Color.Y, 0.0f, 1.0f) * 255.0f),
+        .B = (u8)Round(Clamp(Color.Z, 0.0f, 1.0f) * 255.0f),
+        .A = 0xFFu,
+    };
+    return Result;
+}
+
+inline f32 GetLuminance(v3 RGB)
+{
+    f32 Result = Dot(RGB, v3{ 0.212639f, 0.715169f, 0.072192f });
+    return(Result);
+}
+inline v3 SetLuminance(v3 RGB, f32 Luminance)
+{
+    f32 CurrentLuminance = GetLuminance(RGB);
+    v3 Result = RGB * Ratio0(Luminance, CurrentLuminance);
+    return(Result);
 }
 
 inline u32 GetMaxMipCount(u32 Width, u32 Height)
@@ -1213,20 +1244,29 @@ DrawWidget3D(render_frame* Frame,
     return(Result);
 }
 
-inline b32 AddLight(render_frame* Frame, light Light, light_flags Flags)
+inline b32 AddLight(render_frame* Frame, v3 P, v3 E, light_flags Flags)
 {
     b32 Result = false;
     if (Frame->LightCount < R_MaxLightCount)
     {
         u32 LightIndex = Frame->LightCount++;
-        Frame->Lights[LightIndex] = Light;
+        u32 ShadowIndex = 0xFFFFFFFF;
         if (Flags & LightFlag_ShadowCaster)
         {
             if (Frame->ShadowCount < Frame->MaxShadowCount)
             {
-                Frame->Shadows[Frame->ShadowCount++] = LightIndex;
+                ShadowIndex = Frame->ShadowCount++;
+                Frame->Shadows[ShadowIndex] = LightIndex;
             }
         }
+
+        Frame->Lights[LightIndex] = 
+        {
+            .P = P,
+            .ShadowIndex = ShadowIndex,
+            .E = E,
+            .Flags = Flags,
+        };
 
         Result = true;
     }

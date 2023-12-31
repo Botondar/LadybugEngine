@@ -119,6 +119,10 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     
     UpdateEditor(GameState, GameIO, RenderFrame);
     RenderFrame->Config = GameState->RenderConfig;
+    RenderFrame->ConstantFogDensity = GameState->ConstantFogDensity;
+    RenderFrame->LinearFogDensityAtBottom = GameState->LinearFogDensityAtBottom;
+    RenderFrame->LinearFogMinZ = GameState->LinearFogMinZ;
+    RenderFrame->LinearFogMaxZ = GameState->LinearFogMaxZ;
 
     // Asset update
     {

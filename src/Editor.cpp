@@ -117,6 +117,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
     u32 CPUMenuID = ButtonGUI(&Context, TextSize, "CPU");
     u32 GPUMenuID = ButtonGUI(&Context, TextSize, "GPU");
     u32 RenderMenuID = ButtonGUI(&Context, TextSize, "Render");
+    u32 ReloadShadersButtonID = ButtonGUI(&Context, TextSize, "Reload Shaders");
 
     if (WasReleased(Context.MouseLeft))
     {
@@ -124,7 +125,14 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         {
             if (Context.ActiveID == Context.HotID)
             {
-                Editor->SelectedMenuID = Context.ActiveID;
+                if (Context.ActiveID == ReloadShadersButtonID)
+                {
+                    Frame->ReloadShaders = true;
+                }
+                else
+                {
+                    Editor->SelectedMenuID = Context.ActiveID;
+                }
             }
             Context.ActiveID = 0;
         }
@@ -196,6 +204,20 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         F32Slider(&Context, TextSize, 
                   "SSAO tangent tau", &Game->RenderConfig.SSAOTangentTau, 
                   Game->RenderConfig.DefaultSSAOTangentTau, 0.0f, 1.0f, 1e-3f);
+
+        F32Slider(&Context, TextSize,
+                  "ConstantFogDensity", &Game->ConstantFogDensity,
+                  0.0f, 0.0f, F32_MAX_NORMAL, 1e-1f);
+
+        F32Slider(&Context, TextSize,
+                  "LinearFogDensityAtBottom", &Game->LinearFogDensityAtBottom,
+                  0.0f, 0.0f, F32_MAX_NORMAL, 1e-1f);
+        F32Slider(&Context, TextSize,
+                  "LinearFogMinZ", &Game->LinearFogMinZ,
+                  0.0f, -F32_MAX_NORMAL, Game->LinearFogMaxZ, 1e-1f);
+        F32Slider(&Context, TextSize,
+                  "LinearFogMaxZ", &Game->LinearFogMaxZ,
+                  0.0f, Game->LinearFogMinZ, +F32_MAX_NORMAL, 1e-1f);
     }
 
     // TODO(boti): This shouldn't be done this way, 

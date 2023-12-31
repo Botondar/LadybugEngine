@@ -94,13 +94,14 @@ void main()
     vec3 V = normalize(vec3(2.0 * UV - vec2(1.0), 1.0) * vec3(PerFrame.AspectRatio / PerFrame.FocalLength, 1.0 / PerFrame.FocalLength, 1.0));
     //V = V * mat3(PerFrame.View);
 #if 1
-    vec3 Color = CIEClearSky(V, false);
+    vec3 Lo = CIEClearSky(V, false);
 #else
-    vec3 Color = TraceAtmosphere(V);
+    vec3 Lo = TraceAtmosphere(V);
 #endif
-    Color += 0.02 * PerFrame.SunL * CalculateAtmosphere(PerFrame.FarZ * V, PerFrame, ShadowSampler);
-
-    Out0 = vec4(Color, 1.0);
+    // NOTE(boti): We assume the fog dissipates at some distance...
+    Lo = ApplyFog(Lo, PerFrame.Ambience, PerFrame.ConstantFogDensity, 1000.0f);
+    Lo += (0.9 * MieBetaFactor) * PerFrame.SunL * CalculateAtmosphere(PerFrame.FarZ * V, PerFrame, ShadowSampler);
+    Out0 = vec4(Lo, 1.0);
 }
 
 #endif

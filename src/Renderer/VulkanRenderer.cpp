@@ -2,7 +2,6 @@
 
 vulkan VK;
 
-//#define ReturnOnFailure() if (Result != VK_SUCCESS) return Result
 #define ReturnOnFailure() if (Result != VK_SUCCESS) return nullptr
 
 static VkFormat FormatTable[Format_Count] = 
@@ -183,6 +182,9 @@ GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInf
 internal VkResult 
 ResizeRenderTargets(renderer* Renderer, b32 Forced);
 
+internal VkResult 
+CreatePipelines(renderer* Renderer);
+
 internal void 
 DrawMeshes(render_frame* Frame, 
            VkCommandBuffer CmdBuffer, 
@@ -315,6 +317,417 @@ PushBuffer(gpu_memory_arena* Arena, VkDeviceSize Size, VkBufferUsageFlags Usage,
         {
             UnimplementedCodePath;
         }
+    }
+
+    return(Result);
+}
+
+internal VkResult 
+CreatePipelines(renderer* Renderer, memory_arena* Scratch)
+{
+    VkResult Result = VK_SUCCESS;
+
+    Renderer->Pipelines[Pipeline_None] = { VK_NULL_HANDLE, VK_NULL_HANDLE };
+
+    constexpr u64 MaxPathSize = 512;
+    char Path[MaxPathSize];
+    u64 PathSize = MaxPathSize;
+    CopyZStringToBuffer(Path, "build/", &PathSize);
+    char* Name = Path + (MaxPathSize - PathSize);
+    
+    auto FormatToVulkan = [](format Format) -> VkFormat
+    {
+        VkFormat Result = VK_FORMAT_UNDEFINED;
+        if (Format < Format_Count)
+        {
+            Result = FormatTable[Format];
+        }
+        else
+        {
+            InvalidCodePath;
+        }
+        return(Result);
+    };
+    
+    for (u32 PipelineIndex = 1; PipelineIndex < Pipeline_Count; PipelineIndex++)
+    {
+        memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
+    
+        pipeline_with_layout* Pipeline = Renderer->Pipelines + PipelineIndex;
+        vkDestroyPipeline(VK.Device, Pipeline->Pipeline, nullptr);
+        vkDestroyPipelineLayout(VK.Device, Pipeline->Layout, nullptr);
+
+        const pipeline_info* Info = PipelineInfos + PipelineIndex;
+    
+        VkDescriptorSetLayout SetLayouts[MaxDescriptorSetCount] = {};
+        for (u32 SetLayoutIndex = 0; SetLayoutIndex < Info->Layout.DescriptorSetCount; SetLayoutIndex++)
+        {
+            SetLayouts[SetLayoutIndex] = Renderer->SetLayouts[Info->Layout.DescriptorSets[SetLayoutIndex]];
+        }
+
+        VkPushConstantRange PushConstantRanges[MaxPushConstantRangeCount] = {};
+        for (u32 Index = 0; Index < Info->Layout.PushConstantRangeCount; Index++)
+        {
+            const push_constant_range* Range = Info->Layout.PushConstantRanges + Index;
+            PushConstantRanges[Index] = 
+            {
+                .stageFlags = PipelineStagesToVulkan(Range->Stages),
+                .offset = Range->ByteOffset,
+                .size = Range->ByteSize,
+            };
+        }
+
+        VkPipelineLayoutCreateInfo PipelineLayoutInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .setLayoutCount = Info->Layout.DescriptorSetCount,
+            .pSetLayouts = SetLayouts,
+            .pushConstantRangeCount = Info->Layout.PushConstantRangeCount,
+            .pPushConstantRanges = PushConstantRanges,
+        };
+        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Pipeline->Layout);
+        Assert(Result == VK_SUCCESS);
+        if (Result != VK_SUCCESS) return(Result);
+
+        u64 NameSize = PathSize;
+        CopyZStringToBuffer(Name, Info->Name, &NameSize);
+        char* Extension = Path + (MaxPathSize - NameSize);
+    
+        if (Info->Type == PipelineType_Compute)
+        {
+            u64 Size = NameSize;
+            CopyZStringToBuffer(Extension, ".cs", &Size);
+            buffer Bin = Platform.LoadEntireFile(Path, Scratch);
+            if (Bin.Size)
+            {
+                VkShaderModuleCreateInfo ModuleInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .codeSize = Bin.Size,
+                    .pCode = (u32*)Bin.Data,
+                };
+                VkShaderModule Module = VK_NULL_HANDLE;
+                Result = vkCreateShaderModule(VK.Device, &ModuleInfo, nullptr, &Module);
+                Assert(Result == VK_SUCCESS);
+                if (Result != VK_SUCCESS) return(Result);
+
+                VkComputePipelineCreateInfo PipelineInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .stage = 
+                    {
+                        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                        .pNext = nullptr,
+                        .flags = 0,
+                        .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                        .module = Module,
+                        .pName = "main",
+                        .pSpecializationInfo = nullptr,
+                    },
+                    .layout = Pipeline->Layout,
+                    .basePipelineHandle = VK_NULL_HANDLE,
+                    .basePipelineIndex = 0,
+                };
+                Result = vkCreateComputePipelines(VK.Device, VK_NULL_HANDLE, 1, &PipelineInfo, nullptr, &Pipeline->Pipeline);
+                Assert(Result == VK_SUCCESS);
+                vkDestroyShaderModule(VK.Device, Module, nullptr);
+                if (Result != VK_SUCCESS) return(Result);
+            }
+            else
+            {
+                return(VK_ERROR_UNKNOWN);
+            }
+        }
+        else if (Info->Type == PipelineType_Graphics)
+        {
+            Assert(!HasFlag(Info->EnabledStages, PipelineStage_CS));
+            // Only VS and PS is supported for now
+            if (Info->EnabledStages & ~(PipelineStage_VS|PipelineStage_PS)) 
+            {
+                UnimplementedCodePath;
+            }
+            if (HasFlag(Info->DepthStencilState.Flags, DS_StencilTestEnable))
+            {
+                UnimplementedCodePath;
+            }
+    
+            VkPipelineShaderStageCreateInfo StageInfos[PipelineStage_Count] = {};
+            u32 StageCount = 0;
+    
+            if (Info->EnabledStages & PipelineStage_VS)
+            {
+                VkPipelineShaderStageCreateInfo* StageInfo = StageInfos + StageCount++;
+                StageInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                StageInfo->stage = VK_SHADER_STAGE_VERTEX_BIT;
+                StageInfo->pName = "main";
+    
+                u64 Size = NameSize;
+                CopyZStringToBuffer(Extension, ".vs", &Size);
+                buffer Bin = Platform.LoadEntireFile(Path, Scratch);
+                if (Bin.Size)
+                {
+                    VkShaderModuleCreateInfo ModuleInfo = 
+                    {
+                        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                        .codeSize = Bin.Size,
+                        .pCode = (u32*)Bin.Data,
+                    };
+                    Result = vkCreateShaderModule(VK.Device, &ModuleInfo, nullptr, &StageInfo->module);
+                    if (Result != VK_SUCCESS) return(Result);
+                }
+                else
+                {
+                    return(VK_ERROR_UNKNOWN);
+                }
+            }
+            if (Info->EnabledStages & PipelineStage_PS)
+            {
+                VkPipelineShaderStageCreateInfo* StageInfo = StageInfos + StageCount++;
+                StageInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+                StageInfo->stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+                StageInfo->pName = "main";
+    
+                u64 Size = NameSize;
+                CopyZStringToBuffer(Extension, ".fs", &Size);
+                buffer Bin = Platform.LoadEntireFile(Path, Scratch);
+                if (Bin.Size)
+                {
+                    VkShaderModuleCreateInfo ModuleInfo = 
+                    {
+                        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                        .codeSize = Bin.Size,
+                        .pCode = (u32*)Bin.Data,
+                    };
+                    Result = vkCreateShaderModule(VK.Device, &ModuleInfo, nullptr, &StageInfo->module);
+                    if (Result != VK_SUCCESS) return(Result);
+                }
+                else
+                {
+                    return(VK_ERROR_UNKNOWN);
+                }
+            }
+    
+            VkVertexInputBindingDescription VertexBindings[MaxVertexBindingCount] = {};
+            VkVertexInputAttributeDescription VertexAttribs[MaxVertexAttribCount] = {};
+            for (u32 BindingIndex = 0; BindingIndex < Info->InputAssemblerState.BindingCount; BindingIndex++)
+            {
+                const vertex_binding* Binding = Info->InputAssemblerState.Bindings + BindingIndex;
+                if (Binding->InstanceStepRate > 1)
+                {
+                    UnimplementedCodePath;
+                }
+                VertexBindings[BindingIndex].binding = BindingIndex;
+                VertexBindings[BindingIndex].stride = Binding->Stride;
+                VertexBindings[BindingIndex].inputRate = Binding->InstanceStepRate == 0 ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE;
+            }
+    
+            for (u32 AttribIndex = 0; AttribIndex < Info->InputAssemblerState.AttribCount; AttribIndex++)
+            {
+                const vertex_attrib* Attrib = Info->InputAssemblerState.Attribs + AttribIndex;
+                VertexAttribs[AttribIndex].location = Attrib->Index;
+                VertexAttribs[AttribIndex].binding = Attrib->Binding;
+                VertexAttribs[AttribIndex].format = FormatToVulkan(Attrib->Format);
+                VertexAttribs[AttribIndex].offset = Attrib->ByteOffset;
+            }
+    
+            VkPipelineVertexInputStateCreateInfo VertexInputState = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .vertexBindingDescriptionCount = Info->InputAssemblerState.BindingCount,
+                .pVertexBindingDescriptions = VertexBindings,
+                .vertexAttributeDescriptionCount = Info->InputAssemblerState.AttribCount,
+                .pVertexAttributeDescriptions = VertexAttribs,
+            };
+    
+            VkPipelineInputAssemblyStateCreateInfo InputAssemblyState = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .topology = TopologyTable[Info->InputAssemblerState.Topology],
+                .primitiveRestartEnable = Info->InputAssemblerState.EnablePrimitiveRestart,
+            };
+    
+            VkViewport Viewport = {};
+            VkRect2D Scissor = {};
+            VkPipelineViewportStateCreateInfo ViewportState = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .viewportCount = 1,
+                .pViewports = &Viewport,
+                .scissorCount = 1,
+                .pScissors = &Scissor,
+            };
+    
+            VkPolygonMode PolygonMode;
+            switch (Info->RasterizerState.Fill)
+            {
+                case Fill_Solid: PolygonMode = VK_POLYGON_MODE_FILL; break;
+                case Fill_Line: PolygonMode = VK_POLYGON_MODE_LINE; break;
+                case Fill_Point: PolygonMode = VK_POLYGON_MODE_POINT; break;
+                InvalidDefaultCase;
+            }
+            VkPipelineRasterizationStateCreateInfo RasterizationState = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .depthClampEnable = HasFlag(Info->RasterizerState.Flags, RS_DepthClampEnable),
+                .rasterizerDiscardEnable = HasFlag(Info->RasterizerState.Flags, RS_DiscardEnable),
+                .polygonMode = PolygonMode,
+                .cullMode = Info->RasterizerState.CullFlags,
+                .frontFace = HasFlag(Info->RasterizerState.Flags, RS_FrontCW) ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE,
+                .depthBiasEnable = HasFlag(Info->RasterizerState.Flags, RS_DepthBiasEnable),
+                .depthBiasConstantFactor = Info->RasterizerState.DepthBiasConstantFactor,
+                .depthBiasClamp = Info->RasterizerState.DepthBiasClamp,
+                .depthBiasSlopeFactor = Info->RasterizerState.DepthBiasSlopeFactor,
+                .lineWidth = 1.0f,
+            };
+    
+            VkPipelineMultisampleStateCreateInfo MultisampleState = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+                .sampleShadingEnable = VK_FALSE,
+                .minSampleShading = 0.0f,
+                .pSampleMask = nullptr,
+                .alphaToCoverageEnable = VK_FALSE,
+                .alphaToOneEnable = VK_FALSE,
+            };
+    
+            VkPipelineDepthStencilStateCreateInfo DepthStencilState = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .depthTestEnable = HasFlag(Info->DepthStencilState.Flags, DS_DepthTestEnable),
+                .depthWriteEnable = HasFlag(Info->DepthStencilState.Flags, DS_DepthWriteEnable),
+                .depthCompareOp = CompareOpTable[Info->DepthStencilState.DepthCompareOp],
+                .depthBoundsTestEnable = HasFlag(Info->DepthStencilState.Flags, DS_DepthBoundsTestEnable),
+                .stencilTestEnable = HasFlag(Info->DepthStencilState.Flags, DS_StencilTestEnable),
+                .front = {},
+                .back = {},
+                .minDepthBounds = Info->DepthStencilState.MinDepthBounds,
+                .maxDepthBounds = Info->DepthStencilState.MaxDepthBounds,
+            };
+    
+            VkPipelineColorBlendAttachmentState BlendAttachments[MaxColorAttachmentCount] = {};
+            for (u32 BlendAttachmentIndex = 0; BlendAttachmentIndex < Info->BlendAttachmentCount; BlendAttachmentIndex++)
+            {
+                const blend_attachment* Src = Info->BlendAttachments + BlendAttachmentIndex;
+                BlendAttachments[BlendAttachmentIndex] = 
+                {
+                    .blendEnable = Src->BlendEnable,
+                    .srcColorBlendFactor = BlendFactorTable[Src->SrcColor],
+                    .dstColorBlendFactor = BlendFactorTable[Src->DstColor],
+                    .colorBlendOp = BlendOpTable[Src->ColorOp],
+                    .srcAlphaBlendFactor = BlendFactorTable[Src->SrcAlpha],
+                    .dstAlphaBlendFactor = BlendFactorTable[Src->DstAlpha],
+                    .colorWriteMask = VK_COLOR_COMPONENT_R_BIT|VK_COLOR_COMPONENT_G_BIT|VK_COLOR_COMPONENT_B_BIT|VK_COLOR_COMPONENT_A_BIT,
+                };
+            }
+    
+            VkPipelineColorBlendStateCreateInfo BlendState = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .logicOpEnable = VK_FALSE,
+                .logicOp = VK_LOGIC_OP_CLEAR,
+                .attachmentCount = Info->BlendAttachmentCount,
+                .pAttachments = BlendAttachments,
+                .blendConstants = { 1.0f, 1.0f, 1.0f, 1.0f },
+            };
+    
+            VkDynamicState DynamicStates[] = 
+            {
+                VK_DYNAMIC_STATE_VIEWPORT,
+                VK_DYNAMIC_STATE_SCISSOR,
+            };
+            VkPipelineDynamicStateCreateInfo DynamicState = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .dynamicStateCount = CountOf(DynamicStates),
+                .pDynamicStates = DynamicStates,
+            };
+    
+            VkFormat ColorAttachmentFormats[MaxColorAttachmentCount] = {};
+            for (u32 ColorAttachmentIndex = 0; ColorAttachmentIndex < Info->ColorAttachmentCount; ColorAttachmentIndex++)
+            {
+                format Format = Info->ColorAttachments[ColorAttachmentIndex];
+                if (Format == SWAPCHAIN_FORMAT) 
+                {
+                    ColorAttachmentFormats[ColorAttachmentIndex] = Renderer->SurfaceFormat.format;
+                }
+                else
+                {
+                    ColorAttachmentFormats[ColorAttachmentIndex] = FormatTable[Format];
+                }
+            }
+    
+            VkPipelineRenderingCreateInfo DynamicRendering = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+                .pNext = nullptr,
+                .viewMask = 0,
+                .colorAttachmentCount = Info->ColorAttachmentCount,
+                .pColorAttachmentFormats = ColorAttachmentFormats,
+                .depthAttachmentFormat = FormatTable[Info->DepthAttachment],
+                .stencilAttachmentFormat = FormatTable[Info->StencilAttachment],
+            };
+    
+            VkGraphicsPipelineCreateInfo PipelineCreateInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                .pNext = &DynamicRendering,
+                .flags = 0,
+                .stageCount = StageCount,
+                .pStages = StageInfos,
+                .pVertexInputState = &VertexInputState,
+                .pInputAssemblyState = &InputAssemblyState,
+                .pTessellationState = nullptr,
+                .pViewportState = &ViewportState,
+                .pRasterizationState = &RasterizationState,
+                .pMultisampleState = &MultisampleState,
+                .pDepthStencilState = &DepthStencilState,
+                .pColorBlendState = &BlendState,
+                .pDynamicState = &DynamicState,
+                .layout = Pipeline->Layout,
+                .renderPass = VK_NULL_HANDLE,
+                .subpass = 0,
+                .basePipelineHandle = VK_NULL_HANDLE,
+                .basePipelineIndex = 0,
+            };
+    
+            Result = vkCreateGraphicsPipelines(VK.Device, nullptr, 1, &PipelineCreateInfo, nullptr, &Pipeline->Pipeline);
+            Assert(Result == VK_SUCCESS);
+            if (Result != VK_SUCCESS) return(Result);
+
+            for (u32 StageIndex = 0; StageIndex < StageCount; StageIndex++)
+            {
+                VkPipelineShaderStageCreateInfo* Stage = StageInfos + StageIndex;
+                vkDestroyShaderModule(VK.Device, Stage->module, nullptr);
+            }
+        }
+        else
+        {
+            UnhandledError("Unrecognized pipeline type");
+        }
+    
+        RestoreArena(Scratch, Checkpoint);
     }
 
     return(Result);
@@ -1145,407 +1558,8 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         }
     }
     
-    // Pipelines
-    {
-        Renderer->Pipelines[Pipeline_None] = { VK_NULL_HANDLE, VK_NULL_HANDLE };
-
-        constexpr u64 MaxPathSize = 512;
-        char Path[MaxPathSize];
-        u64 PathSize = MaxPathSize;
-        CopyZStringToBuffer(Path, "build/", &PathSize);
-        char* Name = Path + (MaxPathSize - PathSize);
-
-        auto FormatToVulkan = [](format Format) -> VkFormat
-        {
-            VkFormat Result = VK_FORMAT_UNDEFINED;
-            if (Format < Format_Count)
-            {
-                Result = FormatTable[Format];
-            }
-            else
-            {
-                InvalidCodePath;
-            }
-            return(Result);
-        };
-
-        for (u32 PipelineIndex = 1; PipelineIndex < Pipeline_Count; PipelineIndex++)
-        {
-            memory_arena_checkpoint Checkpoint = ArenaCheckpoint(TempArena);
-
-            pipeline_with_layout* Pipeline = Renderer->Pipelines + PipelineIndex;
-            const pipeline_info* Info = PipelineInfos + PipelineIndex;
-
-            VkDescriptorSetLayout SetLayouts[MaxDescriptorSetCount] = {};
-            for (u32 SetLayoutIndex = 0; SetLayoutIndex < Info->Layout.DescriptorSetCount; SetLayoutIndex++)
-            {
-                SetLayouts[SetLayoutIndex] = Renderer->SetLayouts[Info->Layout.DescriptorSets[SetLayoutIndex]];
-            }
-
-            VkPushConstantRange PushConstantRanges[MaxPushConstantRangeCount] = {};
-            for (u32 Index = 0; Index < Info->Layout.PushConstantRangeCount; Index++)
-            {
-                const push_constant_range* Range = Info->Layout.PushConstantRanges + Index;
-                PushConstantRanges[Index] = 
-                {
-                    .stageFlags = PipelineStagesToVulkan(Range->Stages),
-                    .offset = Range->ByteOffset,
-                    .size = Range->ByteSize,
-                };
-            }
-
-            VkPipelineLayoutCreateInfo PipelineLayoutInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .setLayoutCount = Info->Layout.DescriptorSetCount,
-                .pSetLayouts = SetLayouts,
-                .pushConstantRangeCount = Info->Layout.PushConstantRangeCount,
-                .pPushConstantRanges = PushConstantRanges,
-            };
-            Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Pipeline->Layout);
-            Assert(Result == VK_SUCCESS);
-
-            u64 NameSize = PathSize;
-            CopyZStringToBuffer(Name, Info->Name, &NameSize);
-            char* Extension = Path + (MaxPathSize - NameSize);
-
-            if (Info->Type == PipelineType_Compute)
-            {
-                u64 Size = NameSize;
-                CopyZStringToBuffer(Extension, ".cs", &Size);
-                buffer Bin = Platform.LoadEntireFile(Path, TempArena);
-                if (Bin.Size)
-                {
-                    VkShaderModuleCreateInfo ModuleInfo = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-                        .pNext = nullptr,
-                        .flags = 0,
-                        .codeSize = Bin.Size,
-                        .pCode = (u32*)Bin.Data,
-                    };
-                    VkShaderModule Module = VK_NULL_HANDLE;
-                    Result = vkCreateShaderModule(VK.Device, &ModuleInfo, nullptr, &Module);
-                    Assert(Result == VK_SUCCESS);
-                    ReturnOnFailure();
-
-                    VkComputePipelineCreateInfo PipelineInfo = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
-                        .pNext = nullptr,
-                        .flags = 0,
-                        .stage = 
-                        {
-                            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                            .pNext = nullptr,
-                            .flags = 0,
-                            .stage = VK_SHADER_STAGE_COMPUTE_BIT,
-                            .module = Module,
-                            .pName = "main",
-                            .pSpecializationInfo = nullptr,
-                        },
-                        .layout = Pipeline->Layout,
-                        .basePipelineHandle = VK_NULL_HANDLE,
-                        .basePipelineIndex = 0,
-                    };
-                    Result = vkCreateComputePipelines(VK.Device, VK_NULL_HANDLE, 1, &PipelineInfo, nullptr, &Pipeline->Pipeline);
-                    Assert(Result == VK_SUCCESS);
-                    vkDestroyShaderModule(VK.Device, Module, nullptr);
-                    ReturnOnFailure();
-                }
-                else
-                {
-                    return(nullptr);
-                }
-            }
-            else if (Info->Type == PipelineType_Graphics)
-            {
-                Assert(!HasFlag(Info->EnabledStages, PipelineStage_CS));
-                // Only VS and PS is supported for now
-                if (Info->EnabledStages & ~(PipelineStage_VS|PipelineStage_PS)) 
-                {
-                    UnimplementedCodePath;
-                }
-                if (HasFlag(Info->DepthStencilState.Flags, DS_StencilTestEnable))
-                {
-                    UnimplementedCodePath;
-                }
-
-                VkPipelineShaderStageCreateInfo StageInfos[PipelineStage_Count] = {};
-                u32 StageCount = 0;
-
-                if (Info->EnabledStages & PipelineStage_VS)
-                {
-                    VkPipelineShaderStageCreateInfo* StageInfo = StageInfos + StageCount++;
-                    StageInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-                    StageInfo->stage = VK_SHADER_STAGE_VERTEX_BIT;
-                    StageInfo->pName = "main";
-
-                    u64 Size = NameSize;
-                    CopyZStringToBuffer(Extension, ".vs", &Size);
-                    buffer Bin = Platform.LoadEntireFile(Path, TempArena);
-                    if (Bin.Size)
-                    {
-                        VkShaderModuleCreateInfo ModuleInfo = 
-                        {
-                            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-                            .codeSize = Bin.Size,
-                            .pCode = (u32*)Bin.Data,
-                        };
-                        Result = vkCreateShaderModule(VK.Device, &ModuleInfo, nullptr, &StageInfo->module);
-                        ReturnOnFailure();
-                    }
-                    else
-                    {
-                        return(nullptr);
-                    }
-                }
-                if (Info->EnabledStages & PipelineStage_PS)
-                {
-                    VkPipelineShaderStageCreateInfo* StageInfo = StageInfos + StageCount++;
-                    StageInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-                    StageInfo->stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-                    StageInfo->pName = "main";
-
-                    u64 Size = NameSize;
-                    CopyZStringToBuffer(Extension, ".fs", &Size);
-                    buffer Bin = Platform.LoadEntireFile(Path, TempArena);
-                    if (Bin.Size)
-                    {
-                        VkShaderModuleCreateInfo ModuleInfo = 
-                        {
-                            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-                            .codeSize = Bin.Size,
-                            .pCode = (u32*)Bin.Data,
-                        };
-                        Result = vkCreateShaderModule(VK.Device, &ModuleInfo, nullptr, &StageInfo->module);
-                        ReturnOnFailure();
-                    }
-                    else
-                    {
-                        return(nullptr);
-                    }
-                }
-
-                VkVertexInputBindingDescription VertexBindings[MaxVertexBindingCount] = {};
-                VkVertexInputAttributeDescription VertexAttribs[MaxVertexAttribCount] = {};
-                for (u32 BindingIndex = 0; BindingIndex < Info->InputAssemblerState.BindingCount; BindingIndex++)
-                {
-                    const vertex_binding* Binding = Info->InputAssemblerState.Bindings + BindingIndex;
-                    if (Binding->InstanceStepRate > 1)
-                    {
-                        UnimplementedCodePath;
-                    }
-                    VertexBindings[BindingIndex].binding = BindingIndex;
-                    VertexBindings[BindingIndex].stride = Binding->Stride;
-                    VertexBindings[BindingIndex].inputRate = Binding->InstanceStepRate == 0 ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE;
-                }
-
-                for (u32 AttribIndex = 0; AttribIndex < Info->InputAssemblerState.AttribCount; AttribIndex++)
-                {
-                    const vertex_attrib* Attrib = Info->InputAssemblerState.Attribs + AttribIndex;
-                    VertexAttribs[AttribIndex].location = Attrib->Index;
-                    VertexAttribs[AttribIndex].binding = Attrib->Binding;
-                    VertexAttribs[AttribIndex].format = FormatToVulkan(Attrib->Format);
-                    VertexAttribs[AttribIndex].offset = Attrib->ByteOffset;
-                }
-
-                VkPipelineVertexInputStateCreateInfo VertexInputState = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .vertexBindingDescriptionCount = Info->InputAssemblerState.BindingCount,
-                    .pVertexBindingDescriptions = VertexBindings,
-                    .vertexAttributeDescriptionCount = Info->InputAssemblerState.AttribCount,
-                    .pVertexAttributeDescriptions = VertexAttribs,
-                };
-
-                VkPipelineInputAssemblyStateCreateInfo InputAssemblyState = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .topology = TopologyTable[Info->InputAssemblerState.Topology],
-                    .primitiveRestartEnable = Info->InputAssemblerState.EnablePrimitiveRestart,
-                };
-
-                VkViewport Viewport = {};
-                VkRect2D Scissor = {};
-                VkPipelineViewportStateCreateInfo ViewportState = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .viewportCount = 1,
-                    .pViewports = &Viewport,
-                    .scissorCount = 1,
-                    .pScissors = &Scissor,
-                };
-
-                VkPolygonMode PolygonMode;
-                switch (Info->RasterizerState.Fill)
-                {
-                    case Fill_Solid: PolygonMode = VK_POLYGON_MODE_FILL; break;
-                    case Fill_Line: PolygonMode = VK_POLYGON_MODE_LINE; break;
-                    case Fill_Point: PolygonMode = VK_POLYGON_MODE_POINT; break;
-                    InvalidDefaultCase;
-                }
-                VkPipelineRasterizationStateCreateInfo RasterizationState = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-                    .pNext = nullptr,
-                    .depthClampEnable = HasFlag(Info->RasterizerState.Flags, RS_DepthClampEnable),
-                    .rasterizerDiscardEnable = HasFlag(Info->RasterizerState.Flags, RS_DiscardEnable),
-                    .polygonMode = PolygonMode,
-                    .cullMode = Info->RasterizerState.CullFlags,
-                    .frontFace = HasFlag(Info->RasterizerState.Flags, RS_FrontCW) ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE,
-                    .depthBiasEnable = HasFlag(Info->RasterizerState.Flags, RS_DepthBiasEnable),
-                    .depthBiasConstantFactor = Info->RasterizerState.DepthBiasConstantFactor,
-                    .depthBiasClamp = Info->RasterizerState.DepthBiasClamp,
-                    .depthBiasSlopeFactor = Info->RasterizerState.DepthBiasSlopeFactor,
-                    .lineWidth = 1.0f,
-                };
-
-                VkPipelineMultisampleStateCreateInfo MultisampleState = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-                    .sampleShadingEnable = VK_FALSE,
-                    .minSampleShading = 0.0f,
-                    .pSampleMask = nullptr,
-                    .alphaToCoverageEnable = VK_FALSE,
-                    .alphaToOneEnable = VK_FALSE,
-                };
-
-                VkPipelineDepthStencilStateCreateInfo DepthStencilState = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .depthTestEnable = HasFlag(Info->DepthStencilState.Flags, DS_DepthTestEnable),
-                    .depthWriteEnable = HasFlag(Info->DepthStencilState.Flags, DS_DepthWriteEnable),
-                    .depthCompareOp = CompareOpTable[Info->DepthStencilState.DepthCompareOp],
-                    .depthBoundsTestEnable = HasFlag(Info->DepthStencilState.Flags, DS_DepthBoundsTestEnable),
-                    .stencilTestEnable = HasFlag(Info->DepthStencilState.Flags, DS_StencilTestEnable),
-                    .front = {},
-                    .back = {},
-                    .minDepthBounds = Info->DepthStencilState.MinDepthBounds,
-                    .maxDepthBounds = Info->DepthStencilState.MaxDepthBounds,
-                };
-
-                VkPipelineColorBlendAttachmentState BlendAttachments[MaxColorAttachmentCount] = {};
-                for (u32 BlendAttachmentIndex = 0; BlendAttachmentIndex < Info->BlendAttachmentCount; BlendAttachmentIndex++)
-                {
-                    const blend_attachment* Src = Info->BlendAttachments + BlendAttachmentIndex;
-                    BlendAttachments[BlendAttachmentIndex] = 
-                    {
-                        .blendEnable = Src->BlendEnable,
-                        .srcColorBlendFactor = BlendFactorTable[Src->SrcColor],
-                        .dstColorBlendFactor = BlendFactorTable[Src->DstColor],
-                        .colorBlendOp = BlendOpTable[Src->ColorOp],
-                        .srcAlphaBlendFactor = BlendFactorTable[Src->SrcAlpha],
-                        .dstAlphaBlendFactor = BlendFactorTable[Src->DstAlpha],
-                        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT|VK_COLOR_COMPONENT_G_BIT|VK_COLOR_COMPONENT_B_BIT|VK_COLOR_COMPONENT_A_BIT,
-                    };
-                }
-
-                VkPipelineColorBlendStateCreateInfo BlendState = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .logicOpEnable = VK_FALSE,
-                    .logicOp = VK_LOGIC_OP_CLEAR,
-                    .attachmentCount = Info->BlendAttachmentCount,
-                    .pAttachments = BlendAttachments,
-                    .blendConstants = { 1.0f, 1.0f, 1.0f, 1.0f },
-                };
-
-                VkDynamicState DynamicStates[] = 
-                {
-                    VK_DYNAMIC_STATE_VIEWPORT,
-                    VK_DYNAMIC_STATE_SCISSOR,
-                };
-                VkPipelineDynamicStateCreateInfo DynamicState = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .dynamicStateCount = CountOf(DynamicStates),
-                    .pDynamicStates = DynamicStates,
-                };
-
-                VkFormat ColorAttachmentFormats[MaxColorAttachmentCount] = {};
-                for (u32 ColorAttachmentIndex = 0; ColorAttachmentIndex < Info->ColorAttachmentCount; ColorAttachmentIndex++)
-                {
-                    format Format = Info->ColorAttachments[ColorAttachmentIndex];
-                    if (Format == SWAPCHAIN_FORMAT) 
-                    {
-                        ColorAttachmentFormats[ColorAttachmentIndex] = Renderer->SurfaceFormat.format;
-                    }
-                    else
-                    {
-                        ColorAttachmentFormats[ColorAttachmentIndex] = FormatTable[Format];
-                    }
-                }
-
-                VkPipelineRenderingCreateInfo DynamicRendering = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
-                    .pNext = nullptr,
-                    .viewMask = 0,
-                    .colorAttachmentCount = Info->ColorAttachmentCount,
-                    .pColorAttachmentFormats = ColorAttachmentFormats,
-                    .depthAttachmentFormat = FormatTable[Info->DepthAttachment],
-                    .stencilAttachmentFormat = FormatTable[Info->StencilAttachment],
-                };
-
-                VkGraphicsPipelineCreateInfo PipelineCreateInfo = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-                    .pNext = &DynamicRendering,
-                    .flags = 0,
-                    .stageCount = StageCount,
-                    .pStages = StageInfos,
-                    .pVertexInputState = &VertexInputState,
-                    .pInputAssemblyState = &InputAssemblyState,
-                    .pTessellationState = nullptr,
-                    .pViewportState = &ViewportState,
-                    .pRasterizationState = &RasterizationState,
-                    .pMultisampleState = &MultisampleState,
-                    .pDepthStencilState = &DepthStencilState,
-                    .pColorBlendState = &BlendState,
-                    .pDynamicState = &DynamicState,
-                    .layout = Pipeline->Layout,
-                    .renderPass = VK_NULL_HANDLE,
-                    .subpass = 0,
-                    .basePipelineHandle = VK_NULL_HANDLE,
-                    .basePipelineIndex = 0,
-                };
-
-                Result = vkCreateGraphicsPipelines(VK.Device, nullptr, 1, &PipelineCreateInfo, nullptr, &Pipeline->Pipeline);
-                Assert(Result == VK_SUCCESS);
-
-                for (u32 StageIndex = 0; StageIndex < StageCount; StageIndex++)
-                {
-                    VkPipelineShaderStageCreateInfo* Stage = StageInfos + StageIndex;
-                    vkDestroyShaderModule(VK.Device, Stage->module, nullptr);
-                }
-            }
-            else
-            {
-                UnhandledError("Unrecognized pipeline type");
-            }
-
-            RestoreArena(TempArena, Checkpoint);
-        }
-    }
-
+    Result = CreatePipelines(Renderer, TempArena);
+    ReturnOnFailure();
     return(Renderer);
 }
 
@@ -1758,6 +1772,8 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
     Frame->Renderer = Renderer;
     Frame->Arena = Arena;
 
+    Frame->ReloadShaders = false;
+
     Frame->Backend->SwapchainImageIndex = INVALID_INDEX_U32;
     Frame->FrameID = FrameID;
 
@@ -1865,6 +1881,12 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, u32 Outp
 void EndRenderFrame(render_frame* Frame)
 {
     renderer* Renderer = Frame->Renderer;
+    if (Frame->ReloadShaders)
+    {
+        vkDeviceWaitIdle(Frame->Renderer->Vulkan.Device);
+        CreatePipelines(Renderer, Frame->Arena);
+    }
+
     // NOTE(boti): This is currently also the initial transfer and skinning cmd buffer
     VkCommandBuffer PrepassCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
     VkCommandBuffer RenderCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
@@ -1877,13 +1899,18 @@ void EndRenderFrame(render_frame* Frame)
 
     f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
 
-    Frame->Uniforms.Exposure                = Frame->Config.Exposure;
-    Frame->Uniforms.SSAOIntensity           = Frame->Config.SSAOIntensity;
-    Frame->Uniforms.SSAOInverseMaxDistance  = 1.0f / Frame->Config.SSAOMaxDistance;
-    Frame->Uniforms.SSAOTangentTau          = Frame->Config.SSAOTangentTau;
-    Frame->Uniforms.BloomFilterRadius       = Frame->Config.BloomFilterRadius;
-    Frame->Uniforms.BloomInternalStrength   = Frame->Config.BloomInternalStrength;
-    Frame->Uniforms.BloomStrength           = Frame->Config.BloomStrength;
+    Frame->Uniforms.Ambience                    = 0.25f * v3{ 1.0f, 1.0f, 1.0f }; // TODO(boti): Expose this in the API
+    Frame->Uniforms.Exposure                    = Frame->Config.Exposure;
+    Frame->Uniforms.SSAOIntensity               = Frame->Config.SSAOIntensity;
+    Frame->Uniforms.SSAOInverseMaxDistance      = 1.0f / Frame->Config.SSAOMaxDistance;
+    Frame->Uniforms.SSAOTangentTau              = Frame->Config.SSAOTangentTau;
+    Frame->Uniforms.BloomFilterRadius           = Frame->Config.BloomFilterRadius;
+    Frame->Uniforms.BloomInternalStrength       = Frame->Config.BloomInternalStrength;
+    Frame->Uniforms.BloomStrength               = Frame->Config.BloomStrength;
+    Frame->Uniforms.ConstantFogDensity          = Frame->ConstantFogDensity;
+    Frame->Uniforms.LinearFogDensityAtBottom    = Frame->LinearFogDensityAtBottom;
+    Frame->Uniforms.LinearFogMinZ               = Frame->LinearFogMinZ;
+    Frame->Uniforms.LinearFogMaxZ               = Frame->LinearFogMaxZ;
 
     // Calculate camera parameters
     {
@@ -1998,9 +2025,9 @@ void EndRenderFrame(render_frame* Frame)
     for (u32 ShadowIndex = 0; ShadowIndex < Frame->ShadowCount; ShadowIndex++)
     {
         light* Light = Frame->Lights + Frame->Shadows[ShadowIndex];
-        v3 P = Light->P.XYZ;
+        v3 P = Light->P;
 
-        f32 L = Light->E.W * Max(Max(Light->E.X, Light->E.Y), Light->E.Z);
+        f32 L = GetLuminance(Light->E);
         f32 R = Sqrt(Max((L / R_LuminanceThreshold), 0.0f));
         // TODO(boti): Get the far plane from the luminance and the light threshold
         f32 n = 0.05f;
@@ -2305,23 +2332,24 @@ void EndRenderFrame(render_frame* Frame)
         {
             light* Light = Frame->Lights + LightIndex;
 
-            u32 ShadowIndex = 0xFF;
-            if ((ShadowAt < Frame->ShadowCount) && 
-                (Frame->Shadows[ShadowAt] == LightIndex))
+            u32 ShadowIndex = 0xFFFFFFFFu;
+            if ((ShadowAt < Frame->ShadowCount) && (Frame->Shadows[ShadowAt] == LightIndex))
             {
                     ShadowIndex = ShadowAt++;
             }
 
-            f32 L = Light->E.W * Max(Max(Light->E.X, Light->E.Y), Light->E.Z);
+            f32 L = GetLuminance(Light->E);
             f32 R = Sqrt(Max((L / R_LuminanceThreshold), 0.0f));
-            if (IntersectFrustumSphere(&CameraFrustum, Light->P.XYZ, R))
+            if (IntersectFrustumSphere(&CameraFrustum, Light->P, R))
             {
-                v4 P = Frame->Uniforms.ViewTransform * Light->P;
+                v3 P = TransformPoint(Frame->Uniforms.ViewTransform, Light->P);
                 u32 DstIndex = Frame->Uniforms.LightCount++;
                 LightBuffer[DstIndex] = 
                 {
-                    .P = { P.X, P.Y, P.Z, (f32)ShadowIndex }, // HACK(boti): the shadow index shouldn't be a float
+                    .P = P,
+                    .ShadowIndex = ShadowIndex,
                     .E = Light->E,
+                    .Flags = Light->Flags,
                 };
 
                 if (Frame->Uniforms.LightCount == R_MaxLightCount)

@@ -7,7 +7,7 @@
 #define Billboard_ViewAligned 0
 #define Billboard_ZAligned 1
 
-layout(set = 0, binding = 0) 
+layout(set = 0, binding = 0, scalar)
 uniform PerFrameBlock
 {
     per_frame PerFrame;
@@ -74,7 +74,7 @@ void main()
     ParticleTexture = Particle.TextureIndex;
     ViewP = P;
 
-    if (ParticleColor.a > 0.0)
+    if (GetLuminance(ParticleColor.rgb) > 0.0)
     {
         gl_Position = PerFrame.ProjectionTransform * vec4(P, 1.0);
     }
@@ -107,6 +107,8 @@ void main()
     f32 FarFade = clamp(2.0 * (Depth - ViewP.z), 0.0, 1.0);
     f32 NearFade = clamp(ViewP.z - (PerFrame.NearZ + 0.01), 0.0, 1.0);
     f32 Fade = min(FarFade, NearFade);
-    Target0 = v4(ParticleColor.xyz * SampleColor.xyz, Fade * ParticleColor.w * SampleColor.w);
+    f32 d = length(ViewP);
+    f32 FogFactor = exp(-PerFrame.ConstantFogDensity * MieBetaFactor * d);
+    Target0 = v4(ParticleColor.xyz * SampleColor.xyz, FogFactor * Fade * ParticleColor.w * SampleColor.w);
 }
 #endif

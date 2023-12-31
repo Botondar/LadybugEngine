@@ -98,15 +98,15 @@ void main()
             if (LightCount == R_MaxLightCountPerTile) break;
 
             v3 P = Lights[LightIndex].P.xyz;
-            v4 E = Lights[LightIndex].E;
-            float L = E.w * max(E.z, max(E.y, E.x));
+            v3 E = Lights[LightIndex].E;
+            float L = GetLuminance(E);
             float R = sqrt(max(L / R_LuminanceThreshold, 0.0));
 
             if (IntersectAABBSphere(BoxP, HalfExtent, P, R))
             {
                 // NOTE(boti): Shadow casting lights also participate in volumetrics,
                 // so we don't want to depth cull those
-                if (uint(Lights[LightIndex].P.w) != 0xFF)
+                if (Lights[LightIndex].ShadowIndex != 0xFFFFFFFFu)
                 {
                     Tiles[TileIndex].LightIndices[LightCount++] = LightIndex;
                 }

@@ -48,6 +48,12 @@ struct game_state
     static constexpr f32 DefaultExposure = 0.55f;
     render_config RenderConfig;
 
+    // TODO(boti): Move this to game_world
+    f32 ConstantFogDensity;
+    f32 LinearFogDensityAtBottom;
+    f32 LinearFogMinZ;
+    f32 LinearFogMaxZ;
+
     assets* Assets;
     game_world* World;
 };

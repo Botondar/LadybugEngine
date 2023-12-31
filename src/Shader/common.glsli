@@ -5,9 +5,39 @@
 
 #include "ShaderInterop.h"
 
+#define MieBetaFactor 21e-4
+
 //
 // Common
 //
+
+f32 Ratio0(f32 A, f32 B)
+{
+    f32 Result = 0.0;
+    if (B != 0.0)
+    {
+        Result = A / B;
+    }
+    return(Result);
+}
+
+f32 Ratio1(f32 A, f32 B)
+{
+    f32 Result = 1.0;
+    if (B != 0.0)
+    {
+        Result = A / B;
+    }
+    return(Result);
+}
+
+v3 ApplyFog(in v3 Li, v3 Ambience, f32 Density, f32 Distance)
+{
+    const f32 BetaM0 = 21e-4;
+    f32 FogFactor = exp(-Density * BetaM0 * Distance);
+    v3 Lo = Li * FogFactor + (1.0 - FogFactor) * Ambience;
+    return(Lo);
+}
 
 v3 TransformPoint(m4 M, v3 P)
 {
@@ -247,14 +277,16 @@ float AtmosphereNoise(vec2 P)
 float PhaseMie(in float g, in float g2, in float CosTheta)
 {
     const float OneOver4Pi = 0.07957747;
-#if 1
+
     float a = 1.0 + g2 - 2*g*CosTheta;
     float Denom = sqrt(a) * a;
 
+#if 1
+    // Integral normalized over sphere
     float Phase = OneOver4Pi * (1.0 - g2) / Denom;
 #else
-    float a = (1.0 - g) / (sqrt(1 + g2 - 2.0 * g * CosTheta));
-    float Phase = OneOver4Pi * a*a*a;
+    // Integral normalized over angle [-1,+1]
+    float Phase = 0.5 * (1.0 - g2) / Denom;
 #endif
     return(Phase);
 }

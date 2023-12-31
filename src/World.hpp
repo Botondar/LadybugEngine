@@ -39,7 +39,7 @@ struct entity
     f32 AnimationCounter;
 
     // EntityFlag_LightSource
-    v4 LightEmission;
+    v3 LightEmission;
 };
 
 struct particle
@@ -47,8 +47,8 @@ struct particle
     v3 P;
     v3 dP;
     v3 ddP;
-    v4 Color;
-    v4 dColor;
+    v3 Color;
+    v3 dColor;
     u32 TextureIndex;
 };
 
