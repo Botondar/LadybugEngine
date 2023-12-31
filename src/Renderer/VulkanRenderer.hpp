@@ -71,11 +71,6 @@ struct backend_render_frame
     u32 SwapchainImageIndex;
     VkImage SwapchainImage;
     VkImageView SwapchainImageView;
-    render_target* DepthBuffer;
-    render_target* StructureBuffer;
-    render_target* HDRRenderTarget;
-    render_target* BloomTarget;
-    render_target* OcclusionBuffers[2];
 
     VkBuffer StagingBuffer;
     VkBuffer UniformBuffer;
@@ -103,10 +98,15 @@ struct renderer
 
     VkExtent2D SurfaceExtent;
 
-    render_target_heap RenderTargetHeap;
     geometry_buffer GeometryBuffer;
     texture_manager TextureManager;
     gpu_memory_arena BARMemory;
+    render_target_heap RenderTargetHeap;
+    render_target* DepthBuffer;
+    render_target* StructureBuffer;
+    render_target* HDRRenderTarget;
+    render_target* BloomTarget;
+    render_target* OcclusionBuffers[2];
 
     struct render_debug
     {

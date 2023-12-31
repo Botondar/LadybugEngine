@@ -1596,33 +1596,17 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
                     return VK_ERROR_INITIALIZATION_FAILED;
                 }
 
-                for (u32 i = 0; i < R_MaxFramesInFlight; i++)
-                {
-                    render_frame* Frame = Renderer->Frames + i;
-                    constexpr VkImageUsageFlagBits DepthStencil = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-                    constexpr VkImageUsageFlagBits Color = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-                    constexpr VkImageUsageFlagBits Sampled = VK_IMAGE_USAGE_SAMPLED_BIT;
-                    constexpr VkImageUsageFlagBits Storage = VK_IMAGE_USAGE_STORAGE_BIT;
-                    
-                    if (i == 0)
-                    {
-                        Frame->Backend->DepthBuffer         = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
-                        Frame->Backend->StructureBuffer     = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[STRUCTURE_BUFFER_FORMAT], Color|Sampled, 1);
-                        Frame->Backend->HDRRenderTarget     = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
-                        Frame->Backend->BloomTarget         = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
-                        Frame->Backend->OcclusionBuffers[0] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
-                        Frame->Backend->OcclusionBuffers[1] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
-                    }
-                    else
-                    {
-                        Frame->Backend->DepthBuffer         = Renderer->Frames[0].Backend->DepthBuffer;
-                        Frame->Backend->StructureBuffer     = Renderer->Frames[0].Backend->StructureBuffer;
-                        Frame->Backend->HDRRenderTarget     = Renderer->Frames[0].Backend->HDRRenderTarget;
-                        Frame->Backend->BloomTarget         = Renderer->Frames[0].Backend->BloomTarget;
-                        Frame->Backend->OcclusionBuffers[0] = Renderer->Frames[0].Backend->OcclusionBuffers[0];
-                        Frame->Backend->OcclusionBuffers[1] = Renderer->Frames[0].Backend->OcclusionBuffers[1];
-                    }
-                }
+                constexpr VkImageUsageFlagBits DepthStencil = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+                constexpr VkImageUsageFlagBits Color = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+                constexpr VkImageUsageFlagBits Sampled = VK_IMAGE_USAGE_SAMPLED_BIT;
+                constexpr VkImageUsageFlagBits Storage = VK_IMAGE_USAGE_STORAGE_BIT;
+                
+                Renderer->DepthBuffer         = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
+                Renderer->StructureBuffer     = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[STRUCTURE_BUFFER_FORMAT], Color|Sampled, 1);
+                Renderer->HDRRenderTarget     = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
+                Renderer->BloomTarget         = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
+                Renderer->OcclusionBuffers[0] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
+                Renderer->OcclusionBuffers[1] = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
             }
 
             if (!ResizeRenderTargets(&Renderer->RenderTargetHeap, Renderer->SurfaceExtent.width, Renderer->SurfaceExtent.height))
@@ -2427,14 +2411,14 @@ void EndRenderFrame(render_frame* Frame)
         Frame,
         Renderer->SetLayouts[SetLayout_SampledRenderTargetPS],
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        Frame->Backend->OcclusionBuffers[1]->View,
+        Frame->Renderer->OcclusionBuffers[1]->View,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL); 
 
     VkDescriptorSet StructureBufferDescriptorSet = PushImageDescriptor(
         Frame,
         Renderer->SetLayouts[SetLayout_SampledRenderTargetPS],
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        Frame->Backend->StructureBuffer->View,
+        Frame->Renderer->StructureBuffer->View,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL); 
 
     VkDescriptorSet ShadowDescriptorSet = PushImageDescriptor(
@@ -2727,7 +2711,7 @@ void EndRenderFrame(render_frame* Frame)
         VkDescriptorImageInfo DescriptorImage = 
         {
             .sampler = VK_NULL_HANDLE,
-            .imageView = Frame->Backend->StructureBuffer->View,
+            .imageView = Frame->Renderer->StructureBuffer->View,
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         };
         VkWriteDescriptorSet DescriptorWrite = 
@@ -3188,8 +3172,8 @@ void EndRenderFrame(render_frame* Frame)
     
 
     RenderBloom(Frame, RenderCmd,
-                Frame->Backend->HDRRenderTarget,
-                Frame->Backend->BloomTarget,
+                Frame->Renderer->HDRRenderTarget,
+                Frame->Renderer->BloomTarget,
                 Renderer->Pipelines[Pipeline_BloomDownsample].Layout,
                 Renderer->Pipelines[Pipeline_BloomDownsample].Pipeline,
                 Renderer->Pipelines[Pipeline_BloomUpsample].Layout,
@@ -3258,7 +3242,7 @@ void EndRenderFrame(render_frame* Frame)
         {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .imageView = Frame->Backend->DepthBuffer->View,
+            .imageView = Frame->Renderer->DepthBuffer->View,
             .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             .resolveMode = VK_RESOLVE_MODE_NONE,
             .resolveImageView = VK_NULL_HANDLE,
@@ -3303,12 +3287,12 @@ void EndRenderFrame(render_frame* Frame)
             {
                 {
                     .sampler = VK_NULL_HANDLE,
-                    .imageView = Frame->Backend->HDRRenderTarget->MipViews[0],
+                    .imageView = Frame->Renderer->HDRRenderTarget->MipViews[0],
                     .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 },
                 {
                     .sampler = VK_NULL_HANDLE,
-                    .imageView = Frame->Backend->BloomTarget->MipViews[0],
+                    .imageView = Frame->Renderer->BloomTarget->MipViews[0],
                     .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 },
             };

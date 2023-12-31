@@ -114,7 +114,7 @@ internal void BeginPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer)
             .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->Backend->StructureBuffer->Image,
+            .image = Frame->Renderer->StructureBuffer->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -136,7 +136,7 @@ internal void BeginPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer)
             .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->Backend->DepthBuffer->Image,
+            .image = Frame->Renderer->DepthBuffer->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -168,7 +168,7 @@ internal void BeginPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer)
         {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .imageView = Frame->Backend->StructureBuffer->View,
+            .imageView = Frame->Renderer->StructureBuffer->View,
             .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .resolveMode = VK_RESOLVE_MODE_NONE,
             .resolveImageView = VK_NULL_HANDLE,
@@ -183,7 +183,7 @@ internal void BeginPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer)
     {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
-        .imageView = Frame->Backend->DepthBuffer->View,
+        .imageView = Frame->Renderer->DepthBuffer->View,
         .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         .resolveMode = VK_RESOLVE_MODE_NONE,
         .resolveImageView = VK_NULL_HANDLE,
@@ -315,7 +315,7 @@ RenderSSAO(render_frame* Frame,
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK.GraphicsQueueIdx,
             .dstQueueFamilyIndex = VK.ComputeQueueIdx,
-            .image = Frame->Backend->StructureBuffer->Image,
+            .image = Frame->Renderer->StructureBuffer->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -360,13 +360,13 @@ RenderSSAO(render_frame* Frame,
             VkDescriptorImageInfo StructureBufferInfo = 
             {
                 .sampler = VK_NULL_HANDLE,
-                .imageView = Frame->Backend->StructureBuffer->View,
+                .imageView = Frame->Renderer->StructureBuffer->View,
                 .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             };
             VkDescriptorImageInfo SSAOImageInfo = 
             {
                 .sampler = VK_NULL_HANDLE,
-                .imageView = Frame->Backend->OcclusionBuffers[0]->View,
+                .imageView = Frame->Renderer->OcclusionBuffers[0]->View,
                 .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             };
             VkWriteDescriptorSet Writes[] = 
@@ -407,7 +407,7 @@ RenderSSAO(render_frame* Frame,
             .newLayout = VK_IMAGE_LAYOUT_GENERAL,
             .srcQueueFamilyIndex = VK.GraphicsQueueIdx,
             .dstQueueFamilyIndex = VK.ComputeQueueIdx,
-            .image = Frame->Backend->OcclusionBuffers[0]->Image,
+            .image = Frame->Renderer->OcclusionBuffers[0]->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -458,19 +458,19 @@ RenderSSAO(render_frame* Frame,
             VkDescriptorImageInfo StructureBufferInfo = 
             {
                 .sampler = VK_NULL_HANDLE,
-                .imageView = Frame->Backend->StructureBuffer->View,
+                .imageView = Frame->Renderer->StructureBuffer->View,
                 .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             };
             VkDescriptorImageInfo SSAOImageInfo = 
             {
                 .sampler = VK_NULL_HANDLE,
-                .imageView = Frame->Backend->OcclusionBuffers[0]->View,
+                .imageView = Frame->Renderer->OcclusionBuffers[0]->View,
                 .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             };
             VkDescriptorImageInfo SSAOOutImageInfo = 
             {
                 .sampler = VK_NULL_HANDLE,
-                .imageView = Frame->Backend->OcclusionBuffers[1]->View,
+                .imageView = Frame->Renderer->OcclusionBuffers[1]->View,
                 .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
             };
             VkWriteDescriptorSet Writes[] = 
@@ -522,7 +522,7 @@ RenderSSAO(render_frame* Frame,
                 .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Frame->Backend->OcclusionBuffers[0]->Image,
+                .image = Frame->Renderer->OcclusionBuffers[0]->Image,
                 .subresourceRange = 
                 {
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -543,7 +543,7 @@ RenderSSAO(render_frame* Frame,
                 .newLayout = VK_IMAGE_LAYOUT_GENERAL,
                 .srcQueueFamilyIndex = VK.GraphicsQueueIdx,
                 .dstQueueFamilyIndex = VK.ComputeQueueIdx,
-                .image = Frame->Backend->OcclusionBuffers[1]->Image,
+                .image = Frame->Renderer->OcclusionBuffers[1]->Image,
                 .subresourceRange = 
                 {
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -599,7 +599,7 @@ internal void BeginForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer)
             .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->Backend->HDRRenderTarget->Image,
+            .image = Frame->Renderer->HDRRenderTarget->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -645,7 +645,7 @@ internal void BeginForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer)
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK.ComputeQueueIdx,
             .dstQueueFamilyIndex = VK.GraphicsQueueIdx,
-            .image = Frame->Backend->OcclusionBuffers[1]->Image,
+            .image = Frame->Renderer->OcclusionBuffers[1]->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -675,7 +675,7 @@ internal void BeginForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer)
     {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
-        .imageView = Frame->Backend->HDRRenderTarget->MipViews[0],
+        .imageView = Frame->Renderer->HDRRenderTarget->MipViews[0],
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .resolveMode = VK_RESOLVE_MODE_NONE,
         .resolveImageView = VK_NULL_HANDLE,
@@ -689,7 +689,7 @@ internal void BeginForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer)
     {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
-        .imageView = Frame->Backend->DepthBuffer->View,
+        .imageView = Frame->Renderer->DepthBuffer->View,
         .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
         .resolveMode = VK_RESOLVE_MODE_NONE,
         .resolveImageView = VK_NULL_HANDLE,
