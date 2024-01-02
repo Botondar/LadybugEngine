@@ -45,14 +45,14 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         constexpr umm TransientArenaSize = MiB(512);
         GameState->TransientArena = InitializeArena(TransientArenaSize, PushSize_(&GameState->TotalArena, 0, TransientArenaSize, 64));
 
-        GameState->Renderer = CreateRenderer(&GameState->TotalArena, &GameState->TransientArena);
+        GameState->Renderer = Platform.CreateRenderer(&Memory->PlatformAPI, &GameState->TotalArena, &GameState->TransientArena);
         if (!GameState->Renderer)
         {
             GameIO->bQuitRequested = true;
             GameIO->QuitMessage = "Renderer creation failed";
             return;
         }
-        RenderFrame = BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputExtent);
+        RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputExtent);
 
         constexpr umm AssetArenaSize = GiB(1);
         memory_arena AssetArena = InitializeArena(AssetArenaSize, PushSize_(&GameState->TotalArena, 0, AssetArenaSize, KiB(4)));
@@ -88,7 +88,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
     if (!RenderFrame)
     {
-        RenderFrame = BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputExtent);
+        RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputExtent);
     }
     RenderFrame->ImmediateTextureID = GameState->Assets->Textures[GameState->Assets->DefaultFontTextureID].RendererID;
     RenderFrame->ParticleTextureID = GameState->Assets->Textures[GameState->Assets->ParticleArrayID].RendererID;
@@ -152,7 +152,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     
     UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, 
                          &GameState->TransientArena, GameState->Editor.DrawLights);
-    EndRenderFrame(RenderFrame);
+    Platform.EndRenderFrame(RenderFrame);
 
     GameState->FrameID++;
 }

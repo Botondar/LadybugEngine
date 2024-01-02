@@ -6,7 +6,8 @@ SRC = src
 COMMON = -nologo -std:c++20 -Zi -EHsc -MT -arch:AVX2
 FLOAT_ENV = -fp:except- -fp:strict
 OPTIMIZATION = -O2 -Oi
-INCLUDES = -I$(SRC) -I$(VULKAN_SDK)/Include/
+VULKAN_INCLUDE = -I$(VULKAN_SDK)/Include/
+INCLUDES = -I$(SRC)
 DEFINES = -DDEVELOPER=1 -DWIN32_LEAN_AND_MEAN -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX
 WARNINGS_MSVC = -WX -W4 -wd4100 -wd4189 -wd4200 -wd4201 -wd4505
 WARNINGS_CLANG = -Wshadow -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-lambda-capture -Wno-unused-value -Wno-missing-field-initializers -Wno-char-subscripts -Wno-missing-braces -Wno-c99-designator
@@ -14,10 +15,10 @@ WARNINGS = $(WARNINGS_MSVC) $(WARNINGS_CLANG)
 
 CXX_FLAGS = $(COMMON) $(FLOAT_ENV) $(INCLUDES) $(DEFINES) $(WARNINGS)
 
-LINK_FLAGS = -INCREMENTAL:NO -LIBPATH:"$(VULKAN_SDK)/Lib/"
+LINK_FLAGS = -INCREMENTAL:NO
 SHADER_FLAGS = -g -O --target-env=vulkan1.3 -fhlsl-offsets
 
-LIBS = kernel32.lib user32.lib gdi32.lib Shell32.lib advapi32.lib vulkan-1.lib
+LIBS = kernel32.lib user32.lib gdi32.lib Shell32.lib advapi32.lib
 
 SRC_BASE = "$(SRC)/*.cpp" "$(SRC)/*.hpp"
 SRC_RENDERER = "$(SRC)/Renderer/*.cpp" "$(SRC)/Renderer/*.hpp"
@@ -25,6 +26,13 @@ SRC_LBLIB = "$(SRC)/LadybugLib/*.hpp" "$(SRC)/LadybugLib/*.cpp"
 SRC_ALL = $(SRC_BASE) $(SRC_RENDERER) $(SRC_LBLIB) "$(SRC)/Shader/ShaderInterop.h"
 
 GAME_EXPORT = -EXPORT:Game_UpdateAndRender
+RENDERER_EXPORT = \
+    -EXPORT:CreateRenderer \
+    -EXPORT:GetDeviceName \
+    -EXPORT:AllocateGeometry \
+    -EXPORT:AllocateTextureName \
+    -EXPORT:BeginRenderFrame \
+    -EXPORT:EndRenderFrame
 
 SHADERS = build/blit.vs build/blit.fs build/shader.vs build/shader.fs build/prepass.vs build/prepass.fs \
     build/shadow.vs build/shadow.fs build/sky.vs build/sky.fs build/ui.vs build/ui.fs \
@@ -36,7 +44,7 @@ SHADERS = build/blit.vs build/blit.fs build/shader.vs build/shader.fs build/prep
     build/skin.cs \
     build/light_bin.cs
 
-all: "$(OUT)/" "$(OUT)/Win_LadybugEngine.exe" "$(OUT)/game.dll" "$(OUT)/renderer.obj" $(SHADERS)
+all: "$(OUT)/" "$(OUT)/Win_LadybugEngine.exe" "$(OUT)/game.dll" "$(OUT)/vulkan_renderer.dll" $(SHADERS)
 
 clean: 
     @del /q $(OUT)\*.*
@@ -44,12 +52,12 @@ clean:
 "$(OUT)/":
 	@if not exist $@ mkdir $@
 
-"$(OUT)/renderer.obj": "$(OUT)/" $(SRC_LBLIB) $(SRC_RENDERER)
-    @clang-cl $(CXX_FLAGS) -c "src/Renderer/VulkanRenderer.cpp" -Fo$@ -Fd"$(OUT)/"
+"$(OUT)/vulkan_renderer.dll": "$(OUT)/" $(SRC_LBLIB) $(SRC_RENDERER)
+    @clang-cl $(CXX_FLAGS) $(VULKAN_INCLUDE) "src/Renderer/VulkanRenderer.cpp" -Fo"$(OUT)/" -Fd"$(OUT)/" vulkan-1.lib -link -DLL -OUT:$@ $(LINK_FLAGS) $(RENDERER_EXPORT) -LIBPATH:$(VULKAN_SDK)/Lib/
 "$(OUT)/Win_LadybugEngine.exe": "$(OUT)/" $(SRC_ALL)
-    @clang-cl $(CXX_FLAGS) "src/Win_LadybugEngine.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) -link $(LINK_FLAGS)
-"$(OUT)/game.dll":"$(OUT)/" $(SRC_ALL) "$(OUT)/renderer.obj"
-    @clang-cl $(CXX_FLAGS) "src/LadybugEngine.cpp" -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) "$(OUT)/renderer.obj" -link -DLL -OUT:$@ $(LINK_FLAGS) $(GAME_EXPORT)
+    @clang-cl $(CXX_FLAGS) $(VULKAN_INCLUDE) "src/Win_LadybugEngine.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) vulkan-1.lib -link $(LINK_FLAGS) -LIBPATH:$(VULKAN_SDK)/Lib/
+"$(OUT)/game.dll":"$(OUT)/" $(SRC_ALL)
+    @clang-cl $(CXX_FLAGS) "src/LadybugEngine.cpp" -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) -link -DLL -OUT:$@ $(LINK_FLAGS) $(GAME_EXPORT)
 
 {$(SRC)/Shader/}.glsl{$(OUT)/}.vs:
     glslc $(SHADER_FLAGS) -DVS -fshader-stage=vert -o "$(OUT)/$(@B).vs" "$<"

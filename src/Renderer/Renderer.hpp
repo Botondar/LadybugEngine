@@ -836,25 +836,23 @@ struct render_frame
     per_frame Uniforms;
 };
 
-extern renderer* 
-CreateRenderer(memory_arena* Arena, memory_arena* TempArena);
+#define Signature_CreateRenderer(name)      renderer*                   name(struct platform_api* PlatformAPI, memory_arena* Arena, memory_arena* Scratch)
+#define Signature_GetDeviceName(name)       const char*                 name(renderer* Renderer)
+#define Signature_AllocateGeometry(name)    geometry_buffer_allocation  name(renderer* Renderer, u32 VertexCount, u32 IndexCount)
+#define Signature_AllocateTextureName(name) renderer_texture_id         name(renderer* Renderer, texture_flags Flags)
+#define Signature_BeginRenderFrame(name)    render_frame*               name(renderer* Renderer, memory_arena* Arena, v2u OutputExtent)
+#define Signature_EndRenderFrame(name)      void                        name(render_frame* Frame)
 
-extern const char* 
-GetDeviceName(renderer* Renderer);
-
-extern geometry_buffer_allocation
-AllocateGeometry(renderer* Renderer, u32 VertexCount, u32 IndexCount);
-
-extern renderer_texture_id
-AllocateTextureName(renderer* Renderer, texture_flags Flags);
+typedef Signature_CreateRenderer(create_renderer);
+typedef Signature_GetDeviceName(get_device_name);
+typedef Signature_AllocateGeometry(allocate_geometry);
+typedef Signature_AllocateTextureName(allocate_texture_name);
+typedef Signature_BeginRenderFrame(begin_render_frame);
+typedef Signature_EndRenderFrame(end_render_frame);
 
 //
 // Frame rendering
 //
-
-extern render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* arena, v2u OutputExtent);
-extern void EndRenderFrame(render_frame* Frame);
-
 inline b32 
 TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_info Info, 
                 const void* Data);

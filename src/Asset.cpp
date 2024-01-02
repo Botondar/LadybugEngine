@@ -255,7 +255,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         Assets->WhitenessID = Assets->TextureCount++;
         texture* Whiteness = Assets->Textures + Assets->WhitenessID;
 
-        Whiteness->RendererID = AllocateTextureName(Frame->Renderer, TextureFlag_None);
+        Whiteness->RendererID = Platform.AllocateTextureName(Frame->Renderer, TextureFlag_None);
         Assets->DefaultDiffuseID = Assets->WhitenessID;
         Assets->DefaultMetallicRoughnessID = Assets->WhitenessID;
 
@@ -277,7 +277,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
     {
         Assets->DefaultNormalID = Assets->TextureCount++;
         texture* DefaultNormalTexture = Assets->Textures + Assets->DefaultNormalID;
-        DefaultNormalTexture->RendererID = AllocateTextureName(Frame->Renderer, TextureFlag_None);
+        DefaultNormalTexture->RendererID = Platform.AllocateTextureName(Frame->Renderer, TextureFlag_None);
         texture_info Info =
         {
             .Width = 1,
@@ -325,7 +325,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
     {
         Assets->ParticleArrayID = Assets->TextureCount++;
         texture* ParticleArray = Assets->Textures + Assets->ParticleArrayID;
-        ParticleArray->RendererID = AllocateTextureName(Frame->Renderer, TextureFlag_Special);
+        ParticleArray->RendererID = Platform.AllocateTextureName(Frame->Renderer, TextureFlag_Special);
         // TODO(boti): For now we know that the texture pack we're using is 512x512, 
         // but we may want to figure out some way for the user code to pack texture arrays/atlases dynamically
         texture_info Info =
@@ -375,7 +375,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
             Result = Assets->MeshCount++;
             mesh* Mesh = Assets->Meshes + Result;
 
-            Mesh->Allocation = AllocateGeometry(Frame->Renderer, MeshData.VertexCount, MeshData.IndexCount);
+            Mesh->Allocation = Platform.AllocateGeometry(Frame->Renderer, MeshData.VertexCount, MeshData.IndexCount);
             Mesh->BoundingBox = MeshData.Box;
             Mesh->MaterialID = 0;
             TransferGeometry(Frame, Mesh->Allocation, MeshData.VertexData, MeshData.IndexData);
@@ -455,7 +455,7 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Fra
 
             Assets->DefaultFontTextureID = Assets->TextureCount++;
             texture* DefaultFontTexture = Assets->Textures + Assets->DefaultFontTextureID;
-            DefaultFontTexture->RendererID = AllocateTextureName(Frame->Renderer, TextureFlag_None);
+            DefaultFontTexture->RendererID = Platform.AllocateTextureName(Frame->Renderer, TextureFlag_None);
 
             texture_info Info = 
             {
@@ -561,7 +561,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 }
                 
                 texture* TextureAsset = Assets->Textures + Result;
-                TextureAsset->RendererID = AllocateTextureName(Frame->Renderer, TextureFlag_None);
+                TextureAsset->RendererID = Platform.AllocateTextureName(Frame->Renderer, TextureFlag_None);
                 TextureAsset->IsLoaded = false;
                 AddEntry(&Assets->TextureQueue, TextureAsset, Type, (AlphaMode != GLTF_ALPHA_MODE_OPAQUE), &Filepath);
             }
@@ -899,7 +899,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             {
                 u32 MeshID = Assets->MeshCount++;
                 mesh* DstMesh = Assets->Meshes + MeshID;
-                DstMesh->Allocation = AllocateGeometry(Frame->Renderer, VertexCount, IndexCount);
+                DstMesh->Allocation = Platform.AllocateGeometry(Frame->Renderer, VertexCount, IndexCount);
                 DstMesh->BoundingBox = Box;
                 DstMesh->MaterialID = Primitive->MaterialIndex + BaseMaterialIndex;
                 TransferGeometry(Frame, DstMesh->Allocation, VertexData, IndexData);

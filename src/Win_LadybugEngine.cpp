@@ -407,15 +407,31 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     GameMemory.Size = GiB(4);
     GameMemory.Memory = VirtualAlloc(nullptr, GameMemory.Size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 
-    GameMemory.PlatformAPI.DebugPrint = &Win_DebugPrint;
-    GameMemory.PlatformAPI.GetCounter = &Win_GetCounter;
-    GameMemory.PlatformAPI.ElapsedSeconds = &Win_ElapsedSeconds;
-    GameMemory.PlatformAPI.LoadEntireFile = &Win_LoadEntireFile;
-    GameMemory.PlatformAPI.CreateVulkanSurface = &Win_CreateVulkanSurface;
-    GameMemory.PlatformAPI.CreateThread = &Win_CreateThread;
-    GameMemory.PlatformAPI.CreateSemaphore = &Win_CreateSemaphore;
-    GameMemory.PlatformAPI.WaitForSemaphore = &Win_WaitForSemaphore;
-    GameMemory.PlatformAPI.ReleaseSemaphore = &Win_ReleaseSemaphore;
+    GameMemory.PlatformAPI.DebugPrint           = &Win_DebugPrint;
+    GameMemory.PlatformAPI.GetCounter           = &Win_GetCounter;
+    GameMemory.PlatformAPI.ElapsedSeconds       = &Win_ElapsedSeconds;
+    GameMemory.PlatformAPI.LoadEntireFile       = &Win_LoadEntireFile;
+    GameMemory.PlatformAPI.CreateVulkanSurface  = &Win_CreateVulkanSurface;
+    GameMemory.PlatformAPI.CreateThread         = &Win_CreateThread;
+    GameMemory.PlatformAPI.CreateSemaphore      = &Win_CreateSemaphore;
+    GameMemory.PlatformAPI.WaitForSemaphore     = &Win_WaitForSemaphore;
+    GameMemory.PlatformAPI.ReleaseSemaphore     = &Win_ReleaseSemaphore;
+
+    HMODULE RendererDLL = LoadLibraryA("vulkan_renderer.dll");
+    if (RendererDLL)
+    {
+        GameMemory.PlatformAPI.CreateRenderer       = (create_renderer*)        GetProcAddress(RendererDLL, "CreateRenderer");
+        GameMemory.PlatformAPI.GetDeviceName        = (get_device_name*)        GetProcAddress(RendererDLL, "GetDeviceName");
+        GameMemory.PlatformAPI.AllocateGeometry     = (allocate_geometry*)      GetProcAddress(RendererDLL, "AllocateGeometry");
+        GameMemory.PlatformAPI.AllocateTextureName  = (allocate_texture_name*)  GetProcAddress(RendererDLL, "AllocateTextureName");
+        GameMemory.PlatformAPI.BeginRenderFrame     = (begin_render_frame*)     GetProcAddress(RendererDLL, "BeginRenderFrame");
+        GameMemory.PlatformAPI.EndRenderFrame       = (end_render_frame*)       GetProcAddress(RendererDLL, "EndRenderFrame");
+
+    }
+    else
+    {
+        return (DWORD)-1;
+    }
 
     win_xinput XInput = {};
     Win_InitializeXInput(&XInput);

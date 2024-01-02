@@ -1,6 +1,7 @@
 #include "VulkanRenderer.hpp"
 
 vulkan VK;
+platform_api Platform;
 
 #define ReturnOnFailure() if (Result != VK_SUCCESS) return nullptr
 
@@ -733,14 +734,16 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
     return(Result);
 }
 
-const char* GetDeviceName(renderer* Renderer)
+extern "C" Signature_GetDeviceName(GetDeviceName)
 {
     const char* Result = Renderer->Vulkan.DeviceProps.deviceName;
     return(Result);
 }
 
-renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
+extern "C" Signature_CreateRenderer(CreateRenderer)
 {
+    Platform = *PlatformAPI;
+
     renderer* Renderer = PushStruct(Arena, 0, renderer);
     if (!Renderer) return nullptr;
     VkResult Result = InitializeVulkan(&Renderer->Vulkan);
@@ -1558,7 +1561,7 @@ renderer* CreateRenderer(memory_arena* Arena, memory_arena* TempArena)
         }
     }
     
-    Result = CreatePipelines(Renderer, TempArena);
+    Result = CreatePipelines(Renderer, Scratch);
     ReturnOnFailure();
     return(Renderer);
 }
@@ -1742,14 +1745,13 @@ DrawMeshes(render_frame* Frame,
 // Rendering interface implementation
 //
 
-extern geometry_buffer_allocation
-AllocateGeometry(renderer* Renderer, u32 VertexCount, u32 IndexCount)
+extern "C" Signature_AllocateGeometry(AllocateGeometry)
 {
     geometry_buffer_allocation Result = AllocateVertexBuffer(&Renderer->GeometryBuffer, VertexCount, IndexCount);
     return(Result);
 }
 
-render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, v2u OutputExtent)
+extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
 {
     u32 FrameID = (u32)(Renderer->CurrentFrameID++ % R_MaxFramesInFlight);
     render_frame* Frame = Renderer->Frames + FrameID;
@@ -1854,7 +1856,7 @@ render_frame* BeginRenderFrame(renderer* Renderer, memory_arena* Arena, v2u Outp
     return(Frame);
 }
 
-void EndRenderFrame(render_frame* Frame)
+extern "C" Signature_EndRenderFrame(EndRenderFrame)
 {
     renderer* Renderer = Frame->Renderer;
     if (Frame->ReloadShaders)
@@ -3545,7 +3547,7 @@ void EndRenderFrame(render_frame* Frame)
     }
 }
 
-renderer_texture_id 
+extern "C" renderer_texture_id 
 AllocateTextureName(renderer* Renderer, texture_flags Flags)
 {
     renderer_texture_id Result = AllocateTextureName(&Renderer->TextureManager, Flags);

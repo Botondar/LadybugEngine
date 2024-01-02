@@ -93,7 +93,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
 
         Context.CurrentP = { (f32)Frame->RenderWidth, 0.0f };
         TextGUI(&Context, 24.0f, "%.2fms", 1000.0f * IO->dt);
-        TextGUI(&Context, 20.0f, "%s", GetDeviceName(Frame->Renderer));
+        TextGUI(&Context, 20.0f, "%s", Platform.GetDeviceName(Frame->Renderer));
         TextGUI(&Context, 20.0f, "Rendering@%ux%u", Frame->RenderWidth, Frame->RenderHeight);
     }
 

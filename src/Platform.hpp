@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LadybugLib/Core.hpp"
+#include "Renderer/Renderer.hpp"
 //#include <vulkan/vulkan.h>
 
 // High resolution counter
@@ -42,6 +43,15 @@ struct platform_api
     create_semaphore* CreateSemaphore;
     wait_for_semaphore* WaitForSemaphore;
     release_semaphore* ReleaseSemaphore;
+
+    // Renderer
+    // TODO(boti): Make CreateRenderer fill an render_api struct with all the info
+    create_renderer* CreateRenderer;
+    get_device_name* GetDeviceName;
+    allocate_geometry* AllocateGeometry;
+    allocate_texture_name* AllocateTextureName;
+    begin_render_frame* BeginRenderFrame;
+    end_render_frame* EndRenderFrame;
 };
 
 // Custom key table for layout-independent keys. Naming follows the US keyboard layout
