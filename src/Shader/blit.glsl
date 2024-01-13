@@ -85,13 +85,13 @@ void main()
 
     vec3 Exposed = Sample * PerFrame.Exposure;
 #if 0
-    Exposed = vec3(1.0) - exp(-Exposed);
+    v3 Tonemapped = vec3(1.0) - exp(-Exposed);
 #elif 0
-    Exposed = Exposed / (vec3(1.0) + Exposed);
+    v3 Tonemapped = Exposed / (vec3(1.0) + Exposed);
 #elif 1
-    Exposed = ACESFilm2(Exposed);
+    v3 Tonemapped = ACESFilm2(Exposed);
 #endif
-    Out0 = vec4(Exposed, 1.0);
+    Out0 = vec4(Tonemapped, 1.0);
 }
 
 #endif
