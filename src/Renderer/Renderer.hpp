@@ -252,7 +252,8 @@ enum descriptor_type : u32
     Descriptor_InlineUniformBlock = 11,
 };
 
-enum descriptor_set_layout_flags : flags32
+typedef flags32 descriptor_set_layout_flags;
+enum descriptor_set_layout_flag_bits : descriptor_set_layout_flags
 {
     SetLayoutFlag_None = 0,
 
@@ -363,7 +364,7 @@ struct descriptor_set_binding
 
 struct descriptor_set_layout_info
 {
-    flags32 Flags; // descriptor_set_layout_flags
+    descriptor_set_layout_flags Flags;
     u32 BindingCount;
     descriptor_set_binding Bindings[MaxDescriptorSetLayoutBindingCount];
 };
@@ -376,7 +377,8 @@ struct pipeline_layout_info
     u32 DescriptorSets[MaxDescriptorSetCount];
 };
 
-enum rasterizer_flags : flags32
+typedef flags32 rasterizer_flags;
+enum rasterizer_flag_bits : rasterizer_flags
 {
     RS_Flags_None = 0,
 
@@ -388,7 +390,7 @@ enum rasterizer_flags : flags32
 
 struct rasterizer_state
 {
-    flags32 Flags;
+    rasterizer_flags Flags;
     fill_mode Fill;
     cull_flags CullFlags;
 
@@ -397,7 +399,8 @@ struct rasterizer_state
     f32 DepthBiasSlopeFactor;
 };
 
-enum depth_stencil_flags : flags32
+typedef flags32 depth_stencil_flags;
+enum depth_stencil_flag_bits : depth_stencil_flags
 {
     DS_Flags_None = 0,
 
@@ -409,8 +412,7 @@ enum depth_stencil_flags : flags32
 
 struct depth_stencil_state
 {
-    flags32 Flags;
-
+    depth_stencil_flags Flags;
     compare_op DepthCompareOp;
     f32 MinDepthBounds;
     f32 MaxDepthBounds;
@@ -434,8 +436,10 @@ struct pipeline_info
 
     pipeline_layout_info Layout;
 
-    // Gfx pipeline specific
-    flags32 EnabledStages;
+    //
+    // Graphics pipeline specific
+    //
+    pipeline_stages EnabledStages;
 
     vertex_state InputAssemblerState;
     rasterizer_state RasterizerState;
