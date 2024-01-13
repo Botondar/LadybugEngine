@@ -2088,7 +2088,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         u32 RowLength = 0;
                         u32 ImageHeight = 0;
                         u64 TexelCount;
-                        if (ByteRate.IsBlock)
+                        if (ByteRate.Flags & FormatFlag_BlockCompressed)
                         {
                             RowLength = Align(Width, 4u);
                             ImageHeight = Align(Height, 4u);

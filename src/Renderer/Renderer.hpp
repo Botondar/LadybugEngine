@@ -63,6 +63,14 @@ constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
 
 constexpr f32 GlobalMaxLOD = 1000.0f;
 
+typedef flags32 format_flags;
+enum format_flag_bits : format_flags
+{
+    FormatFlag_None = 0,
+
+    FormatFlag_BlockCompressed = (1u << 0),
+};
+
 enum format : u32
 {
     Format_Undefined = 0,
@@ -485,7 +493,7 @@ struct format_byterate
 {
     u32 Numerator;
     u32 Denominator;
-    b32 IsBlock;
+    format_flags Flags;
 };
 
 //
@@ -897,65 +905,65 @@ inline u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, 
 
 static format_byterate FormatByterateTable[Format_Count] = 
 {
-    [Format_Undefined]          = { 0, 0, false },
+    [Format_Undefined]          = { 0, 0, FormatFlag_None },
 
-    [Format_R8_UNorm]           = { 1*1, 1, false },
-    [Format_R8_UInt]            = { 1*1, 1, false },
-    [Format_R8_SRGB]            = { 1*1, 1, false },
-    [Format_R8G8_UNorm]         = { 2*1, 1, false },
-    [Format_R8G8_UInt]          = { 2*1, 1, false },
-    [Format_R8G8_SRGB]          = { 2*1, 1, false },
-    [Format_R8G8B8_UNorm]       = { 3*1, 1, false },
-    [Format_R8G8B8_UInt]        = { 3*1, 1, false },
-    [Format_R8G8B8_SRGB]        = { 3*1, 1, false },
-    [Format_R8G8B8A8_UNorm]     = { 4*1, 1, false },
-    [Format_R8G8B8A8_UInt]      = { 4*1, 1, false },
-    [Format_R8G8B8A8_SRGB]      = { 4*1, 1, false },
-    [Format_R16_UNorm]          = { 1*2, 1, false },
-    [Format_R16_UInt]           = { 1*2, 1, false },
-    [Format_R16_Float]          = { 1*2, 1, false },
-    [Format_R16G16_UNorm]       = { 2*2, 1, false },
-    [Format_R16G16_UInt]        = { 2*2, 1, false },
-    [Format_R16G16_Float]       = { 2*2, 1, false },
-    [Format_R16G16B16_UNorm]    = { 3*2, 1, false },
-    [Format_R16G16B16_UInt]     = { 3*2, 1, false },
-    [Format_R16G16B16_Float]    = { 3*2, 1, false },
-    [Format_R16G16B16A16_UNorm] = { 4*2, 1, false },
-    [Format_R16G16B16A16_UInt]  = { 4*2, 1, false },
-    [Format_R16G16B16A16_Float] = { 4*2, 1, false },
-    [Format_R32_UInt]           = { 1*4, 1, false },
-    [Format_R32_Float]          = { 1*4, 1, false },
-    [Format_R32G32_UInt]        = { 2*4, 1, false },
-    [Format_R32G32_Float]       = { 2*4, 1, false },
-    [Format_R32G32B32_UInt]     = { 3*4, 1, false },
-    [Format_R32G32B32_Float]    = { 3*4, 1, false },
-    [Format_R32G32B32A32_UInt]  = { 4*4, 1, false },
-    [Format_R32G32B32A32_Float] = { 4*4, 1, false },
+    [Format_R8_UNorm]           = { 1*1, 1, FormatFlag_None },
+    [Format_R8_UInt]            = { 1*1, 1, FormatFlag_None },
+    [Format_R8_SRGB]            = { 1*1, 1, FormatFlag_None },
+    [Format_R8G8_UNorm]         = { 2*1, 1, FormatFlag_None },
+    [Format_R8G8_UInt]          = { 2*1, 1, FormatFlag_None },
+    [Format_R8G8_SRGB]          = { 2*1, 1, FormatFlag_None },
+    [Format_R8G8B8_UNorm]       = { 3*1, 1, FormatFlag_None },
+    [Format_R8G8B8_UInt]        = { 3*1, 1, FormatFlag_None },
+    [Format_R8G8B8_SRGB]        = { 3*1, 1, FormatFlag_None },
+    [Format_R8G8B8A8_UNorm]     = { 4*1, 1, FormatFlag_None },
+    [Format_R8G8B8A8_UInt]      = { 4*1, 1, FormatFlag_None },
+    [Format_R8G8B8A8_SRGB]      = { 4*1, 1, FormatFlag_None },
+    [Format_R16_UNorm]          = { 1*2, 1, FormatFlag_None },
+    [Format_R16_UInt]           = { 1*2, 1, FormatFlag_None },
+    [Format_R16_Float]          = { 1*2, 1, FormatFlag_None },
+    [Format_R16G16_UNorm]       = { 2*2, 1, FormatFlag_None },
+    [Format_R16G16_UInt]        = { 2*2, 1, FormatFlag_None },
+    [Format_R16G16_Float]       = { 2*2, 1, FormatFlag_None },
+    [Format_R16G16B16_UNorm]    = { 3*2, 1, FormatFlag_None },
+    [Format_R16G16B16_UInt]     = { 3*2, 1, FormatFlag_None },
+    [Format_R16G16B16_Float]    = { 3*2, 1, FormatFlag_None },
+    [Format_R16G16B16A16_UNorm] = { 4*2, 1, FormatFlag_None },
+    [Format_R16G16B16A16_UInt]  = { 4*2, 1, FormatFlag_None },
+    [Format_R16G16B16A16_Float] = { 4*2, 1, FormatFlag_None },
+    [Format_R32_UInt]           = { 1*4, 1, FormatFlag_None },
+    [Format_R32_Float]          = { 1*4, 1, FormatFlag_None },
+    [Format_R32G32_UInt]        = { 2*4, 1, FormatFlag_None },
+    [Format_R32G32_Float]       = { 2*4, 1, FormatFlag_None },
+    [Format_R32G32B32_UInt]     = { 3*4, 1, FormatFlag_None },
+    [Format_R32G32B32_Float]    = { 3*4, 1, FormatFlag_None },
+    [Format_R32G32B32A32_UInt]  = { 4*4, 1, FormatFlag_None },
+    [Format_R32G32B32A32_Float] = { 4*4, 1, FormatFlag_None },
 
-    [Format_R11G11B10_Float]    = { 4, 1, false},
-    [Format_D16]                = { 2, 1, false },
-    [Format_D24X8]              = { 4, 1, false },
-    [Format_D32]                = { 4, 1, false },
-    [Format_S8]                 = { 1, 1, false },
-    [Format_D24S8]              = { 4, 1, false },
-    [Format_D32S8]              = { 8, 1, false },
+    [Format_R11G11B10_Float]    = { 4, 1, FormatFlag_None },
+    [Format_D16]                = { 2, 1, FormatFlag_None },
+    [Format_D24X8]              = { 4, 1, FormatFlag_None },
+    [Format_D32]                = { 4, 1, FormatFlag_None },
+    [Format_S8]                 = { 1, 1, FormatFlag_None },
+    [Format_D24S8]              = { 4, 1, FormatFlag_None },
+    [Format_D32S8]              = { 8, 1, FormatFlag_None },
 
-    [Format_BC1_RGB_UNorm]  = { 1, 2, true },
-    [Format_BC1_RGB_SRGB]   = { 1, 2, true },
-    [Format_BC1_RGBA_UNorm] = { 1, 2, true },
-    [Format_BC1_RGBA_SRGB]  = { 1, 2, true },
-    [Format_BC2_UNorm]      = { 1, 1, true },
-    [Format_BC2_SRGB]       = { 1, 1, true },
-    [Format_BC3_UNorm]      = { 1, 1, true },
-    [Format_BC3_SRGB]       = { 1, 1, true },
-    [Format_BC4_UNorm]      = { 1, 1, true },
-    [Format_BC4_SNorm]      = { 1, 1, true },
-    [Format_BC5_UNorm]      = { 1, 1, true },
-    [Format_BC5_SNorm]      = { 1, 1, true },
-    [Format_BC6_UFloat]     = { 1, 1, true },
-    [Format_BC6_SFloat]     = { 1, 1, true },
-    [Format_BC7_UNorm]      = { 1, 1, true },
-    [Format_BC7_SRGB]       = { 1, 1, true },
+    [Format_BC1_RGB_UNorm]  = { 1, 2, FormatFlag_BlockCompressed },
+    [Format_BC1_RGB_SRGB]   = { 1, 2, FormatFlag_BlockCompressed },
+    [Format_BC1_RGBA_UNorm] = { 1, 2, FormatFlag_BlockCompressed },
+    [Format_BC1_RGBA_SRGB]  = { 1, 2, FormatFlag_BlockCompressed },
+    [Format_BC2_UNorm]      = { 1, 1, FormatFlag_BlockCompressed },
+    [Format_BC2_SRGB]       = { 1, 1, FormatFlag_BlockCompressed },
+    [Format_BC3_UNorm]      = { 1, 1, FormatFlag_BlockCompressed },
+    [Format_BC3_SRGB]       = { 1, 1, FormatFlag_BlockCompressed },
+    [Format_BC4_UNorm]      = { 1, 1, FormatFlag_BlockCompressed },
+    [Format_BC4_SNorm]      = { 1, 1, FormatFlag_BlockCompressed },
+    [Format_BC5_UNorm]      = { 1, 1, FormatFlag_BlockCompressed },
+    [Format_BC5_SNorm]      = { 1, 1, FormatFlag_BlockCompressed },
+    [Format_BC6_UFloat]     = { 1, 1, FormatFlag_BlockCompressed },
+    [Format_BC6_SFloat]     = { 1, 1, FormatFlag_BlockCompressed },
+    [Format_BC7_UNorm]      = { 1, 1, FormatFlag_BlockCompressed },
+    [Format_BC7_SRGB]       = { 1, 1, FormatFlag_BlockCompressed },
 };
 
 //
@@ -1061,7 +1069,7 @@ inline u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, 
     {
         u32 CurrentWidth = Max(Width >> Mip, 1u);
         u32 CurrentHeight = Max(Height >> Mip, 1u);
-        if (ByteRate.IsBlock)
+        if (ByteRate.Flags & FormatFlag_BlockCompressed)
         {
             CurrentWidth = Align(CurrentWidth, 4u);
             CurrentHeight = Align(CurrentHeight, 4u);
