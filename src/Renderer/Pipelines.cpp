@@ -4,7 +4,6 @@ vertex_state InputState_vertex =
     .Topology = Topology_TriangleList,
     .EnablePrimitiveRestart = false,
     // TODO(boti): We should figure out some way to not have to hard-code these.
-    //             The problem is that we can't use CountOf, since arrays are defined after the counts
     .BindingCount = 1,
     .AttribCount = 5,
     .Bindings = 
@@ -513,7 +512,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .Binding = 0,
                 .Type = Descriptor_StorageBuffer,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_PS|PipelineStage_CS,
+                .Stages = PipelineStage_All,//PipelineStage_PS|PipelineStage_CS,
                 .ImmutableSampler = Sampler_None,
             },
         },
@@ -563,16 +562,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Graphics,
         .Layout = 
         {
-            .PushConstantRangeCount = 1,
-            .DescriptorSetCount = 9,
-            .PushConstantRanges = 
-            {
-                { 
-                    .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .ByteSize = sizeof(m4) + sizeof(renderer_material),
-                    .ByteOffset = 0, 
-                },
-            },
+            .PushConstantRangeCount = 0,
+            .DescriptorSetCount = 10,
+            .PushConstantRanges = {},
             .DescriptorSets = 
             {
                 SetLayout_DefaultSamplerPS, // Texture sampler
@@ -584,6 +576,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
                 SetLayout_StructuredBuffer, // LightBuffer
                 SetLayout_StructuredBuffer, // TileBuffer
                 SetLayout_PointShadows,
+                SetLayout_StructuredBuffer, // InstanceBuffer
             },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
@@ -618,21 +611,15 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Graphics,
         .Layout = 
         {
-            .PushConstantRangeCount = 1,
-            .DescriptorSetCount = 3,
-            .PushConstantRanges = 
-            {
-                { 
-                    .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .ByteSize = sizeof(m4) + sizeof(renderer_material),
-                    .ByteOffset = 0, 
-                },
-            },
+            .PushConstantRangeCount = 0,
+            .DescriptorSetCount = 4,
+            .PushConstantRanges = {},
             .DescriptorSets = 
             {
                 SetLayout_DefaultSamplerPS,
                 SetLayout_BindlessTexturesPS,
                 SetLayout_PerFrameUniformData,
+                SetLayout_StructuredBuffer,
             },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
@@ -668,12 +655,12 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Layout = 
         {
             .PushConstantRangeCount = 1,
-            .DescriptorSetCount = 3,
+            .DescriptorSetCount = 4,
             .PushConstantRanges = 
             {
                 { 
                     .Stages = PipelineStage_VS|PipelineStage_PS, 
-                    .ByteSize = sizeof(m4) + sizeof(renderer_material) + sizeof(u32),
+                    .ByteSize = sizeof(u32),
                     .ByteOffset = 0, 
                 },
             },
@@ -682,6 +669,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
                 SetLayout_DefaultSamplerPS,
                 SetLayout_BindlessTexturesPS,
                 SetLayout_PerFrameUniformData,
+                SetLayout_StructuredBuffer,
             },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
@@ -717,12 +705,12 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Layout = 
         {
             .PushConstantRangeCount = 1,
-            .DescriptorSetCount = 3,
+            .DescriptorSetCount = 4,
             .PushConstantRanges = 
             {
                 {
                     .Stages = PipelineStage_VS|PipelineStage_PS,
-                    .ByteSize = sizeof(m4) + sizeof(renderer_material) + sizeof(u32),
+                    .ByteSize = sizeof(u32),
                     .ByteOffset = 0,
                 },
             },
@@ -731,6 +719,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
                 SetLayout_DefaultSamplerPS,
                 SetLayout_BindlessTexturesPS,
                 SetLayout_PerFrameUniformData,
+                SetLayout_StructuredBuffer,
             },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,

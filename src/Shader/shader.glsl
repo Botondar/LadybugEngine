@@ -2,15 +2,16 @@
 
 #include "common.glsli"
 
-layout(set = 2, binding = 0, scalar) uniform PerFrameBlock
+layout(set = 2, binding = 0, scalar) 
+uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
 
-layout(push_constant) uniform PushConstants
+layout(set = 9, binding = 0, scalar)
+buffer InstanceBuffer
 {
-    mat4 ModelTransform;
-    renderer_material Material;
+    instance_data Instances[];
 };
 
 #if defined(VS)
@@ -30,19 +31,23 @@ layout(location = 3) out vec3 T;
 layout(location = 4) out vec3 B;
 layout(location = 5) out vec3 ShadowP;
 layout(location = 6) out vec3 CascadeBlends;
+layout(location = 7) out flat uint InstanceIndex;
 
 void main()
 {
-    vec3 WorldP = TransformPoint(ModelTransform, aP);
+    instance_data Instance = Instances[gl_InstanceIndex];
+    vec3 WorldP = TransformPoint(Instance.Transform, aP);
     TexCoord = aTexCoord;
     P = TransformPoint(PerFrame.ViewTransform, WorldP);
-    N = normalize(mat3(PerFrame.ViewTransform) * (aN * inverse(mat3(ModelTransform))));
-    T = normalize((mat3(PerFrame.ViewTransform) * (mat3(ModelTransform) * aT.xyz)));
+    N = normalize(mat3(PerFrame.ViewTransform) * (aN * inverse(mat3(Instance.Transform))));
+    T = normalize((mat3(PerFrame.ViewTransform) * (mat3(Instance.Transform) * aT.xyz)));
     B = normalize(cross(T, N)) * aT.w;
 
     ShadowP = TransformPoint(PerFrame.CascadeViewProjections[0], WorldP);
     ShadowP.xy = 0.5 * ShadowP.xy + v2(0.5);
     CascadeBlends = GetCascadeBlends(PerFrame.CascadeMinDistances, PerFrame.CascadeMaxDistances, P.z);
+
+    InstanceIndex = gl_InstanceIndex;
 
     gl_Position = PerFrame.ViewProjectionTransform * v4(WorldP, 1.0);
 }
@@ -75,6 +80,7 @@ layout(location = 3) in vec3 InT;
 layout(location = 4) in vec3 InB;
 layout(location = 5) in vec3 ShadowP;
 layout(location = 6) in vec3 ShadowBlends;
+layout(location = 7) in flat uint InstanceIndex;
 
 layout(location = 0) out vec4 Out0;
 
@@ -128,20 +134,22 @@ void main()
     uint TileIndex = TileX + TileY * PerFrame.TileCount.x;
 
     {
-        vec4 BaseColor = UnpackRGBA8(Material.DiffuseColor);
-        vec4 BaseMetallicRoughness = UnpackRGBA8(Material.BaseMaterial);
-        vec4 Albedo = BaseColor * texture(sampler2D(Textures[Material.DiffuseID], Sampler), TexCoord);
+        instance_data Instance = Instances[InstanceIndex];
+
+        vec4 BaseColor = UnpackRGBA8(Instance.Material.DiffuseColor);
+        vec4 BaseMetallicRoughness = UnpackRGBA8(Instance.Material.BaseMaterial);
+        vec4 Albedo = BaseColor * texture(sampler2D(Textures[Instance.Material.DiffuseID], Sampler), TexCoord);
         {
             float ScreenSpaceOcclusion = textureLod(OcclusionBuffer, gl_FragCoord.xy, 0).r;
             vec3 Ambient = PerFrame.Ambience * Albedo.rgb * ScreenSpaceOcclusion;
-            Lo += Ambient + Material.Emissive;
+            Lo += Ambient + Instance.Material.Emissive;
         }
 
         vec3 Normal;
-        Normal.xy = texture(sampler2D(Textures[Material.NormalID], Sampler), TexCoord).xy;
+        Normal.xy = texture(sampler2D(Textures[Instance.Material.NormalID], Sampler), TexCoord).xy;
         Normal.xy = 2.0 * Normal.xy - vec2(1.0);
         Normal.z = sqrt(1.0 - dot(Normal.xy, Normal.xy));
-        vec4 MetallicRoughness = texture(sampler2D(Textures[Material.MetallicRoughnessID], Sampler), TexCoord);
+        vec4 MetallicRoughness = texture(sampler2D(Textures[Instance.Material.MetallicRoughnessID], Sampler), TexCoord);
         float Roughness = MetallicRoughness.g * BaseMetallicRoughness.g;
         float Metallic = MetallicRoughness.b * BaseMetallicRoughness.b;
 

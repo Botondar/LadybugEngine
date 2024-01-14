@@ -617,13 +617,6 @@ struct particle_cmd
     billboard_mode Mode;
 };
 
-// TODO(boti): Rename this. we'd probably want pipeline-specific push constant types
-struct alignas(4) push_constants
-{
-    m4 Transform;
-    renderer_material Material;
-};
-
 // NOTE(boti): binary-compatible with Vulkan/D3D12
 struct draw_indirect_cmd
 {

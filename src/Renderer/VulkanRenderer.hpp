@@ -170,6 +170,10 @@ struct renderer
     VkDeviceMemory TileMemory;
     VkBuffer TileBuffer;
 
+    umm InstanceMemorySize;
+    VkDeviceMemory InstanceMemory;
+    VkBuffer InstanceBuffer;
+
     VkSemaphore ImageAcquiredSemaphores[R_MaxFramesInFlight];
     VkFence ImageAcquiredFences[R_MaxFramesInFlight];
     VkSemaphore TimelineSemaphore;

@@ -159,3 +159,9 @@ struct renderer_material
     renderer_texture_id NormalID;
     renderer_texture_id MetallicRoughnessID;
 };
+
+struct instance_data
+{
+    m4 Transform;
+    renderer_material Material;
+};
