@@ -3222,7 +3222,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     {
         vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Shading");
 
-        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Simple];
+        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_ShadingForward];
         vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
         vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                 0, CountOf(DescriptorSets), DescriptorSets,

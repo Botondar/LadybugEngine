@@ -556,9 +556,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     // None pipeline
     [Pipeline_None] = {},
 
-    [Pipeline_Simple] =
+    [Pipeline_ShadingForward] =
     {
-        .Name = "shader",
+        .Name = "shading_forward",
         .Type = PipelineType_Graphics,
         .Layout = 
         {
