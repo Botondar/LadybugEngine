@@ -164,6 +164,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                 {
                     .robustBufferAccess = VK_TRUE,
                     .fullDrawIndexUint32 = VK_TRUE,
+                    .geometryShader = VK_TRUE,
                     .multiDrawIndirect = VK_TRUE,
                     .drawIndirectFirstInstance = VK_TRUE,
                     .depthClamp = VK_TRUE,

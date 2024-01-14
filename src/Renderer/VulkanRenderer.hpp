@@ -107,6 +107,7 @@ struct renderer
     render_target* HDRRenderTarget;
     render_target* BloomTarget;
     render_target* OcclusionBuffers[2];
+    render_target* VisibilityBuffer;
 
     struct render_debug
     {

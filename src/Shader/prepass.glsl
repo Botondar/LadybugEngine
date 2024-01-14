@@ -40,7 +40,8 @@ void main()
 layout(set = 0, binding = 0) uniform sampler Sampler;
 layout(set = 1, binding = 0) uniform texture2D Textures[];
 
-layout(location = 0) out vec4 StructureOut;
+layout(location = 0) out v2u VisibilityOut;
+layout(location = 1) out vec4 StructureOut;
 
 vec4 StructureEncode(in float z)
 {
@@ -54,6 +55,7 @@ vec4 StructureEncode(in float z)
 void main()
 {
     instance_data Instance = Instances[InstanceIndex];
+    VisibilityOut = v2u(InstanceIndex, gl_PrimitiveID);
     StructureOut = StructureEncode(ViewP.z);
     vec4 Albedo = texture(sampler2D(Textures[Instance.Material.DiffuseID], Sampler), TexCoord);
     if (Albedo.a < R_AlphaTestThreshold)
