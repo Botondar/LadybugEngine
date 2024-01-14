@@ -187,10 +187,9 @@ internal VkResult
 CreatePipelines(renderer* Renderer);
 
 internal void 
-DrawMeshes(render_frame* Frame, 
-           VkCommandBuffer CmdBuffer, 
-           VkPipelineLayout PipelineLayout, 
-           const frustum* Frustum);
+DrawMeshes(render_frame* Frame,
+           VkCommandBuffer CmdBuffer,
+           frustum* Frustum);
 
 internal VkMemoryRequirements 
 GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInfo)
@@ -1735,10 +1734,9 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
 #undef ReturnOnFailure
 
 internal void 
-DrawMeshes(render_frame* Frame, 
-           VkCommandBuffer CmdBuffer, 
-           VkPipelineLayout PipelineLayout, 
-           const frustum* Frustum)
+DrawMeshes(render_frame* Frame,
+           VkCommandBuffer CmdBuffer,
+           frustum* Frustum)
 {
     const VkDeviceSize ZeroOffset = 0;
     vkCmdBindIndexBuffer(CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
@@ -2756,7 +2754,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                 3, 1, &InstanceBufferDescriptorSet,
                                 0, nullptr);
-        DrawMeshes(Frame, PrepassCmd, Pipeline.Layout, &Frame->CameraFrustum);
+        DrawMeshes(Frame, PrepassCmd, &Frame->CameraFrustum);
     }
     EndPrepass(Frame, PrepassCmd);
 
@@ -2982,7 +2980,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Layout,
                                     3, 1, &InstanceBufferDescriptorSet,
                                     0, nullptr);
-            DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout, CascadeFrustums + CascadeIndex);
+            DrawMeshes(Frame, ShadowCmd, CascadeFrustums + CascadeIndex);
 
             EndCascade(Frame, ShadowCmd);
         }
@@ -3097,7 +3095,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 u32 Index = 6*ShadowIndex + LayerIndex;
                 vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                    0, sizeof(Index), &Index);
-                DrawMeshes(Frame, ShadowCmd, ShadowPipeline.Layout, ShadowFrustums + Index);
+                DrawMeshes(Frame, ShadowCmd, ShadowFrustums + Index);
 
                 vkCmdEndRendering(ShadowCmd);
             }
@@ -3233,7 +3231,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                 9, 1, &InstanceBufferDescriptorSet,
                                 0, nullptr);
         // TOOD(boti): We're doing frustum culling twice here (first one is the prepass)
-        DrawMeshes(Frame, RenderCmd, Pipeline.Layout, &Frame->CameraFrustum);
+        DrawMeshes(Frame, RenderCmd, &Frame->CameraFrustum);
 
         vkCmdEndDebugUtilsLabelEXT(RenderCmd);
 
