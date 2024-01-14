@@ -14,16 +14,16 @@ buffer InstanceBuffer
     instance_data Instances[];
 };
 
+interpolant(0) vec2 TexCoord;
+interpolant(1) vec3 ViewP;
+interpolant(2) flat uint InstanceIndex;
+
 #if defined(VS)
 
 invariant gl_Position;
 
 layout(location = Attrib_Position) in vec3 aP;
 layout(location = Attrib_TexCoord) in vec2 aTexCoord;
-
-layout(location = 0) out vec2 TexCoord;
-layout(location = 1) out vec3 ViewP;
-layout(location = 2) out flat uint InstanceIndex;
 
 void main()
 {
@@ -39,10 +39,6 @@ void main()
 
 layout(set = 0, binding = 0) uniform sampler Sampler;
 layout(set = 1, binding = 0) uniform texture2D Textures[];
-
-layout(location = 0) in vec2 TexCoord;
-layout(location = 1) in vec3 ViewP;
-layout(location = 2) in flat uint InstanceIndex;
 
 layout(location = 0) out vec4 StructureOut;
 

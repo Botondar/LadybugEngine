@@ -19,13 +19,13 @@ layout(push_constant) uniform PushConstants
     uint Index;
 };
 
+interpolant(0) vec2 TexCoord;
+interpolant(1) flat uint InstanceIndex;
+
 #if defined(VS)
 
 layout(location = Attrib_Position) in vec3 aP;
 layout(location = Attrib_TexCoord) in vec2 aTexCoord;
-
-layout(location = 0) out vec2 TexCoord;
-layout(location = 1) out flat uint InstanceIndex;
 
 void main()
 {
@@ -41,9 +41,6 @@ void main()
 
 layout(set = 0, binding = 0) uniform sampler Sampler;
 layout(set = 1, binding = 0) uniform texture2D Textures[];
-
-layout(location = 0) in vec2 TexCoord;
-layout(location = 1) in flat uint InstanceIndex;
 
 void main()
 {

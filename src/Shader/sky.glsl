@@ -7,6 +7,8 @@ layout(set = 0, binding = 0, scalar) uniform PerFrameBlock
     per_frame PerFrame;
 };
 
+interpolant(0) vec2 UV;
+
 #if defined(VS)
 
 const vec2 VertexData[] = 
@@ -15,8 +17,6 @@ const vec2 VertexData[] =
     vec2(+3.0, -1.0),
     vec2(-1.0, +3.0),
 };
-
-layout(location = 0) out vec2 UV;
 
 void main()
 {
@@ -28,8 +28,6 @@ void main()
 #elif defined(FS)
 
 layout(set = 1, binding = 0) uniform sampler2DArrayShadow ShadowSampler;
-
-layout(location = 0) in vec2 UV;
 
 layout(location = 0) out vec4 Out0;
 

@@ -13,6 +13,11 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
+interpolant(0) v2 TexCoord;
+interpolant(1) v4 ParticleColor;
+interpolant(2) flat uint ParticleTexture;
+interpolant(3) v3 ViewP;
+
 #if defined(VS)
 layout(push_constant) 
 uniform PushConstants
@@ -33,11 +38,6 @@ buffer VertexBlock
 {
     particle Particles[];
 };
-
-layout(location = 0) out v2 TexCoord;
-layout(location = 1) out v4 ParticleColor;
-layout(location = 2) out flat uint ParticleTexture;
-layout(location = 3) out v3 ViewP;
 
 void main()
 {
@@ -91,11 +91,6 @@ void main()
 
 layout(set = 2, binding = 0) uniform sampler2D StructureBuffer;
 layout(set = 3, binding = 0) uniform sampler2DArray Texture;
-
-layout(location = 0) in v2 TexCoord;
-layout(location = 1) in v4 ParticleColor;
-layout(location = 2) in flat uint ParticleTexture;
-layout(location = 3) in v3 ViewP;
 
 layout(location = 0) out v4 Target0;
 

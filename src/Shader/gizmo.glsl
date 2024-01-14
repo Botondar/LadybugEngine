@@ -15,14 +15,14 @@ layout(push_constant) uniform PushConstants
     uint iSrcColor;
 };
 
+interpolant(0) vec3 P;
+interpolant(1) vec3 N;
+interpolant(2) vec3 SrcColor;
+
 #if defined(VS)
 
 layout(location = 0) in vec3 aP;
 layout(location = 1) in vec3 aN;
-
-layout(location = 0) out vec3 P;
-layout(location = 1) out vec3 N;
-layout(location = 2) out vec3 SrcColor;
 
 void main()
 {
@@ -35,10 +35,6 @@ void main()
 }
 
 #elif defined(FS)
-
-layout(location = 0) in vec3 P;
-layout(location = 1) in vec3 N;
-layout(location = 2) in vec3 SrcColor;
 
 layout(location = 0) out vec4 OutColor;
 

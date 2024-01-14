@@ -7,6 +7,14 @@
 
 #define MieBetaFactor 21e-4
 
+#if defined(VS)
+#   define interpolant(n) layout(location = n) out
+#elif defined(FS)
+#   define interpolant(n) layout(location = n) in
+#else
+#   define interpolant(n)
+#endif
+
 //
 // Common
 //

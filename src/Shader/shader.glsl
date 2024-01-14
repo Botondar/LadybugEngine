@@ -14,6 +14,15 @@ buffer InstanceBuffer
     instance_data Instances[];
 };
 
+interpolant(0) vec3 P;
+interpolant(1) vec2 TexCoord;
+interpolant(2) vec3 TriN;
+interpolant(3) vec3 TriT;
+interpolant(4) vec3 TriB;
+interpolant(5) vec3 ShadowP;
+interpolant(6) vec3 CascadeBlends;
+interpolant(7) flat uint InstanceIndex;
+
 #if defined(VS)
 
 invariant gl_Position;
@@ -24,24 +33,15 @@ layout(location = Attrib_TangentSign)   in vec4 aT;
 layout(location = Attrib_TexCoord)      in vec2 aTexCoord;
 layout(location = Attrib_Color)         in vec4 aColor;
 
-layout(location = 0) out vec3 P;
-layout(location = 1) out vec2 TexCoord;
-layout(location = 2) out vec3 N;
-layout(location = 3) out vec3 T;
-layout(location = 4) out vec3 B;
-layout(location = 5) out vec3 ShadowP;
-layout(location = 6) out vec3 CascadeBlends;
-layout(location = 7) out flat uint InstanceIndex;
-
 void main()
 {
     instance_data Instance = Instances[gl_InstanceIndex];
     vec3 WorldP = TransformPoint(Instance.Transform, aP);
     TexCoord = aTexCoord;
     P = TransformPoint(PerFrame.ViewTransform, WorldP);
-    N = normalize(mat3(PerFrame.ViewTransform) * (aN * inverse(mat3(Instance.Transform))));
-    T = normalize((mat3(PerFrame.ViewTransform) * (mat3(Instance.Transform) * aT.xyz)));
-    B = normalize(cross(T, N)) * aT.w;
+    TriN = normalize(mat3(PerFrame.ViewTransform) * (aN * inverse(mat3(Instance.Transform))));
+    TriT = normalize((mat3(PerFrame.ViewTransform) * (mat3(Instance.Transform) * aT.xyz)));
+    TriB = normalize(cross(TriT, TriN)) * aT.w;
 
     ShadowP = TransformPoint(PerFrame.CascadeViewProjections[0], WorldP);
     ShadowP.xy = 0.5 * ShadowP.xy + v2(0.5);
@@ -72,15 +72,6 @@ readonly buffer TileBuffer
 };
 
 layout(set = 8, binding = 0) uniform samplerCubeShadow PointShadows[];
-
-layout(location = 0) in vec3 P;
-layout(location = 1) in vec2 TexCoord;
-layout(location = 2) in vec3 InN;
-layout(location = 3) in vec3 InT;
-layout(location = 4) in vec3 InB;
-layout(location = 5) in vec3 ShadowP;
-layout(location = 6) in vec3 ShadowBlends;
-layout(location = 7) in flat uint InstanceIndex;
 
 layout(location = 0) out vec4 Out0;
 
@@ -154,15 +145,15 @@ void main()
         float Metallic = MetallicRoughness.b * BaseMetallicRoughness.b;
 
         mat3 TBN = mat3(
-            normalize(InT),
-            normalize(InB),
-            normalize(InN));
+            normalize(TriT),
+            normalize(TriB),
+            normalize(TriN));
         vec3 N = TBN * Normal;
 
         vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);
         vec3 DiffuseBase = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb;
 
-        float SunShadow = CalculateShadow(ShadowP, ShadowBlends);
+        float SunShadow = CalculateShadow(ShadowP, CascadeBlends);
         Lo += CalculateOutgoingLuminance(SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
                                          DiffuseBase, F0, Roughness);
 
