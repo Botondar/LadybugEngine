@@ -20,7 +20,7 @@ internal bool CreateGeometryMemory(geometry_memory* Memory, geometry_buffer_type
         case geometry_buffer_type::Index:
         {
             Stride = sizeof(vert_index);
-            Usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+            Usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         } break;
         InvalidDefaultCase;
     }
