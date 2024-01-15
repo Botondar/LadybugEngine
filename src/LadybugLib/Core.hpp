@@ -193,7 +193,7 @@ inline void RestoreArena(memory_arena* Arena, memory_arena_checkpoint Checkpoint
 inline void ResetArena(memory_arena* Arena);
 
 #define PushStruct(Arena, Flags, Type) (Type*)PushSize_(Arena, Flags, sizeof(Type), alignof(Type))
-#define PushArray(Arena, Flags, Type, Count) (Type*)PushSize_(Arena, Flags, (umm)Count * sizeof(Type), alignof(Type))
+#define PushArray(Arena, Flags, Type, Count) (Type*)PushSize_(Arena, Flags, (umm)(Count) * sizeof(Type), alignof(Type))
 inline void* PushSize_(memory_arena* Arena, memory_push_flags Flags, umm Size, umm Alignment);
 
 #define DList_Initialize(pSentinel, Next, Prev) \
