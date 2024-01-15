@@ -186,11 +186,6 @@ ResizeRenderTargets(renderer* Renderer, b32 Forced);
 internal VkResult 
 CreatePipelines(renderer* Renderer);
 
-internal void 
-DrawMeshes(render_frame* Frame,
-           VkCommandBuffer CmdBuffer,
-           frustum* Frustum);
-
 internal VkMemoryRequirements 
 GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInfo)
 {
@@ -209,8 +204,9 @@ GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInf
     return(Result);
 }
 
-internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTypes, size_t Size, 
-                                          VkBuffer* pBuffer, VkDeviceMemory* pMemory)
+internal VkResult CreateDedicatedBuffer(
+    VkBufferUsageFlags Usage, u32 MemoryTypes, 
+    umm Size, VkBuffer* pBuffer, VkDeviceMemory* pMemory)
 {
     VkResult Result = VK_SUCCESS;
 
@@ -226,16 +222,12 @@ internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTy
         .pQueueFamilyIndices = nullptr,
     };
 
-    VkBuffer Buffer = VK_NULL_HANDLE;
-    if ((Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Buffer)) == VK_SUCCESS)
+    VkMemoryRequirements MemoryRequirements = GetBufferMemoryRequirements(VK.Device, &BufferInfo);
+    u32 MemoryTypeIndex;
+    if (BitScanForward(&MemoryTypeIndex, MemoryTypes & MemoryRequirements.memoryTypeBits))
     {
-        VkMemoryRequirements MemoryRequirements = {};
-        vkGetBufferMemoryRequirements(VK.Device, Buffer, &MemoryRequirements);
-        Assert(MemoryRequirements.size == Size);
-        MemoryTypes &= MemoryRequirements.memoryTypeBits;
-
-        u32 MemoryTypeIndex;
-        if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
+        VkBuffer Buffer = VK_NULL_HANDLE;
+        if ((Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Buffer)) == VK_SUCCESS)
         {
             VkMemoryAllocateInfo AllocInfo = 
             {
@@ -244,7 +236,7 @@ internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTy
                 .allocationSize = Size,
                 .memoryTypeIndex = MemoryTypeIndex,
             };
-
+            
             VkDeviceMemory Memory = VK_NULL_HANDLE;
             if ((Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Memory)) == VK_SUCCESS)
             {
@@ -256,12 +248,15 @@ internal VkResult CreateAndAllocateBuffer(VkBufferUsageFlags Usage, u32 MemoryTy
                     Memory = VK_NULL_HANDLE;
                 }
             }
-
+            
             vkFreeMemory(VK.Device, Memory, nullptr);
         }
+        vkDestroyBuffer(VK.Device, Buffer, nullptr);
     }
-
-    vkDestroyBuffer(VK.Device, Buffer, nullptr);
+    else
+    {
+        Result = VK_ERROR_UNKNOWN; // TODO
+    }
     return Result;
 }
 
@@ -1104,7 +1099,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
 
         // Vertex stack
         {
-            umm Size = MiB(8);
+            umm Size = MiB(2);
             for (u32 i = 0; i < R_MaxFramesInFlight; i++)
             {
                 b32 PushResult = PushBuffer(&Renderer->BARMemory, Size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
@@ -1198,169 +1193,30 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         }
     }
 
-    // Skinning buffer
-    {
-        VkBufferCreateInfo BufferInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .size = R_SkinningBufferSize,
-            .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = 0,
-            .pQueueFamilyIndices = nullptr,
-        };
-
-        VkMemoryRequirements MemoryRequirements = GetBufferMemoryRequirements(VK.Device, &BufferInfo);
-        u32 MemoryTypes = MemoryRequirements.memoryTypeBits & VK.GPUMemTypes;
-        u32 MemoryTypeIndex = 0;
-        if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
-        {
-            VkMemoryAllocateInfo AllocInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                .pNext = nullptr,
-                .allocationSize = MemoryRequirements.size,
-                .memoryTypeIndex = MemoryTypeIndex,
-            };
-
-            Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->SkinningMemory);
-            ReturnOnFailure();
-            Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->SkinningBuffer);
-            ReturnOnFailure();
-            Result = vkBindBufferMemory(VK.Device, Renderer->SkinningBuffer, Renderer->SkinningMemory, 0);
-            ReturnOnFailure();
-            Renderer->SkinningMemorySize = MemoryRequirements.size;
-        }
-        else
-        {
-            return(0);
-        }
-    }
+    Renderer->SkinningMemorySize = R_SkinningBufferSize;
+    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK.GPUMemTypes, 
+                                   Renderer->SkinningMemorySize, &Renderer->SkinningBuffer, &Renderer->SkinningMemory);
+    ReturnOnFailure();
     
-    // Light buffer
-    {
-        VkBufferCreateInfo BufferInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .size = R_MaxLightCount * sizeof(light),
-            .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = 0,
-            .pQueueFamilyIndices = nullptr,
-        };
+    Renderer->LightBufferMemorySize = R_MaxLightCount * sizeof(light);
+    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
+                                   Renderer->LightBufferMemorySize, &Renderer->LightBuffer, &Renderer->LightBufferMemory);
+    ReturnOnFailure();
+    
+    Renderer->TileMemorySize = sizeof(screen_tile) * R_MaxTileCountX * R_MaxTileCountY;
+    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
+                                   Renderer->TileMemorySize, &Renderer->TileBuffer, &Renderer->TileMemory);
+    ReturnOnFailure();
 
-        VkMemoryRequirements MemoryRequirements = GetBufferMemoryRequirements(VK.Device, &BufferInfo);
-        u32 MemoryTypes = MemoryRequirements.memoryTypeBits & VK.GPUMemTypes;
-        u32 MemoryTypeIndex = 0;
-        if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
-        {
-            VkMemoryAllocateInfo AllocInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                .pNext = nullptr,
-                .allocationSize = MemoryRequirements.size,
-                .memoryTypeIndex = MemoryTypeIndex,
-            };
+    Renderer->InstanceMemorySize = MiB(64);
+    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
+                                   Renderer->InstanceMemorySize, &Renderer->InstanceBuffer, &Renderer->InstanceMemory);
+    ReturnOnFailure();
 
-            Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->LightBufferMemory);
-            ReturnOnFailure();
-            Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->LightBuffer);
-            ReturnOnFailure();
-            Result = vkBindBufferMemory(VK.Device, Renderer->LightBuffer, Renderer->LightBufferMemory, 0);
-            ReturnOnFailure();
-            Renderer->LightBufferMemorySize = MemoryRequirements.size;
-        }
-        else
-        {
-            return(0);
-        }
-    }
-
-    // Tile buffer
-    {
-        VkBufferCreateInfo BufferInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .size = sizeof(screen_tile) * R_MaxTileCountX * R_MaxTileCountY,
-            .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = 0,
-            .pQueueFamilyIndices = nullptr,
-        };
-
-        VkMemoryRequirements MemoryRequirements = GetBufferMemoryRequirements(VK.Device, &BufferInfo);
-        u32 MemoryTypes = MemoryRequirements.memoryTypeBits & VK.GPUMemTypes;
-        u32 MemoryTypeIndex = 0;
-        if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
-        {
-            VkMemoryAllocateInfo AllocInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                .pNext = nullptr,
-                .allocationSize = MemoryRequirements.size,
-                .memoryTypeIndex = MemoryTypeIndex,
-            };
-
-            Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->TileMemory);
-            ReturnOnFailure();
-            Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->TileBuffer);
-            ReturnOnFailure();
-            Result = vkBindBufferMemory(VK.Device, Renderer->TileBuffer, Renderer->TileMemory, 0);
-            ReturnOnFailure();
-            Renderer->TileMemorySize = MemoryRequirements.size;
-        }
-        else
-        {
-            return(0);
-        }
-    }
-
-    // Instance buffer
-    {
-        Renderer->InstanceMemorySize = MiB(64);
-        VkBufferCreateInfo BufferInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .size = Renderer->InstanceMemorySize,
-            .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = 0,
-            .pQueueFamilyIndices = nullptr,
-        };
-
-        VkMemoryRequirements MemoryRequirements = GetBufferMemoryRequirements(VK.Device, &BufferInfo);
-        u32 MemoryTypes = MemoryRequirements.memoryTypeBits & VK.GPUMemTypes;
-        u32 MemoryTypeIndex = 0;
-        if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
-        {
-            VkMemoryAllocateInfo AllocInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                .pNext = nullptr,
-                .allocationSize = MemoryRequirements.size,
-                .memoryTypeIndex = MemoryTypeIndex,
-            };
-
-            Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->InstanceMemory);
-            ReturnOnFailure();
-            Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->InstanceBuffer);
-            ReturnOnFailure();
-            Result = vkBindBufferMemory(VK.Device, Renderer->InstanceBuffer, Renderer->InstanceMemory, 0);
-            ReturnOnFailure();
-        }
-        else
-        {
-            return(0);
-        }
-    }
+    Renderer->DrawMemorySize = MiB(128);
+    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK.GPUMemTypes,
+                                   Renderer->DrawMemorySize, &Renderer->DrawBuffer, &Renderer->DrawMemory);
+    ReturnOnFailure();
 
     // Shadow storage
     {
@@ -1734,36 +1590,31 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
 #undef ReturnOnFailure
 
 internal void 
-DrawMeshes(render_frame* Frame,
-           VkCommandBuffer CmdBuffer,
-           frustum* Frustum)
+DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, draw_list* List)
 {
-    const VkDeviceSize ZeroOffset = 0;
-    vkCmdBindIndexBuffer(CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
-    vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &Frame->Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
-    
-    for (u32 CmdIndex = 0; CmdIndex < Frame->DrawCmdCount; CmdIndex++)
+    vkCmdBindIndexBuffer(CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, 0, VK_INDEX_TYPE_UINT32);
+
+    umm CurrentOffset = 0;
+    for (u32 Group = 0; Group < DrawGroup_Count; Group++)
     {
-        draw_cmd* Cmd = Frame->DrawCmds + CmdIndex;
-    
-        b32 IsVisible = true;
-        if (Frustum)
+        VkBuffer VertexBuffer = VK_NULL_HANDLE;
+        switch (Group)
         {
-            IsVisible = IntersectFrustumBox(Frustum, Cmd->BoundingBox, Cmd->Transform);
+            case DrawGroup_Opaque:
+            {
+                VertexBuffer = Frame->Renderer->GeometryBuffer.VertexMemory.Buffer;
+            } break;
+            case DrawGroup_Skinned:
+            {
+                VertexBuffer = Frame->Renderer->SkinningBuffer;
+            } break;
+            InvalidDefaultCase;
         }
-    
-        if (IsVisible)
-        {
-            vkCmdDrawIndexed(CmdBuffer, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
-        }
-    
-    }
-    
-    vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &Frame->Backend->SkinnedMeshVB, &ZeroOffset);
-    for (u32 CmdIndex = 0; CmdIndex < Frame->SkinnedDrawCmdCount; CmdIndex++)
-    {
-        draw_cmd* Cmd = Frame->SkinnedDrawCmds + CmdIndex;
-        vkCmdDrawIndexed(CmdBuffer, Cmd->Base.IndexCount, 1, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
+
+        VkDeviceSize ZeroOffset = 0;
+        vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &VertexBuffer, &ZeroOffset);
+        vkCmdDrawIndexedIndirect(CmdBuffer, Frame->Renderer->DrawBuffer, List->DrawBufferOffset + CurrentOffset, List->DrawGroupDrawCounts[Group], sizeof(VkDrawIndexedIndirectCommand));
+        CurrentOffset += List->DrawGroupDrawCounts[Group] * sizeof(VkDrawIndexedIndirectCommand);
     }
 }
 
@@ -1856,7 +1707,6 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
 
         Frame->MaxSkinnedVertexCount = TruncateU64ToU32(R_SkinningBufferSize / sizeof(vertex));
         Frame->SkinnedMeshVertexCount = 0;
-        Frame->Backend->SkinnedMeshVB = Renderer->SkinningBuffer;
     }
 
     Frame->RenderWidth = Renderer->SurfaceExtent.width;
@@ -2318,7 +2168,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         umm InstanceDataByteCount = (umm)TotalDrawCount * sizeof(instance_data);
         Assert(InstanceDataByteCount <= Renderer->InstanceMemorySize);
 
-        // TODO(boti): Align StagingBufferAt here?
+        Frame->StagingBufferAt = Align(Frame->StagingBufferAt, alignof(instance_data));
+        Assert(Frame->StagingBufferAt <= Frame->StagingBufferSize);
         Assert(InstanceDataByteCount <= (Frame->StagingBufferSize - Frame->StagingBufferAt));
         umm SourceOffset = Frame->StagingBufferAt;
         Frame->StagingBufferAt += InstanceDataByteCount;
@@ -2524,6 +2375,174 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     frustum CascadeFrustums[R_MaxShadowCascadeCount];
     SetupSceneRendering(Frame, CascadeFrustums);
 
+    //
+    // Build draw lists and upload draw data
+    //
+    draw_list PrimaryDrawList = {};
+    draw_list CascadeDrawLists[R_MaxShadowCascadeCount] = {};
+    draw_list* ShadowDrawLists = PushArray(Frame->Arena, MemPush_Clear, draw_list, 6 * Frame->ShadowCount);
+    u32 DrawListCount = 1 + R_MaxShadowCascadeCount + 6 * Frame->ShadowCount;
+
+    {
+        Frame->StagingBufferAt = Align(Frame->StagingBufferAt, alignof(VkDrawIndexedIndirectCommand));
+        Assert(Frame->StagingBufferAt <= Frame->StagingBufferSize);
+        umm MaxDrawCountPerDrawList = Frame->DrawCmdCount + Frame->SkinnedDrawCmdCount;
+        umm MaxMemorySizePerDrawList = sizeof(VkDrawIndexedIndirectCommand) * MaxDrawCountPerDrawList;
+        umm CopySrcAt = Frame->StagingBufferAt;
+        umm DrawBufferAt = 0;
+        umm TotalDrawCount = 0;
+
+        for (u32 DrawListIndex = 0; DrawListIndex < DrawListCount; DrawListIndex++)
+        {
+            frustum* Frustum = nullptr;
+            draw_list* DrawList = nullptr;
+            if (DrawListIndex == 0)
+            {
+                Frustum = &Frame->CameraFrustum;
+                DrawList = &PrimaryDrawList;
+            }
+            else if ((DrawListIndex - 1) < R_MaxShadowCascadeCount)
+            {
+                u32 Index = DrawListIndex - 1;
+                Frustum = CascadeFrustums + Index;
+                DrawList = CascadeDrawLists + Index;
+            }
+            else
+            {
+                u32 Index = (DrawListIndex - 1 - R_MaxShadowCascadeCount);
+                Frustum = ShadowFrustums + Index;
+                DrawList = ShadowDrawLists + Index;
+            }
+
+            if (((Frame->StagingBufferAt + MaxMemorySizePerDrawList) > Frame->StagingBufferSize) ||
+                ((DrawBufferAt + MaxMemorySizePerDrawList) > Renderer->DrawMemorySize))
+            {
+                UnimplementedCodePath;
+                break;
+            }
+
+            DrawList->DrawBufferOffset = DrawBufferAt;
+            VkDrawIndexedIndirectCommand* DstAt = (VkDrawIndexedIndirectCommand*)OffsetPtr(Frame->StagingBufferBase, Frame->StagingBufferAt);
+            umm TotalDrawCountPerList = 0;
+            for (u32 Group = 0; Group < DrawGroup_Count; Group++)
+            {
+                u32 CmdCount = 0;
+                draw_cmd* FirstCmd = nullptr;
+                switch (Group)
+                {
+                    case DrawGroup_Opaque: 
+                    {
+                        CmdCount = Frame->DrawCmdCount;
+                        FirstCmd = Frame->DrawCmds;
+                    } break;
+                    case DrawGroup_Skinned: 
+                    {
+                        CmdCount = Frame->SkinnedDrawCmdCount;
+                        FirstCmd = Frame->SkinnedDrawCmds;
+                    } break;
+                    InvalidDefaultCase;
+                }
+                
+                for (u32 CmdIndex = 0; CmdIndex < CmdCount; CmdIndex++)
+                {
+                    draw_cmd* Cmd = FirstCmd + CmdIndex;
+                    b32 IsVisible = true;
+
+                    // NOTE(boti): We don't have correct BBox information about skinned meshes,
+                    //             so those are never culled
+                    if (Frustum && (Group != DrawGroup_Skinned))
+                    {
+                        IsVisible = IntersectFrustumBox(Frustum, Cmd->BoundingBox, Cmd->Transform);
+                    }
+            
+                    if (IsVisible)
+                    {
+                        DrawList->DrawGroupDrawCounts[Group] += 1;
+                        *DstAt++ = 
+                        {
+                            .indexCount     = Cmd->Base.IndexCount,
+                            .instanceCount  = Cmd->Base.InstanceCount,
+                            .firstIndex     = Cmd->Base.IndexOffset,
+                            .vertexOffset   = (s32)Cmd->Base.VertexOffset,
+                            .firstInstance  = Cmd->Base.InstanceOffset,
+                        };
+                    }
+                }
+                
+                TotalDrawCountPerList += DrawList->DrawGroupDrawCounts[Group];
+            }
+            
+            TotalDrawCount += TotalDrawCountPerList;
+            umm MemorySize = TotalDrawCountPerList * sizeof(VkDrawIndexedIndirectCommand);
+            DrawBufferAt += MemorySize;
+            Frame->StagingBufferAt += MemorySize;
+        }
+
+        if (TotalDrawCount)
+        {
+            VkBufferCopy Copy =
+            {
+                .srcOffset = CopySrcAt,
+                .dstOffset = 0,
+                .size = TotalDrawCount * sizeof(VkDrawIndexedIndirectCommand),
+            };
+
+            VkBufferMemoryBarrier2 BeginBarriers[] = 
+            {
+                {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                    .srcAccessMask = VK_ACCESS_2_NONE,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .buffer = Renderer->DrawBuffer,
+                    .offset = 0,
+                    .size = VK_WHOLE_SIZE,
+                },
+            };
+            VkDependencyInfo BeginDependency = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext = nullptr,
+                .dependencyFlags = 0,
+                .bufferMemoryBarrierCount = CountOf(BeginBarriers),
+                .pBufferMemoryBarriers = BeginBarriers,
+            };
+            vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
+
+            vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->DrawBuffer, 1, &Copy);
+
+            VkBufferMemoryBarrier2 EndBarriers[] = 
+            {
+                {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .buffer = Renderer->DrawBuffer,
+                    .offset = 0,
+                    .size = VK_WHOLE_SIZE,
+                },
+            };
+            VkDependencyInfo EndDependency = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext = nullptr,
+                .dependencyFlags = 0,
+                .bufferMemoryBarrierCount = CountOf(EndBarriers),
+                .pBufferMemoryBarriers = EndBarriers,
+            };
+            vkCmdPipelineBarrier2(PrepassCmd, &EndDependency);
+        }
+    }
+
     VkDescriptorSet LightBufferDescriptorSet = PushBufferDescriptor(
         Frame, Renderer->SetLayouts[SetLayout_StructuredBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
         Renderer->LightBuffer, 0, VK_WHOLE_SIZE);
@@ -2599,7 +2618,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         .extent = { Frame->RenderWidth, Frame->RenderHeight },
     };
 
+    //
     // Skinning
+    //
     {
         vkCmdBeginDebugUtilsLabelEXT(PrepassCmd, "Skinning");
         VkDescriptorSet JointDescriptorSet = 
@@ -2617,7 +2638,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .range = VK_WHOLE_SIZE,
             },
             {
-                .buffer = Frame->Backend->SkinnedMeshVB,
+                .buffer = Frame->Renderer->SkinningBuffer,
                 .offset = 0,
                 .range = VK_WHOLE_SIZE,
             },
@@ -2664,7 +2685,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Frame->Backend->SkinnedMeshVB,
+                .buffer = Frame->Renderer->SkinningBuffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE,
             },
@@ -2710,7 +2731,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Frame->Backend->SkinnedMeshVB,
+                .buffer = Frame->Renderer->SkinningBuffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE,
             },
@@ -2754,7 +2775,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
                                 3, 1, &InstanceBufferDescriptorSet,
                                 0, nullptr);
-        DrawMeshes(Frame, PrepassCmd, &Frame->CameraFrustum);
+        DrawList(Frame, PrepassCmd, &PrimaryDrawList);
     }
     EndPrepass(Frame, PrepassCmd);
 
@@ -2802,8 +2823,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                Renderer->Pipelines[Pipeline_SSAOBlur].Pipeline, 
                Renderer->Pipelines[Pipeline_SSAOBlur].Layout, 
                Renderer->SetLayouts[SetLayout_SSAOBlur]);
-
+    //
     // Light binning
+    //
     {
         vkCmdBeginDebugUtilsLabelEXT(PreLightCmd, "Light binning");
 
@@ -2944,7 +2966,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     vkBeginCommandBuffer(ShadowCmd, &CmdBufferBegin);
 
+    //
     // Cascaded shadows
+    //
     {
         vkCmdBeginDebugUtilsLabelEXT(ShadowCmd, "CSM");
 
@@ -2980,7 +3004,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Layout,
                                     3, 1, &InstanceBufferDescriptorSet,
                                     0, nullptr);
-            DrawMeshes(Frame, ShadowCmd, CascadeFrustums + CascadeIndex);
+            DrawList(Frame, ShadowCmd, CascadeDrawLists + CascadeIndex);
 
             EndCascade(Frame, ShadowCmd);
         }
@@ -2988,7 +3012,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdEndDebugUtilsLabelEXT(ShadowCmd);
     }
 
+    //
     // Point shadows
+    //
     {
         vkCmdBeginDebugUtilsLabelEXT(ShadowCmd, "Point shadows");
 
@@ -3095,7 +3121,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 u32 Index = 6*ShadowIndex + LayerIndex;
                 vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                                    0, sizeof(Index), &Index);
-                DrawMeshes(Frame, ShadowCmd, ShadowFrustums + Index);
+                DrawList(Frame, ShadowCmd, ShadowDrawLists + Index);
 
                 vkCmdEndRendering(ShadowCmd);
             }
@@ -3230,8 +3256,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
                                 9, 1, &InstanceBufferDescriptorSet,
                                 0, nullptr);
-        // TOOD(boti): We're doing frustum culling twice here (first one is the prepass)
-        DrawMeshes(Frame, RenderCmd, &Frame->CameraFrustum);
+        DrawList(Frame, RenderCmd, &PrimaryDrawList);
 
         vkCmdEndDebugUtilsLabelEXT(RenderCmd);
 

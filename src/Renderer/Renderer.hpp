@@ -570,6 +570,14 @@ struct render_config
     static constexpr f32 DefaultBloomStrength = 0.1f;
 };
 
+enum draw_group : u32
+{
+    DrawGroup_Opaque = 0,
+    DrawGroup_Skinned,
+
+    DrawGroup_Count,
+};
+
 typedef u32 vert_index;
 
 struct vertex

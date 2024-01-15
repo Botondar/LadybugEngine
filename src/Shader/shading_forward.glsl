@@ -36,7 +36,7 @@ layout(location = Attrib_Color)         in vec4 aColor;
 void main()
 {
     instance_data Instance = Instances[gl_InstanceIndex];
-    vec3 WorldP = TransformPoint(Instance.Transform, aP);
+    precise vec3 WorldP = TransformPoint(Instance.Transform, aP);
     TexCoord = aTexCoord;
     P = TransformPoint(PerFrame.ViewTransform, WorldP);
     TriN = normalize(mat3(PerFrame.ViewTransform) * (aN * inverse(mat3(Instance.Transform))));

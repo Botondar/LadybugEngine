@@ -37,6 +37,12 @@ extern m3 GlobalCubeFaceBases[Layer_Count];
 
 extern vulkan VK;
 
+struct draw_list
+{
+    u32 DrawGroupDrawCounts[DrawGroup_Count];
+    umm DrawBufferOffset;
+};
+
 struct point_shadow_map
 {
     VkImage Image;
@@ -76,7 +82,6 @@ struct backend_render_frame
     VkBuffer UniformBuffer;
     VkBuffer ParticleBuffer;
     VkBuffer JointBuffer;
-    VkBuffer SkinnedMeshVB;
     VkBuffer Vertex2DBuffer;
 };
 
@@ -174,6 +179,10 @@ struct renderer
     umm InstanceMemorySize;
     VkDeviceMemory InstanceMemory;
     VkBuffer InstanceBuffer;
+
+    umm DrawMemorySize;
+    VkDeviceMemory DrawMemory;
+    VkBuffer DrawBuffer;
 
     VkSemaphore ImageAcquiredSemaphores[R_MaxFramesInFlight];
     VkFence ImageAcquiredFences[R_MaxFramesInFlight];

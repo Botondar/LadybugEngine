@@ -28,7 +28,7 @@ layout(location = Attrib_TexCoord) in vec2 aTexCoord;
 void main()
 {
     instance_data Instance = Instances[gl_InstanceIndex];
-    v3 WorldP  = TransformPoint(Instance.Transform, aP);
+    precise v3 WorldP  = TransformPoint(Instance.Transform, aP);
     ViewP = TransformPoint(PerFrame.ViewTransform, WorldP);
     TexCoord = aTexCoord;
     InstanceIndex = gl_InstanceIndex;
