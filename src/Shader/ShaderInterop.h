@@ -71,13 +71,13 @@
 #define Skin_GroupSizeY                 1
 #define Skin_GroupSizeZ                 1
 
-#define DownsampleBloom_GroupSizeX      8
-#define DownsampleBloom_GroupSizeY      8
-#define DownsampleBloom_GroupSizeZ      1
+#define BloomDownsample_GroupSizeX      8
+#define BloomDownsample_GroupSizeY      8
+#define BloomDownsample_GroupSizeZ      1
 
-#define UpsampleBloom_GroupSizeX        8
-#define UpsampleBloom_GroupSizeY        8
-#define UpsampleBloom_GroupSizeZ        1
+#define BloomUpsample_GroupSizeX        8
+#define BloomUpsample_GroupSizeY        8
+#define BloomUpsample_GroupSizeZ        1
 
 #define ShadingVisibility_GroupSizeX    8
 #define ShadingVisibility_GroupSizeY    8

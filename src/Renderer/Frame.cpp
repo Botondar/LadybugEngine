@@ -918,8 +918,8 @@ internal void RenderBloom(
         vkCmdPushConstants(CmdBuffer, DownsamplePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 
                            0, sizeof(DoKarisAverage), &DoKarisAverage);
 
-        u32 DispatchX = CeilDiv(Width, DownsampleBloom_GroupSizeX);
-        u32 DispatchY = CeilDiv(Height, DownsampleBloom_GroupSizeY);
+        u32 DispatchX = CeilDiv(Width, BloomDownsample_GroupSizeX);
+        u32 DispatchY = CeilDiv(Height, BloomDownsample_GroupSizeY);
         vkCmdDispatch(CmdBuffer, DispatchX, DispatchY, 1);
 
         DoKarisAverage = 0;
@@ -1213,8 +1213,8 @@ internal void RenderBloom(
         Width = Max(Frame->RenderWidth >> Mip, 1u);
         Height = Max(Frame->RenderHeight >> Mip, 1u);
 
-        u32 DispatchX = CeilDiv(Width, UpsampleBloom_GroupSizeX);
-        u32 DispatchY = CeilDiv(Height, UpsampleBloom_GroupSizeY);
+        u32 DispatchX = CeilDiv(Width, BloomUpsample_GroupSizeX);
+        u32 DispatchY = CeilDiv(Height, BloomUpsample_GroupSizeY);
         vkCmdDispatch(CmdBuffer, DispatchX, DispatchY, 1);
 
         VkImageMemoryBarrier2 End = 

@@ -2,7 +2,7 @@
 
 #include "common.glsli"
 
-layout(local_size_x = UpsampleBloom_GroupSizeX, local_size_y = UpsampleBloom_GroupSizeY, local_size_z = UpsampleBloom_GroupSizeZ) in;
+LayoutGroupSize(BloomUpsample);
 
 layout(set = 0, binding = 0) uniform sampler2D PrevMip;
 layout(set = 0, binding = 1) uniform sampler2D Input;

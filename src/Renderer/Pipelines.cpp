@@ -955,7 +955,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
 
     [Pipeline_BloomDownsample] =
     {
-        .Name = "downsample_bloom",
+        .Name = "bloom_downsample",
         .Type = PipelineType_Compute,
         .Layout = 
         {
@@ -975,7 +975,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
 
     [Pipeline_BloomUpsample] =
     {
-        .Name = "upsample_bloom",
+        .Name = "bloom_upsample",
         .Type = PipelineType_Compute,
         .Layout = 
         {
