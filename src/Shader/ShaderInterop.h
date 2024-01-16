@@ -131,6 +131,9 @@ struct per_frame
     v2 ScreenSize;
     v2u TileCount;
 
+    u32 OpaqueDrawCount;
+    u32 SkinnedDrawCount;
+
     u32 LightCount;
 
     v3 Ambience;
