@@ -2,7 +2,7 @@
 
 #include "common.glsli"
 
-layout(local_size_x = SSAO_GroupSizeX, local_size_y = SSAO_GroupSizeY, local_size_z = SSAO_GroupSizeZ) in;
+LayoutGroupSize(SSAO);
 
 layout(set = 0, binding = 0) uniform sampler2D StructureBuffer;
 layout(set = 0, binding = 1) uniform writeonly restrict image2D SSAOImage;
