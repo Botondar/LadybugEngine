@@ -2163,45 +2163,83 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
 
     // Upload instance data
+    umm DrawBufferAt = 0;
     {
+        Frame->Uniforms.OpaqueDrawCount = Frame->DrawCmdCount;
+        Frame->Uniforms.SkinnedDrawCount = Frame->SkinnedDrawCmdCount;
+
         u32 TotalDrawCount = Frame->DrawCmdCount + Frame->SkinnedDrawCmdCount;
+
         umm InstanceDataByteCount = (umm)TotalDrawCount * sizeof(instance_data);
         Assert(InstanceDataByteCount <= Renderer->InstanceMemorySize);
-
         Frame->StagingBufferAt = Align(Frame->StagingBufferAt, alignof(instance_data));
-        Assert(Frame->StagingBufferAt <= Frame->StagingBufferSize);
-        Assert(InstanceDataByteCount <= (Frame->StagingBufferSize - Frame->StagingBufferAt));
-        umm SourceOffset = Frame->StagingBufferAt;
+        Assert((Frame->StagingBufferAt + InstanceDataByteCount) <= Frame->StagingBufferSize);
+        umm InstanceDataCopyOffset = Frame->StagingBufferAt;
         Frame->StagingBufferAt += InstanceDataByteCount;
+        instance_data* InstanceDataAt = (instance_data*)OffsetPtr(Frame->StagingBufferBase, InstanceDataCopyOffset);
 
-        instance_data* InstanceDataAt = (instance_data*)OffsetPtr(Frame->StagingBufferBase, SourceOffset);
+        umm DrawDataByteCount = (umm)TotalDrawCount * sizeof(VkDrawIndexedIndirectCommand);
+        Assert(DrawDataByteCount <= Renderer->DrawMemorySize);
+        Frame->StagingBufferAt = Align(Frame->StagingBufferAt, alignof(VkDrawIndexedIndirectCommand));
+        Assert((Frame->StagingBufferAt + DrawDataByteCount) <= Frame->StagingBufferSize);
+        umm DrawDataCopyOffset = Frame->StagingBufferAt;
+        Frame->StagingBufferAt += DrawDataByteCount;
+        VkDrawIndexedIndirectCommand* DrawDataAt = (VkDrawIndexedIndirectCommand*)OffsetPtr(Frame->StagingBufferBase, DrawDataCopyOffset);
+        Frame->StagingBufferAt += InstanceDataByteCount;
+        DrawBufferAt += DrawDataByteCount;
+
         for (u32 It = 0; It < Frame->DrawCmdCount; It++)
         {
-            Frame->DrawCmds[It].Base.InstanceOffset = It; // HACK(boti)
+            draw_cmd* Cmd = Frame->DrawCmds + It;
+            Cmd->Base.InstanceOffset = It; // HACK(boti)
+            *DrawDataAt++ = 
+            {
+                .indexCount     = Cmd->Base.IndexCount,
+                .instanceCount  = Cmd->Base.InstanceCount,
+                .firstIndex     = Cmd->Base.IndexOffset,
+                .vertexOffset   = (s32)Cmd->Base.VertexOffset,
+                .firstInstance  = Cmd->Base.InstanceOffset,
+            };
             *InstanceDataAt++ = 
             {
-                .Transform = Frame->DrawCmds[It].Transform,
-                .Material = Frame->DrawCmds[It].Material,
+                .Transform = Cmd->Transform,
+                .Material = Cmd->Material,
             };
         }
 
         for (u32 It = 0; It < Frame->SkinnedDrawCmdCount; It++)
         {
-            Frame->SkinnedDrawCmds[It].Base.InstanceOffset = Frame->DrawCmdCount + It; // HACK(boti)
+            draw_cmd* Cmd = Frame->SkinnedDrawCmds + It;
+            Cmd->Base.InstanceOffset = Frame->DrawCmdCount + It; // HACK(boti)
+            *DrawDataAt++ = 
+            {
+                .indexCount     = Cmd->Base.IndexCount,
+                .instanceCount  = Cmd->Base.InstanceCount,
+                .firstIndex     = Cmd->Base.IndexOffset,
+                .vertexOffset   = (s32)Cmd->Base.VertexOffset,
+                .firstInstance  = Cmd->Base.InstanceOffset,
+            };
             *InstanceDataAt++ = 
             {
-                .Transform = Frame->SkinnedDrawCmds[It].Transform,
-                .Material = Frame->SkinnedDrawCmds[It].Material,
+                .Transform = Cmd->Transform,
+                .Material = Cmd->Material,
             };
         }
 
-        VkBufferCopy Copy = 
+        VkBufferCopy InstanceCopy = 
         {
-            .srcOffset = SourceOffset,
+            .srcOffset = InstanceDataCopyOffset,
             .dstOffset = 0,
             .size = InstanceDataByteCount,
         };
         
+        VkBufferCopy DrawCopy =
+        {
+            .srcOffset = DrawDataCopyOffset,
+            .dstOffset = 0,
+            .size = TotalDrawCount * sizeof(VkDrawIndexedIndirectCommand),
+        };
+
         VkBufferMemoryBarrier2 BeginBarriers[] = 
         {
             {
@@ -2217,6 +2255,19 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .offset = 0,
                 .size = VK_WHOLE_SIZE,
             },
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                .srcAccessMask = VK_ACCESS_2_NONE,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = Renderer->DrawBuffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE,
+            },
         };
         VkDependencyInfo BeginDependency = 
         {
@@ -2227,7 +2278,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .pBufferMemoryBarriers = BeginBarriers,
         };
         vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
-        vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->InstanceBuffer, 1, &Copy);
+        vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->InstanceBuffer, 1, &InstanceCopy);
+        vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->DrawBuffer, 1, &DrawCopy);
 
         VkBufferMemoryBarrier2 EndBarriers[] = 
         {
@@ -2389,8 +2441,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         umm MaxDrawCountPerDrawList = Frame->DrawCmdCount + Frame->SkinnedDrawCmdCount;
         umm MaxMemorySizePerDrawList = sizeof(VkDrawIndexedIndirectCommand) * MaxDrawCountPerDrawList;
         umm CopySrcAt = Frame->StagingBufferAt;
-        umm DrawBufferAt = 0;
         umm TotalDrawCount = 0;
+        umm DrawCopyOffset = DrawBufferAt;
 
         for (u32 DrawListIndex = 0; DrawListIndex < DrawListCount; DrawListIndex++)
         {
@@ -2483,33 +2535,17 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             VkBufferCopy Copy =
             {
                 .srcOffset = CopySrcAt,
-                .dstOffset = 0,
+                .dstOffset = DrawCopyOffset,
                 .size = TotalDrawCount * sizeof(VkDrawIndexedIndirectCommand),
             };
 
-            VkBufferMemoryBarrier2 BeginBarriers[] = 
-            {
-                {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                    .srcAccessMask = VK_ACCESS_2_NONE,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .buffer = Renderer->DrawBuffer,
-                    .offset = 0,
-                    .size = VK_WHOLE_SIZE,
-                },
-            };
             VkDependencyInfo BeginDependency = 
             {
                 .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
                 .pNext = nullptr,
                 .dependencyFlags = 0,
-                .bufferMemoryBarrierCount = CountOf(BeginBarriers),
-                .pBufferMemoryBarriers = BeginBarriers,
+                .bufferMemoryBarrierCount = 0,
+                .pBufferMemoryBarriers = nullptr,
             };
             vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
 
