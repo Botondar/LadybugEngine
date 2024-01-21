@@ -4,6 +4,338 @@
 
 LayoutGroupSize(ShadingVisibility);
 
+layout(set = 0, binding = 0, scalar) 
+uniform PerFrameBlock
+{
+    per_frame PerFrame;
+};
+
+layout(set = 1, binding = 0, scalar)
+buffer InstanceBuffer
+{
+    instance_data InstanceData[];
+};
+
+layout(set = 2, binding = 0, scalar)
+buffer DrawBuffer
+{
+    draw_data DrawData[];
+};
+
+layout(set = 3, binding = 0, scalar)
+buffer IndexBuffer
+{
+    u32 IndexData[];
+};
+
+layout(set = 4, binding = 0, scalar)
+buffer VertexBuffer
+{
+    vertex VertexData[];
+};
+
+layout(set = 14, binding = 0, scalar)
+buffer SkinnedVertexBuffer
+{
+    vertex SkinnedVertexData[];
+};
+
+layout(set = 5, binding = 0) uniform usampler2D VisibilityBuffer;
+layout(set = 13, binding = 0) uniform sampler2D OcclusionBuffer;
+layout(set = 6, binding = 0) uniform restrict writeonly image2D HDRTarget;
+
+layout(set = 7, binding = 0) uniform sampler Sampler;
+layout(set = 8, binding = 0) uniform texture2D Textures[];
+
+layout(set = 9, binding = 0) uniform sampler2DArrayShadow CascadeSampler;
+
+layout(set = 10, binding = 0)
+buffer LightBuffer
+{
+    light Lights[];
+};
+
+layout(set = 11, binding = 0) 
+buffer TileBuffer
+{
+    screen_tile Tiles[];
+};
+
+layout(set = 12, binding = 0) uniform samplerCubeShadow PointShadows[];
+
+#define buffer_type uint
+#define BufferType_Skinned 1
+
+struct unpacked_vertex
+{
+    v3 P;
+    v3 N;
+    v4 T;
+    v2 UV;
+};
+
+unpacked_vertex UnpackVertex(uint Index, buffer_type Type)
+{
+    unpacked_vertex Vertex;
+    if (Type == BufferType_Skinned)
+    {
+        Vertex.P = SkinnedVertexData[Index].P;
+        Vertex.N = SkinnedVertexData[Index].N;
+        Vertex.T = SkinnedVertexData[Index].T;
+        Vertex.UV = SkinnedVertexData[Index].TexCoord;
+    }
+    else
+    {
+        Vertex.P = VertexData[Index].P;
+        Vertex.N = VertexData[Index].N;
+        Vertex.T = VertexData[Index].T;
+        Vertex.UV = VertexData[Index].TexCoord;
+    }
+    return(Vertex);
+}
+
+f32 Wedge(v2 A, v2 B)
+{
+    f32 Result = A.x*B.y - A.y*B.x;
+    return(Result);
+}
+
+f32 Interpolate(v3 Bary, f32 A, f32 B, f32 C)
+{
+    f32 Result = Bary.x*A + Bary.y*B + Bary.z*C;
+    return(Result);
+}
+
+v2 Interpolate(v3 Bary, v2 A, v2 B, v2 C)
+{
+    v2 Result = Bary.x*A + Bary.y*B + Bary.z*C;
+    return(Result);
+}
+
+v3 Interpolate(v3 Bary, v3 A, v3 B, v3 C)
+{
+    v3 Result = Bary.x*A + Bary.y*B + Bary.z*C;
+    return(Result);
+}
+
 void main()
 {
+    v2u OutputExtent = textureSize(VisibilityBuffer, 0);
+    if (any(greaterThanEqual(gl_GlobalInvocationID.xy, OutputExtent)))
+    {
+        return;
+    }
+
+    v2s TexelID = v2s(gl_GlobalInvocationID.xy);
+    v2u TileID = gl_GlobalInvocationID.xy / v2u(R_TileSizeX, R_TileSizeY);
+    uint TileIndex = TileID.x + TileID.y * PerFrame.TileCount.x;
+    v2u InstanceTriangleID = texelFetch(VisibilityBuffer, TexelID, 0).rg;
+
+    v2 Pixel = 2.0 * (v2(TexelID) / v2(OutputExtent)) - v2(1.0);
+
+    v3 Lo = v3(0.0);
+
+    if (InstanceTriangleID.x != 0xFFFFFFFFu)
+    {
+        //
+        // Instance/vertex fetch
+        //
+        instance_data Instance = InstanceData[nonuniformEXT(InstanceTriangleID.x)];
+        draw_data Draw = DrawData[nonuniformEXT(InstanceTriangleID.x)];
+        
+        uint IndexIndex = 3 * InstanceTriangleID.y + Draw.IndexOffset;
+        
+        uint Index0 = IndexData[IndexIndex + 0];
+        uint Index1 = IndexData[IndexIndex + 1];
+        uint Index2 = IndexData[IndexIndex + 2];
+
+        buffer_type BufferType = (InstanceTriangleID.x >= PerFrame.OpaqueDrawCount) ? BufferType_Skinned : 0;
+        unpacked_vertex Vertex0 = UnpackVertex(Draw.VertexOffset + Index0, BufferType);
+        unpacked_vertex Vertex1 = UnpackVertex(Draw.VertexOffset + Index1, BufferType);
+        unpacked_vertex Vertex2 = UnpackVertex(Draw.VertexOffset + Index2, BufferType);
+
+        //
+        // Barycentrics
+        //
+        v3 ddX;
+        v3 ddY;
+        v3 Barycentrics;
+        {
+            v4 P0 = PerFrame.ViewProjectionTransform * v4(TransformPoint(Instance.Transform, Vertex0.P), 1.0);
+            v4 P1 = PerFrame.ViewProjectionTransform * v4(TransformPoint(Instance.Transform, Vertex1.P), 1.0);
+            v4 P2 = PerFrame.ViewProjectionTransform * v4(TransformPoint(Instance.Transform, Vertex2.P), 1.0);
+            v3 InvW = v3(1.0 / P0.w, 1.0 / P1.w, 1.0 / P2.w);
+            P0 *= InvW.x;
+            P1 *= InvW.y;
+            P2 *= InvW.z;
+            v2 P12 = P2.xy - P1.xy;
+            v2 P10 = P0.xy - P1.xy;
+            f32 InvDet = 1.0 / Wedge(P12, P10);
+
+            ddX = InvDet * v3(P1.y - P2.y, P2.y - P0.y, P0.y - P1.y) * InvW;
+            ddY = InvDet * v3(P2.x - P1.x, P0.x - P2.x, P1.x - P0.x) * InvW;
+            f32 ddXSum = ddX.x + ddX.y + ddX.z;
+            f32 ddYSum = ddY.x + ddY.y + ddY.z;
+
+            v2 dP = Pixel - P0.xy;
+            f32 InterpInvW = InvW.x + dP.x*ddXSum + dP.y*ddYSum;
+            f32 InterpW = 1.0 / InterpInvW;
+
+            Barycentrics.x = InterpW * (InvW.x + dP.x*ddX.x + dP.y*ddY.x);
+            Barycentrics.y = InterpW * (dP.x*ddX.y + dP.y*ddY.y);
+            Barycentrics.z = InterpW * (dP.x*ddX.z + dP.y*ddY.z);
+
+            ddX *= 2.0 / f32(OutputExtent.x);
+            ddY *= 2.0 / f32(OutputExtent.y);
+            ddXSum *= 2.0 / f32(OutputExtent.x);
+            ddYSum *= 2.0 / f32(OutputExtent.y);
+            //ddY *= -1.0f;
+            //ddYSum *= -1.0f;
+
+            f32 InterpDDX = 1.0 / (InterpInvW + ddXSum);
+            f32 InterpDDY = 1.0 / (InterpInvW + ddYSum);
+
+            ddX = InterpDDX * (Barycentrics * InterpInvW + ddX) - Barycentrics;
+            ddY = InterpDDY * (Barycentrics * InterpInvW + ddY) - Barycentrics;
+
+        }
+
+        //
+        // Attribute interpolation
+        //
+        v3 P        = Interpolate(Barycentrics, Vertex0.P.xyz, Vertex1.P.xyz, Vertex2.P.xyz);
+        v3 WorldP   = TransformPoint(Instance.Transform, P);
+        P           = TransformPoint(PerFrame.ViewTransform, WorldP);
+
+        v2 UV       = Interpolate(Barycentrics, Vertex0.UV, Vertex1.UV, Vertex2.UV);
+        v2 dXdUV    = Interpolate(ddX, Vertex0.UV, Vertex1.UV, Vertex2.UV);
+        v2 dYdUV    = Interpolate(ddY, Vertex0.UV, Vertex1.UV, Vertex2.UV);
+
+        v3 TriN     = Interpolate(Barycentrics, Vertex0.N, Vertex1.N, Vertex2.N);
+        TriN        = TransformDirection(PerFrame.ViewTransform, normalize(TriN * inverse(mat3(Instance.Transform))));
+        v3 TriT     = Interpolate(Barycentrics, Vertex0.T.xyz, Vertex1.T.xyz, Vertex2.T.xyz);
+        TriT        = TransformDirection(PerFrame.ViewTransform, TransformDirection(Instance.Transform, TriT));
+        v3 TriB     = normalize(cross(TriT, TriN)) * Vertex0.T.w;
+
+        //
+        // Material and normal fetch
+        //
+        v4 Albedo = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.DiffuseID)], Sampler), UV, dXdUV, dYdUV);
+        Albedo *= UnpackRGBA8(Instance.Material.DiffuseColor);
+        v4 MetallicRoughness = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.MetallicRoughnessID)], Sampler), UV, dXdUV, dYdUV);
+        MetallicRoughness *= UnpackRGBA8(Instance.Material.BaseMaterial);
+
+        v3 N;
+        N.xy = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.NormalID)], Sampler), UV, dXdUV, dYdUV).xy;
+        N.xy = 2.0 * N.xy - v2(1.0);
+        N.z = sqrt(1.0 - dot(N.xy, N.xy));
+        N = TriT * N.x + TriB * N.y + TriN * N.z;
+
+        //
+        // Shading
+        //
+        v3 V = normalize(-P);
+        v3 F0 = mix(v3(0.04), Albedo.rgb, MetallicRoughness.b);
+        v3 DiffuseBase = (1.0 - MetallicRoughness.b) * (v3(1.0) - F0) * Albedo.rgb;
+
+        Lo += PerFrame.Ambience * Albedo.rgb * texelFetch(OcclusionBuffer, TexelID, 0).r;
+
+        f32 SunShadow = 1.0;
+        {
+            v3 CascadeBlends = GetCascadeBlends(PerFrame.CascadeMinDistances, PerFrame.CascadeMaxDistances, P.z);
+            // NOTE(boti): This works because orthographic projection is an affine transform
+            v3 CascadeP0 = TransformPoint(PerFrame.CascadeViewProjections[0], WorldP);
+            CascadeP0.xy = 0.5 * CascadeP0.xy + v2(0.5);
+            v3 CascadeP1 = PerFrame.CascadeScales[0] * CascadeP0 + PerFrame.CascadeOffsets[0];
+            v3 CascadeP2 = PerFrame.CascadeScales[1] * CascadeP0 + PerFrame.CascadeOffsets[1];
+            v3 CascadeP3 = PerFrame.CascadeScales[2] * CascadeP0 + PerFrame.CascadeOffsets[2];
+
+            v2 ShadowMapSize = v2(textureSize(CascadeSampler, 0).xy);
+            v2 TexelSize = v2(1.0) / ShadowMapSize;
+
+            bool BeyondCascade2 = (CascadeBlends.y >= 0.0);
+            bool BeyondCascade3 = (CascadeBlends.z >= 0.0);
+
+            v2 ShadowP1 = (BeyondCascade2) ? CascadeP2.xy : CascadeP0.xy;
+            v2 ShadowP2 = (BeyondCascade3) ? CascadeP3.xy : CascadeP1.xy;
+            f32 Depth1 = (BeyondCascade2) ? CascadeP2.z : CascadeP0.z;
+            f32 Depth2 = (BeyondCascade3) ? clamp(CascadeP3.z, 0.0, 1.0) : CascadeP1.z;
+
+            v3 Blends = clamp(CascadeBlends, v3(0.0), v3(1.0));
+            f32 Blend = (BeyondCascade2) ? Blends.y - Blends.z : 1.0 - Blends.x;
+
+            v4 P1 = v4(ShadowP1.xy, 2.0 * f32(BeyondCascade2),          Depth1);
+            v4 P2 = v4(ShadowP2.xy, 2.0 * f32(BeyondCascade3) + 1.0,    Depth2);
+
+            // TODO(boti): Move this scale to per-frame
+            f32 Scale = 2.0 * TexelSize.x;
+            f32 Shadow1 = SampleShadowPoisson(CascadeSampler, P1, Scale, 64);
+            f32 Shadow2 = SampleShadowPoisson(CascadeSampler, P2, Scale, 64);
+            SunShadow = mix(Shadow2, Shadow1, Blend);
+        }
+
+        Lo += CalculateOutgoingLuminance(SunShadow * PerFrame.SunL, PerFrame.SunV, N, V, DiffuseBase, F0, MetallicRoughness.g);
+        
+        for (uint It = 0; It < Tiles[TileIndex].LightCount; It++)
+        {
+            uint LightIndex = Tiles[TileIndex].LightIndices[It];
+            light Light = Lights[LightIndex];
+
+            v3 dP = Light.P.xyz - P;
+            v3 E = Light.E;
+            f32 DistSq = dot(dP, dP);
+            f32 InvDistSq = 1.0 / DistSq;
+            v3 L = dP * sqrt(InvDistSq);
+            E *= InvDistSq;
+            if (GetLuminance(E) < R_LuminanceThreshold)
+            {
+                E = v3(0.0);
+            }
+
+            f32 Shadow = 1.0;
+            if (Light.ShadowIndex != 0xFFFFFFFFu)
+            {
+                v3 SampleP = TransformDirection(PerFrame.CameraTransform, -dP);
+                v3 AbsP = abs(SampleP);
+                f32 MaxXY = max(AbsP.x, AbsP.y);
+                f32 Depth = max(MaxXY, AbsP.z);
+
+                v2s ShadowResolution = textureSize(PointShadows[Light.ShadowIndex], 0);
+                f32 TexelSize = 1.0 / f32(ShadowResolution.x);
+                f32 Offset = 2.0 * TexelSize;
+
+                f32 n = PerFrame.PointShadows[Light.ShadowIndex].Near;
+                f32 f = PerFrame.PointShadows[Light.ShadowIndex].Far;
+                f32 r = 1.0 / (f - n);
+                f32 ProjDepth = f*r - f*n*r / Depth;
+                Shadow = texture(PointShadows[Light.ShadowIndex], v4(SampleP, ProjDepth));
+
+                f32 dXY = (MaxXY > AbsP.z) ? Offset : 0.0;
+                f32 dX = (AbsP.x > AbsP.y) ? dXY : 0.0;
+                v2 OffsetXY = v2(Offset - dX, dX);
+                v2 OffsetYZ = v2(Offset - dXY, dXY);
+
+                // TODO(boti): Something's wrong here, we're getting seams
+                // at the edge of the cube faces
+                v3 Limit = v3(Depth);
+                Limit.xy -= OffsetXY * (1.0 / 512.0);
+                Limit.yz -= OffsetYZ * (1.0 / 512.0);
+
+                SampleP.xy -= OffsetXY;
+                SampleP.yz -= OffsetYZ;
+                Shadow += texture(PointShadows[Light.ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+                SampleP.xy += 2.0 * OffsetXY;
+                Shadow += texture(PointShadows[Light.ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+                SampleP.yz += 2.0 * OffsetYZ;
+                Shadow += texture(PointShadows[Light.ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+                SampleP.xy -= 2.0 * OffsetXY;
+                Shadow += texture(PointShadows[Light.ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+                Shadow = 0.2 * Shadow;
+            }
+
+            Lo += CalculateOutgoingLuminance(Shadow * E, L, N, V, DiffuseBase, F0, MetallicRoughness.g);
+        }
+    }
+
+    imageStore(HDRTarget, TexelID, v4(Lo, 1.0));
 }

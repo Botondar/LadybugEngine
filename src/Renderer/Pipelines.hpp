@@ -11,6 +11,7 @@ enum sampler : u32
     Sampler_Shadow,
     Sampler_RenderTargetNormalized,
     Sampler_RenderTargetNormalizedClampToEdge,
+    Sampler_NoFilter,
 
     Sampler_Count,
 };
@@ -20,10 +21,10 @@ enum descriptor_set_layout : u32
     SetLayout_None = 0,
 
     SetLayout_PerFrameUniformData,
-    SetLayout_BindlessTexturesPS,
-    SetLayout_SampledRenderTargetPS,
-    SetLayout_DefaultSamplerPS,
-    SetLayout_ShadowPS,
+    SetLayout_BindlessTextures,
+    SetLayout_SampledRenderTarget,
+    SetLayout_DefaultSampler,
+    SetLayout_CascadeShadow,
     SetLayout_SampledRenderTargetNormalized_PS_CS,
     SetLayout_StorageImage_CS,
     SetLayout_Bloom,
@@ -38,6 +39,7 @@ enum descriptor_set_layout : u32
     SetLayout_StructuredBuffer,
     SetLayout_SingleCombinedTextureCS,
     SetLayout_PointShadows,
+    SetLayout_CombinedTextureNoFilter_PS_CS,
 
     SetLayout_Count,
 };
@@ -61,6 +63,7 @@ enum pipeline : u32
     Pipeline_Quad,
     Pipeline_Skinning,
     Pipeline_LightBinning,
+    Pipeline_ShadingVisibility,
 
     Pipeline_Count,
 };

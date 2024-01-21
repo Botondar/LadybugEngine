@@ -185,6 +185,23 @@ const sampler_state SamplerInfos[Sampler_Count] =
         .Border = Border_Black,
         .EnableUnnormalizedCoordinates = false,
     },
+
+    [Sampler_NoFilter] = 
+    {
+        .MagFilter = Filter_Nearest,
+        .MinFilter = Filter_Nearest,
+        .MipFilter = Filter_Nearest,
+        .WrapU = Wrap_ClampToEdge,
+        .WrapV = Wrap_ClampToEdge,
+        .WrapW = Wrap_ClampToEdge,
+        .Anisotropy = Anisotropy_None,
+        .EnableComparison = false,
+        .Comparison = Compare_Always,
+        .MinLOD = 0.0f,
+        .MaxLOD = GlobalMaxLOD,
+        .Border = Border_Black,
+        .EnableUnnormalizedCoordinates = false,
+    },
 };
 
 
@@ -207,7 +224,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
             },
         },
     },
-    [SetLayout_BindlessTexturesPS] = 
+    [SetLayout_BindlessTextures] = 
     {
         .Flags = SetLayoutFlag_UpdateAfterBind|SetLayoutFlag_Bindless,
         .BindingCount = 1,
@@ -217,13 +234,13 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .Binding = 0,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 0, // NOTE(boti): actual count is implied by the descriptor pool size for bindless
-                .Stages = PipelineStage_PS,
+                .Stages = PipelineStage_PS|PipelineStage_CS,
                 .ImmutableSampler = Sampler_None,
             },
         },
     },
 
-    [SetLayout_SampledRenderTargetPS] = 
+    [SetLayout_SampledRenderTarget] = 
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 1,
@@ -233,13 +250,13 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .Binding = 0,
                 .Type = Descriptor_ImageSampler,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_PS,
+                .Stages = PipelineStage_PS|PipelineStage_CS,
                 .ImmutableSampler = Sampler_RenderTargetUnnormalized,
             },
         },
     },
 
-    [SetLayout_DefaultSamplerPS] =
+    [SetLayout_DefaultSampler] =
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 1,
@@ -249,13 +266,13 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .Binding = 0,
                 .Type = Descriptor_Sampler,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_PS,
+                .Stages = PipelineStage_PS|PipelineStage_CS,
                 .ImmutableSampler = Sampler_Default,
             },
         },
     },
 
-    [SetLayout_ShadowPS] = 
+    [SetLayout_CascadeShadow] = 
     {
         .Flags = SetLayoutFlag_None,
         .BindingCount = 1,
@@ -544,8 +561,24 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .Binding = 0,
                 .Type = Descriptor_ImageSampler,
                 .DescriptorCount = R_MaxShadowCount,
-                .Stages = PipelineStage_PS,
+                .Stages = PipelineStage_PS|PipelineStage_CS,
                 .ImmutableSampler = Sampler_None,
+            },
+        },
+    },
+
+    [SetLayout_CombinedTextureNoFilter_PS_CS] = 
+    {
+        .Flags = SetLayoutFlag_None,
+        .BindingCount = 1,
+        .Bindings = 
+        {
+            {
+                .Binding = 0,
+                .Type = Descriptor_ImageSampler,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_PS|PipelineStage_CS,
+                .ImmutableSampler = Sampler_NoFilter,
             },
         },
     },
@@ -567,12 +600,12 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = {},
             .DescriptorSets = 
             {
-                SetLayout_DefaultSamplerPS, // Texture sampler
-                SetLayout_BindlessTexturesPS, // Textures
+                SetLayout_DefaultSampler, // Texture sampler
+                SetLayout_BindlessTextures, // Textures
                 SetLayout_PerFrameUniformData,
-                SetLayout_SampledRenderTargetPS, // Occlusion buffer
-                SetLayout_SampledRenderTargetPS, // Structure buffer
-                SetLayout_ShadowPS, // Shadow map
+                SetLayout_SampledRenderTarget, // Occlusion buffer
+                SetLayout_SampledRenderTarget, // Structure buffer
+                SetLayout_CascadeShadow, // Shadow map
                 SetLayout_StructuredBuffer, // LightBuffer
                 SetLayout_StructuredBuffer, // TileBuffer
                 SetLayout_PointShadows,
@@ -616,8 +649,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .PushConstantRanges = {},
             .DescriptorSets = 
             {
-                SetLayout_DefaultSamplerPS,
-                SetLayout_BindlessTexturesPS,
+                SetLayout_DefaultSampler,
+                SetLayout_BindlessTextures,
                 SetLayout_PerFrameUniformData,
                 SetLayout_StructuredBuffer,
             },
@@ -666,8 +699,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             },
             .DescriptorSets = 
             {
-                SetLayout_DefaultSamplerPS,
-                SetLayout_BindlessTexturesPS,
+                SetLayout_DefaultSampler,
+                SetLayout_BindlessTextures,
                 SetLayout_PerFrameUniformData,
                 SetLayout_StructuredBuffer,
             },
@@ -716,8 +749,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             },
             .DescriptorSets = 
             {
-                SetLayout_DefaultSamplerPS,
-                SetLayout_BindlessTexturesPS,
+                SetLayout_DefaultSampler,
+                SetLayout_BindlessTextures,
                 SetLayout_PerFrameUniformData,
                 SetLayout_StructuredBuffer,
             },
@@ -804,11 +837,19 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSets = 
             { 
                 SetLayout_PerFrameUniformData,
-                SetLayout_ShadowPS,
+                SetLayout_CascadeShadow,
             },
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
-        .InputAssemblerState = InputState_vertex,
+        .InputAssemblerState = 
+        {
+            .Topology = Topology_TriangleList,
+            .EnablePrimitiveRestart = false,
+            .BindingCount = 0,
+            .AttribCount = 0,
+            .Bindings = {},
+            .Attribs = {},
+        },
         .RasterizerState = 
         {
             .Flags = RS_Flags_None,
@@ -1035,7 +1076,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             {
                 SetLayout_PerFrameUniformData,
                 SetLayout_ParticleBuffer,
-                SetLayout_SampledRenderTargetPS,
+                SetLayout_SampledRenderTarget,
                 SetLayout_SingleCombinedTexturePS,
             },
         },
@@ -1118,6 +1159,35 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
                 SetLayout_StructuredBuffer, // light buffer
                 SetLayout_StructuredBuffer, // tile buffer
                 SetLayout_SingleCombinedTextureCS, // Structure buffer
+            },
+        },
+    },
+    [Pipeline_ShadingVisibility] = 
+    {
+        .Name = "shading_visibility",
+        .Type = PipelineType_Compute,
+        .Layout = 
+        {
+            .PushConstantRangeCount = 0,
+            .DescriptorSetCount = 15,
+            .PushConstantRanges = {},
+            .DescriptorSets = 
+            {
+                SetLayout_PerFrameUniformData,
+                SetLayout_StructuredBuffer, // InstanceBuffer
+                SetLayout_StructuredBuffer, // DrawBuffer
+                SetLayout_StructuredBuffer, // IndexBuffer
+                SetLayout_StructuredBuffer, // VertexBuffer
+                SetLayout_CombinedTextureNoFilter_PS_CS, // Visibility buffer
+                SetLayout_StorageImage_CS, // Color buffer
+                SetLayout_DefaultSampler,
+                SetLayout_BindlessTextures,
+                SetLayout_CascadeShadow,
+                SetLayout_StructuredBuffer, // LightBuffer
+                SetLayout_StructuredBuffer, // TileBuffer
+                SetLayout_PointShadows,
+                SetLayout_SampledRenderTarget,
+                SetLayout_StructuredBuffer, // Skinning VertexBuffer
             },
         },
     },

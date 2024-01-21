@@ -2,13 +2,13 @@
 
 #include "common.glsli"
 
-layout(set = 2, binding = 0, scalar) 
+layout(set = 2, binding = 0, scalar)
 uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
 
-layout(set = 3, binding = 0, scalar) 
+layout(set = 3, binding = 0, scalar)
 buffer InstanceBuffer
 {
     instance_data Instances[];

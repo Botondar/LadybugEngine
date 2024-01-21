@@ -4,23 +4,6 @@
 
 LayoutGroupSize(Skin);
 
-struct vertex
-{
-    v3 P;
-    v3 N;
-    v4 T;
-    v2 TC;
-    v4 Weights;
-    u8vec4 Joints;
-    u8vec4 Color;
-};
-
-struct vertex_skin
-{
-    v4 Weights;
-    u8vec4 Joints;
-};
-
 layout(push_constant) uniform PushConstants
 {
     uint SrcOffset;
@@ -85,12 +68,12 @@ void main()
             Weights[3] * TransformDirection(J3, InT.xyz);
         T = normalize(T);
 
-        DstVB.Data[DstOffset + Index].P = P;
-        DstVB.Data[DstOffset + Index].N = N;
-        DstVB.Data[DstOffset + Index].T = vec4(T, InT.w);
-        DstVB.Data[DstOffset + Index].TC      = SrcVB.Data[SrcOffset + Index].TC;
-        DstVB.Data[DstOffset + Index].Weights = SrcVB.Data[SrcOffset + Index].Weights;
-        DstVB.Data[DstOffset + Index].Joints  = SrcVB.Data[SrcOffset + Index].Joints;
-        DstVB.Data[DstOffset + Index].Color   = SrcVB.Data[SrcOffset + Index].Color;
+        DstVB.Data[DstOffset + Index].P         = P;
+        DstVB.Data[DstOffset + Index].N         = N;
+        DstVB.Data[DstOffset + Index].T         = vec4(T, InT.w);
+        DstVB.Data[DstOffset + Index].TexCoord  = SrcVB.Data[SrcOffset + Index].TexCoord;
+        DstVB.Data[DstOffset + Index].Weights   = SrcVB.Data[SrcOffset + Index].Weights;
+        DstVB.Data[DstOffset + Index].Joints    = SrcVB.Data[SrcOffset + Index].Joints;
+        DstVB.Data[DstOffset + Index].Color     = SrcVB.Data[SrcOffset + Index].Color;
     }
 }

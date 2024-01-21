@@ -38,7 +38,7 @@ constexpr u32 R_MaxTileCountX = CeilDiv(R_MaxRenderTargetSizeX, R_TileSizeX);
 constexpr u32 R_MaxTileCountY = CeilDiv(R_MaxRenderTargetSizeY, R_TileSizeY);
 
 constexpr u64 R_RenderTargetMemorySize      = MiB(320);
-constexpr u64 R_TextureMemorySize           = MiB(1024llu);
+constexpr u64 R_TextureMemorySize           = MiB(256llu);
 constexpr u64 R_ShadowMapMemorySize         = MiB(256);
 constexpr u32 R_MaxShadowCascadeCount       = 4;
 constexpr u32 R_ShadowResolution            = 2048u; // TODO(boti): Rename, this only applies to the cascades
@@ -579,17 +579,6 @@ enum draw_group : u32
 };
 
 typedef u32 vert_index;
-
-struct vertex
-{
-    v3 P;
-    v3 N;
-    v4 T;
-    v2 TexCoord;
-    v4 Weights;
-    u8 Joints[4];
-    rgba8 Color;
-};
 
 struct vertex_skin8
 {

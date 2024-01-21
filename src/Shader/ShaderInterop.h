@@ -3,6 +3,13 @@
 #   define CONSTEXPR constexpr
 #   define StaticAssert(expr) static_assert(expr)
 
+struct v4u8
+{
+    u8 E[4];
+
+    u8& operator[](u32 Index) { return E[Index]; }
+};
+
 #else
 
 #   define CONSTEXPR const
@@ -13,14 +20,17 @@
 
 #   define flags32  uint
 #   define u32      uint
+#   define s32      int
 #   define f32      float
 #   define v2       vec2
+#   define v2u      uvec2
+#   define v2s      ivec2
 #   define v3       vec3
 #   define v4       vec4
+#   define v4u8     u8vec4
 #   define m2       mat2
 #   define m3       mat3
 #   define m4       mat4
-#   define v2u      uvec2
 
 #   define rgba8               u32
 #   define renderer_texture_id u32
@@ -88,6 +98,18 @@
 //
 // Data
 //
+
+struct vertex
+{
+    v3 P;
+    v3 N;
+    v4 T;
+    v2 TexCoord;
+    v4 Weights;
+    v4u8 Joints;
+    rgba8 Color;
+};
+
 struct light
 {
     v3 P;
@@ -173,4 +195,13 @@ struct instance_data
 {
     m4 Transform;
     renderer_material Material;
+};
+
+struct draw_data
+{
+    u32 IndexCount;
+    u32 InstanceCount;
+    u32 IndexOffset;
+    s32 VertexOffset;
+    u32 InstanceOffset;
 };
