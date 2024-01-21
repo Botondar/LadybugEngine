@@ -85,6 +85,11 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
     gui_context Context = BeginGUI(Frame, Font, IO);
     Context.ActiveID = Editor->ActiveMenuID;
 
+    if (WasPressed(IO->Keys[SC_R]))
+    {
+        Game->RenderConfig.ShadingMode = (shading_mode)((Game->RenderConfig.ShadingMode + 1) % ShadingMode_Count);
+    }
+
     // NOTE(boti): we always print the frametime, regardless of whether the debug UI is active or not
     {
         Context.CurrentLayout = font_layout_type::Top;

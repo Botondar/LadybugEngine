@@ -549,8 +549,18 @@ enum texture_flag_bits : texture_flags
     TextureFlag_Special = (1 << 0),
 };
 
+// Shading mode for the primary opaque pass
+enum shading_mode : u32
+{
+    ShadingMode_Forward = 0,
+    ShadingMode_Visibility,
+
+    ShadingMode_Count,
+};
+
 struct render_config
 {
+    shading_mode ShadingMode;
     f32 Exposure;
 
     f32 SSAOIntensity;

@@ -103,7 +103,7 @@ float CalculateShadow(vec3 CascadeCoord0, in vec3 CascadeBlends)
     float Shadow2 = 0.0;
 
 #if 1
-    float Scale = 4.0 * TexelSize.x;
+    float Scale = 2.0 * TexelSize.x;
     Shadow1 = SampleShadowPoisson(ShadowSampler, P1, Scale, 64);
     Shadow2 = SampleShadowPoisson(ShadowSampler, P2, Scale, 64);
 #else
