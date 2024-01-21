@@ -88,9 +88,9 @@ constexpr ret CountOf(const type (&)[N])
 #define OffsetOf(s, m) ((umm)(&((s*)0)->m))
 #endif
 
-#define KiB(x) 1024*(x)
-#define MiB(x) 1024*KiB(x)
-#define GiB(x) 1024llu*MiB(x)
+#define KiB(x) (1024*(x))
+#define MiB(x) (1024*KiB(x))
+#define GiB(x) (1024llu*MiB(x))
 // ^NOTE(boti): we cast GiBs to 64 bits because that's probably what you want
 
 #define Assert(...) assert(__VA_ARGS__)
@@ -557,13 +557,11 @@ PushSize_(memory_arena* Arena, memory_push_flags Flags, umm Size, umm Alignment)
 
 inline u32 RandU32(entropy32* Entropy)
 {
-    // NOTE(boti): XorShift32
-    u32 Value = Entropy->Value;
-    Value ^= Value << 13;
-    Value ^= Value >> 17;
-    Value ^= Value << 5;
-    Entropy->Value = Value;
-    return(Value);
+    // NOTE(boti): PCG32
+    Entropy->Value = Entropy->Value * 747796405u + 2891336453u;
+    u32 Result = ((Entropy->Value >> ((Entropy->Value >> 28u) + 4u)) ^ Entropy->Value) * 277803737u;
+    Result = (Result >> 22u) ^ Result;
+    return(Result);
 }
 
 inline f32 RandUnilateral(entropy32* Entropy)
