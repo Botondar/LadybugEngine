@@ -331,7 +331,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
             u32 ChunkMeshID = Assets->MeshCount++;
             mesh* Mesh = Assets->Meshes + ChunkMeshID;
-            Mesh->Allocation = AllocateGeometry(Frame->Renderer, TerrainMesh.VertexCount, TerrainMesh.IndexCount);
+            Mesh->Allocation = Platform.AllocateGeometry(Frame->Renderer, TerrainMesh.VertexCount, TerrainMesh.IndexCount);
             Mesh->BoundingBox = TerrainMesh.Box;
             Mesh->MaterialID = World->TerrainMaterialID;
 
