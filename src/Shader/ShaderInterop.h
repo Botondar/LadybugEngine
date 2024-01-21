@@ -89,8 +89,8 @@ struct v4u8
 #define BloomUpsample_GroupSizeY        8
 #define BloomUpsample_GroupSizeZ        1
 
-#define ShadingVisibility_GroupSizeX    8
-#define ShadingVisibility_GroupSizeY    8
+#define ShadingVisibility_GroupSizeX    16
+#define ShadingVisibility_GroupSizeY    16
 #define ShadingVisibility_GroupSizeZ    1
 
 #define LayoutGroupSize(name) layout(local_size_x = name##_GroupSizeX, local_size_y = name##_GroupSizeY, local_size_z = name##_GroupSizeZ) in
