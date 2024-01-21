@@ -131,7 +131,8 @@ void main()
     uint TileIndex = TileID.x + TileID.y * PerFrame.TileCount.x;
     v2u InstanceTriangleID = texelFetch(VisibilityBuffer, TexelID, 0).rg;
 
-    v2 Pixel = 2.0 * (v2(TexelID) / v2(OutputExtent)) - v2(1.0);
+    v2 TexelOffset = v2(0.5);
+    v2 Pixel = 2.0 * ((v2(TexelID) + TexelOffset) / v2(OutputExtent)) - v2(1.0);
 
     v3 Lo = v3(0.0);
 
@@ -189,8 +190,6 @@ void main()
             ddY *= 2.0 / f32(OutputExtent.y);
             ddXSum *= 2.0 / f32(OutputExtent.x);
             ddYSum *= 2.0 / f32(OutputExtent.y);
-            //ddY *= -1.0f;
-            //ddYSum *= -1.0f;
 
             f32 InterpDDX = 1.0 / (InterpInvW + ddXSum);
             f32 InterpDDY = 1.0 / (InterpInvW + ddYSum);
