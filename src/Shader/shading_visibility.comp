@@ -11,31 +11,31 @@ uniform PerFrameBlock
 };
 
 layout(set = 1, binding = 0, scalar)
-buffer InstanceBuffer
+readonly buffer InstanceBuffer
 {
     instance_data InstanceData[];
 };
 
 layout(set = 2, binding = 0, scalar)
-buffer DrawBuffer
+readonly buffer DrawBuffer
 {
     draw_data DrawData[];
 };
 
 layout(set = 3, binding = 0, scalar)
-buffer IndexBuffer
+readonly buffer IndexBuffer
 {
     u32 IndexData[];
 };
 
 layout(set = 4, binding = 0, scalar)
-buffer VertexBuffer
+readonly buffer VertexBuffer
 {
     vertex VertexData[];
 };
 
 layout(set = 14, binding = 0, scalar)
-buffer SkinnedVertexBuffer
+readonly buffer SkinnedVertexBuffer
 {
     vertex SkinnedVertexData[];
 };
@@ -50,13 +50,13 @@ layout(set = 8, binding = 0) uniform texture2D Textures[];
 layout(set = 9, binding = 0) uniform sampler2DArrayShadow CascadeSampler;
 
 layout(set = 10, binding = 0)
-buffer LightBuffer
+readonly buffer LightBuffer
 {
     light Lights[];
 };
 
 layout(set = 11, binding = 0) 
-buffer TileBuffer
+readonly buffer TileBuffer
 {
     screen_tile Tiles[];
 };

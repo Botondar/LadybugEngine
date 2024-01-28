@@ -9,7 +9,7 @@ uniform PerFrameBlock
 };
 
 layout(set = 3, binding = 0, scalar)
-buffer InstanceBuffer
+readonly buffer InstanceBuffer
 {
     instance_data Instances[];
 };
