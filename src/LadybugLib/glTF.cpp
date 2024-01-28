@@ -693,13 +693,13 @@ internal gltf_type ParseGLTFType(json_element* Elem, gltf_elem_flags Flags, gltf
     if (Elem)
     {
         Assert(Elem->Type == json_element_type::String);
-        if      (StringEquals(&Elem->String, "SCALAR")) Result = GLTF_SCALAR;
-        else if (StringEquals(&Elem->String, "VEC2"))   Result = GLTF_VEC2;
-        else if (StringEquals(&Elem->String, "VEC3"))   Result = GLTF_VEC3;
-        else if (StringEquals(&Elem->String, "VEC4"))   Result = GLTF_VEC4;
-        else if (StringEquals(&Elem->String, "MAT2"))   Result = GLTF_MAT2;
-        else if (StringEquals(&Elem->String, "MAT3"))   Result = GLTF_MAT3;
-        else if (StringEquals(&Elem->String, "MAT4"))   Result = GLTF_MAT4;
+        if      (StringEquals(Elem->String, "SCALAR")) Result = GLTF_SCALAR;
+        else if (StringEquals(Elem->String, "VEC2"))   Result = GLTF_VEC2;
+        else if (StringEquals(Elem->String, "VEC3"))   Result = GLTF_VEC3;
+        else if (StringEquals(Elem->String, "VEC4"))   Result = GLTF_VEC4;
+        else if (StringEquals(Elem->String, "MAT2"))   Result = GLTF_MAT2;
+        else if (StringEquals(Elem->String, "MAT3"))   Result = GLTF_MAT3;
+        else if (StringEquals(Elem->String, "MAT4"))   Result = GLTF_MAT4;
         else
         {
             UnhandledError("Invalid accessor type");
@@ -747,9 +747,9 @@ internal gltf_alpha_mode ParseGLTFAlphaMode(json_element* Elem, gltf_elem_flags 
             UnhandledError("Invalid glTF element type");
         }
 
-        if      (StringEquals(&Elem->String, "OPAQUE")) Result = GLTF_ALPHA_MODE_OPAQUE;
-        else if (StringEquals(&Elem->String, "MASK"))   Result = GLTF_ALPHA_MODE_MASK;
-        else if (StringEquals(&Elem->String, "BLEND"))  Result = GLTF_ALPHA_MODE_BLEND;
+        if      (StringEquals(Elem->String, "OPAQUE")) Result = GLTF_ALPHA_MODE_OPAQUE;
+        else if (StringEquals(Elem->String, "MASK"))   Result = GLTF_ALPHA_MODE_MASK;
+        else if (StringEquals(Elem->String, "BLEND"))  Result = GLTF_ALPHA_MODE_BLEND;
         else 
         {
             UnhandledError("Invalid glTF alpha mode value");
@@ -786,10 +786,10 @@ internal gltf_animation_path ParseGLTFAnimationPath(json_element* Elem, gltf_ele
     if (Elem)
     {
         Assert(Elem->Type == json_element_type::String);
-        if      (StringEquals(&Elem->String, "weights"))     Result = GLTF_Weights;
-        else if (StringEquals(&Elem->String, "scale"))       Result = GLTF_Scale;
-        else if (StringEquals(&Elem->String, "rotation"))    Result = GLTF_Rotation;
-        else if (StringEquals(&Elem->String, "translation")) Result = GLTF_Translation;
+        if      (StringEquals(Elem->String, "weights"))     Result = GLTF_Weights;
+        else if (StringEquals(Elem->String, "scale"))       Result = GLTF_Scale;
+        else if (StringEquals(Elem->String, "rotation"))    Result = GLTF_Rotation;
+        else if (StringEquals(Elem->String, "translation")) Result = GLTF_Translation;
         else
         {
             UnhandledError("Invalid glTF animation path value");
@@ -808,9 +808,9 @@ internal gltf_animation_interpolation ParseGLTFInterpolation(json_element* Elem,
     if (Elem)
     {
         Assert(Elem->Type == json_element_type::String);
-        if      (StringEquals(&Elem->String, "LINEAR")) Result = GLTF_Linear;
-        else if (StringEquals(&Elem->String, "STEP")) Result = GLTF_Step;
-        else if (StringEquals(&Elem->String, "CUBICSPLINE")) Result = GLTF_CubicSpline;
+        if      (StringEquals(Elem->String, "LINEAR")) Result = GLTF_Linear;
+        else if (StringEquals(Elem->String, "STEP")) Result = GLTF_Step;
+        else if (StringEquals(Elem->String, "CUBICSPLINE")) Result = GLTF_CubicSpline;
         else
         {
             UnhandledError("Invalid glTF interpolation value");

@@ -724,7 +724,7 @@ lbfn json_element* GetElement(json_object* Object, const char* Name)
 
     for (u64 i = 0; i < Object->ElementCount; i++)
     {
-        if (StringEquals(Object->Keys + i, Name))
+        if (StringEquals(Object->Keys[i], Name))
         {
             Result = Object->Elements + i;
             break;

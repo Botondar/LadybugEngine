@@ -2,6 +2,7 @@
 
 inline bool IsSpace(char C);
 inline bool IsDigit(char C);
+inline bool IsAlpha(char C);
 
 inline bool CopyZStringToBuffer(char* Dst, const char* Src, u64* SizePtr);
 
@@ -13,7 +14,7 @@ struct string
 
 // Checks string with zero-terminated string for equality
 // Only returns true if the strings also have equal length
-inline bool StringEquals(const string* String, const char* ZString);
+inline bool StringEquals(string String, const char* ZString);
 
 // TODO(boti): There's no need to have this separate from string
 struct string_view
@@ -75,6 +76,12 @@ inline bool IsDigit(char C)
     return Result;
 }
 
+inline bool IsAlpha(char C)
+{
+    bool Result = ((C >= 'a') && (C <= 'z')) || ((C >= 'A') && (C <= 'Z'));
+    return(Result);
+}
+
 inline bool CopyZStringToBuffer(char* Dst, const char* Src, u64* SizePtr)
 {
     bool Result = false;
@@ -106,16 +113,16 @@ inline bool CopyZStringToBuffer(char* Dst, const char* Src, u64* SizePtr)
     return(Result);
 }
 
-inline bool StringEquals(const string* String, const char* ZString)
+inline bool StringEquals(string String, const char* ZString)
 {
     bool Result = false;
 
     if (ZString)
     {
         u64 i;
-        for (i = 0; i < String->Length; i++)
+        for (i = 0; i < String.Length; i++)
         {
-            if (ZString[i] != String->String[i])
+            if (ZString[i] != String.String[i])
             {
                 break;
             }
@@ -125,14 +132,14 @@ inline bool StringEquals(const string* String, const char* ZString)
             }
         }
 
-        if (i == String->Length)
+        if (i == String.Length)
         {
             Result = (ZString[i] == 0);
         }
     }
     else
     {
-        Result = (String->Length == 0);
+        Result = (String.Length == 0);
     }
 
     return Result;

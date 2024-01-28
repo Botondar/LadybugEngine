@@ -102,9 +102,9 @@ constexpr ret CountOf(const type (&)[N])
 #define UnhandledError(msg) Assert(!msg)
 #define UnimplementedCodePath Assert(!"Unimplemented code path")
 #else
-#define Verify(...) #error "Verify in non-developer build"
-#define UnhandledError(...) #error "Unhandled error"
-#define UnimplementedCodePath #error "Unimplemented code path"
+#define Verify(...) static_assert(false, "Verify in non-developer build")
+#define UnhandledError(...) static_assert(false, "Unhandled error")
+#define UnimplementedCodePath static_assert(false, "Unimplemented code path")
 #endif
 
 #define UNREFERENCED_VARIABLE(x) (void)x
