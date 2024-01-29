@@ -91,6 +91,11 @@ internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32
                 .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
                 .descriptorCount = Manager->MaxTextureCount,
             },
+            // Packed samplers
+            {
+                .type = VK_DESCRIPTOR_TYPE_SAMPLER,
+                .descriptorCount = packed_sampler::MaxSamplerCount,
+            },
         };
 
         VkDescriptorPoolCreateInfo PoolInfo = 
@@ -98,7 +103,7 @@ internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             .pNext = nullptr,
             .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
-            .maxSets = 2,
+            .maxSets = 3,
             .poolSizeCount = CountOf(PoolSizes),
             .pPoolSizes = PoolSizes,
         };

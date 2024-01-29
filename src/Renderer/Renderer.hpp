@@ -52,10 +52,10 @@ constexpr u64 R_SkinningBufferSize          = MiB(128);
 constexpr u32 MaxVertexBindingCount = 16;
 constexpr u32 MaxVertexAttribCount = 32;
 constexpr u32 MaxColorAttachmentCount = 8;
-constexpr u32 MaxDescriptorSetCount = 256;
+constexpr u32 MaxDescriptorSetCount = 32;
 constexpr u32 MaxPushConstantRangeCount = 64;
-constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
-
+constexpr u32 MaxDescriptorSetLayoutBindingCount = 128;
+constexpr u32 MaxPushConstantSize = 128;
 
 //
 // Low-level rendering
@@ -242,6 +242,31 @@ struct sampler_state
     b32 EnableUnnormalizedCoordinates;
 };
 
+// NOTE(boti): Packed samplers are only used by materials, which means:
+//  - Anisotropy is always 16x
+//  - Comparison is always disabled
+//  - Min/Max LOD is always [0, GlobalMax]
+//  - Border is always white
+//  - Coords are always normalized
+union packed_sampler
+{
+    static constexpr u32 BitsUsed = 9;
+    static constexpr u32 MaxSamplerCount = (1u << (BitsUsed + 1));
+
+    u32 Value;
+    struct
+    {
+        tex_filter MagFilter : 1;
+        tex_filter MinFilter : 1;
+        tex_filter MipFilter : 1;
+        tex_wrap WrapU : 2;
+        tex_wrap WrapV : 2;
+        tex_wrap WrapW : 2;
+    };
+};
+
+inline sampler_state UnpackSampler(packed_sampler Sampler);
+
 // TODO(boti): This is binary compatible with Vulkan for now,
 // but with mutable descriptor types it could be collapsed down to the D3D12 model?
 enum descriptor_type : u32
@@ -354,13 +379,6 @@ enum cull_flags : u32
     Cull_Front = (1 << 1),
 };
 
-struct push_constant_range
-{
-    pipeline_stages Stages;
-    u32 ByteSize;
-    u32 ByteOffset;
-};
-
 struct descriptor_set_binding
 {
     u32 Binding;
@@ -379,9 +397,7 @@ struct descriptor_set_layout_info
 
 struct pipeline_layout_info
 {
-    u32 PushConstantRangeCount;
     u32 DescriptorSetCount;
-    push_constant_range PushConstantRanges[MaxPushConstantRangeCount];
     u32 DescriptorSets[MaxDescriptorSetCount];
 };
 
@@ -573,7 +589,7 @@ struct render_config
 
     static constexpr f32 DefaultSSAOIntensity = 8.0f;
     static constexpr f32 DefaultSSAOMaxDistance = 0.5f;
-    static constexpr f32 DefaultSSAOTangentTau = 0.03125;
+    static constexpr f32 DefaultSSAOTangentTau = 0.03125f;
 
     static constexpr f32 DefaultBloomFilterRadius = 0.005f;
     static constexpr f32 DefaultBloomInternalStrength = 0.65f;
@@ -970,6 +986,28 @@ static format_byterate FormatByterateTable[Format_Count] =
 //
 // Implementation
 //
+
+inline sampler_state UnpackSampler(packed_sampler Sampler)
+{
+    sampler_state Result =
+    {
+        .MagFilter = Sampler.MagFilter,
+        .MinFilter = Sampler.MinFilter,
+        .MipFilter = Sampler.MipFilter,
+        .WrapU = Sampler.WrapU,
+        .WrapV = Sampler.WrapV,
+        .WrapW = Sampler.WrapW,
+        .Anisotropy = Anisotropy_16,
+        .EnableComparison = false,
+        .Comparison = Compare_Always,
+        .MinLOD = 0.0f,
+        .MaxLOD = GlobalMaxLOD,
+        .Border = Border_White,
+        .EnableUnnormalizedCoordinates = false,
+    };
+    return(Result);
+}
+
 inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A /*= 0xFF*/)
 {
     rgba8 Result = 

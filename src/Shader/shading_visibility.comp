@@ -4,64 +4,63 @@
 
 LayoutGroupSize(ShadingVisibility);
 
-layout(set = 0, binding = 0, scalar) 
+SetBindingLayout(PerFrame, Constants, scalar) 
 uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
 
-layout(set = 1, binding = 0, scalar)
+SetBindingLayout(PerFrame, InstanceBuffer, scalar)
 readonly buffer InstanceBuffer
 {
     instance_data InstanceData[];
 };
 
-layout(set = 2, binding = 0, scalar)
+SetBindingLayout(PerFrame, DrawBuffer, scalar)
 readonly buffer DrawBuffer
 {
     draw_data DrawData[];
 };
 
-layout(set = 3, binding = 0, scalar)
+SetBindingLayout(PerFrame, IndexBuffer, scalar)
 readonly buffer IndexBuffer
 {
     u32 IndexData[];
 };
 
-layout(set = 4, binding = 0, scalar)
+SetBindingLayout(PerFrame, VertexBuffer, scalar)
 readonly buffer VertexBuffer
 {
     vertex VertexData[];
 };
 
-layout(set = 14, binding = 0, scalar)
+SetBindingLayout(PerFrame, SkinnedVertexBuffer, scalar)
 readonly buffer SkinnedVertexBuffer
 {
     vertex SkinnedVertexData[];
 };
 
-layout(set = 5, binding = 0) uniform usampler2D VisibilityBuffer;
-layout(set = 13, binding = 0) uniform sampler2D OcclusionBuffer;
-layout(set = 6, binding = 0) uniform restrict writeonly image2D HDRTarget;
+SetBinding(PerFrame, VisibilityImage) uniform utexture2D VisibilityImage;
+SetBinding(PerFrame, OcclusionImage) uniform texture2D OcclusionImage;
+SetBinding(PerFrame, HDRColorStorageImage) uniform restrict writeonly image2D HDRTarget;
 
-layout(set = 7, binding = 0) uniform sampler Sampler;
-layout(set = 8, binding = 0) uniform texture2D Textures[];
+layout(set = 1, binding = 0) uniform sampler Sampler;
+layout(set = 2, binding = 0) uniform texture2D Textures[];
 
-layout(set = 9, binding = 0) uniform sampler2DArrayShadow CascadeSampler;
+layout(set = 3, binding = 0) uniform sampler2DArrayShadow CascadeSampler;
+layout(set = 4, binding = 0) uniform samplerCubeShadow PointShadows[];
 
-layout(set = 10, binding = 0)
+SetBindingLayout(PerFrame, LightBuffer, scalar)
 readonly buffer LightBuffer
 {
     light Lights[];
 };
 
-layout(set = 11, binding = 0) 
+SetBindingLayout(PerFrame, TileBuffer, scalar) 
 readonly buffer TileBuffer
 {
     screen_tile Tiles[];
 };
-
-layout(set = 12, binding = 0) uniform samplerCubeShadow PointShadows[];
 
 #define buffer_type uint
 #define BufferType_Skinned 1
@@ -120,7 +119,7 @@ v3 Interpolate(v3 Bary, v3 A, v3 B, v3 C)
 
 void main()
 {
-    v2u OutputExtent = textureSize(VisibilityBuffer, 0);
+    v2u OutputExtent = textureSize(VisibilityImage, 0);
     if (any(greaterThanEqual(gl_GlobalInvocationID.xy, OutputExtent)))
     {
         return;
@@ -129,7 +128,7 @@ void main()
     v2s TexelID = v2s(gl_GlobalInvocationID.xy);
     v2u TileID = gl_GlobalInvocationID.xy / v2u(R_TileSizeX, R_TileSizeY);
     uint TileIndex = TileID.x + TileID.y * PerFrame.TileCount.x;
-    v2u InstanceTriangleID = texelFetch(VisibilityBuffer, TexelID, 0).rg;
+    v2u InstanceTriangleID = texelFetch(VisibilityImage, TexelID, 0).rg;
 
     v2 TexelOffset = v2(0.5);
     v2 Pixel = 2.0 * ((v2(TexelID) + TexelOffset) / v2(OutputExtent)) - v2(1.0);
@@ -237,7 +236,7 @@ void main()
         v3 F0 = mix(v3(0.04), Albedo.rgb, MetallicRoughness.b);
         v3 DiffuseBase = (1.0 - MetallicRoughness.b) * (v3(1.0) - F0) * Albedo.rgb;
 
-        Lo += PerFrame.Ambience * Albedo.rgb * texelFetch(OcclusionBuffer, TexelID, 0).r;
+        Lo += PerFrame.Ambience * Albedo.rgb * texelFetch(OcclusionImage, TexelID, 0).r;
 
         f32 SunShadow = 1.0;
         {

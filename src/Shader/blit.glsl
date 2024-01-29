@@ -23,13 +23,14 @@ void main()
 
 #elif defined(FS)
 
-layout(set = 0, binding = 0) uniform sampler2D Texture;
-layout(set = 0, binding = 1) uniform sampler2D BloomTexture;
-
-layout(set = 1, binding = 0, scalar) uniform PerFrameBlock
+SetBindingLayout(PerFrame, Constants, scalar)
+uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
+
+SetBinding(PerFrame, HDRColorImage) uniform texture2D HDRColorImage;
+SetBinding(PerFrame, BloomImage) uniform texture2D BloomImage;
 
 layout(location = 0) in vec2 TexCoord;
 
@@ -79,8 +80,8 @@ v3 ACESFilm2(v3 S)
 
 void main()
 {
-    vec3 Sample = textureLod(Texture, TexCoord, 0).rgb;
-    vec3 SampleBloom = textureLod(BloomTexture, TexCoord, 0).rgb;
+    vec3 Sample = texelFetch(HDRColorImage, v2s(gl_FragCoord.xy), 0).rgb;
+    vec3 SampleBloom = texelFetch(BloomImage, v2s(gl_FragCoord.xy), 0).rgb;
     Sample = mix(Sample, SampleBloom, PerFrame.BloomStrength);
 
     vec3 Exposed = Sample * PerFrame.Exposure;

@@ -2,7 +2,8 @@
 
 #include "common.glsli"
 
-layout(set = 0, binding = 0, scalar) uniform PerFrameBlock
+SetBindingLayout(PerFrame, Constants, scalar)
+uniform PerFrameBlock
 {
     per_frame PerFrame;
 };

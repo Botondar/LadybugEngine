@@ -2,13 +2,13 @@
 
 #include "common.glsli"
 
-layout(set = 2, binding = 0, scalar) 
+SetBindingLayout(PerFrame, Constants, scalar)
 uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
 
-layout(set = 9, binding = 0, scalar)
+SetBindingLayout(PerFrame, InstanceBuffer, scalar)
 readonly buffer InstanceBuffer
 {
     instance_data Instances[];
@@ -55,24 +55,26 @@ void main()
 
 #elif defined(FS)
 
-layout(set = 0, binding = 0) uniform sampler Sampler;
-layout(set = 1, binding = 0) uniform texture2D Textures[];
-layout(set = 3, binding = 0) uniform sampler2D OcclusionBuffer;
-layout(set = 4, binding = 0) uniform sampler2D StructureBuffer;
-layout(set = 5, binding = 0) uniform sampler2DArrayShadow ShadowSampler;
-
-layout(set = 6, binding = 0, scalar) 
+SetBindingLayout(PerFrame, LightBuffer, scalar)
 readonly buffer LightBuffer
 {
     light Lights[];
 };
-layout(set = 7, binding = 0, scalar)
+SetBindingLayout(PerFrame, TileBuffer, scalar)
 readonly buffer TileBuffer
 {
     screen_tile Tiles[];
 };
 
-layout(set = 8, binding = 0) uniform samplerCubeShadow PointShadows[];
+SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
+SetBinding(PerFrame, OcclusionImage) uniform texture2D OcclusionImage;
+
+layout(set = 1, binding = 0) uniform sampler Sampler;
+layout(set = 2, binding = 0) uniform texture2D Textures[];
+
+layout(set = 3, binding = 0) uniform sampler2DArrayShadow ShadowSampler;
+
+layout(set = 4, binding = 0) uniform samplerCubeShadow PointShadows[];
 
 layout(location = 0) out vec4 Out0;
 
@@ -132,7 +134,7 @@ void main()
         vec4 BaseMetallicRoughness = UnpackRGBA8(Instance.Material.BaseMaterial);
         vec4 Albedo = BaseColor * texture(sampler2D(Textures[Instance.Material.DiffuseID], Sampler), TexCoord);
         {
-            float ScreenSpaceOcclusion = textureLod(OcclusionBuffer, gl_FragCoord.xy, 0).r;
+            float ScreenSpaceOcclusion = texelFetch(OcclusionImage, v2s(gl_FragCoord.xy), 0).r;
             vec3 Ambient = PerFrame.Ambience * Albedo.rgb * ScreenSpaceOcclusion;
             Lo += Ambient + Instance.Material.Emissive;
         }

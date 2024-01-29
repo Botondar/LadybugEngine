@@ -1,45 +1,22 @@
 #pragma once
 
 // TODO(boti): clean up the mess around samplers and descriptor set layouts
-
-enum sampler : u32
-{
-    Sampler_None = 0,
-
-    Sampler_Default,
-    Sampler_RenderTargetUnnormalized,
-    Sampler_Shadow,
-    Sampler_RenderTargetNormalized,
-    Sampler_RenderTargetNormalizedClampToEdge,
-    Sampler_NoFilter,
-
-    Sampler_Count,
-};
-
 enum descriptor_set_layout : u32
 {
     SetLayout_None = 0,
 
+    SetLayout_PerFrame,
     SetLayout_PerFrameUniformData,
     SetLayout_BindlessTextures,
-    SetLayout_SampledRenderTarget,
     SetLayout_DefaultSampler,
     SetLayout_CascadeShadow,
-    SetLayout_SampledRenderTargetNormalized_PS_CS,
-    SetLayout_StorageImage_CS,
     SetLayout_Bloom,
-    SetLayout_SSAO,
-    SetLayout_SSAOBlur,
-    SetLayout_Blit,
     SetLayout_BloomUpsample,
     SetLayout_SingleCombinedTexturePS,
     SetLayout_ParticleBuffer,
     SetLayout_PoseTransform,
-    SetLayout_Skinning, 
-    SetLayout_StructuredBuffer,
-    SetLayout_SingleCombinedTextureCS,
     SetLayout_PointShadows,
-    SetLayout_CombinedTextureNoFilter_PS_CS,
+    SetLayout_PackedSamplers,
 
     SetLayout_Count,
 };

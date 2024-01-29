@@ -34,11 +34,17 @@ RENDERER_EXPORT = \
     -EXPORT:BeginRenderFrame \
     -EXPORT:EndRenderFrame
 
-SHADERS = build/blit.vs build/blit.fs build/shading_forward.vs build/shading_forward.fs build/prepass.vs build/prepass.fs \
-    build/shadow.vs build/shadow.fs build/sky.vs build/sky.fs build/ui.vs build/ui.fs \
+SHADERS = \
+    build/blit.vs build/blit.fs \
+    build/shading_forward.vs build/shading_forward.fs \
+    build/prepass.vs build/prepass.fs \
+    build/shadow.vs build/shadow.fs \
+    build/sky.vs build/sky.fs \
+    build/ui.vs build/ui.fs \
     build/shadow_any.vs build/shadow_any.fs \
     build/gizmo.vs build/gizmo.fs \
-    build/bloom_downsample.cs build/bloom_upsample.cs build/ssao.cs build/ssao_blur.cs \
+    build/bloom_downsample.cs build/bloom_upsample.cs \
+    build/ssao.cs build/ssao_blur.cs \
     build/quad.vs build/quad.fs \
     build/skin.cs \
     build/light_bin.cs \

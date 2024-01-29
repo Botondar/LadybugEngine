@@ -4,10 +4,12 @@
 
 LayoutGroupSize(SSAOBlur);
 
-layout(set = 0, binding = 0) uniform sampler2D StructureBuffer;
-layout(set = 0, binding = 1) uniform sampler2D OcclusionBuffer;
-layout(set = 0, binding = 2) uniform writeonly restrict image2D OcclusionOut;
+SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
+SetBinding(PerFrame, OcclusionRawImage) uniform texture2D OcclusionImage;
+SetBinding(PerFrame, OcclusionStorageImage) uniform writeonly restrict image2D OcclusionOut;
 
+// TODO(boti): I put a bunch of reenable filtering TODOs here, 
+// but are we actually doing any filtering here?
 void main()
 {
     ivec2 iP = ivec2(gl_GlobalInvocationID.xy);
@@ -15,7 +17,8 @@ void main()
 
     const float Epsilon = 1.0 / 128.0;
 
-    vec3 Structure = StructureDecode(textureLod(StructureBuffer, P, 0));
+    // TODO(boti): Reenable filtering
+    vec3 Structure = StructureDecode(texelFetch(StructureImage, iP, 0));
     float Range = 1.5 * (max(abs(Structure.x), abs(Structure.y)) + Epsilon);
 
     vec2 Sample = vec2(0.0, 1.0);
@@ -29,9 +32,11 @@ void main()
             float x = 2.0 * ix;
 
             vec2 SampleP = P + vec2(x, y);
-            Sample.x = textureLod(OcclusionBuffer, SampleP, 0).x;
+            // TODO(boti): Reenable filtering
+            Sample.x = texelFetch(OcclusionImage, v2s(SampleP), 0).x;
             Occlusion.z += Sample.x;
-            vec2 Depth = textureLod(StructureBuffer, SampleP, 0).zw;
+            // TODO(boti): Reenable filtering
+            vec2 Depth = texelFetch(StructureImage, v2s(SampleP), 0).zw;
             if (abs(Depth.x + Depth.y - Structure.z) < Range)
             {
                 Occlusion.xy += Sample;

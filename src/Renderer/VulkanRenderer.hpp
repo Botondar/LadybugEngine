@@ -68,6 +68,7 @@ struct backend_render_frame
 
     VkDescriptorPool DescriptorPool;
     VkDescriptorSet UniformDescriptorSet;
+    VkDescriptorSet PerFrameDescriptorSet;
 
     VkFence ImageAcquiredFence;
     VkSemaphore ImageAcquiredSemaphore;

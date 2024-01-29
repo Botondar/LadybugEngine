@@ -8,12 +8,14 @@ struct texture_manager
     VkDescriptorPool DescriptorPool;
     VkDescriptorSetLayout DescriptorSetLayouts[2]; // NOTE(boti): 0 = sampler, 1 = texture
     VkDescriptorSet DescriptorSets[2]; 
+    VkDescriptorSet PackedSamplerDescriptorSet;
 
     u64 MemorySize;
     VkDeviceMemory Memory;
     u64 MemoryOffset;
 
     VkSampler Sampler;
+    VkSampler PackedSamplers[packed_sampler::MaxSamplerCount];
 
     u32 TextureCount;
     VkImage Images[MaxTextureCount];

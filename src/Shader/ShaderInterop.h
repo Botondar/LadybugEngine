@@ -32,6 +32,9 @@ struct v4u8
 #   define m3       mat3
 #   define m4       mat4
 
+// NOTE(boti): GLSL has the row/column counts backwards...
+#   define m3x4     mat4x3
+
 #   define rgba8               u32
 #   define renderer_texture_id u32
 
@@ -56,6 +59,48 @@ struct v4u8
 #define Attrib_Color            4
 #define Attrib_JointWeights     5
 #define Attrib_JointIndices     6
+
+#define Set_PerFrame            0
+#define Set_Sampler             1
+#define Set_BindlessTexture     2
+#define Set_Unused0             3
+
+// PerFrame set bindings
+#define Binding_PerFrame_Constants                  0
+#define Binding_PerFrame_LightBuffer                1
+#define Binding_PerFrame_TileBuffer                 2
+#define Binding_PerFrame_InstanceBuffer             3
+#define Binding_PerFrame_DrawBuffer                 4
+#define Binding_PerFrame_IndexBuffer                5
+#define Binding_PerFrame_VertexBuffer               6
+#define Binding_PerFrame_SkinnedVertexBuffer        7
+#define Binding_PerFrame_VisibilityImage            8
+#define Binding_PerFrame_OcclusionImage             9
+#define Binding_PerFrame_StructureImage             10
+#define Binding_PerFrame_OcclusionRawStorageImage   11
+#define Binding_PerFrame_OcclusionStorageImage      12
+#define Binding_PerFrame_OcclusionRawImage          13
+// TODO(boti): Remove this once we have the mip views in place
+#define Binding_PerFrame_HDRColorStorageImage       14
+#define Binding_PerFrame_HDRColorImage              15
+#define Binding_PerFrame_BloomImage                 16
+
+#define Binding_PerFrame_Count                      17
+
+// Sampler set bindings
+#define Binding_Sampler_NamedSamplers               0
+
+// TODO(boti): Move this back to an enum once we have C++ metageneration going on
+#define Sampler_None                                0
+#define Sampler_Default                             1
+#define Sampler_RenderTargetUnnormalized            2
+#define Sampler_Shadow                              3
+#define Sampler_RenderTargetNormalized              4
+#define Sampler_RenderTargetNormalizedClampToEdge   5
+#define Sampler_NoFilter                            6
+
+#define Sampler_Count                               7
+
 
 #define light_flags flags32
 #define LightFlag_None          0x00u
@@ -94,6 +139,8 @@ struct v4u8
 #define ShadingVisibility_GroupSizeZ    1
 
 #define LayoutGroupSize(name) layout(local_size_x = name##_GroupSizeX, local_size_y = name##_GroupSizeY, local_size_z = name##_GroupSizeZ) in
+#define SetBinding(s, b) layout(set = Set_##s, binding = Binding_##s##_##b)
+#define SetBindingLayout(s, b, l) layout(set = Set_##s, binding = Binding_##s##_##b, l)
 
 //
 // Data

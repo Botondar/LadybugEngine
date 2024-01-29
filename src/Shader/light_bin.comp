@@ -4,25 +4,25 @@
 
 LayoutGroupSize(LightBin);
 
-layout(set = 0, binding = 0, scalar)
+SetBindingLayout(PerFrame, Constants, scalar)
 uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
 
-layout(set = 1, binding = 0, scalar)
+SetBindingLayout(PerFrame, LightBuffer, scalar)
 readonly buffer LightBuffer
 {
     light Lights[];
 };
 
-layout(set = 2, binding = 0, scalar)
+SetBindingLayout(PerFrame, TileBuffer, scalar)
 buffer TileBuffer
 {
     screen_tile Tiles[];
 };
 
-layout(set = 3, binding = 0) uniform sampler2D StructureBuffer;
+SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
 
 bool IntersectAABBSphere(v3 P, v3 HalfExtent, v3 C, float R)
 {
@@ -52,7 +52,7 @@ void main()
         {
             for (uint X = 0; X < R_TileSizeX; X++)
             {
-                vec2 Depth2 = texelFetch(StructureBuffer, ivec2(uMinX + X, uMinY + Y), 0).zw;
+                vec2 Depth2 = texelFetch(StructureImage, ivec2(uMinX + X, uMinY + Y), 0).zw;
                 float Depth = Depth2.x + Depth2.y;
                 MinDepth = min(Depth, MinDepth);
                 MaxDepth = max(Depth, MaxDepth);

@@ -4,14 +4,15 @@
 
 LayoutGroupSize(BloomUpsample);
 
-layout(set = 0, binding = 0) uniform sampler2D PrevMip;
-layout(set = 0, binding = 1) uniform sampler2D Input;
-layout(set = 0, binding = 2) uniform restrict writeonly image2D Output;
-
-layout(set = 1, binding = 0, scalar) uniform PerFrameBlock
+SetBindingLayout(PerFrame, Constants, scalar) 
+uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
+
+layout(set = 1, binding = 0) uniform sampler2D PrevMip;
+layout(set = 1, binding = 1) uniform sampler2D Input;
+layout(set = 1, binding = 2) uniform restrict writeonly image2D Output;
 
 void main()
 {

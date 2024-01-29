@@ -4,26 +4,27 @@
 
 LayoutGroupSize(Skin);
 
-layout(push_constant) uniform PushConstants
+layout(push_constant) 
+uniform PushConstants
 {
     uint SrcOffset;
     uint DstOffset;
     uint Count;
 };
 
-layout(set = 0, binding = 0, scalar)
+SetBindingLayout(PerFrame, VertexBuffer, scalar)
 readonly buffer SrcVB_SSBO
 {
     vertex Data[];
 } SrcVB;
 
-layout(set = 0, binding = 1, scalar)
+SetBindingLayout(PerFrame, SkinnedVertexBuffer, scalar)
 writeonly buffer DstVB_SSBO
 {
     vertex Data[];
 } DstVB;
 
-
+// TODO(boti): Move joints to a per-frame SSBO as well?
 layout(set = 1, binding = 0, std140)
 uniform Skin
 {

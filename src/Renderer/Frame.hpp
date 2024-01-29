@@ -36,14 +36,6 @@ internal void EndCascade(render_frame* Frame, VkCommandBuffer CmdBuffer);
 internal void BeginForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer);
 internal void EndForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer);
 
-internal void RenderSSAO(
-    render_frame* Frame,
-    VkCommandBuffer CmdBuffer,
-    VkPipeline Pipeline, VkPipelineLayout PipelineLayout,
-    VkDescriptorSetLayout SetLayout,
-    VkPipeline BlurPipeline, VkPipelineLayout BlurPipelineLayout,
-    VkDescriptorSetLayout BlurSetLayout);
-
 internal void 
 RenderBloom(render_frame* Frame,
             VkCommandBuffer CmdBuffer,

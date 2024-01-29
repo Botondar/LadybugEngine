@@ -2,13 +2,13 @@
 
 #include "common.glsli"
 
-layout(set = 2, binding = 0, scalar)
+SetBindingLayout(PerFrame, Constants, scalar)
 uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
 
-layout(set = 3, binding = 0, scalar)
+SetBindingLayout(PerFrame, InstanceBuffer, scalar)
 readonly buffer InstanceBuffer
 {
     instance_data Instances[];
@@ -37,8 +37,8 @@ void main()
 
 #elif defined(FS)
 
-layout(set = 0, binding = 0) uniform sampler Sampler;
-layout(set = 1, binding = 0) uniform texture2D Textures[];
+layout(set = 1, binding = 0) uniform sampler Sampler;
+layout(set = 2, binding = 0) uniform texture2D Textures[];
 
 layout(location = 0) out v2u VisibilityOut;
 layout(location = 1) out vec4 StructureOut;

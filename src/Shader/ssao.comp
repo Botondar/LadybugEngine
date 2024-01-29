@@ -4,13 +4,13 @@
 
 LayoutGroupSize(SSAO);
 
-layout(set = 0, binding = 0) uniform sampler2D StructureBuffer;
-layout(set = 0, binding = 1) uniform writeonly restrict image2D SSAOImage;
-
-layout(set = 1, binding = 0, scalar) uniform PerFrameBlock
+SetBindingLayout(PerFrame, Constants, scalar)
+uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
+SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
+SetBinding(PerFrame, OcclusionRawStorageImage) uniform writeonly restrict image2D SSAOImage;
 
 // Sample offset table
 const vec2 d[4] = { vec2(0.1, 0.0), vec2(0.0, 0.2), vec2(-0.3, 0.0 ), vec2(0.0, -0.4), };
@@ -43,13 +43,14 @@ void main()
     ivec2 P = ivec2(gl_GlobalInvocationID.xy);
 
     float Aspect = PerFrame.ScreenSize.x / PerFrame.ScreenSize.y;
-    float VectorScale = 2.0 * Aspect / ( PerFrame.FocalLength * PerFrame.ScreenSize.x);
+    float VectorScale = 2.0 * Aspect / (PerFrame.FocalLength * PerFrame.ScreenSize.x);
 
     // Accumulate occlusion per pixel
     if (P.x < Size.x && P.y < Size.y)
     {
         vec2 SampleP = vec2(P);// / PerFrame.ScreenSize;
-        vec3 Structure = StructureDecode(textureLod(StructureBuffer, SampleP, 0));
+        // TODO(boti): Reenable filtering
+        vec3 Structure = StructureDecode(texelFetch(StructureImage, P, 0));
 
         float Scale = VectorScale * Structure.z;
         vec3 N = normalize(vec3(Structure.xy, -Scale));
@@ -66,7 +67,9 @@ void main()
             v.x = d[i].x * Rotation.x - d[i].y * Rotation.y;
             v.y = d[i].x * Rotation.y + d[i].y * Rotation.x;
 
-            vec2 Depth2 = textureLod(StructureBuffer, SampleP + v.xy * Scale, 0).zw;
+            // TODO(boti): Reenable filtering here once we have the samplers set up
+            //vec2 Depth2 = textureLod(StructureImage, SampleP + v.xy * Scale, 0).zw;
+            vec2 Depth2 = texelFetch(StructureImage, v2s(v2(P) + v.xy * Scale), 0).zw;
             v.z = Depth2.x + Depth2.y - Structure.z;
             
             float NdotV = dot(N, v);

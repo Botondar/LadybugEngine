@@ -1,13 +1,11 @@
 #version 460 core
 
-#extension GL_EXT_scalar_block_layout : require
-
 #include "common.glsli"
 
 #define Billboard_ViewAligned 0
 #define Billboard_ZAligned 1
 
-layout(set = 0, binding = 0, scalar)
+SetBindingLayout(PerFrame, Constants, scalar)
 uniform PerFrameBlock
 {
     per_frame PerFrame;
@@ -33,8 +31,8 @@ struct particle
     v2 HalfExtent;
 };
 
-layout(scalar, set = 1, binding = 0) 
-buffer VertexBlock
+layout(set = 1, binding = 0, scalar) 
+readonly buffer VertexBlock
 {
     particle Particles[];
 };
@@ -89,14 +87,14 @@ void main()
 }
 #else
 
-layout(set = 2, binding = 0) uniform sampler2D StructureBuffer;
-layout(set = 3, binding = 0) uniform sampler2DArray Texture;
+SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
+layout(set = 2, binding = 0) uniform sampler2DArray Texture;
 
 layout(location = 0) out v4 Target0;
 
 void main()
 {
-    f32 Depth = StructureDecode(textureLod(StructureBuffer, gl_FragCoord.xy, 0)).z;
+    f32 Depth = StructureDecode(texelFetch(StructureImage, v2s(gl_FragCoord.xy), 0)).z;
     v4 SampleColor = texture(Texture, vec3(TexCoord, float(ParticleTexture)));
 
     f32 FarFade = clamp(2.0 * (Depth - ViewP.z), 0.0, 1.0);
