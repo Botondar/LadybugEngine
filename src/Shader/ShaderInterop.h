@@ -91,15 +91,14 @@ struct v4u8
 #define Binding_Sampler_NamedSamplers               0
 
 // TODO(boti): Move this back to an enum once we have C++ metageneration going on
-#define Sampler_None                                0
-#define Sampler_Default                             1
-#define Sampler_RenderTargetUnnormalized            2
-#define Sampler_Shadow                              3
-#define Sampler_RenderTargetNormalized              4
-#define Sampler_RenderTargetNormalizedClampToEdge   5
-#define Sampler_NoFilter                            6
+#define Sampler_Default                             0
+#define Sampler_RenderTargetUnnormalized            1
+#define Sampler_Shadow                              2
+#define Sampler_RenderTargetNormalized              3
+#define Sampler_RenderTargetNormalizedClampToEdge   4
+#define Sampler_NoFilter                            5
 
-#define Sampler_Count                               7
+#define Sampler_Count                               6
 
 
 #define light_flags flags32

@@ -44,7 +44,7 @@ SetBinding(PerFrame, VisibilityImage) uniform utexture2D VisibilityImage;
 SetBinding(PerFrame, OcclusionImage) uniform texture2D OcclusionImage;
 SetBinding(PerFrame, HDRColorStorageImage) uniform restrict writeonly image2D HDRTarget;
 
-layout(set = 1, binding = 0) uniform sampler Sampler;
+SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 layout(set = 2, binding = 0) uniform texture2D Textures[];
 
 layout(set = 3, binding = 0) uniform sampler2DArrayShadow CascadeSampler;
@@ -218,13 +218,13 @@ void main()
         //
         // Material and normal fetch
         //
-        v4 Albedo = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.DiffuseID)], Sampler), UV, dXdUV, dYdUV);
+        v4 Albedo = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.DiffuseID)], Samplers[Sampler_Default]), UV, dXdUV, dYdUV);
         Albedo *= UnpackRGBA8(Instance.Material.DiffuseColor);
-        v4 MetallicRoughness = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.MetallicRoughnessID)], Sampler), UV, dXdUV, dYdUV);
+        v4 MetallicRoughness = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.MetallicRoughnessID)], Samplers[Sampler_Default]), UV, dXdUV, dYdUV);
         MetallicRoughness *= UnpackRGBA8(Instance.Material.BaseMaterial);
 
         v3 N;
-        N.xy = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.NormalID)], Sampler), UV, dXdUV, dYdUV).xy;
+        N.xy = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.NormalID)], Samplers[Sampler_Default]), UV, dXdUV, dYdUV).xy;
         N.xy = 2.0 * N.xy - v2(1.0);
         N.z = sqrt(1.0 - dot(N.xy, N.xy));
         N = TriT * N.x + TriB * N.y + TriN * N.z;

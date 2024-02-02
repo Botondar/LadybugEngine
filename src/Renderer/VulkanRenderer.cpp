@@ -916,8 +916,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
 
     // Create samplers
     {
-        Renderer->Samplers[Sampler_None] = VK_NULL_HANDLE;
-        for (u32 Index = 1; Index < Sampler_Count; Index++)
+        for (u32 Index = 0; Index < Sampler_Count; Index++)
         {
             VkSamplerCreateInfo Info = SamplerStateToVulkanSamplerInfo(SamplerInfos[Index]);
             Result = vkCreateSampler(VK.Device, &Info, nullptr, &Renderer->Samplers[Index]);
@@ -940,15 +939,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 Bindings[BindingIndex].descriptorType = (VkDescriptorType)Binding->Type; // TODO(boti): create a helper for this
                 Bindings[BindingIndex].descriptorCount = Binding->DescriptorCount;
                 Bindings[BindingIndex].stageFlags = PipelineStagesToVulkan(Binding->Stages);
-                if (Binding->ImmutableSampler == Sampler_None)
-                {
-                    Bindings[BindingIndex].pImmutableSamplers = nullptr;
-                }
-                else
-                {
-                    Assert(Binding->DescriptorCount <= 1);
-                    Bindings[BindingIndex].pImmutableSamplers = &Renderer->Samplers[Binding->ImmutableSampler];
-                }
+                Bindings[BindingIndex].pImmutableSamplers = nullptr;
             }
             VkDescriptorSetLayoutCreateInfo CreateInfo = 
             {
@@ -1793,7 +1784,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     VkCommandBuffer ShadowCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
 
     vkResetDescriptorPool(VK.Device, Frame->Backend->DescriptorPool, 0);
-    Frame->Backend->UniformDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrameUniformData]);
 
     f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
 
@@ -2627,8 +2617,35 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         Frame,
         Renderer->SetLayouts[SetLayout_CascadeShadow],
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        Frame->Renderer->ShadowView,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        Renderer->ShadowView,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        Renderer->Samplers[Sampler_Shadow]);
+
+    VkDescriptorSet SamplersDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_Samplers]);
+    {
+        VkDescriptorImageInfo SamplerDescriptorInfos[Sampler_Count];
+        for (u32 SamplerIndex = 0; SamplerIndex < Sampler_Count; SamplerIndex++)
+        {
+            SamplerDescriptorInfos[SamplerIndex] = 
+            {
+                .sampler = Renderer->Samplers[SamplerIndex],
+                .imageView = VK_NULL_HANDLE,
+                .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            };
+        }
+
+        VkWriteDescriptorSet Write = 
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+            .dstSet = SamplersDescriptorSet,
+            .dstBinding = Binding_Sampler_NamedSamplers,
+            .descriptorCount = Sampler_Count,
+            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+            .pImageInfo = SamplerDescriptorInfos,
+        };
+        vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
+    }
 
     VkDescriptorSet PerFrameDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrame]);
     Frame->Backend->PerFrameDescriptorSet = PerFrameDescriptorSet;
@@ -3060,7 +3077,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         VkDescriptorSet PrepassDescriptorSets[] = 
         {
             PerFrameDescriptorSet,
-            Renderer->TextureManager.DescriptorSets[0],
+            SamplersDescriptorSet,
             Renderer->TextureManager.DescriptorSets[1],
         };
         vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
@@ -3418,7 +3435,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             VkDescriptorSet ShadowDescriptorSets[] = 
             {
                 PerFrameDescriptorSet,
-                Renderer->TextureManager.DescriptorSets[0],
+                SamplersDescriptorSet,
                 Renderer->TextureManager.DescriptorSets[1],
             };
             vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Layout,
@@ -3482,7 +3499,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         VkDescriptorSet ShadowDescriptorSets[] = 
         {
             PerFrameDescriptorSet,
-            Renderer->TextureManager.DescriptorSets[0],
+            SamplersDescriptorSet,
             Renderer->TextureManager.DescriptorSets[1],
         };
         vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Layout,
@@ -3786,7 +3803,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             VkDescriptorSet ShadingDescriptorSets[] = 
             {
                 PerFrameDescriptorSet,
-                Renderer->TextureManager.DescriptorSets[0],
+                SamplersDescriptorSet,
                 Renderer->TextureManager.DescriptorSets[1],
                 CascadeDescriptorSet,
                 PointShadowsDescriptorSet,
@@ -3966,7 +3983,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             VkDescriptorSet ForwardDescriptorSets[] = 
             {
                 PerFrameDescriptorSet,
-                Renderer->TextureManager.DescriptorSets[0],
+                SamplersDescriptorSet,
                 Renderer->TextureManager.DescriptorSets[1],
                 CascadeDescriptorSet,
                 PointShadowsDescriptorSet,
@@ -4195,7 +4212,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
             pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
             VkDescriptorSetLayout SetLayout = Frame->Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS];
-            VkDescriptorSet ImmediateDescriptorSet = PushImageDescriptor(Frame, SetLayout, Frame->ImmediateTextureID);
+            VkDescriptorSet ImmediateDescriptorSet = PushImageDescriptor(Frame, SetLayout, Frame->ImmediateTextureID, Renderer->Samplers[Sampler_Default]);
 
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Pipeline);
             vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Layout, 
@@ -4565,19 +4582,4 @@ internal void SetupSceneRendering(render_frame* Frame, frustum* CascadeFrustums)
 
     // Upload uniform data
     memcpy(Frame->UniformData, &Frame->Uniforms, sizeof(Frame->Uniforms));
-    {
-         VkDescriptorBufferInfo Info = { Frame->Backend->UniformBuffer, 0, sizeof(Frame->Uniforms) };
-         VkWriteDescriptorSet Write = 
-         {
-             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-             .pNext = nullptr,
-             .dstSet = Frame->Backend->UniformDescriptorSet,
-             .dstBinding = 0,
-             .dstArrayElement = 0,
-             .descriptorCount = 1 ,
-             .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-             .pBufferInfo = &Info,
-         };
-         vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
-    }
 }

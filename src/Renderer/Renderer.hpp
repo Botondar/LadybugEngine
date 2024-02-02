@@ -385,7 +385,6 @@ struct descriptor_set_binding
     descriptor_type Type;
     u32 DescriptorCount;
     pipeline_stages Stages;
-    u32 ImmutableSampler; // NOTE(boti): for now we only allow single immutable samplers
 };
 
 struct descriptor_set_layout_info

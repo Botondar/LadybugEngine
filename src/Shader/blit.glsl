@@ -38,7 +38,6 @@ layout(location = 0) out vec4 Out0;
 
 v3 ACESFilm(v3 S)
 {
-    
     float a = 2.51f;
     float b = 0.03f;
     float c = 2.43f;

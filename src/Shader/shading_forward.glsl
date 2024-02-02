@@ -69,7 +69,7 @@ readonly buffer TileBuffer
 SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
 SetBinding(PerFrame, OcclusionImage) uniform texture2D OcclusionImage;
 
-layout(set = 1, binding = 0) uniform sampler Sampler;
+SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 layout(set = 2, binding = 0) uniform texture2D Textures[];
 
 layout(set = 3, binding = 0) uniform sampler2DArrayShadow ShadowSampler;
@@ -132,7 +132,7 @@ void main()
 
         vec4 BaseColor = UnpackRGBA8(Instance.Material.DiffuseColor);
         vec4 BaseMetallicRoughness = UnpackRGBA8(Instance.Material.BaseMaterial);
-        vec4 Albedo = BaseColor * texture(sampler2D(Textures[Instance.Material.DiffuseID], Sampler), TexCoord);
+        vec4 Albedo = BaseColor * texture(sampler2D(Textures[Instance.Material.DiffuseID], Samplers[Sampler_Default]), TexCoord);
         {
             float ScreenSpaceOcclusion = texelFetch(OcclusionImage, v2s(gl_FragCoord.xy), 0).r;
             vec3 Ambient = PerFrame.Ambience * Albedo.rgb * ScreenSpaceOcclusion;
@@ -140,10 +140,10 @@ void main()
         }
 
         vec3 Normal;
-        Normal.xy = texture(sampler2D(Textures[Instance.Material.NormalID], Sampler), TexCoord).xy;
+        Normal.xy = texture(sampler2D(Textures[Instance.Material.NormalID], Samplers[Sampler_Default]), TexCoord).xy;
         Normal.xy = 2.0 * Normal.xy - vec2(1.0);
         Normal.z = sqrt(1.0 - dot(Normal.xy, Normal.xy));
-        vec4 MetallicRoughness = texture(sampler2D(Textures[Instance.Material.MetallicRoughnessID], Sampler), TexCoord);
+        vec4 MetallicRoughness = texture(sampler2D(Textures[Instance.Material.MetallicRoughnessID], Samplers[Sampler_Default]), TexCoord);
         float Roughness = MetallicRoughness.g * BaseMetallicRoughness.g;
         float Metallic = MetallicRoughness.b * BaseMetallicRoughness.b;
 

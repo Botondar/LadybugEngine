@@ -19,10 +19,12 @@ internal VkDescriptorSet
 PushImageDescriptor(render_frame* Frame, 
                     VkDescriptorSetLayout Layout,
                     VkDescriptorType Type,
-                    VkImageView View, VkImageLayout ImageLayout);
+                    VkImageView View, 
+                    VkImageLayout ImageLayout,
+                    VkSampler Sampler);
 
 internal VkDescriptorSet 
-PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, renderer_texture_id ID);
+PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, renderer_texture_id ID, VkSampler Sampler);
 
 //
 // Rendering

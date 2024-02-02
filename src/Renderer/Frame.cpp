@@ -56,12 +56,14 @@ internal VkDescriptorSet
 PushImageDescriptor(render_frame* Frame, 
                     VkDescriptorSetLayout Layout,
                     VkDescriptorType Type,
-                    VkImageView View, VkImageLayout ImageLayout)
+                    VkImageView View, 
+                    VkImageLayout ImageLayout,
+                    VkSampler Sampler)
 {
     VkDescriptorSet Set = PushDescriptorSet(Frame, Layout);
     if (Set)
     {
-        VkDescriptorImageInfo Info = { VK_NULL_HANDLE, View, ImageLayout };
+        VkDescriptorImageInfo Info = { Sampler, View, ImageLayout };
         VkWriteDescriptorSet Write = 
         {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -82,13 +84,14 @@ PushImageDescriptor(render_frame* Frame,
 }
 
 internal VkDescriptorSet 
-PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, renderer_texture_id ID)
+PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, renderer_texture_id ID, VkSampler Sampler)
 {
     texture_manager* TextureManager = &Frame->Renderer->TextureManager;
     VkDescriptorSet Set = PushImageDescriptor(Frame, Layout,
                                               VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                               *GetImageView(TextureManager, ID),
-                                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                              Sampler);
     return(Set);
 }
 
@@ -584,7 +587,7 @@ internal void RenderBloom(
     {
         VkDescriptorImageInfo SourceImageInfo = 
         {
-            .sampler = VK_NULL_HANDLE,
+            .sampler = Frame->Renderer->Samplers[Sampler_RenderTargetNormalizedClampToEdge],
             .imageView = SrcRT->MipViews[Mip - 1],
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         };
@@ -862,13 +865,13 @@ internal void RenderBloom(
 
         VkDescriptorImageInfo DstMipPlus1ImageInfo = 
         {
-            .sampler = VK_NULL_HANDLE,
+            .sampler = Frame->Renderer->Samplers[Sampler_RenderTargetNormalizedClampToEdge],
             .imageView = DstRT->MipViews[Mip + 1],
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         };
         VkDescriptorImageInfo SrcImageInfo = 
         {
-            .sampler = VK_NULL_HANDLE,
+            .sampler = Frame->Renderer->Samplers[Sampler_RenderTargetNormalizedClampToEdge],
             .imageView = SrcRT->MipViews[Mip],
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         };
