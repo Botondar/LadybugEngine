@@ -5,8 +5,11 @@
 
 PFN_vkCmdBeginDebugUtilsLabelEXT        vkCmdBeginDebugUtilsLabelEXT_;
 PFN_vkCmdEndDebugUtilsLabelEXT          vkCmdEndDebugUtilsLabelEXT_;
+PFN_vkSetDebugUtilsObjectNameEXT        vkSetDebugUtilsObjectNameEXT_;
+
 //#define vkCmdBeginDebugUtilsLabelEXT    vkCmdBeginDebugUtilsLabelEXT_
 #define vkCmdEndDebugUtilsLabelEXT      vkCmdEndDebugUtilsLabelEXT_
+#define vkSetDebugUtilsObjectNameEXT    vkSetDebugUtilsObjectNameEXT_
 
 inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* Label);
 
@@ -69,6 +72,7 @@ struct backend_render_frame
     VkDescriptorPool DescriptorPool;
     VkDescriptorSet UniformDescriptorSet;
     VkDescriptorSet PerFrameDescriptorSet;
+    VkDescriptorSet SamplersDescriptorSet;
 
     VkFence ImageAcquiredFence;
     VkSemaphore ImageAcquiredSemaphore;

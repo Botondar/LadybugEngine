@@ -55,6 +55,8 @@ void main()
 
 #elif defined(FS)
 
+layout(early_fragment_tests) in;
+
 SetBindingLayout(PerFrame, LightBuffer, scalar)
 readonly buffer LightBuffer
 {
@@ -69,12 +71,12 @@ readonly buffer TileBuffer
 SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
 SetBinding(PerFrame, OcclusionImage) uniform texture2D OcclusionImage;
 
+SetBinding(PerFrame, CascadedShadow) uniform texture2DArray CascadedShadow;
+
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
-layout(set = 2, binding = 0) uniform texture2D Textures[];
+SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
-layout(set = 3, binding = 0) uniform sampler2DArrayShadow ShadowSampler;
-
-layout(set = 4, binding = 0) uniform samplerCubeShadow PointShadows[];
+layout(set = 3, binding = 0) uniform samplerCubeShadow PointShadows[];
 
 layout(location = 0) out vec4 Out0;
 
@@ -84,7 +86,7 @@ float CalculateShadow(vec3 CascadeCoord0, in vec3 CascadeBlends)
     vec3 CascadeCoord2 = PerFrame.CascadeScales[1] * CascadeCoord0 + PerFrame.CascadeOffsets[1];
     vec3 CascadeCoord3 = PerFrame.CascadeScales[2] * CascadeCoord0 + PerFrame.CascadeOffsets[2];
 
-    vec2 ShadowMapSize = vec2(textureSize(ShadowSampler, 0).xy);
+    vec2 ShadowMapSize = vec2(textureSize(CascadedShadow, 0).xy);
     vec2 TexelSize = 1.0 / ShadowMapSize;
 
     bool BeyondCascade2 = (CascadeBlends.y >= 0.0);
@@ -106,12 +108,12 @@ float CalculateShadow(vec3 CascadeCoord0, in vec3 CascadeBlends)
 
 #if 1
     float Scale = 2.0 * TexelSize.x;
-    Shadow1 = SampleShadowPoisson(ShadowSampler, P1, Scale, 64);
-    Shadow2 = SampleShadowPoisson(ShadowSampler, P2, Scale, 64);
+    Shadow1 = SampleShadowPoisson(CascadedShadow, Samplers[Sampler_Shadow], P1, Scale, 64);
+    Shadow2 = SampleShadowPoisson(CascadedShadow, Samplers[Sampler_Shadow], P2, Scale, 64);
 #else
     v2 Jitter = v2(1.0 * (3.0/16.0), 3.0 * (3.0 / 16.0)) * TexelSize.x;
-    Shadow1 = SampleShadowJitter4(ShadowSampler, P1, Jitter);
-    Shadow2 = SampleShadowJitter4(ShadowSampler, P2, Jitter);
+    Shadow1 = SampleShadowJitter4(CascadedShadow, Samplers[Sampler_Shadow], P1, Jitter);
+    Shadow2 = SampleShadowJitter4(CascadedShadow, Samplers[Sampler_Shadow], P2, Jitter);
 #endif
 
     float Result = mix(Shadow2, Shadow1, Blend);

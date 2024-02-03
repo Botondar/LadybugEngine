@@ -40,7 +40,7 @@ void main()
 #elif defined(FS)
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
-layout(set = 2, binding = 0) uniform texture2D Textures[];
+SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
 void main()
 {

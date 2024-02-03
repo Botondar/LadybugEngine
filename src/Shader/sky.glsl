@@ -28,7 +28,8 @@ void main()
 
 #elif defined(FS)
 
-layout(set = 1, binding = 0) uniform sampler2DArrayShadow ShadowSampler;
+SetBinding(PerFrame, CascadedShadow) uniform texture2DArray CascadedShadow;
+SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 
 layout(location = 0) out vec4 Out0;
 
@@ -99,7 +100,7 @@ void main()
 #endif
     // NOTE(boti): We assume the fog dissipates at some distance...
     Lo = ApplyFog(Lo, PerFrame.Ambience, PerFrame.ConstantFogDensity, 1000.0f);
-    Lo += (0.9 * MieBetaFactor) * PerFrame.SunL * CalculateAtmosphere(PerFrame.FarZ * V, PerFrame, ShadowSampler);
+    Lo += (0.9 * MieBetaFactor) * PerFrame.SunL * CalculateAtmosphere(PerFrame.FarZ * V, PerFrame, CascadedShadow, Samplers[Sampler_Shadow]);
     Out0 = vec4(Lo, 1.0);
 }
 

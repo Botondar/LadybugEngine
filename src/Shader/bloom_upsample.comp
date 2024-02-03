@@ -4,38 +4,45 @@
 
 LayoutGroupSize(BloomUpsample);
 
+layout(push_constant) uniform PushConstants
+{
+    uint DstMipIndex;
+};
+
 SetBindingLayout(PerFrame, Constants, scalar) 
 uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
 
-layout(set = 1, binding = 0) uniform sampler2D PrevMip;
-layout(set = 1, binding = 1) uniform sampler2D Input;
-layout(set = 1, binding = 2) uniform restrict writeonly image2D Output;
+SetBinding(PerFrame, HDRColorImage)         uniform texture2D ColorImage;
+SetBinding(PerFrame, BloomImageGeneral)     uniform texture2D BloomImage;
+SetBinding(PerFrame, BloomMipStorageImages) uniform restrict writeonly image2D BloomMips[R_MaxMipCount];
+
+SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 
 void main()
 {
-    ivec2 InputSize = textureSize(Input, 0);
-    ivec2 OutputSize = imageSize(Output);
+    ivec2 OutputSize = imageSize(BloomMips[DstMipIndex]);
 
     float RX = PerFrame.BloomFilterRadius * (float(OutputSize.y) / float(OutputSize.x));
     float RY = PerFrame.BloomFilterRadius;
 
     ivec2 P = ivec2(gl_GlobalInvocationID.xy);
     vec2 SampleP = (vec2(P) + vec2(0.5, 0.5)) / vec2(OutputSize);
-    vec3 SrcColor = textureLod(Input, SampleP, 0).rgb;
+    vec3 SrcColor = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP, DstMipIndex).rgb;
     if (P.x < OutputSize.x && P.y < OutputSize.y)
     {
-        vec3 a = textureLod(PrevMip, SampleP + vec2(-RX, -RY), 0).rgb;
-        vec3 b = textureLod(PrevMip, SampleP + vec2(0.0, -RY), 0).rgb;
-        vec3 c = textureLod(PrevMip, SampleP + vec2(+RX, -RY), 0).rgb;
-        vec3 d = textureLod(PrevMip, SampleP + vec2(-RX, 0.0), 0).rgb;
-        vec3 e = textureLod(PrevMip, SampleP + vec2(0.0, 0.0), 0).rgb;
-        vec3 f = textureLod(PrevMip, SampleP + vec2(+RX, 0.0), 0).rgb;
-        vec3 g = textureLod(PrevMip, SampleP + vec2(-RX, +RY), 0).rgb;
-        vec3 h = textureLod(PrevMip, SampleP + vec2(0.0, +RY), 0).rgb;
-        vec3 i = textureLod(PrevMip, SampleP + vec2(+RX, +RY), 0).rgb;
+        uint SrcMipIndex = DstMipIndex + 1;
+        vec3 a = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(-RX, -RY), SrcMipIndex).rgb;
+        vec3 b = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(0.0, -RY), SrcMipIndex).rgb;
+        vec3 c = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(+RX, -RY), SrcMipIndex).rgb;
+        vec3 d = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(-RX, 0.0), SrcMipIndex).rgb;
+        vec3 e = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(0.0, 0.0), SrcMipIndex).rgb;
+        vec3 f = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(+RX, 0.0), SrcMipIndex).rgb;
+        vec3 g = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(-RX, +RY), SrcMipIndex).rgb;
+        vec3 h = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(0.0, +RY), SrcMipIndex).rgb;
+        vec3 i = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(+RX, +RY), SrcMipIndex).rgb;
 
         vec3 BlurColor = 
             e * (4.0 / 16.0) +
@@ -47,6 +54,6 @@ void main()
         #else
         vec4 DstColor = vec4(mix(SrcColor, BlurColor, PerFrame.BloomInternalStrength), 1.0);
         #endif
-        imageStore(Output, P, DstColor);
+        imageStore(BloomMips[DstMipIndex], P, DstColor);
     }
 }

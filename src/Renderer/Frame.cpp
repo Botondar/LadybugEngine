@@ -479,43 +479,21 @@ internal void RenderBloom(
 {
     vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, "Bloom");
 
+    VkDescriptorSet BaseDescriptorSets[] = 
+    {
+        Frame->Backend->PerFrameDescriptorSet,
+        Frame->Backend->SamplersDescriptorSet,
+    };
+
+    vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, DownsamplePipelineLayout,
+                            0, CountOf(BaseDescriptorSets), BaseDescriptorSets,
+                            0, nullptr);
+
     u32 Width = Frame->RenderWidth;
     u32 Height = Frame->RenderHeight;
 
     constexpr u32 MaxBloomMipCount = 64u;//9u;
     u32 BloomMipCount = Min(SrcRT->MipCount, MaxBloomMipCount);
-
-    VkDescriptorSetLayout DownsampleSetLayouts[render_target::GlobalMaxMipCount];
-    VkDescriptorSetLayout UpsampleSetLayouts[render_target::GlobalMaxMipCount];
-    for (u32 i = 0; i < SrcRT->MipCount; i++)
-    {
-        DownsampleSetLayouts[i] = DownsampleSetLayout;
-        UpsampleSetLayouts[i] = UpsampleSetLayout;
-    }
-    VkDescriptorSetAllocateInfo DownsampleAllocInfo = 
-    {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .pNext = nullptr,
-        .descriptorPool = Frame->Backend->DescriptorPool,
-        .descriptorSetCount = SrcRT->MipCount,
-        .pSetLayouts = DownsampleSetLayouts,
-    };
-    VkDescriptorSet DownsampleSets[render_target::GlobalMaxMipCount] = {};
-    VkResult Result = vkAllocateDescriptorSets(VK.Device, &DownsampleAllocInfo, DownsampleSets);
-    Assert(Result == VK_SUCCESS);
-
-    VkDescriptorSetAllocateInfo UpsampleAllocInfo = 
-    {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .pNext = nullptr,
-        .descriptorPool = Frame->Backend->DescriptorPool,
-        .descriptorSetCount = DstRT->MipCount, // TODO(boti): this only needs to be BloomMipCount
-        .pSetLayouts = UpsampleSetLayouts,
-    };
-    VkDescriptorSet UpsampleSets[render_target::GlobalMaxMipCount] = {};
-    Result = vkAllocateDescriptorSets(VK.Device, &UpsampleAllocInfo, UpsampleSets);
-    Assert(Result == VK_SUCCESS);
-
     VkImageMemoryBarrier2 BeginBarriers[] = 
     {
         // HDR Mip 0
@@ -524,10 +502,10 @@ internal void RenderBloom(
             .pNext = nullptr,
             .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
             .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = SrcRT->Image,
@@ -540,15 +518,14 @@ internal void RenderBloom(
                 .layerCount = 1,
             },
         },
-#if 1
-        // HDR Mip rest
+        // HDR mips
         {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .pNext = nullptr,
             .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
             .srcAccessMask = VK_ACCESS_2_NONE,
             .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
             .newLayout = VK_IMAGE_LAYOUT_GENERAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -563,7 +540,6 @@ internal void RenderBloom(
                 .layerCount = 1,
             },
         },
-#endif
     };
 
     VkDependencyInfo BeginDependencyInfo = 
@@ -585,48 +561,8 @@ internal void RenderBloom(
     vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, DownsamplePipeline);
     for (u32 Mip = 1; Mip < SrcRT->MipCount; Mip++)
     {
-        VkDescriptorImageInfo SourceImageInfo = 
-        {
-            .sampler = Frame->Renderer->Samplers[Sampler_RenderTargetNormalizedClampToEdge],
-            .imageView = SrcRT->MipViews[Mip - 1],
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        VkDescriptorImageInfo DestImageInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = SrcRT->MipViews[Mip],
-            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-        };
-        VkWriteDescriptorSet Writes[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = DownsampleSets[Mip - 1],
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .pImageInfo = &SourceImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = DownsampleSets[Mip - 1],
-                .dstBinding = 1,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .pImageInfo = &DestImageInfo,
-            },  
-        };
-
-        vkUpdateDescriptorSets(VK.Device, CountOf(Writes), Writes, 0, nullptr);
-        vkCmdBindDescriptorSets(CmdBuffer, 
-                                VK_PIPELINE_BIND_POINT_COMPUTE, DownsamplePipelineLayout,
-                                0, 1, DownsampleSets + Mip - 1, 0, nullptr);
         vkCmdPushConstants(CmdBuffer, DownsamplePipelineLayout, VK_SHADER_STAGE_ALL, 
-                           0, sizeof(DoKarisAverage), &DoKarisAverage);
+                           0, sizeof(Mip), &Mip);
 
         u32 DispatchX = CeilDiv(Width, BloomDownsample_GroupSizeX);
         u32 DispatchY = CeilDiv(Height, BloomDownsample_GroupSizeY);
@@ -645,7 +581,7 @@ internal void RenderBloom(
             .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = SrcRT->Image,
@@ -687,7 +623,7 @@ internal void RenderBloom(
                 .srcAccessMask = VK_ACCESS_2_NONE,
                 .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
                 .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
                 .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -759,7 +695,7 @@ internal void RenderBloom(
             },
         };
 
-        vkCmdCopyImage(CmdBuffer, 
+        vkCmdCopyImage(CmdBuffer,
                        SrcRT->Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                        DstRT->Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                        1, &CopyRegion);
@@ -771,8 +707,8 @@ internal void RenderBloom(
                 .pNext = nullptr,
                 .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
                 .srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_2_NONE,
-                .dstAccessMask = VK_ACCESS_2_NONE,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
                 .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                 .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -790,12 +726,33 @@ internal void RenderBloom(
             {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
                 .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                .srcAccessMask = VK_ACCESS_2_NONE,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = SrcRT->Image,
+                .subresourceRange = 
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = MipIndex,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
                 .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
                 .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
                 .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                 .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
                 .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .image = DstRT->Image,
@@ -804,6 +761,27 @@ internal void RenderBloom(
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                     .baseMipLevel = MipIndex,
                     .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = DstRT->Image,
+                .subresourceRange = 
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = MipIndex,
                     .baseArrayLayer = 0,
                     .layerCount = 1,
                 },
@@ -821,105 +799,11 @@ internal void RenderBloom(
     }
 
     vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, UpsamplePipeline);
-    vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, UpsamplePipelineLayout,
-                            0, 1, &Frame->Backend->PerFrameDescriptorSet, 0, nullptr);
     for (u32 Index = 1; Index < BloomMipCount; Index++)
     {
         u32 Mip = BloomMipCount - Index - 1;
-        VkImageMemoryBarrier2 Begin = 
-        {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT|VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = DstRT->Image,
-            .subresourceRange = 
-            {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = Mip,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-        };
-
-        VkDependencyInfo BeginDependency = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .pNext = nullptr,
-            .dependencyFlags = 0,
-            .memoryBarrierCount = 0,
-            .pMemoryBarriers = nullptr,
-            .bufferMemoryBarrierCount = 0,
-            .pBufferMemoryBarriers = nullptr,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &Begin,
-        };
-        vkCmdPipelineBarrier2(CmdBuffer, &BeginDependency);
-
-        VkDescriptorImageInfo DstMipPlus1ImageInfo = 
-        {
-            .sampler = Frame->Renderer->Samplers[Sampler_RenderTargetNormalizedClampToEdge],
-            .imageView = DstRT->MipViews[Mip + 1],
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        VkDescriptorImageInfo SrcImageInfo = 
-        {
-            .sampler = Frame->Renderer->Samplers[Sampler_RenderTargetNormalizedClampToEdge],
-            .imageView = SrcRT->MipViews[Mip],
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        VkDescriptorImageInfo DstImageInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = DstRT->MipViews[Mip],
-            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-        };
-        VkWriteDescriptorSet Writes[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = UpsampleSets[Mip],
-                .dstBinding = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .pImageInfo = &DstMipPlus1ImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = UpsampleSets[Mip],
-                .dstBinding = 1,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .pImageInfo = &SrcImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = UpsampleSets[Mip],
-                .dstBinding = 2,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .pImageInfo = &DstImageInfo,
-            },
-        };
-
-        vkUpdateDescriptorSets(VK.Device, CountOf(Writes), Writes, 0, nullptr);
-        vkCmdBindDescriptorSets(CmdBuffer, 
-                                VK_PIPELINE_BIND_POINT_COMPUTE, UpsamplePipelineLayout,
-                                1, 1, UpsampleSets + Mip, 0, nullptr);
-
+        vkCmdPushConstants(CmdBuffer, UpsamplePipelineLayout, VK_SHADER_STAGE_ALL,
+                           0, sizeof(Mip), &Mip);
         Width = Max(Frame->RenderWidth >> Mip, 1u);
         Height = Max(Frame->RenderHeight >> Mip, 1u);
 
@@ -936,7 +820,7 @@ internal void RenderBloom(
             .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
             .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .image = DstRT->Image,
@@ -949,7 +833,7 @@ internal void RenderBloom(
                 .layerCount = 1,
             },
         };
-
+    
         VkDependencyInfo EndDependency = 
         {
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
@@ -964,6 +848,43 @@ internal void RenderBloom(
         };
         vkCmdPipelineBarrier2(CmdBuffer, &EndDependency);
     }
+
+    VkImageMemoryBarrier2 End = 
+    {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .pNext = nullptr,
+        .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+        .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT|VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+        .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = DstRT->Image,
+        .subresourceRange = 
+        {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = VK_REMAINING_MIP_LEVELS,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+    
+    VkDependencyInfo EndDependency = 
+    {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pNext = nullptr,
+        .dependencyFlags = 0,
+        .memoryBarrierCount = 0,
+        .pMemoryBarriers = nullptr,
+        .bufferMemoryBarrierCount = 0,
+        .pBufferMemoryBarriers = nullptr,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers = &End,
+    };
+    vkCmdPipelineBarrier2(CmdBuffer, &EndDependency);
 
     vkCmdEndDebugUtilsLabelEXT(CmdBuffer);
 }

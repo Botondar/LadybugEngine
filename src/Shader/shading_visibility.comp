@@ -43,12 +43,12 @@ readonly buffer SkinnedVertexBuffer
 SetBinding(PerFrame, VisibilityImage) uniform utexture2D VisibilityImage;
 SetBinding(PerFrame, OcclusionImage) uniform texture2D OcclusionImage;
 SetBinding(PerFrame, HDRColorStorageImage) uniform restrict writeonly image2D HDRTarget;
+SetBinding(PerFrame, CascadedShadow) uniform texture2DArray CascadedShadow;
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
-layout(set = 2, binding = 0) uniform texture2D Textures[];
+SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
-layout(set = 3, binding = 0) uniform sampler2DArrayShadow CascadeSampler;
-layout(set = 4, binding = 0) uniform samplerCubeShadow PointShadows[];
+layout(set = 3, binding = 0) uniform samplerCubeShadow PointShadows[];
 
 SetBindingLayout(PerFrame, LightBuffer, scalar)
 readonly buffer LightBuffer
@@ -248,7 +248,7 @@ void main()
             v3 CascadeP2 = PerFrame.CascadeScales[1] * CascadeP0 + PerFrame.CascadeOffsets[1];
             v3 CascadeP3 = PerFrame.CascadeScales[2] * CascadeP0 + PerFrame.CascadeOffsets[2];
 
-            v2 ShadowMapSize = v2(textureSize(CascadeSampler, 0).xy);
+            v2 ShadowMapSize = v2(textureSize(CascadedShadow, 0).xy);
             v2 TexelSize = v2(1.0) / ShadowMapSize;
 
             bool BeyondCascade2 = (CascadeBlends.y >= 0.0);
@@ -267,8 +267,8 @@ void main()
 
             // TODO(boti): Move this scale to per-frame
             f32 Scale = 2.0 * TexelSize.x;
-            f32 Shadow1 = SampleShadowPoisson(CascadeSampler, P1, Scale, 64);
-            f32 Shadow2 = SampleShadowPoisson(CascadeSampler, P2, Scale, 64);
+            f32 Shadow1 = SampleShadowPoisson(CascadedShadow, Samplers[Sampler_Shadow], P1, Scale, 64);
+            f32 Shadow2 = SampleShadowPoisson(CascadedShadow, Samplers[Sampler_Shadow], P2, Scale, 64);
             SunShadow = mix(Shadow2, Shadow1, Blend);
         }
 

@@ -103,7 +103,7 @@ CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize)
 }
 
 internal render_target* 
-PushRenderTarget(render_target_heap* Heap, VkFormat Format, VkImageUsageFlags Usage, u32 MaxMipCount /*= 1*/)
+PushRenderTarget(const char* Name, render_target_heap* Heap, VkFormat Format, VkImageUsageFlags Usage, u32 MaxMipCount /*= 1*/)
 {
     render_target* Result = nullptr;
 
@@ -114,11 +114,12 @@ PushRenderTarget(render_target_heap* Heap, VkFormat Format, VkImageUsageFlags Us
         Result = Heap->RenderTargets + Heap->RenderTargetCount++;
         *Result =
         {
+            .Name = Name,
             .Image = VK_NULL_HANDLE,
             .View = VK_NULL_HANDLE,
             .MipCount = 0,
             .MipViews = {},
-            .MaxMipCount = MaxMipCount ? MaxMipCount : render_target::GlobalMaxMipCount,
+            .MaxMipCount = MaxMipCount ? MaxMipCount : R_MaxMipCount,
             .Format = Format,
             .Usage = Usage,
         };
@@ -243,6 +244,16 @@ ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height)
 
                         if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, &RT->View) == VK_SUCCESS)
                         {
+                            VkDebugUtilsObjectNameInfoEXT NameInfo = 
+                            {
+                                .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+                                .pNext = nullptr,
+                                .objectType = VK_OBJECT_TYPE_IMAGE,
+                                .objectHandle = (u64)RT->Image,
+                                .pObjectName = RT->Name,
+
+                            };
+                            vkSetDebugUtilsObjectNameEXT(VK.Device, &NameInfo);
                         }
                         else
                         {

@@ -932,6 +932,25 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             const descriptor_set_layout_info* Info = SetLayoutInfos + Index;
 
             VkDescriptorSetLayoutBinding Bindings[MaxDescriptorSetLayoutBindingCount] = {};
+            VkDescriptorBindingFlags BindingFlags[MaxDescriptorSetLayoutBindingCount] = {};
+
+            VkDescriptorSetLayoutBindingFlagsCreateInfo FlagsInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+                .pNext = nullptr,
+                .bindingCount = Info->BindingCount,
+                .pBindingFlags = BindingFlags,
+            };
+
+            VkDescriptorSetLayoutCreateInfo CreateInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                .pNext = &FlagsInfo,
+                .flags = 0,
+                .bindingCount = Info->BindingCount,
+                .pBindings = Bindings,
+            };
+
             for (u32 BindingIndex = 0; BindingIndex < Info->BindingCount; BindingIndex++)
             {
                 const descriptor_set_binding* Binding = Info->Bindings + BindingIndex;
@@ -940,36 +959,18 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 Bindings[BindingIndex].descriptorCount = Binding->DescriptorCount;
                 Bindings[BindingIndex].stageFlags = PipelineStagesToVulkan(Binding->Stages);
                 Bindings[BindingIndex].pImmutableSamplers = nullptr;
-            }
-            VkDescriptorSetLayoutCreateInfo CreateInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .bindingCount = Info->BindingCount,
-                .pBindings = Bindings,
-            };
-
-            VkDescriptorBindingFlags BindlessFlags = 0;
-            VkDescriptorSetLayoutBindingFlagsCreateInfo BindlessInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-                .pNext = nullptr,
-                .bindingCount = 1,
-                .pBindingFlags = &BindlessFlags,
-            };
-
-            if (HasFlag(Info->Flags, SetLayoutFlag_UpdateAfterBind))
-            {
-                CreateInfo.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-                BindlessFlags |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
-            }
-
-            if (HasFlag(Info->Flags, SetLayoutFlag_Bindless))
-            {
-                BindlessFlags |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
-                Bindings[0].descriptorCount = 1 << 18; // HACK(boti): see texture manager
-                CreateInfo.pNext = &BindlessInfo;
+                if (Binding->Flags & DescriptorFlag_PartiallyBound)
+                {
+                    BindingFlags[BindingIndex] |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+                }
+                if (Binding->Flags & DescriptorFlag_Bindless)
+                {
+                    CreateInfo.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+                    BindingFlags[BindingIndex] |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT|VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+                    // HACK(boti): see texture manager;
+                    // TODO(boti) [update]: I don't see a reason why this can't just be part of the set layout?
+                    Bindings[BindingIndex].descriptorCount = 1 << 18; 
+                }
             }
 
             Result = vkCreateDescriptorSetLayout(VK.Device, &CreateInfo, nullptr, &Renderer->SetLayouts[Index]);
@@ -989,7 +990,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     // Texture Manager
     // TODO(boti): remove this
     Renderer->TextureManager.DescriptorSetLayouts[0] = Renderer->SetLayouts[SetLayout_DefaultSampler];
-    Renderer->TextureManager.DescriptorSetLayouts[1] = Renderer->SetLayouts[SetLayout_BindlessTextures];
+    Renderer->TextureManager.DescriptorSetLayouts[1] = Renderer->SetLayouts[SetLayout_Bindless];
     if (!CreateTextureManager(&Renderer->TextureManager, R_TextureMemorySize, VK.GPUMemTypes))
     {
         Result = VK_ERROR_INITIALIZATION_FAILED;
@@ -1535,13 +1536,13 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
                 constexpr VkImageUsageFlagBits Sampled = VK_IMAGE_USAGE_SAMPLED_BIT;
                 constexpr VkImageUsageFlagBits Storage = VK_IMAGE_USAGE_STORAGE_BIT;
                 
-                Renderer->DepthBuffer           = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
-                Renderer->StructureBuffer       = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[STRUCTURE_BUFFER_FORMAT], Color|Sampled, 1);
-                Renderer->HDRRenderTarget       = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
-                Renderer->BloomTarget           = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
-                Renderer->OcclusionBuffers[0]   = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
-                Renderer->OcclusionBuffers[1]   = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
-                Renderer->VisibilityBuffer      = PushRenderTarget(&Renderer->RenderTargetHeap, FormatTable[VISIBILITY_FORMAT], Color|Sampled, 1);
+                Renderer->DepthBuffer           = PushRenderTarget("Depth", &Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
+                Renderer->StructureBuffer       = PushRenderTarget("Structure", &Renderer->RenderTargetHeap, FormatTable[STRUCTURE_BUFFER_FORMAT], Color|Sampled, 1);
+                Renderer->HDRRenderTarget       = PushRenderTarget("HDR", &Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
+                Renderer->BloomTarget           = PushRenderTarget("Bloom", &Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
+                Renderer->OcclusionBuffers[0]   = PushRenderTarget("OcclusionRaw", &Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
+                Renderer->OcclusionBuffers[1]   = PushRenderTarget("Occlusion", &Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
+                Renderer->VisibilityBuffer      = PushRenderTarget("Visibility", &Renderer->RenderTargetHeap, FormatTable[VISIBILITY_FORMAT], Color|Sampled, 1);
             }
 
             if (!ResizeRenderTargets(&Renderer->RenderTargetHeap, Renderer->SurfaceExtent.width, Renderer->SurfaceExtent.height))
@@ -2622,6 +2623,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         Renderer->Samplers[Sampler_Shadow]);
 
     VkDescriptorSet SamplersDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_Samplers]);
+    Frame->Backend->SamplersDescriptorSet = SamplersDescriptorSet;
     {
         VkDescriptorImageInfo SamplerDescriptorInfos[Sampler_Count];
         for (u32 SamplerIndex = 0; SamplerIndex < Sampler_Count; SamplerIndex++)
@@ -2751,6 +2753,44 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .sampler = VK_NULL_HANDLE,
             .imageView = Renderer->BloomTarget->View,
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        VkDescriptorImageInfo CascadedShadowImageInfo = 
+        {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = Renderer->ShadowView,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+
+        VkDescriptorImageInfo HDRMipStorageImageInfos[R_MaxMipCount];
+        VkDescriptorImageInfo BloomMipStorageImageInfos[R_MaxMipCount];
+        Assert(Renderer->HDRRenderTarget->MipCount == Renderer->BloomTarget->MipCount);
+        for (u32 Mip = 0; Mip < Renderer->HDRRenderTarget->MipCount; Mip++)
+        {
+            HDRMipStorageImageInfos[Mip] = 
+            {
+                .sampler = VK_NULL_HANDLE,
+                .imageView = Renderer->HDRRenderTarget->MipViews[Mip],
+                .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+            };
+            BloomMipStorageImageInfos[Mip] = 
+            {
+                .sampler = VK_NULL_HANDLE,
+                .imageView = Renderer->BloomTarget->MipViews[Mip],
+                .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+            };
+        }
+
+        VkDescriptorImageInfo HDRColorImageGeneralInfo = 
+        {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = Renderer->HDRRenderTarget->View,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+        };
+        VkDescriptorImageInfo BloomImageGeneralInfo = 
+        {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = Renderer->BloomTarget->View,
+            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         };
 
         VkWriteDescriptorSet Writes[] = 
@@ -2924,6 +2964,56 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .descriptorCount = 1,
                 .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
                 .pImageInfo = &BloomImageInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = PerFrameDescriptorSet,
+                .dstBinding = Binding_PerFrame_CascadedShadow,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &CascadedShadowImageInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = PerFrameDescriptorSet,
+                .dstBinding = Binding_PerFrame_HDRMipStorageImages,
+                .dstArrayElement = 0,
+                .descriptorCount = Renderer->HDRRenderTarget->MipCount,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .pImageInfo = HDRMipStorageImageInfos,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = PerFrameDescriptorSet,
+                .dstBinding = Binding_PerFrame_BloomMipStorageImages,
+                .dstArrayElement = 0,
+                .descriptorCount = Renderer->BloomTarget->MipCount,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .pImageInfo = BloomMipStorageImageInfos,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = PerFrameDescriptorSet,
+                .dstBinding = Binding_PerFrame_HDRColorImageGeneral,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &HDRColorImageGeneralInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = PerFrameDescriptorSet,
+                .dstBinding = Binding_PerFrame_BloomImageGeneral,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &BloomImageGeneralInfo,
             },
         };
         static_assert(CountOf(Writes) == Binding_PerFrame_Count);
@@ -3805,7 +3895,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 PerFrameDescriptorSet,
                 SamplersDescriptorSet,
                 Renderer->TextureManager.DescriptorSets[1],
-                CascadeDescriptorSet,
                 PointShadowsDescriptorSet,
             };
             vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout, 
@@ -3903,7 +3992,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 VkDescriptorSet Sets[] = 
                 {
                     PerFrameDescriptorSet,
-                    CascadeDescriptorSet,
+                    SamplersDescriptorSet,
                 };
                 vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Layout, 
                                         0, CountOf(Sets), Sets,
@@ -3985,7 +4074,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 PerFrameDescriptorSet,
                 SamplersDescriptorSet,
                 Renderer->TextureManager.DescriptorSets[1],
-                CascadeDescriptorSet,
                 PointShadowsDescriptorSet,
             };
             vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
@@ -4004,7 +4092,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 VkDescriptorSet Sets[] = 
                 {
                     PerFrameDescriptorSet,
-                    CascadeDescriptorSet,
+                    SamplersDescriptorSet,
                 };
                 vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Layout, 
                                         0, CountOf(Sets), Sets,

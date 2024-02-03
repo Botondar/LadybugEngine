@@ -285,13 +285,13 @@ enum descriptor_type : u32
     Descriptor_InlineUniformBlock = 11,
 };
 
-typedef flags32 descriptor_set_layout_flags;
-enum descriptor_set_layout_flag_bits : descriptor_set_layout_flags
+typedef flags32 descriptor_flags;
+enum descriptor_flag_bits : descriptor_flags
 {
-    SetLayoutFlag_None = 0,
+    DescriptorFlag_None = 0,
 
-    SetLayoutFlag_UpdateAfterBind = (1 << 0),
-    SetLayoutFlag_Bindless = (2 << 0),
+    DescriptorFlag_PartiallyBound   = (1 << 0),
+    DescriptorFlag_Bindless         = (1 << 1),
 };
 
 enum pipeline_type : u32
@@ -385,11 +385,11 @@ struct descriptor_set_binding
     descriptor_type Type;
     u32 DescriptorCount;
     pipeline_stages Stages;
+    descriptor_flags Flags;
 };
 
 struct descriptor_set_layout_info
 {
-    descriptor_set_layout_flags Flags;
     u32 BindingCount;
     descriptor_set_binding Bindings[MaxDescriptorSetLayoutBindingCount];
 };

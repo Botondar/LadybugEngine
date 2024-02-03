@@ -51,6 +51,7 @@ struct v4u8
 #define R_LuminanceThreshold    1e-2f
 #define R_MaxLightCount         16384
 #define R_MaxShadowCount        64
+#define R_MaxMipCount           16
 
 #define Attrib_Position         0
 #define Attrib_Normal           1
@@ -62,7 +63,7 @@ struct v4u8
 
 #define Set_PerFrame            0
 #define Set_Sampler             1
-#define Set_BindlessTexture     2
+#define Set_Bindless            2
 #define Set_Unused0             3
 
 // PerFrame set bindings
@@ -84,8 +85,16 @@ struct v4u8
 #define Binding_PerFrame_HDRColorStorageImage       14
 #define Binding_PerFrame_HDRColorImage              15
 #define Binding_PerFrame_BloomImage                 16
+#define Binding_PerFrame_CascadedShadow             17
+#define Binding_PerFrame_HDRMipStorageImages        18
+#define Binding_PerFrame_BloomMipStorageImages      19
+// NOTE(boti): HDR and Bloom general images are workarounds
+// for the image layout being baked into the set
+// TODO(boti): Enhanced barriers are need for this in D3D12 (same-queue read + read/write)
+#define Binding_PerFrame_HDRColorImageGeneral       20
+#define Binding_PerFrame_BloomImageGeneral          21
 
-#define Binding_PerFrame_Count                      17
+#define Binding_PerFrame_Count                      22
 
 // Sampler set bindings
 #define Binding_Sampler_NamedSamplers               0
@@ -100,6 +109,8 @@ struct v4u8
 
 #define Sampler_Count                               6
 
+// Bindless bindings
+#define Binding_Bindless_Textures                   0
 
 #define light_flags flags32
 #define LightFlag_None          0x00u

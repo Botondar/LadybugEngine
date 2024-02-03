@@ -5,9 +5,11 @@ enum descriptor_set_layout : u32
 {
     SetLayout_None = 0,
 
+    // System sets
     SetLayout_PerFrame,
-    SetLayout_BindlessTextures,
     SetLayout_Samplers,
+    SetLayout_Bindless,
+    
     SetLayout_DefaultSampler,
     SetLayout_CascadeShadow,
     SetLayout_Bloom,

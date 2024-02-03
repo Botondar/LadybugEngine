@@ -151,7 +151,7 @@ vec3 GetCascadeBlends(in float Nd[4], in float Fd[4], in f32 Z)
     return Result;
 }
 
-float SampleShadowPoisson(sampler2DArrayShadow Sampler, v4 P, float Scale, uint TapCount)
+float SampleShadowPoisson(texture2DArray Texture, sampler Sampler, v4 P, float Scale, uint TapCount)
 {
     float Result = 0.0;
 
@@ -225,7 +225,7 @@ float SampleShadowPoisson(sampler2DArrayShadow Sampler, v4 P, float Scale, uint 
 
     for (uint Tap = 0; Tap < TapCount; Tap++)
     {
-        Result += texture(Sampler, P + v4(Scale * Offsets[Tap], 0.0, 0.0));
+        Result += texture(sampler2DArrayShadow(Texture, Sampler), P + v4(Scale * Offsets[Tap], 0.0, 0.0));
     }
 
     Result *= 1.0 / float(TapCount);
@@ -300,7 +300,7 @@ float PhaseMie(in float g, in float g2, in float CosTheta)
     return(Phase);
 }
 
-float CalculateAtmosphere(v3 P, per_frame PerFrame, sampler2DArrayShadow ShadowMap)
+float CalculateAtmosphere(v3 P, per_frame PerFrame, texture2DArray Cascades, sampler Sampler)
 {
     const int StepCount = 32;
     const float StepDistribution = 0.25;
@@ -350,7 +350,7 @@ float CalculateAtmosphere(v3 P, per_frame PerFrame, sampler2DArrayShadow ShadowM
             // FIXME
             ShadowCoord.xyw = PerFrame.CascadeScales[CascadeIndex - 1] * ShadowCoord.xyw + PerFrame.CascadeOffsets[CascadeIndex - 1];
         }
-        float Shadow = texture(ShadowMap, ShadowCoord);
+        float Shadow = texture(sampler2DArrayShadow(Cascades, Sampler), ShadowCoord);
 
         InScatter += Weight * Shadow;
         Weight += dW;

@@ -4,13 +4,15 @@
 
 LayoutGroupSize(BloomDownsample);
 
-layout(set = 0, binding = 0) uniform sampler2D Input;
-layout(set = 0, binding = 1) uniform restrict writeonly image2D Output;
-
 layout(push_constant) uniform PushConstants
 {
-    bool DoKarisAverage;
+    uint DstMipIndex;
 };
+
+SetBinding(PerFrame, HDRColorImageGeneral) uniform texture2D ColorImage;
+SetBinding(PerFrame, HDRMipStorageImages) uniform restrict writeonly image2D Mips[R_MaxMipCount];
+
+SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 
 vec3 KarisAvg(in vec3 a, in vec3 b, in vec3 c, in vec3 d)
 {
@@ -32,8 +34,10 @@ vec3 KarisAvg(in vec3 a, in vec3 b, in vec3 c, in vec3 d)
 
 void main()
 {
-    ivec2 InputSize = textureSize(Input, 0);
-    ivec2 OutputSize = imageSize(Output);
+    uint SrcMip = DstMipIndex - 1;
+
+    ivec2 InputSize = textureSize(ColorImage, int(SrcMip));
+    ivec2 OutputSize = imageSize(Mips[DstMipIndex]);
 
     vec2 InputTexelSize = vec2(1.0) / InputSize;
     vec2 OutputTexelSize = vec2(1.0) / OutputSize;
@@ -47,23 +51,23 @@ void main()
         // b01  -  b11  -  b21
         //  -  a01  -  a11  -
         // b02  -  b12  -  b22
-        vec3 a00 = textureLod(Input, ReadP + InputTexelSize * vec2(-1.0, -1.0), 0).rgb;
-        vec3 a10 = textureLod(Input, ReadP + InputTexelSize * vec2(+1.0, -1.0), 0).rgb;
-        vec3 a11 = textureLod(Input, ReadP + InputTexelSize * vec2(+1.0, +1.0), 0).rgb;
-        vec3 a01 = textureLod(Input, ReadP + InputTexelSize * vec2(-1.0, +1.0), 0).rgb;
+        vec3 a00 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(-1.0, -1.0), SrcMip).rgb;
+        vec3 a10 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(+1.0, -1.0), SrcMip).rgb;
+        vec3 a11 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(+1.0, +1.0), SrcMip).rgb;
+        vec3 a01 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(-1.0, +1.0), SrcMip).rgb;
 
-        vec3 b00 = textureLod(Input, ReadP + InputTexelSize * vec2(-2.0, -2.0), 0).rgb;
-        vec3 b10 = textureLod(Input, ReadP + InputTexelSize * vec2( 0.0, -2.0), 0).rgb;
-        vec3 b20 = textureLod(Input, ReadP + InputTexelSize * vec2(+2.0, -2.0), 0).rgb;
-        vec3 b01 = textureLod(Input, ReadP + InputTexelSize * vec2(-2.0,  0.0), 0).rgb;
-        vec3 b11 = textureLod(Input, ReadP + InputTexelSize * vec2( 0.0,  0.0), 0).rgb;
-        vec3 b21 = textureLod(Input, ReadP + InputTexelSize * vec2(+2.0,  0.0), 0).rgb;
-        vec3 b02 = textureLod(Input, ReadP + InputTexelSize * vec2(-2.0, +2.0), 0).rgb;
-        vec3 b12 = textureLod(Input, ReadP + InputTexelSize * vec2( 0.0, +2.0), 0).rgb;
-        vec3 b22 = textureLod(Input, ReadP + InputTexelSize * vec2(+2.0, +2.0), 0).rgb;
+        vec3 b00 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(-2.0, -2.0), SrcMip).rgb;
+        vec3 b10 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2( 0.0, -2.0), SrcMip).rgb;
+        vec3 b20 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(+2.0, -2.0), SrcMip).rgb;
+        vec3 b01 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(-2.0,  0.0), SrcMip).rgb;
+        vec3 b11 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2( 0.0,  0.0), SrcMip).rgb;
+        vec3 b21 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(+2.0,  0.0), SrcMip).rgb;
+        vec3 b02 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(-2.0, +2.0), SrcMip).rgb;
+        vec3 b12 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2( 0.0, +2.0), SrcMip).rgb;
+        vec3 b22 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(+2.0, +2.0), SrcMip).rgb;
         
         vec3 Accum = vec3(0.0);
-        if (DoKarisAverage)
+        if (DstMipIndex == 1)
         {
             Accum += KarisAvg(b00, b10, b01, b11);
             Accum += KarisAvg(b10, b20, b11, b21);
@@ -84,6 +88,6 @@ void main()
             
         }
         
-        imageStore(Output, WriteP, vec4(Accum, 1.0));
+        imageStore(Mips[DstMipIndex], WriteP, vec4(Accum, 1.0));
     }
 }
