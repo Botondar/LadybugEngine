@@ -3,7 +3,11 @@
 vulkan VK;
 platform_api Platform;
 
-#define ReturnOnFailure() if (Result != VK_SUCCESS) return nullptr
+#define ReturnOnFailure() \
+if (Result != VK_SUCCESS) { \
+    UnhandledError("Renderer init error"); \
+    return nullptr; \
+}
 
 static VkFormat FormatTable[Format_Count] = 
 {
@@ -380,33 +384,44 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
         vkDestroyPipelineLayout(VK.Device, Pipeline->Layout, nullptr);
 
         const pipeline_info* Info = PipelineInfos + PipelineIndex;
-    
-        VkDescriptorSetLayout SetLayouts[MaxDescriptorSetCount] = {};
-        for (u32 SetLayoutIndex = 0; SetLayoutIndex < Info->Layout.DescriptorSetCount; SetLayoutIndex++)
+        
+        if (Info->Layout.DescriptorSetCount)
         {
-            SetLayouts[SetLayoutIndex] = Renderer->SetLayouts[Info->Layout.DescriptorSets[SetLayoutIndex]];
+            VkDescriptorSetLayout SetLayouts[MaxDescriptorSetCount] = {};
+            for (u32 SystemSetIndex = 0; SystemSetIndex < SystemSet_Count; SystemSetIndex++)
+            {
+                SetLayouts[SystemSetIndex] = Renderer->SetLayouts[SystemSetIndex];
+            }
+            for (u32 SetLayoutIndex = 0; SetLayoutIndex < Info->Layout.DescriptorSetCount; SetLayoutIndex++)
+            {
+                SetLayouts[SetLayoutIndex + Set_User0] = Renderer->SetLayouts[Info->Layout.DescriptorSets[SetLayoutIndex]];
+            }
+
+            VkPushConstantRange PushConstantRange = 
+            {
+                .stageFlags = VK_SHADER_STAGE_ALL,
+                .offset = 0,
+                .size = MinPushConstantSize,
+            };
+
+            VkPipelineLayoutCreateInfo PipelineLayoutInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .setLayoutCount = SystemSet_Count + Info->Layout.DescriptorSetCount,
+                .pSetLayouts = SetLayouts,
+                .pushConstantRangeCount = 1,
+                .pPushConstantRanges = &PushConstantRange,
+            };
+            Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Pipeline->Layout);
+            Assert(Result == VK_SUCCESS);
+            if (Result != VK_SUCCESS) return(Result);
         }
-
-        VkPushConstantRange PushConstantRange = 
+        else
         {
-            .stageFlags = VK_SHADER_STAGE_ALL,
-            .offset = 0,
-            .size = MaxPushConstantSize,
-        };
-
-        VkPipelineLayoutCreateInfo PipelineLayoutInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .setLayoutCount = Info->Layout.DescriptorSetCount,
-            .pSetLayouts = SetLayouts,
-            .pushConstantRangeCount = 1,
-            .pPushConstantRanges = &PushConstantRange,
-        };
-        Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Pipeline->Layout);
-        Assert(Result == VK_SUCCESS);
-        if (Result != VK_SUCCESS) return(Result);
+            Pipeline->Layout = Renderer->SystemPipelineLayout;
+        }
 
         u64 NameSize = PathSize;
         CopyZStringToBuffer(Name, Info->Name, &NameSize);
@@ -926,8 +941,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
 
     // Create descriptor set layouts
     {
-        Renderer->SetLayouts[SetLayout_None] = VK_NULL_HANDLE;
-        for (u32 Index = 1; Index < SetLayout_Count; Index++)
+        for (u32 Index = 0; Index < SetLayout_Count; Index++)
         {
             const descriptor_set_layout_info* Info = SetLayoutInfos + Index;
 
@@ -989,13 +1003,15 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
 
     // Texture Manager
     // TODO(boti): remove this
-    Renderer->TextureManager.DescriptorSetLayouts[0] = Renderer->SetLayouts[SetLayout_DefaultSampler];
-    Renderer->TextureManager.DescriptorSetLayouts[1] = Renderer->SetLayouts[SetLayout_Bindless];
+    Renderer->TextureManager.DescriptorSetLayout = Renderer->SetLayouts[SetLayout_Bindless];
     if (!CreateTextureManager(&Renderer->TextureManager, R_TextureMemorySize, VK.GPUMemTypes))
     {
         Result = VK_ERROR_INITIALIZATION_FAILED;
         ReturnOnFailure();
     }
+
+    // TODO(boti): Packed samplers should be folded into the sampler descriptor set
+    #if 0
     for (u32 PackedSamplerID = 0; PackedSamplerID < packed_sampler::MaxSamplerCount; PackedSamplerID++)
     {
         packed_sampler PackedSampler = { .Value = PackedSamplerID };
@@ -1038,6 +1054,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
         }
     }
+    #endif
 
     // Per frame
     {
@@ -1490,9 +1507,29 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             }
         }
     }
-    
-    // Create packed samplers
 
+    // Create system pipeline layout
+    {
+        VkPushConstantRange PushConstantRange = 
+        {
+            .stageFlags = VK_SHADER_STAGE_ALL,
+            .offset = 0,
+            .size = MinPushConstantSize,
+        };
+        VkPipelineLayoutCreateInfo Info = 
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .setLayoutCount = SystemSet_Count,
+            .pSetLayouts = Renderer->SetLayouts,
+            .pushConstantRangeCount = 1,
+            .pPushConstantRanges = &PushConstantRange,
+        };
+
+        Result = vkCreatePipelineLayout(VK.Device, &Info, nullptr, &Renderer->SystemPipelineLayout);
+        ReturnOnFailure();
+    }
     Result = CreatePipelines(Renderer, Scratch);
     ReturnOnFailure();
     return(Renderer);
@@ -3050,6 +3087,20 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
     }
 
+    VkDescriptorSet SystemDescriptorSets[] = 
+    {
+        PerFrameDescriptorSet,
+        SamplersDescriptorSet,
+        Renderer->TextureManager.DescriptorSet,
+    };
+
+    vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SystemPipelineLayout,
+                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
+                            0, nullptr);
+    vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->SystemPipelineLayout,
+                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
+                            0, nullptr);
+
     VkViewport FrameViewport = 
     {
         .x = 0.0f,
@@ -3077,9 +3128,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         pipeline_with_layout SkinningPipeline = Renderer->Pipelines[Pipeline_Skinning];
         vkCmdBindPipeline(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Pipeline);
-        vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
-                                0, 1, &PerFrameDescriptorSet,
-                                0, nullptr);
 
         VkBufferMemoryBarrier2 BeginBarriers[] =
         {
@@ -3112,7 +3160,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         {
             skinning_cmd* Cmd = Frame->SkinningCmds + SkinningCmdIndex;
             vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
-                                    1, 1, &JointDescriptorSet,
+                                    Set_User0, 1, &JointDescriptorSet,
                                     1, &Cmd->PoseOffset);
 
             u32 PushConstants[3] = 
@@ -3163,16 +3211,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     {
         pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Prepass];
         vkCmdBindPipeline(PrepassCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-
-        VkDescriptorSet PrepassDescriptorSets[] = 
-        {
-            PerFrameDescriptorSet,
-            SamplersDescriptorSet,
-            Renderer->TextureManager.DescriptorSets[1],
-        };
-        vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout, 
-                                0, CountOf(PrepassDescriptorSets), PrepassDescriptorSets,
-                                0, nullptr);
         DrawList(Frame, PrepassCmd, &PrimaryDrawList);
     }
     EndPrepass(Frame, PrepassCmd);
@@ -3213,6 +3251,12 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitPrepass, nullptr);
 
     vkBeginCommandBuffer(PreLightCmd, &CmdBufferBegin);
+    vkCmdBindDescriptorSets(PreLightCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SystemPipelineLayout,
+                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
+                            0, nullptr);
+    vkCmdBindDescriptorSets(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->SystemPipelineLayout,
+                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
+                            0, nullptr);
 
     //
     // SSAO
@@ -3285,10 +3329,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_SSAO];
             vkCmdBindPipeline(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
-            vkCmdBindDescriptorSets(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout,
-                                    0, 1, &PerFrameDescriptorSet,
-                                    0, nullptr);
-
+            
             u32 DispatchX = CeilDiv(Frame->RenderWidth, SSAO_GroupSizeX);
             u32 DispatchY = CeilDiv(Frame->RenderHeight, SSAO_GroupSizeY);
             vkCmdDispatch(PreLightCmd, DispatchX, DispatchY, 1);
@@ -3355,13 +3396,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             vkCmdPipelineBarrier2(PreLightCmd, &BlurDependency);
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_SSAOBlur];
             vkCmdBindPipeline(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
-            // NOTE(boti): Compatible layouts, no need to rebind sets
-            // TODO(boti): We should never rebind sets 0-2
-#if 0
-            vkCmdBindDescriptorSets(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout,
-                                    0, 1, PerFrameDescriptorSet,
-                                    0, nullptr);
-#endif
 
             u32 BlurDispatchX = CeilDiv(Frame->RenderWidth, SSAOBlur_GroupSizeX);
             u32 BlurDispatchY = CeilDiv(Frame->RenderHeight, SSAOBlur_GroupSizeY);
@@ -3404,14 +3438,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_LightBinning];
         vkCmdBindPipeline(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
-
-        VkDescriptorSet BinningDescriptorSets[] = 
-        {
-            PerFrameDescriptorSet,
-        };
-        vkCmdBindDescriptorSets(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout, 
-                                0, CountOf(BinningDescriptorSets), BinningDescriptorSets, 
-                                0, nullptr);
         vkCmdDispatch(PreLightCmd, CeilDiv(TileCountX, LightBin_GroupSizeX), CeilDiv(TileCountY, LightBin_GroupSizeY), 1);
 
         VkBufferMemoryBarrier2 EndBarriers[] = 
@@ -3489,6 +3515,12 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     vkQueueSubmit2(VK.ComputeQueue, 1, &SubmitPreLight, nullptr);
 
     vkBeginCommandBuffer(ShadowCmd, &CmdBufferBegin);
+    vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SystemPipelineLayout,
+                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
+                            0, nullptr);
+    vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->SystemPipelineLayout,
+                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
+                            0, nullptr);
 
     //
     // Cascaded shadows
@@ -3522,15 +3554,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout,
                                VK_SHADER_STAGE_ALL,
                                0, sizeof(u32), &CascadeIndex);
-            VkDescriptorSet ShadowDescriptorSets[] = 
-            {
-                PerFrameDescriptorSet,
-                SamplersDescriptorSet,
-                Renderer->TextureManager.DescriptorSets[1],
-            };
-            vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Layout,
-                                    0, CountOf(ShadowDescriptorSets), ShadowDescriptorSets,
-                                    0, nullptr);
             DrawList(Frame, ShadowCmd, CascadeDrawLists + CascadeIndex);
 
             EndCascade(Frame, ShadowCmd);
@@ -3585,16 +3608,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         pipeline_with_layout ShadowPipeline = Renderer->Pipelines[Pipeline_ShadowAny];
         vkCmdBindPipeline(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Pipeline);
-
-        VkDescriptorSet ShadowDescriptorSets[] = 
-        {
-            PerFrameDescriptorSet,
-            SamplersDescriptorSet,
-            Renderer->TextureManager.DescriptorSets[1],
-        };
-        vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Layout,
-                                0, CountOf(ShadowDescriptorSets), ShadowDescriptorSets,
-                                0, nullptr);
 
         VkViewport ShadowViewport = 
         {
@@ -3769,8 +3782,14 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     };
     vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitShadow, nullptr);
     
-
     vkBeginCommandBuffer(RenderCmd, &CmdBufferBegin);
+    vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SystemPipelineLayout,
+                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
+                            0, nullptr);
+    vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->SystemPipelineLayout,
+                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
+                            0, nullptr);
+
     vkCmdSetViewport(RenderCmd, 0, 1, &FrameViewport);
     vkCmdSetScissor(RenderCmd, 0, 1, &FrameScissor);
 
@@ -3889,16 +3908,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_ShadingVisibility];
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
-
-            VkDescriptorSet ShadingDescriptorSets[] = 
-            {
-                PerFrameDescriptorSet,
-                SamplersDescriptorSet,
-                Renderer->TextureManager.DescriptorSets[1],
-                PointShadowsDescriptorSet,
-            };
             vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout, 
-                                    0, CountOf(ShadingDescriptorSets), ShadingDescriptorSets, 
+                                    Set_User0, 1, &PointShadowsDescriptorSet, 
                                     0, nullptr);
 
             vkCmdDispatch(RenderCmd, CeilDiv(Frame->RenderWidth, ShadingVisibility_GroupSizeX), CeilDiv(Frame->RenderHeight, ShadingVisibility_GroupSizeY), 1);
@@ -3989,14 +4000,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
                 pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
                 vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
-                VkDescriptorSet Sets[] = 
-                {
-                    PerFrameDescriptorSet,
-                    SamplersDescriptorSet,
-                };
-                vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Layout, 
-                                        0, CountOf(Sets), Sets,
-                                        0, nullptr);
                 vkCmdDraw(RenderCmd, 3, 1, 0, 0);
 
                 vkCmdEndDebugUtilsLabelEXT(RenderCmd);
@@ -4029,11 +4032,10 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 vkUpdateDescriptorSets(VK.Device, 1, &TextureWrite, 0, nullptr);
 
                 VkDescriptorSet ParticleBufferDescriptor = 
-                PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_ParticleBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                                     Frame->Backend->ParticleBuffer, 0, VK_WHOLE_SIZE);
+                    PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_ParticleBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                                         Frame->Backend->ParticleBuffer, 0, VK_WHOLE_SIZE);
                 VkDescriptorSet ParticleDescriptorSets[] = 
                 {
-                    PerFrameDescriptorSet,
                     ParticleBufferDescriptor,
                     TextureSet,
                 };
@@ -4041,7 +4043,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
                 vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
                 vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
-                                        0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
+                                        Set_User0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
                                         0, nullptr);
 
                 for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
@@ -4068,16 +4070,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_ShadingForward];
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-
-            VkDescriptorSet ForwardDescriptorSets[] = 
-            {
-                PerFrameDescriptorSet,
-                SamplersDescriptorSet,
-                Renderer->TextureManager.DescriptorSets[1],
-                PointShadowsDescriptorSet,
-            };
             vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
-                                    0, CountOf(ForwardDescriptorSets), ForwardDescriptorSets,
+                                    Set_User0, 1, &PointShadowsDescriptorSet,
                                     0, nullptr);
             DrawList(Frame, RenderCmd, &PrimaryDrawList);
 
@@ -4089,14 +4083,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
                 pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
                 vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
-                VkDescriptorSet Sets[] = 
-                {
-                    PerFrameDescriptorSet,
-                    SamplersDescriptorSet,
-                };
-                vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Layout, 
-                                        0, CountOf(Sets), Sets,
-                                        0, nullptr);
                 vkCmdDraw(RenderCmd, 3, 1, 0, 0);
 
                 vkCmdEndDebugUtilsLabelEXT(RenderCmd);
@@ -4132,7 +4118,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                      Frame->Backend->ParticleBuffer, 0, VK_WHOLE_SIZE);
                 VkDescriptorSet ParticleDescriptorSets[] = 
                 {
-                    PerFrameDescriptorSet,
                     ParticleBufferDescriptor,
                     TextureSet,
                 };
@@ -4140,7 +4125,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
                 vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
                 vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
-                                        0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
+                                        Set_User0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
                                         0, nullptr);
 
                 for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
@@ -4171,8 +4156,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     // Blit + UI
     {
-        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Blit");
-
         VkImageMemoryBarrier2 BeginBarriers[] = 
         {
             // Swapchain image
@@ -4255,14 +4238,10 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdBeginRendering(RenderCmd, &RenderingInfo);
         
         // Blit
+        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Blit");
         {
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Blit];
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-
-            VkDescriptorSet BlitDescriptorSets[] = { PerFrameDescriptorSet };
-            vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
-                                    0, CountOf(BlitDescriptorSets), BlitDescriptorSets, 
-                                    0, nullptr);
             vkCmdDraw(RenderCmd, 3, 1, 0, 0);
         }
         vkCmdEndDebugUtilsLabelEXT(RenderCmd);
@@ -4304,7 +4283,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Pipeline);
             vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Layout, 
-                                    0, 1, &ImmediateDescriptorSet, 0, nullptr);
+                                    Set_User0, 1, &ImmediateDescriptorSet, 
+                                    0, nullptr);
 
             m4 OrthoTransform = M4(2.0f / Frame->RenderWidth, 0.0f, 0.0f, -1.0f,
                                    0.0f, 2.0f / Frame->RenderHeight, 0.0f, -1.0f,

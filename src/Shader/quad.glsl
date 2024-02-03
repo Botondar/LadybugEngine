@@ -31,7 +31,7 @@ struct particle
     v2 HalfExtent;
 };
 
-layout(set = 1, binding = 0, scalar) 
+layout(set = Set_User0, binding = 0, scalar) 
 readonly buffer VertexBlock
 {
     particle Particles[];
@@ -88,7 +88,7 @@ void main()
 #else
 
 SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
-layout(set = 2, binding = 0) uniform sampler2DArray Texture;
+layout(set = Set_User0 + 1, binding = 0) uniform sampler2DArray Texture;
 
 layout(location = 0) out v4 Target0;
 

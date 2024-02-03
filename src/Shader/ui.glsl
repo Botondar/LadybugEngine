@@ -23,7 +23,7 @@ void main()
 }
 #else
 
-layout(set = 0, binding = 0) uniform sampler2D Sampler;
+layout(set = Set_User0, binding = 0) uniform sampler2D Sampler;
 
 layout(location = 0) out vec4 Out0;
 

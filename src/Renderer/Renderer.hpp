@@ -55,7 +55,7 @@ constexpr u32 MaxColorAttachmentCount = 8;
 constexpr u32 MaxDescriptorSetCount = 32;
 constexpr u32 MaxPushConstantRangeCount = 64;
 constexpr u32 MaxDescriptorSetLayoutBindingCount = 128;
-constexpr u32 MaxPushConstantSize = 128;
+constexpr u32 MinPushConstantSize = 128;
 
 //
 // Low-level rendering

@@ -3,14 +3,12 @@
 // TODO(boti): clean up the mess around samplers and descriptor set layouts
 enum descriptor_set_layout : u32
 {
-    SetLayout_None = 0,
-
     // System sets
     SetLayout_PerFrame,
     SetLayout_Samplers,
     SetLayout_Bindless,
     
-    SetLayout_DefaultSampler,
+    // User sets
     SetLayout_CascadeShadow,
     SetLayout_Bloom,
     SetLayout_BloomUpsample,

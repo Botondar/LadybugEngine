@@ -64,7 +64,9 @@ struct v4u8
 #define Set_PerFrame            0
 #define Set_Sampler             1
 #define Set_Bindless            2
-#define Set_Unused0             3
+#define SystemSet_Count         3
+
+#define Set_User0               SystemSet_Count
 
 // PerFrame set bindings
 #define Binding_PerFrame_Constants                  0

@@ -6,33 +6,6 @@ internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32
 {
     VkResult Result = VK_SUCCESS;
 
-    VkSamplerCreateInfo SamplerInfo = 
-    {
-        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .magFilter = VK_FILTER_LINEAR,
-        .minFilter = VK_FILTER_LINEAR,
-        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-        .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-        .mipLodBias = 0.0f,
-        .anisotropyEnable = VK_TRUE,
-        .maxAnisotropy = 4.0f,
-        .compareEnable = VK_FALSE,
-        .compareOp = VK_COMPARE_OP_ALWAYS,
-        .minLod = 0.0f,
-        .maxLod = VK_LOD_CLAMP_NONE,
-        .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
-        .unnormalizedCoordinates = VK_FALSE,
-    };
-    Result = vkCreateSampler(VK.Device, &SamplerInfo, nullptr, &Manager->Sampler);
-    if (Result != VK_SUCCESS)
-    {
-        return false;
-    }
-
     VkImageCreateInfo ImageInfo = 
     {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -81,20 +54,9 @@ internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32
 
         VkDescriptorPoolSize PoolSizes[] = 
         {
-            // Set 0
-            {
-                .type = VK_DESCRIPTOR_TYPE_SAMPLER,
-                .descriptorCount = 1,
-            },
-            // Set 1
             {
                 .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
                 .descriptorCount = Manager->MaxTextureCount,
-            },
-            // Packed samplers
-            {
-                .type = VK_DESCRIPTOR_TYPE_SAMPLER,
-                .descriptorCount = packed_sampler::MaxSamplerCount,
             },
         };
 
@@ -103,7 +65,7 @@ internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             .pNext = nullptr,
             .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
-            .maxSets = 3,
+            .maxSets = 1,
             .poolSizeCount = CountOf(PoolSizes),
             .pPoolSizes = PoolSizes,
         };
@@ -117,10 +79,10 @@ internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
             .pNext = nullptr,
             .descriptorPool = Manager->DescriptorPool,
-            .descriptorSetCount = CountOf(Manager->DescriptorSetLayouts),
-            .pSetLayouts = Manager->DescriptorSetLayouts,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &Manager->DescriptorSetLayout,
         };
-        Result = vkAllocateDescriptorSets(VK.Device, &DescriptorInfo, Manager->DescriptorSets);
+        Result = vkAllocateDescriptorSets(VK.Device, &DescriptorInfo, &Manager->DescriptorSet);
         if (Result != VK_SUCCESS)
         {
             return false;
@@ -304,7 +266,7 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
                             {
                                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                                 .pNext = nullptr,
-                                .dstSet = Manager->DescriptorSets[1],
+                                .dstSet = Manager->DescriptorSet,
                                 .dstBinding = 0,
                                 .dstArrayElement = ID.Value,
                                 .descriptorCount = 1,
@@ -443,7 +405,7 @@ CreateTexture2D(texture_manager* Manager, texture_flags Flags,
                             {
                                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                                 .pNext = nullptr,
-                                .dstSet = Manager->DescriptorSets[1],
+                                .dstSet = Manager->DescriptorSet,
                                 .dstBinding = 0,
                                 .dstArrayElement = ID.Value,
                                 .descriptorCount = 1,

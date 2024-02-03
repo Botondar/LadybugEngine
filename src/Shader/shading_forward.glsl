@@ -76,7 +76,7 @@ SetBinding(PerFrame, CascadedShadow) uniform texture2DArray CascadedShadow;
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
-layout(set = 3, binding = 0) uniform samplerCubeShadow PointShadows[];
+layout(set = Set_User0, binding = 0) uniform samplerCubeShadow PointShadows[];
 
 layout(location = 0) out vec4 Out0;
 

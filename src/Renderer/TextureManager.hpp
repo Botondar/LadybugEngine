@@ -6,15 +6,15 @@ struct texture_manager
     static constexpr u32 MaxSpecialTextureCount = 2048u;
 
     VkDescriptorPool DescriptorPool;
-    VkDescriptorSetLayout DescriptorSetLayouts[2]; // NOTE(boti): 0 = sampler, 1 = texture
-    VkDescriptorSet DescriptorSets[2]; 
+    VkDescriptorSetLayout DescriptorSetLayout;
+    VkDescriptorSet DescriptorSet; 
     VkDescriptorSet PackedSamplerDescriptorSet;
 
     u64 MemorySize;
     VkDeviceMemory Memory;
     u64 MemoryOffset;
 
-    VkSampler Sampler;
+    // TODO(boti): Move this to the renderer
     VkSampler PackedSamplers[packed_sampler::MaxSamplerCount];
 
     u32 TextureCount;

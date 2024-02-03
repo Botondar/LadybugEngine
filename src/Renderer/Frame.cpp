@@ -479,16 +479,6 @@ internal void RenderBloom(
 {
     vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, "Bloom");
 
-    VkDescriptorSet BaseDescriptorSets[] = 
-    {
-        Frame->Backend->PerFrameDescriptorSet,
-        Frame->Backend->SamplersDescriptorSet,
-    };
-
-    vkCmdBindDescriptorSets(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, DownsamplePipelineLayout,
-                            0, CountOf(BaseDescriptorSets), BaseDescriptorSets,
-                            0, nullptr);
-
     u32 Width = Frame->RenderWidth;
     u32 Height = Frame->RenderHeight;
 

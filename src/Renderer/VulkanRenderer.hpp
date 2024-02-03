@@ -119,6 +119,8 @@ struct renderer
     render_target* OcclusionBuffers[2];
     render_target* VisibilityBuffer;
 
+    VkPipelineLayout SystemPipelineLayout;
+
     struct render_debug
     {
         u64 ResizeCount;
