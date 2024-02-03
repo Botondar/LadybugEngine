@@ -31,9 +31,9 @@ void main()
             float x = 2.0 * ix;
 
             vec2 SampleP = P + vec2(x, y);
-            Sample.x = textureLod(sampler2D(OcclusionImage, Samplers[Sampler_RenderTargetUnnormalized]), SampleP, 0).x;
+            Sample.x = textureLod(sampler2D(OcclusionImage, Samplers[Sampler_LinearUnnormalized]), SampleP, 0).x;
             Occlusion.z += Sample.x;
-            vec2 Depth = textureLod(sampler2D(StructureImage, Samplers[Sampler_RenderTargetUnnormalized]), SampleP, 0).zw;
+            vec2 Depth = textureLod(sampler2D(StructureImage, Samplers[Sampler_LinearUnnormalized]), SampleP, 0).zw;
             if (abs(Depth.x + Depth.y - Structure.z) < Range)
             {
                 Occlusion.xy += Sample;

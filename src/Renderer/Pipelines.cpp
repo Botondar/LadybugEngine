@@ -118,7 +118,7 @@ const sampler_state SamplerInfos[Sampler_Count] =
         .Border = Border_White,
         .EnableUnnormalizedCoordinates = false,
     },
-    [Sampler_RenderTargetUnnormalized] = 
+    [Sampler_LinearUnnormalized] = 
     {
         .MagFilter = Filter_Linear,
         .MinFilter = Filter_Linear,
@@ -150,7 +150,7 @@ const sampler_state SamplerInfos[Sampler_Count] =
         .Border = Border_White,
         .EnableUnnormalizedCoordinates = false,
     },
-    [Sampler_RenderTargetNormalized] = 
+    [Sampler_LinearBlackBorder] = 
     {
         .MagFilter = Filter_Linear,
         .MinFilter = Filter_Linear,
@@ -167,7 +167,7 @@ const sampler_state SamplerInfos[Sampler_Count] =
         .EnableUnnormalizedCoordinates = false,
     },
 
-    [Sampler_RenderTargetNormalizedClampToEdge] = 
+    [Sampler_LinearEdgeClamp] = 
     {
         .MagFilter = Filter_Linear,
         .MinFilter = Filter_Linear,

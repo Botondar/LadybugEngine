@@ -103,10 +103,10 @@ struct v4u8
 
 // TODO(boti): Move this back to an enum once we have C++ metageneration going on
 #define Sampler_Default                             0
-#define Sampler_RenderTargetUnnormalized            1
+#define Sampler_LinearUnnormalized                  1
 #define Sampler_Shadow                              2
-#define Sampler_RenderTargetNormalized              3
-#define Sampler_RenderTargetNormalizedClampToEdge   4
+#define Sampler_LinearBlackBorder                   3
+#define Sampler_LinearEdgeClamp                     4
 #define Sampler_NoFilter                            5
 
 #define Sampler_Count                               6

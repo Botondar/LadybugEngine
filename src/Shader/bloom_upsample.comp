@@ -30,19 +30,19 @@ void main()
 
     ivec2 P = ivec2(gl_GlobalInvocationID.xy);
     vec2 SampleP = (vec2(P) + vec2(0.5, 0.5)) / vec2(OutputSize);
-    vec3 SrcColor = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP, DstMipIndex).rgb;
+    vec3 SrcColor = texelFetch(ColorImage, P, int(DstMipIndex)).rgb;
     if (P.x < OutputSize.x && P.y < OutputSize.y)
     {
         uint SrcMipIndex = DstMipIndex + 1;
-        vec3 a = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(-RX, -RY), SrcMipIndex).rgb;
-        vec3 b = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(0.0, -RY), SrcMipIndex).rgb;
-        vec3 c = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(+RX, -RY), SrcMipIndex).rgb;
-        vec3 d = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(-RX, 0.0), SrcMipIndex).rgb;
-        vec3 e = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(0.0, 0.0), SrcMipIndex).rgb;
-        vec3 f = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(+RX, 0.0), SrcMipIndex).rgb;
-        vec3 g = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(-RX, +RY), SrcMipIndex).rgb;
-        vec3 h = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(0.0, +RY), SrcMipIndex).rgb;
-        vec3 i = textureLod(sampler2D(BloomImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), SampleP + vec2(+RX, +RY), SrcMipIndex).rgb;
+        vec3 a = textureLod(sampler2D(BloomImage, Samplers[Sampler_LinearEdgeClamp]), SampleP + vec2(-RX, -RY), SrcMipIndex).rgb;
+        vec3 b = textureLod(sampler2D(BloomImage, Samplers[Sampler_LinearEdgeClamp]), SampleP + vec2(0.0, -RY), SrcMipIndex).rgb;
+        vec3 c = textureLod(sampler2D(BloomImage, Samplers[Sampler_LinearEdgeClamp]), SampleP + vec2(+RX, -RY), SrcMipIndex).rgb;
+        vec3 d = textureLod(sampler2D(BloomImage, Samplers[Sampler_LinearEdgeClamp]), SampleP + vec2(-RX, 0.0), SrcMipIndex).rgb;
+        vec3 e = textureLod(sampler2D(BloomImage, Samplers[Sampler_LinearEdgeClamp]), SampleP + vec2(0.0, 0.0), SrcMipIndex).rgb;
+        vec3 f = textureLod(sampler2D(BloomImage, Samplers[Sampler_LinearEdgeClamp]), SampleP + vec2(+RX, 0.0), SrcMipIndex).rgb;
+        vec3 g = textureLod(sampler2D(BloomImage, Samplers[Sampler_LinearEdgeClamp]), SampleP + vec2(-RX, +RY), SrcMipIndex).rgb;
+        vec3 h = textureLod(sampler2D(BloomImage, Samplers[Sampler_LinearEdgeClamp]), SampleP + vec2(0.0, +RY), SrcMipIndex).rgb;
+        vec3 i = textureLod(sampler2D(BloomImage, Samplers[Sampler_LinearEdgeClamp]), SampleP + vec2(+RX, +RY), SrcMipIndex).rgb;
 
         vec3 BlurColor = 
             e * (4.0 / 16.0) +

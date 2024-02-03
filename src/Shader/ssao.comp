@@ -68,7 +68,7 @@ void main()
             v.x = d[i].x * Rotation.x - d[i].y * Rotation.y;
             v.y = d[i].x * Rotation.y + d[i].y * Rotation.x;
 
-            vec2 Depth2 = textureLod(sampler2D(StructureImage, Samplers[Sampler_RenderTargetUnnormalized]), SampleP + v.xy * Scale, 0).zw;
+            vec2 Depth2 = textureLod(sampler2D(StructureImage, Samplers[Sampler_LinearUnnormalized]), SampleP + v.xy * Scale, 0).zw;
             v.z = Depth2.x + Depth2.y - Structure.z;
             
             float NdotV = dot(N, v);

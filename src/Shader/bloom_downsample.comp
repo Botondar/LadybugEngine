@@ -51,20 +51,20 @@ void main()
         // b01  -  b11  -  b21
         //  -  a01  -  a11  -
         // b02  -  b12  -  b22
-        vec3 a00 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(-1.0, -1.0), SrcMip).rgb;
-        vec3 a10 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(+1.0, -1.0), SrcMip).rgb;
-        vec3 a11 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(+1.0, +1.0), SrcMip).rgb;
-        vec3 a01 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(-1.0, +1.0), SrcMip).rgb;
+        vec3 a00 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2(-1.0, -1.0), SrcMip).rgb;
+        vec3 a10 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2(+1.0, -1.0), SrcMip).rgb;
+        vec3 a11 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2(+1.0, +1.0), SrcMip).rgb;
+        vec3 a01 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2(-1.0, +1.0), SrcMip).rgb;
 
-        vec3 b00 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(-2.0, -2.0), SrcMip).rgb;
-        vec3 b10 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2( 0.0, -2.0), SrcMip).rgb;
-        vec3 b20 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(+2.0, -2.0), SrcMip).rgb;
-        vec3 b01 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(-2.0,  0.0), SrcMip).rgb;
-        vec3 b11 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2( 0.0,  0.0), SrcMip).rgb;
-        vec3 b21 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(+2.0,  0.0), SrcMip).rgb;
-        vec3 b02 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(-2.0, +2.0), SrcMip).rgb;
-        vec3 b12 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2( 0.0, +2.0), SrcMip).rgb;
-        vec3 b22 = textureLod(sampler2D(ColorImage, Samplers[Sampler_RenderTargetNormalizedClampToEdge]), ReadP + InputTexelSize * vec2(+2.0, +2.0), SrcMip).rgb;
+        vec3 b00 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2(-2.0, -2.0), SrcMip).rgb;
+        vec3 b10 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2( 0.0, -2.0), SrcMip).rgb;
+        vec3 b20 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2(+2.0, -2.0), SrcMip).rgb;
+        vec3 b01 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2(-2.0,  0.0), SrcMip).rgb;
+        vec3 b11 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2( 0.0,  0.0), SrcMip).rgb;
+        vec3 b21 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2(+2.0,  0.0), SrcMip).rgb;
+        vec3 b02 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2(-2.0, +2.0), SrcMip).rgb;
+        vec3 b12 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2( 0.0, +2.0), SrcMip).rgb;
+        vec3 b22 = textureLod(sampler2D(ColorImage, Samplers[Sampler_LinearEdgeClamp]), ReadP + InputTexelSize * vec2(+2.0, +2.0), SrcMip).rgb;
         
         vec3 Accum = vec3(0.0);
         if (DstMipIndex == 1)
