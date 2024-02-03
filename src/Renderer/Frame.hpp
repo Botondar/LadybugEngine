@@ -35,9 +35,6 @@ internal void EndPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer);
 internal void BeginCascade(render_frame* Frame, VkCommandBuffer CmdBuffer, u32 CascadeIndex);
 internal void EndCascade(render_frame* Frame, VkCommandBuffer CmdBuffer);
 
-internal void BeginForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer);
-internal void EndForwardPass(render_frame* Frame, VkCommandBuffer CmdBuffer);
-
 internal void 
 RenderBloom(render_frame* Frame,
             VkCommandBuffer CmdBuffer,

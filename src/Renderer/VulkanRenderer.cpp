@@ -3796,353 +3796,302 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     //
     // Shading
     //
-    if (Frame->Config.ShadingMode == ShadingMode_Visibility)
+
+    VkRenderingAttachmentInfo ShadingColorAttachments[] = 
     {
-        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Shading");
         {
-            VkImageMemoryBarrier2 BeginBarriers[] = 
+            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .pNext = nullptr,
+            .imageView = Renderer->HDRRenderTarget->View,
+            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .resolveMode = VK_RESOLVE_MODE_NONE,
+            .resolveImageView = VK_NULL_HANDLE,
+            .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .clearValue = {},
+        },
+    };
+    
+    VkRenderingAttachmentInfo ShadingDepthAttachment = 
+    {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext = nullptr,
+        .imageView = Renderer->DepthBuffer->View,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .resolveMode = VK_RESOLVE_MODE_NONE,
+        .resolveImageView = VK_NULL_HANDLE,
+        .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue = {},
+    };
+    VkRenderingInfo ShadingRenderingInfo = 
+    {
+        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .renderArea = { { 0, 0 }, { Frame->RenderWidth, Frame->RenderHeight } },
+        .layerCount = 1,
+        .viewMask = 0,
+        .colorAttachmentCount = CountOf(ShadingColorAttachments),
+        .pColorAttachments = ShadingColorAttachments,
+        .pDepthAttachment = &ShadingDepthAttachment,
+        .pStencilAttachment = nullptr,
+    };
+
+    vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Opaque shading");
+    {
+        pipeline PipelineID = Pipeline_None;
+        VkPipelineBindPoint BindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
+        VkImageLayout LayoutForShading = VK_IMAGE_LAYOUT_UNDEFINED;
+        switch (Frame->Config.ShadingMode)
+        {
+            case ShadingMode_Visibility:
             {
-                // Visibility buffer
-                {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                    .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = Renderer->VisibilityBuffer->Image,
-                    .subresourceRange = 
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                    },
-                },
-
-                // HDR Color
-                {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                    .srcAccessMask = VK_ACCESS_2_NONE,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                    .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = Renderer->HDRRenderTarget->Image,
-                    .subresourceRange = 
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                    },
-                },
-
-                // Shadow cascades
-                {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-                    .srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = Frame->Renderer->ShadowMap,
-                    .subresourceRange = 
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = Frame->Renderer->ShadowCascadeCount,
-                    },
-                },
-
-                // SSAO
-                {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    .srcQueueFamilyIndex = VK.ComputeQueueIdx,
-                    .dstQueueFamilyIndex = VK.GraphicsQueueIdx,
-                    .image = Frame->Renderer->OcclusionBuffers[1]->Image,
-                    .subresourceRange = 
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                    },
-                },
-            };
-
-            VkDependencyInfo BeginDependency = 
+                PipelineID = Pipeline_ShadingVisibility;
+                BindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
+                LayoutForShading = VK_IMAGE_LAYOUT_GENERAL;
+            } break;
+            case ShadingMode_Forward:
             {
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .pNext = nullptr,
-                .dependencyFlags = 0,
-                .imageMemoryBarrierCount = CountOf(BeginBarriers),
-                .pImageMemoryBarriers = BeginBarriers,
-            };
-
-            vkCmdPipelineBarrier2(RenderCmd, &BeginDependency);
-
-            pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_ShadingVisibility];
-            vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
-            vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Layout, 
-                                    Set_User0, 1, &PointShadowsDescriptorSet, 
-                                    0, nullptr);
-
-            vkCmdDispatch(RenderCmd, CeilDiv(Frame->RenderWidth, ShadingVisibility_GroupSizeX), CeilDiv(Frame->RenderHeight, ShadingVisibility_GroupSizeY), 1);
+                PipelineID = Pipeline_ShadingForward;
+                BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+                LayoutForShading = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; 
+            } break;
+            InvalidDefaultCase;
         }
+
+        VkImageMemoryBarrier2 BeginBarriers[] = 
+        {
+            // HDR Color
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                .srcAccessMask = VK_ACCESS_2_NONE,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout = LayoutForShading,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = Renderer->HDRRenderTarget->Image,
+                .subresourceRange = 
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            },
+
+            // Visibility buffer
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = Renderer->VisibilityBuffer->Image,
+                .subresourceRange = 
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            },
+
+            // Shadow cascades
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+                .srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = Frame->Renderer->ShadowMap,
+                .subresourceRange = 
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = Frame->Renderer->ShadowCascadeCount,
+                },
+            },
+
+            // SSAO
+            {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+                .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex = VK.ComputeQueueIdx,
+                .dstQueueFamilyIndex = VK.GraphicsQueueIdx,
+                .image = Frame->Renderer->OcclusionBuffers[1]->Image,
+                .subresourceRange = 
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1,
+                },
+            },
+        };
+
+        VkDependencyInfo BeginDependency = 
+        {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .imageMemoryBarrierCount = CountOf(BeginBarriers),
+            .pImageMemoryBarriers = BeginBarriers,
+        };
+
+        vkCmdPipelineBarrier2(RenderCmd, &BeginDependency);
+
+        pipeline_with_layout Pipeline = Renderer->Pipelines[PipelineID];
+        vkCmdBindPipeline(RenderCmd, BindPoint, Pipeline.Pipeline);
+        vkCmdBindDescriptorSets(RenderCmd, BindPoint, Pipeline.Layout, 
+                                Set_User0, 1, &PointShadowsDescriptorSet, 
+                                0, nullptr);
+
+        switch (Frame->Config.ShadingMode)
+        {
+            case ShadingMode_Visibility:
+            {
+                u32 DispatchX = CeilDiv(Frame->RenderWidth, ShadingVisibility_GroupSizeX);
+                u32 DispatchY = CeilDiv(Frame->RenderHeight, ShadingVisibility_GroupSizeY);
+                vkCmdDispatch(RenderCmd, DispatchX, DispatchY, 1);
+
+                VkImageMemoryBarrier2 EndBarriers[] = 
+                {
+                    {
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                        .pNext = nullptr,
+                        .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                        .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+                        .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                        .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+                        .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                        .image = Renderer->HDRRenderTarget->Image,
+                        .subresourceRange = 
+                        {
+                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = 1,
+                            .baseArrayLayer = 0,
+                            .layerCount = 1,
+                        },
+                    },
+                };
+                VkDependencyInfo EndDependency = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .imageMemoryBarrierCount = CountOf(EndBarriers),
+                    .pImageMemoryBarriers = EndBarriers,
+                };
+                vkCmdPipelineBarrier2(RenderCmd, &EndDependency);
+
+                vkCmdBeginRendering(RenderCmd, &ShadingRenderingInfo);
+            } break;
+            case ShadingMode_Forward:
+            {
+                vkCmdBeginRendering(RenderCmd, &ShadingRenderingInfo);
+                DrawList(Frame, RenderCmd, &PrimaryDrawList);
+            } break;
+            InvalidDefaultCase;
+        }
+    }
+    vkCmdEndDebugUtilsLabelEXT(RenderCmd);
+
+    // Render sky
+    vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Sky");
+    {
+        pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
+        vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
+        vkCmdDraw(RenderCmd, 3, 1, 0, 0);
+    }
+    vkCmdEndDebugUtilsLabelEXT(RenderCmd);
+
+    // Particles
+    {
+        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Particle");
+
+        VkImageView ParticleView = *GetImageView(&Renderer->TextureManager, Frame->ParticleTextureID);
+        VkDescriptorSet TextureSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS]);
+        VkDescriptorImageInfo DescriptorImage = 
+        {
+            .sampler = Renderer->Samplers[Sampler_Default],
+            .imageView = ParticleView,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+
+        VkWriteDescriptorSet TextureWrite = 
+        {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .pNext = nullptr,
+            .dstSet = TextureSet,
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = &DescriptorImage,
+        };
+        vkUpdateDescriptorSets(VK.Device, 1, &TextureWrite, 0, nullptr);
+
+        VkDescriptorSet ParticleBufferDescriptor = 
+        PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_ParticleBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                             Frame->Backend->ParticleBuffer, 0, VK_WHOLE_SIZE);
+        VkDescriptorSet ParticleDescriptorSets[] = 
+        {
+            ParticleBufferDescriptor,
+            TextureSet,
+        };
+
+        pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
+        vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
+        vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
+                                Set_User0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
+                                0, nullptr);
+
+        for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
+        {
+            particle_cmd* Cmd = Frame->ParticleDrawCmds + CmdIndex;
+            u32 VertexCount = 6 * Cmd->ParticleCount;
+            u32 FirstVertex = 6 * Cmd->FirstParticle;
+            vkCmdPushConstants(RenderCmd, ParticlePipeline.Layout, VK_SHADER_STAGE_ALL, 
+                               0, sizeof(Cmd->Mode), &Cmd->Mode);
+            vkCmdDraw(RenderCmd, VertexCount, 1, FirstVertex, 0);
+        }
+
         vkCmdEndDebugUtilsLabelEXT(RenderCmd);
-
-        {
-            VkImageMemoryBarrier2 BeginBarriers[] = 
-            {
-                {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                    .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-                    .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = Renderer->HDRRenderTarget->Image,
-                    .subresourceRange = 
-                    {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
-                        .baseArrayLayer = 0,
-                        .layerCount = 1,
-                    },
-                },
-            };
-            VkDependencyInfo BeginDependency = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .pNext = nullptr,
-                .dependencyFlags = 0,
-                .imageMemoryBarrierCount = CountOf(BeginBarriers),
-                .pImageMemoryBarriers = BeginBarriers,
-            };
-            vkCmdPipelineBarrier2(RenderCmd, &BeginDependency);
-
-            VkRenderingAttachmentInfo ColorAttachments[] = 
-            {
-                {
-                    .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                    .pNext = nullptr,
-                    .imageView = Renderer->HDRRenderTarget->View,
-                    .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                    .resolveMode = VK_RESOLVE_MODE_NONE,
-                    .resolveImageView = VK_NULL_HANDLE,
-                    .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                    .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-                    .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                    .clearValue = {},
-                },
-            };
-
-            VkRenderingAttachmentInfo DepthAttachment = 
-            {
-                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                .pNext = nullptr,
-                .imageView = Renderer->DepthBuffer->View,
-                .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                .resolveMode = VK_RESOLVE_MODE_NONE,
-                .resolveImageView = VK_NULL_HANDLE,
-                .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                .clearValue = {},
-            };
-            VkRenderingInfo RenderingInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .renderArea = { { 0, 0 }, { Frame->RenderWidth, Frame->RenderHeight } },
-                .layerCount = 1,
-                .viewMask = 0,
-                .colorAttachmentCount = CountOf(ColorAttachments),
-                .pColorAttachments = ColorAttachments,
-                .pDepthAttachment = &DepthAttachment,
-                .pStencilAttachment = nullptr,
-            };
-            vkCmdBeginRendering(RenderCmd, &RenderingInfo);
-            // Render sky
-            {
-                vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Sky");
-
-                pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
-                vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
-                vkCmdDraw(RenderCmd, 3, 1, 0, 0);
-
-                vkCmdEndDebugUtilsLabelEXT(RenderCmd);
-            }
-
-            // Particles
-            {
-                vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Particle");
-
-                VkImageView ParticleView = *GetImageView(&Renderer->TextureManager, Frame->ParticleTextureID);
-                VkDescriptorSet TextureSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS]);
-                VkDescriptorImageInfo DescriptorImage = 
-                {
-                    .sampler = Renderer->Samplers[Sampler_Default],
-                    .imageView = ParticleView,
-                    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                };
-
-                VkWriteDescriptorSet TextureWrite = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                    .pNext = nullptr,
-                    .dstSet = TextureSet,
-                    .dstBinding = 0,
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                    .pImageInfo = &DescriptorImage,
-                };
-                vkUpdateDescriptorSets(VK.Device, 1, &TextureWrite, 0, nullptr);
-
-                VkDescriptorSet ParticleBufferDescriptor = 
-                    PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_ParticleBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                                         Frame->Backend->ParticleBuffer, 0, VK_WHOLE_SIZE);
-                VkDescriptorSet ParticleDescriptorSets[] = 
-                {
-                    ParticleBufferDescriptor,
-                    TextureSet,
-                };
-
-                pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
-                vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
-                vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
-                                        Set_User0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
-                                        0, nullptr);
-
-                for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
-                {
-                    particle_cmd* Cmd = Frame->ParticleDrawCmds + CmdIndex;
-                    u32 VertexCount = 6 * Cmd->ParticleCount;
-                    u32 FirstVertex = 6 * Cmd->FirstParticle;
-                    vkCmdPushConstants(RenderCmd, ParticlePipeline.Layout, VK_SHADER_STAGE_ALL, 
-                                       0, sizeof(Cmd->Mode), &Cmd->Mode);
-                    vkCmdDraw(RenderCmd, VertexCount, 1, FirstVertex, 0);
-                }
-
-                vkCmdEndDebugUtilsLabelEXT(RenderCmd);
-            }
-
-            vkCmdEndRendering(RenderCmd);
-        }
     }
-    else if (Frame->Config.ShadingMode == ShadingMode_Forward)
-    {
-        BeginForwardPass(Frame, RenderCmd);
-        {
-            vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Shading");
 
-            pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_ShadingForward];
-            vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-            vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Layout,
-                                    Set_User0, 1, &PointShadowsDescriptorSet,
-                                    0, nullptr);
-            DrawList(Frame, RenderCmd, &PrimaryDrawList);
-
-            vkCmdEndDebugUtilsLabelEXT(RenderCmd);
-
-            // Render sky
-            {
-                vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Sky");
-
-                pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
-                vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
-                vkCmdDraw(RenderCmd, 3, 1, 0, 0);
-
-                vkCmdEndDebugUtilsLabelEXT(RenderCmd);
-            }
-
-            // Particles
-            {
-                vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Particle");
-
-                VkImageView ParticleView = *GetImageView(&Renderer->TextureManager, Frame->ParticleTextureID);
-                VkDescriptorSet TextureSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS]);
-                VkDescriptorImageInfo DescriptorImage = 
-                {
-                    .sampler = Renderer->Samplers[Sampler_Default],
-                    .imageView = ParticleView,
-                    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                };
-                VkWriteDescriptorSet TextureWrite = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                    .pNext = nullptr,
-                    .dstSet = TextureSet,
-                    .dstBinding = 0,
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                    .pImageInfo = &DescriptorImage,
-                };
-                vkUpdateDescriptorSets(VK.Device, 1, &TextureWrite, 0, nullptr);
-
-                VkDescriptorSet ParticleBufferDescriptor = 
-                PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_ParticleBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                                     Frame->Backend->ParticleBuffer, 0, VK_WHOLE_SIZE);
-                VkDescriptorSet ParticleDescriptorSets[] = 
-                {
-                    ParticleBufferDescriptor,
-                    TextureSet,
-                };
-
-                pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
-                vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
-                vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
-                                        Set_User0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
-                                        0, nullptr);
-
-                for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
-                {
-                    particle_cmd* Cmd = Frame->ParticleDrawCmds + CmdIndex;
-                    u32 VertexCount = 6 * Cmd->ParticleCount;
-                    u32 FirstVertex = 6 * Cmd->FirstParticle;
-                    vkCmdPushConstants(RenderCmd, ParticlePipeline.Layout, VK_SHADER_STAGE_ALL, 
-                                       0, sizeof(Cmd->Mode), &Cmd->Mode);
-                    vkCmdDraw(RenderCmd, VertexCount, 1, FirstVertex, 0);
-                }
-
-                vkCmdEndDebugUtilsLabelEXT(RenderCmd);
-            }
-        }
-        EndForwardPass(Frame, RenderCmd);
-    }
+    vkCmdEndRendering(RenderCmd);
 
     RenderBloom(Frame, RenderCmd,
                 Frame->Renderer->HDRRenderTarget,
