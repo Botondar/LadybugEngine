@@ -8,8 +8,8 @@ SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
 SetBinding(PerFrame, OcclusionRawImage) uniform texture2D OcclusionImage;
 SetBinding(PerFrame, OcclusionStorageImage) uniform writeonly restrict image2D OcclusionOut;
 
-// TODO(boti): I put a bunch of reenable filtering TODOs here, 
-// but are we actually doing any filtering here?
+SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
+
 void main()
 {
     ivec2 iP = ivec2(gl_GlobalInvocationID.xy);
@@ -17,7 +17,6 @@ void main()
 
     const float Epsilon = 1.0 / 128.0;
 
-    // TODO(boti): Reenable filtering
     vec3 Structure = StructureDecode(texelFetch(StructureImage, iP, 0));
     float Range = 1.5 * (max(abs(Structure.x), abs(Structure.y)) + Epsilon);
 
@@ -32,11 +31,9 @@ void main()
             float x = 2.0 * ix;
 
             vec2 SampleP = P + vec2(x, y);
-            // TODO(boti): Reenable filtering
-            Sample.x = texelFetch(OcclusionImage, v2s(SampleP), 0).x;
+            Sample.x = textureLod(sampler2D(OcclusionImage, Samplers[Sampler_RenderTargetUnnormalized]), SampleP, 0).x;
             Occlusion.z += Sample.x;
-            // TODO(boti): Reenable filtering
-            vec2 Depth = texelFetch(StructureImage, v2s(SampleP), 0).zw;
+            vec2 Depth = textureLod(sampler2D(StructureImage, Samplers[Sampler_RenderTargetUnnormalized]), SampleP, 0).zw;
             if (abs(Depth.x + Depth.y - Structure.z) < Range)
             {
                 Occlusion.xy += Sample;

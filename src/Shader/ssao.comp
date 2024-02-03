@@ -12,6 +12,8 @@ uniform PerFrameBlock
 SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
 SetBinding(PerFrame, OcclusionRawStorageImage) uniform writeonly restrict image2D SSAOImage;
 
+SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
+
 // Sample offset table
 const vec2 d[4] = { vec2(0.1, 0.0), vec2(0.0, 0.2), vec2(-0.3, 0.0 ), vec2(0.0, -0.4), };
 
@@ -49,7 +51,6 @@ void main()
     if (P.x < Size.x && P.y < Size.y)
     {
         vec2 SampleP = vec2(P);// / PerFrame.ScreenSize;
-        // TODO(boti): Reenable filtering
         vec3 Structure = StructureDecode(texelFetch(StructureImage, P, 0));
 
         float Scale = VectorScale * Structure.z;
@@ -67,9 +68,7 @@ void main()
             v.x = d[i].x * Rotation.x - d[i].y * Rotation.y;
             v.y = d[i].x * Rotation.y + d[i].y * Rotation.x;
 
-            // TODO(boti): Reenable filtering here once we have the samplers set up
-            //vec2 Depth2 = textureLod(StructureImage, SampleP + v.xy * Scale, 0).zw;
-            vec2 Depth2 = texelFetch(StructureImage, v2s(v2(P) + v.xy * Scale), 0).zw;
+            vec2 Depth2 = textureLod(sampler2D(StructureImage, Samplers[Sampler_RenderTargetUnnormalized]), SampleP + v.xy * Scale, 0).zw;
             v.z = Depth2.x + Depth2.y - Structure.z;
             
             float NdotV = dot(N, v);
