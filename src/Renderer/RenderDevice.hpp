@@ -43,8 +43,10 @@ struct vulkan
     VkQueueFamilyProperties QueueFamilies[MaxQueueFamilyCount];
     VkPhysicalDeviceMemoryProperties MemoryProps;
     VkPhysicalDeviceProperties DeviceProps;
+    VkPhysicalDeviceDescriptorBufferPropertiesEXT DescriptorBufferProps;
 
     VkPhysicalDeviceFeatures2 DeviceFeatures;
+    VkPhysicalDeviceDescriptorBufferFeaturesEXT DescriptorBufferFeatures;
     VkPhysicalDeviceVulkan13Features Vulkan13Features;
     VkPhysicalDeviceVulkan12Features Vulkan12Features;
     VkPhysicalDeviceVulkan11Features Vulkan11Features;

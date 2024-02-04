@@ -22,6 +22,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
     const char* RequiredDeviceExtensions[] = 
     {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,
     };
 
     VkApplicationInfo AppInfo = 
@@ -75,6 +76,21 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                 UnhandledError("Failed to find appropriate device");
             }
 
+            // TODO(boti): Fold this into the device selection loop
+            {
+                Vulkan->DescriptorBufferProps = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT,
+                    .pNext = nullptr,
+                };
+                VkPhysicalDeviceProperties2 Props2 = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+                    .pNext = &Vulkan->DescriptorBufferProps,
+                };
+                vkGetPhysicalDeviceProperties2(SelectedDevice, &Props2);
+            }
+
             Vulkan->TimestampPeriod = Vulkan->DeviceProps.limits.timestampPeriod;
 
             Vulkan->TexelBufferAlignment = Vulkan->DeviceProps.limits.minTexelBufferOffsetAlignment;
@@ -86,19 +102,25 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
             Vulkan->MaxStorageBufferByteSize = Vulkan->DeviceProps.limits.maxStorageBufferRange;
             Vulkan->MaxPushConstantByteSize = Vulkan->DeviceProps.limits.maxPushConstantsSize;
 
-            if (Vulkan->MaxPushConstantByteSize < 256)
-            {
-                UnimplementedCodePath;
-            }
             if (Vulkan->MaxConstantBufferByteSize < (1 << 16))
             {
                 UnimplementedCodePath;
             }
 
+            Vulkan->DescriptorBufferFeatures = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
+                .pNext = nullptr,
+
+                .descriptorBuffer = VK_TRUE,
+                .descriptorBufferCaptureReplay = VK_FALSE,
+                .descriptorBufferImageLayoutIgnored = VK_FALSE,
+                .descriptorBufferPushDescriptors = VK_FALSE,
+            };
             Vulkan->Vulkan13Features = 
             {
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-                .pNext = nullptr,
+                .pNext = &Vulkan->DescriptorBufferFeatures,
 
                 .robustImageAccess = VK_TRUE,
                 .inlineUniformBlock = VK_TRUE,
@@ -327,6 +349,8 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                 vkCmdBeginDebugUtilsLabelEXT_ = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdBeginDebugUtilsLabelEXT");
                 vkCmdEndDebugUtilsLabelEXT_ = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdEndDebugUtilsLabelEXT");
                 vkSetDebugUtilsObjectNameEXT_ = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkSetDebugUtilsObjectNameEXT");
+
+                // TODO(boti): Descriptor buffer function loading
             }
             else
             {
