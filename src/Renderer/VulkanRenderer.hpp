@@ -3,6 +3,9 @@
 
 #include <vulkan/vulkan.h>
 
+//
+// VK_EXT_debug_utils
+//
 PFN_vkCmdBeginDebugUtilsLabelEXT        vkCmdBeginDebugUtilsLabelEXT_;
 PFN_vkCmdEndDebugUtilsLabelEXT          vkCmdEndDebugUtilsLabelEXT_;
 PFN_vkSetDebugUtilsObjectNameEXT        vkSetDebugUtilsObjectNameEXT_;
@@ -12,6 +15,23 @@ PFN_vkSetDebugUtilsObjectNameEXT        vkSetDebugUtilsObjectNameEXT_;
 #define vkSetDebugUtilsObjectNameEXT    vkSetDebugUtilsObjectNameEXT_
 
 inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* Label);
+
+//
+// VK_EXT_descriptor_buffer
+//
+
+PFN_vkCmdBindDescriptorBuffersEXT               vkCmdBindDescriptorBuffersEXT_;
+PFN_vkCmdSetDescriptorBufferOffsetsEXT          vkCmdSetDescriptorBufferOffsetsEXT_;
+PFN_vkGetDescriptorEXT                          vkGetDescriptorEXT_;
+PFN_vkGetDescriptorSetLayoutBindingOffsetEXT    vkGetDescriptorSetLayoutBindingOffsetEXT_;
+PFN_vkGetDescriptorSetLayoutSizeEXT             vkGetDescriptorSetLayoutSizeEXT_;
+
+#define vkCmdBindDescriptorBuffersEXT               vkCmdBindDescriptorBuffersEXT_;
+#define vkCmdSetDescriptorBufferOffsetsEXT          vkCmdSetDescriptorBufferOffsetsEXT_;
+#define vkGetDescriptorEXT                          vkGetDescriptorEXT_;
+#define vkGetDescriptorSetLayoutBindingOffsetEXT    vkGetDescriptorSetLayoutBindingOffsetEXT_;
+#define vkGetDescriptorSetLayoutSizeEXT             vkGetDescriptorSetLayoutSizeEXT_;
+
 
 struct gpu_memory_arena
 {

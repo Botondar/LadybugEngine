@@ -163,7 +163,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                 .hostQueryReset = VK_TRUE,
                 .timelineSemaphore = VK_TRUE,
                 .bufferDeviceAddress = VK_TRUE,
-                .bufferDeviceAddressCaptureReplay = VK_TRUE,
+                //.bufferDeviceAddressCaptureReplay = VK_TRUE,
                 .vulkanMemoryModel = VK_TRUE,
                 .shaderOutputViewportIndex = VK_TRUE,
                 .shaderOutputLayer = VK_TRUE,
@@ -346,11 +346,15 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                 vkGetDeviceQueue(Vulkan->Device, Vulkan->ComputeQueueIdx, ComputeQueueIdx, &Vulkan->ComputeQueue);
                 vkGetDeviceQueue(Vulkan->Device, Vulkan->TransferQueueIdx, 0, &Vulkan->TransferQueue);
 
-                vkCmdBeginDebugUtilsLabelEXT_ = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdBeginDebugUtilsLabelEXT");
-                vkCmdEndDebugUtilsLabelEXT_ = (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdEndDebugUtilsLabelEXT");
-                vkSetDebugUtilsObjectNameEXT_ = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkSetDebugUtilsObjectNameEXT");
+                vkCmdBeginDebugUtilsLabelEXT_   = (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkCmdBeginDebugUtilsLabelEXT");
+                vkCmdEndDebugUtilsLabelEXT_     = (PFN_vkCmdEndDebugUtilsLabelEXT)  vkGetDeviceProcAddr(Vulkan->Device, "vkCmdEndDebugUtilsLabelEXT");
+                vkSetDebugUtilsObjectNameEXT_   = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkSetDebugUtilsObjectNameEXT");
 
-                // TODO(boti): Descriptor buffer function loading
+                vkCmdBindDescriptorBuffersEXT_              = (PFN_vkCmdBindDescriptorBuffersEXT)           vkGetDeviceProcAddr(Vulkan->Device, "vkCmdBindDescriptorBuffersEXT");
+                vkCmdSetDescriptorBufferOffsetsEXT_         = (PFN_vkCmdSetDescriptorBufferOffsetsEXT)      vkGetDeviceProcAddr(Vulkan->Device, "vkCmdSetDescriptorBufferOffsetsEXT");
+                vkGetDescriptorEXT_                         = (PFN_vkGetDescriptorEXT)                      vkGetDeviceProcAddr(Vulkan->Device, "vkGetDescriptorEXT");
+                vkGetDescriptorSetLayoutBindingOffsetEXT_   = (PFN_vkGetDescriptorSetLayoutBindingOffsetEXT)vkGetDeviceProcAddr(Vulkan->Device, "vkGetDescriptorSetLayoutBindingOffsetEXT");
+                vkGetDescriptorSetLayoutSizeEXT_            = (PFN_vkGetDescriptorSetLayoutSizeEXT)         vkGetDeviceProcAddr(Vulkan->Device, "vkGetDescriptorSetLayoutSizeEXT");
             }
             else
             {
