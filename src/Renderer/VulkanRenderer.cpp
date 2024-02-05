@@ -427,7 +427,10 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
     
         pipeline_with_layout* Pipeline = Renderer->Pipelines + PipelineIndex;
         vkDestroyPipeline(VK.Device, Pipeline->Pipeline, nullptr);
-        vkDestroyPipelineLayout(VK.Device, Pipeline->Layout, nullptr);
+        if (Pipeline->Layout != Renderer->SystemPipelineLayout)
+        {
+            vkDestroyPipelineLayout(VK.Device, Pipeline->Layout, nullptr);
+        }
 
         const pipeline_info* Info = PipelineInfos + PipelineIndex;
         
