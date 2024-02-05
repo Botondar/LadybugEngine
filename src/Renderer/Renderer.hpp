@@ -550,7 +550,8 @@ inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 P, f32 r);
 // Render API
 //
 
-inline bool IsValid(renderer_texture_id ID) { return ID.Value != U32_MAX; }
+constexpr renderer_texture_id InvalidRendererTextureID = { U32_MAX };
+inline bool IsValid(renderer_texture_id ID) { return ID.Value != InvalidRendererTextureID.Value; }
 
 inline f32 GetLuminance(v3 RGB);
 inline v3 SetLuminance(v3 RGB, f32 Luminance);
@@ -729,6 +730,18 @@ struct texture_info
     texture_swizzle Swizzle;
 };
 
+inline b32 AreTextureInfosSameFormat(texture_info A, texture_info B)
+{
+    b32 Result = 
+        (A.Width == B.Width) &&
+        (A.Height == B.Height) &&
+        (A.Depth == B.Depth) &&
+        (A.MipCount == B.MipCount) &&
+        (A.ArrayCount == B.ArrayCount) &&
+        (A.Format == B.Format);
+    return(Result);
+}
+
 enum transfer_op_type : u32
 {
     TransferOp_Undefined,
@@ -868,14 +881,17 @@ struct render_frame
 #define Signature_CreateRenderer(name)      renderer*                   name(struct platform_api* PlatformAPI, memory_arena* Arena, memory_arena* Scratch)
 #define Signature_GetDeviceName(name)       const char*                 name(renderer* Renderer)
 #define Signature_AllocateGeometry(name)    geometry_buffer_allocation  name(renderer* Renderer, u32 VertexCount, u32 IndexCount)
-#define Signature_AllocateTextureName(name) renderer_texture_id         name(renderer* Renderer, texture_flags Flags)
+/* NOTE(boti): Passing nullptr as Info is allowed as a way to allocate a texture _name_ only.
+ * Such a name can't be used as a placeholder until it has been uploaded with some data (after a frame boundary).
+ */ 
+#define Signature_AllocateTexture(name)     renderer_texture_id         name(renderer* Renderer, texture_flags Flags, const texture_info* Info, renderer_texture_id Placeholder)
 #define Signature_BeginRenderFrame(name)    render_frame*               name(renderer* Renderer, memory_arena* Arena, v2u OutputExtent)
 #define Signature_EndRenderFrame(name)      void                        name(render_frame* Frame)
 
 typedef Signature_CreateRenderer(create_renderer);
 typedef Signature_GetDeviceName(get_device_name);
 typedef Signature_AllocateGeometry(allocate_geometry);
-typedef Signature_AllocateTextureName(allocate_texture_name);
+typedef Signature_AllocateTexture(allocate_texture);
 typedef Signature_BeginRenderFrame(begin_render_frame);
 typedef Signature_EndRenderFrame(end_render_frame);
 

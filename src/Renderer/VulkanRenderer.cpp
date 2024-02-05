@@ -2066,6 +2066,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         }
     }
 
+    //
+    // Transfer
+    //
     VkCommandBufferBeginInfo CmdBufferBegin = 
     {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -2142,9 +2145,51 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 {
                     AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
                 }
+                else if (AreTextureInfosSameFormat(Op->Texture.Info, GetTextureInfo(&Renderer->TextureManager, Op->Texture.TargetID)))
+                {
+                    // NOTE(boti): Nothing to do here, although in the future we might want to allocate memory here
+                    // (currently that's always already done in this case)
+                }
                 else
                 {
                     UnimplementedCodePath;
+                }
+
+                if (!IsTextureSpecial(Op->Texture.TargetID))
+                {
+                    umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
+                    if ((Frame->StagingBufferAt + DescriptorSize) <= Frame->StagingBufferSize)
+                    {
+                        VkDescriptorImageInfo DescriptorImage = 
+                        {
+                            .sampler = VK_NULL_HANDLE,
+                            .imageView = *GetImageView(&Renderer->TextureManager, Op->Texture.TargetID),
+                            .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                        };
+                        VkDescriptorGetInfoEXT DescriptorInfo = 
+                        {
+                            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                            .pNext = nullptr,
+                            .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                            .data = { .pSampledImage = &DescriptorImage },
+                        };
+                        vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Frame->StagingBufferBase, Frame->StagingBufferAt));
+
+                        umm DescriptorOffset = Renderer->TextureManager.TextureTableOffset + Op->Texture.TargetID.Value*DescriptorSize; // TODO(boti): standardize this
+                        VkBufferCopy DescriptorCopy = 
+                        {
+                            .srcOffset = Frame->StagingBufferAt,
+                            .dstOffset = DescriptorOffset,
+                            .size = DescriptorSize,
+                        };
+                        vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
+
+                        Frame->StagingBufferAt += DescriptorSize;
+                    }
+                    else
+                    {
+                        UnimplementedCodePath;
+                    }
                 }
 
                 VkImageMemoryBarrier2 BeginBarrier = 
@@ -2303,6 +2348,35 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             InvalidDefaultCase;
         }
     }
+
+    
+    VkBufferMemoryBarrier2 EndTransferStageBufferMemoryBarriers[] = 
+    {
+        // Texture descriptor buffer
+        {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+            .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+            .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_DESCRIPTOR_BUFFER_READ_BIT_EXT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = Renderer->TextureManager.DescriptorBuffer,
+            .offset = 0,
+            .size = VK_WHOLE_SIZE,
+        },
+    };
+
+    VkDependencyInfo EndTransferStageDependency = 
+    {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pNext = nullptr,
+        .dependencyFlags = 0,
+        .bufferMemoryBarrierCount = CountOf(EndTransferStageBufferMemoryBarriers),
+        .pBufferMemoryBarriers = EndTransferStageBufferMemoryBarriers,
+    };
+    vkCmdPipelineBarrier2(PrepassCmd, &EndTransferStageDependency);
 
     // Upload instance data
     umm DrawBufferAt = 0;
@@ -3210,7 +3284,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             
             for (u32 Element = 0; Element < Write->descriptorCount; Element++)
             {
-                u32 ActualElement = Element + Write->dstArrayElement;
+                u32 EffectiveElement = Element + Write->dstArrayElement;
 
                 const void* Data = nullptr;
                 umm DescriptorSize = 0;
@@ -3236,7 +3310,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 }
 
                 // NOTE(boti): descriptors live in their own dedicated buffer starting at offset 0 for now, but may not in the future
-                VkDeviceSize Offset = 0 + BaseOffset + ActualElement*DescriptorSize;
+                VkDeviceSize Offset = 0 + BaseOffset + EffectiveElement*DescriptorSize;
 
                 VkDescriptorGetInfoEXT DescriptorInfo = 
                 {
@@ -4521,10 +4595,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
 }
 
-extern "C" renderer_texture_id 
-AllocateTextureName(renderer* Renderer, texture_flags Flags)
+extern "C" Signature_AllocateTexture(AllocateTexture)
 {
-    renderer_texture_id Result = AllocateTextureName(&Renderer->TextureManager, Flags);
+    renderer_texture_id Result = AllocateTexture(&Renderer->TextureManager, Flags, Info, Placeholder);
     return(Result);
 }
 

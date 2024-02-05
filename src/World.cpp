@@ -595,24 +595,15 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 texture* AlbedoTexture = Assets->Textures + Material->AlbedoID;
                 texture* NormalTexture = Assets->Textures + Material->NormalID;
                 texture* MetallicRoughnessTexture = Assets->Textures + Material->MetallicRoughnessID;
-                renderer_texture_id AlbedoID = AlbedoTexture->IsLoaded ? 
-                    AlbedoTexture->RendererID : 
-                    Assets->Textures[Assets->DefaultDiffuseID].RendererID;
-                renderer_texture_id NormalID = NormalTexture->IsLoaded ?
-                    NormalTexture->RendererID :
-                    Assets->Textures[Assets->DefaultNormalID].RendererID;
-                renderer_texture_id MetallicRoughnessID = MetallicRoughnessTexture->IsLoaded ?
-                    MetallicRoughnessTexture->RendererID :
-                    Assets->Textures[Assets->DefaultMetallicRoughnessID].RendererID;
                 
                 renderer_material RenderMaterial = 
                 {
                     .Emissive = Material->Emission,
                     .DiffuseColor = Material->Albedo,
                     .BaseMaterial = Material->MetallicRoughness,
-                    .DiffuseID = AlbedoID,
-                    .NormalID = NormalID,
-                    .MetallicRoughnessID = MetallicRoughnessID,
+                    .DiffuseID = AlbedoTexture->RendererID,
+                    .NormalID = NormalTexture->RendererID,
+                    .MetallicRoughnessID = MetallicRoughnessTexture->RendererID,
                 };
                 if (DrawSkinned)
                 {

@@ -420,12 +420,12 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     HMODULE RendererDLL = LoadLibraryA("vulkan_renderer.dll");
     if (RendererDLL)
     {
-        GameMemory.PlatformAPI.CreateRenderer       = (create_renderer*)        GetProcAddress(RendererDLL, "CreateRenderer");
-        GameMemory.PlatformAPI.GetDeviceName        = (get_device_name*)        GetProcAddress(RendererDLL, "GetDeviceName");
-        GameMemory.PlatformAPI.AllocateGeometry     = (allocate_geometry*)      GetProcAddress(RendererDLL, "AllocateGeometry");
-        GameMemory.PlatformAPI.AllocateTextureName  = (allocate_texture_name*)  GetProcAddress(RendererDLL, "AllocateTextureName");
-        GameMemory.PlatformAPI.BeginRenderFrame     = (begin_render_frame*)     GetProcAddress(RendererDLL, "BeginRenderFrame");
-        GameMemory.PlatformAPI.EndRenderFrame       = (end_render_frame*)       GetProcAddress(RendererDLL, "EndRenderFrame");
+        GameMemory.PlatformAPI.CreateRenderer       = (create_renderer*)    GetProcAddress(RendererDLL, "CreateRenderer");
+        GameMemory.PlatformAPI.GetDeviceName        = (get_device_name*)    GetProcAddress(RendererDLL, "GetDeviceName");
+        GameMemory.PlatformAPI.AllocateGeometry     = (allocate_geometry*)  GetProcAddress(RendererDLL, "AllocateGeometry");
+        GameMemory.PlatformAPI.AllocateTexture      = (allocate_texture*)   GetProcAddress(RendererDLL, "AllocateTexture");
+        GameMemory.PlatformAPI.BeginRenderFrame     = (begin_render_frame*) GetProcAddress(RendererDLL, "BeginRenderFrame");
+        GameMemory.PlatformAPI.EndRenderFrame       = (end_render_frame*)   GetProcAddress(RendererDLL, "EndRenderFrame");
 
     }
     else

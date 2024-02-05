@@ -14,8 +14,8 @@ WARNINGS_CLANG = -Wshadow -Wno-unused-function -Wno-unused-variable -Wno-unused-
 WARNINGS = $(WARNINGS_MSVC) $(WARNINGS_CLANG)
 
 CXX_FLAGS = $(COMMON) $(FLOAT_ENV) $(INCLUDES) $(DEFINES) $(WARNINGS)
-
 LINK_FLAGS = -INCREMENTAL:NO
+
 SHADER_FLAGS = -g -O --target-env=vulkan1.3 -fhlsl-offsets
 
 LIBS = kernel32.lib user32.lib gdi32.lib Shell32.lib advapi32.lib
@@ -30,7 +30,7 @@ RENDERER_EXPORT = \
     -EXPORT:CreateRenderer \
     -EXPORT:GetDeviceName \
     -EXPORT:AllocateGeometry \
-    -EXPORT:AllocateTextureName \
+    -EXPORT:AllocateTexture \
     -EXPORT:BeginRenderFrame \
     -EXPORT:EndRenderFrame
 

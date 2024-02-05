@@ -34,24 +34,24 @@ typedef void                release_semaphore       (platform_semaphore Semaphor
 
 struct platform_api
 {
-    debug_print* DebugPrint;
-    get_counter* GetCounter;
-    elapsed_seconds* ElapsedSeconds;
-    load_entire_file* LoadEntireFile;
-    create_vulkan_surface* CreateVulkanSurface;
-    create_thread* CreateThread;
-    create_semaphore* CreateSemaphore;
-    wait_for_semaphore* WaitForSemaphore;
-    release_semaphore* ReleaseSemaphore;
+    debug_print*            DebugPrint;
+    get_counter*            GetCounter;
+    elapsed_seconds*        ElapsedSeconds;
+    load_entire_file*       LoadEntireFile;
+    create_vulkan_surface*  CreateVulkanSurface;
+    create_thread*          CreateThread;
+    create_semaphore*       CreateSemaphore;
+    wait_for_semaphore*     WaitForSemaphore;
+    release_semaphore*      ReleaseSemaphore;
 
     // Renderer
     // TODO(boti): Make CreateRenderer fill an render_api struct with all the info
-    create_renderer* CreateRenderer;
-    get_device_name* GetDeviceName;
-    allocate_geometry* AllocateGeometry;
-    allocate_texture_name* AllocateTextureName;
+    create_renderer*    CreateRenderer;
+    get_device_name*    GetDeviceName;
+    allocate_geometry*  AllocateGeometry;
+    allocate_texture*   AllocateTexture;
     begin_render_frame* BeginRenderFrame;
-    end_render_frame* EndRenderFrame;
+    end_render_frame*   EndRenderFrame;
 };
 
 // Custom key table for layout-independent keys. Naming follows the US keyboard layout

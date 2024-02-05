@@ -25,25 +25,27 @@ struct texture_manager
     u32 TextureCount;
     VkImage Images[MaxTextureCount];
     VkImageView ImageViews[MaxTextureCount];
+    texture_info TextureInfos[MaxTextureCount];
 
     u32 SpecialTextureCount;
     VkImage SpecialImages[MaxSpecialTextureCount];
     VkImageView SpecialImageViews[MaxSpecialTextureCount];
+    texture_info SpecialTextureInfos[MaxTextureCount];
 };
+
+// TODO(boti): Rework this API, it's horrible
 
 internal bool 
 CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes, VkDescriptorSetLayout* SetLayouts);
 
 internal VkImage* GetImage(texture_manager* Manager, renderer_texture_id ID);
 internal VkImageView* GetImageView(texture_manager* Manager, renderer_texture_id ID);
+internal texture_info GetTextureInfo(texture_manager* Manager, renderer_texture_id ID);
+
+internal b32 IsTextureSpecial(renderer_texture_id ID);
 
 internal renderer_texture_id
-AllocateTextureName(texture_manager* Manager, texture_flags Flags);
+AllocateTexture(texture_manager* Manager, texture_flags Flags, const texture_info* Info, renderer_texture_id Placeholder);
 
 internal b32
 AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info Info);
-
-internal renderer_texture_id 
-CreateTexture2D(texture_manager* Manager, texture_flags Flags,
-                u32 Width, u32 Height, u32 MipCount, u32 ArrayCount,
-                VkFormat Format, texture_swizzle Swizzle);

@@ -78,6 +78,8 @@ enum texture_type : u32
     TextureType_Diffuse,
     TextureType_Normal,
     TextureType_Material,
+
+    TextureType_Count,
 };
 
 struct texture_queue_entry
@@ -159,9 +161,7 @@ struct assets
     texture_queue TextureQueue;
 
     u32 WhitenessID;
-    u32 DefaultDiffuseID;
-    u32 DefaultNormalID;
-    u32 DefaultMetallicRoughnessID;
+    u32 DefaultTextures[TextureType_Count];
 
     u32 ParticleArrayID;
 
