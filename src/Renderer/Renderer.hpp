@@ -87,6 +87,8 @@ enum format : u32
     Format_R8G8B8A8_UInt,
     Format_R8G8B8A8_SRGB,
 
+    Format_B8G8R8A8_SRGB,
+
     Format_R16_UNorm,
     Format_R16_UInt,
     Format_R16_Float,
@@ -453,6 +455,21 @@ struct blend_attachment
     blend_op AlphaOp;
 };
 
+enum render_target_format : u32
+{
+    RTFormat_Undefined = 0,
+    
+    RTFormat_Depth,
+    RTFormat_HDR,
+    RTFormat_Structure,
+    RTFormat_Visibility,
+    RTFormat_Occlusion,
+    RTFormat_Shadow,
+    RTFormat_Swapchain,
+
+    RTFormat_Count,
+};
+
 struct pipeline_info
 {
     const char* Name;
@@ -472,9 +489,9 @@ struct pipeline_info
     blend_attachment BlendAttachments[MaxColorAttachmentCount];
 
     u32 ColorAttachmentCount;
-    format ColorAttachments[MaxColorAttachmentCount];
-    format DepthAttachment;
-    format StencilAttachment;
+    render_target_format ColorAttachments[MaxColorAttachmentCount];
+    render_target_format DepthAttachment;
+    render_target_format StencilAttachment;
 };
 
 enum cube_layer : u32
@@ -515,16 +532,6 @@ struct format_byterate
 //
 // High-level renderer
 //
-
-// TODO(boti): Maybe we should just have an indirected enum for this too?
-constexpr format DEPTH_FORMAT               = Format_D32;
-constexpr format HDR_FORMAT                 = Format_R16G16B16A16_Float;
-constexpr format STRUCTURE_BUFFER_FORMAT    = Format_R16G16B16A16_Float;
-constexpr format SSAO_FORMAT                = Format_R8_UNorm;
-constexpr format SHADOW_FORMAT              = Format_D16;
-constexpr format VISIBILITY_FORMAT          = Format_R32G32_UInt;
-// HACK(boti): The swapchain format is unknown at compile time, so we use this special value to refer to it
-constexpr format SWAPCHAIN_FORMAT           = (format)0xFFFFFFFF;
 
 union frustum
 {
@@ -952,6 +959,7 @@ static format_byterate FormatByterateTable[Format_Count] =
     [Format_R8G8B8A8_UNorm]     = { 4*1, 1, FormatFlag_None },
     [Format_R8G8B8A8_UInt]      = { 4*1, 1, FormatFlag_None },
     [Format_R8G8B8A8_SRGB]      = { 4*1, 1, FormatFlag_None },
+    [Format_B8G8R8A8_SRGB]      = { 4*1, 1, FormatFlag_None },
     [Format_R16_UNorm]          = { 1*2, 1, FormatFlag_None },
     [Format_R16_UInt]           = { 1*2, 1, FormatFlag_None },
     [Format_R16_Float]          = { 1*2, 1, FormatFlag_None },

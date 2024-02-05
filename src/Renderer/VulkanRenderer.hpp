@@ -68,6 +68,19 @@ extern m3 GlobalCubeFaceBases[Layer_Count];
 
 extern vulkan VK;
 
+static format RenderTargetFormatTable[RTFormat_Count]
+{
+    [RTFormat_Undefined]    = Format_Undefined,
+
+    [RTFormat_Depth]        = Format_D32,
+    [RTFormat_HDR]          = Format_R16G16B16A16_Float,
+    [RTFormat_Structure]    = Format_R16G16B16A16_Float,
+    [RTFormat_Visibility]   = Format_R32G32_UInt,
+    [RTFormat_Occlusion]    = Format_R8_UNorm,
+    [RTFormat_Shadow]       = Format_D16,
+    [RTFormat_Swapchain]    = Format_Undefined, // NOTE(boti): Actually filled at runtime
+};
+
 struct draw_list
 {
     u32 DrawGroupDrawCounts[DrawGroup_Count];

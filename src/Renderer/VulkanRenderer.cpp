@@ -24,6 +24,9 @@ static VkFormat FormatTable[Format_Count] =
     [Format_R8G8B8A8_UNorm]     = VK_FORMAT_R8G8B8A8_UNORM,
     [Format_R8G8B8A8_UInt]      = VK_FORMAT_R8G8B8A8_UINT,
     [Format_R8G8B8A8_SRGB]      = VK_FORMAT_R8G8B8A8_SRGB,
+    
+    [Format_B8G8R8A8_SRGB]      = VK_FORMAT_B8G8R8A8_SRGB,
+
     [Format_R16_UNorm]          = VK_FORMAT_R16_UNORM,
     [Format_R16_UInt]           = VK_FORMAT_R16_UINT,
     [Format_R16_Float]          = VK_FORMAT_R16_SFLOAT,
@@ -36,6 +39,7 @@ static VkFormat FormatTable[Format_Count] =
     [Format_R16G16B16A16_UNorm] = VK_FORMAT_R16G16B16A16_UNORM,
     [Format_R16G16B16A16_UInt]  = VK_FORMAT_R16G16B16A16_UINT,
     [Format_R16G16B16A16_Float] = VK_FORMAT_R16G16B16A16_SFLOAT,
+
     [Format_R32_UInt]           = VK_FORMAT_R32_UINT,
     [Format_R32_Float]          = VK_FORMAT_R32_SFLOAT,
     [Format_R32G32_UInt]        = VK_FORMAT_R32G32_UINT,
@@ -44,13 +48,16 @@ static VkFormat FormatTable[Format_Count] =
     [Format_R32G32B32_Float]    = VK_FORMAT_R32G32B32_SFLOAT,
     [Format_R32G32B32A32_UInt]  = VK_FORMAT_R32G32B32A32_UINT,
     [Format_R32G32B32A32_Float] = VK_FORMAT_R32G32B32A32_SFLOAT,
+
     [Format_R11G11B10_Float]    = VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+
     [Format_D16]                = VK_FORMAT_D16_UNORM,
     [Format_D24X8]              = VK_FORMAT_X8_D24_UNORM_PACK32,
     [Format_D32]                = VK_FORMAT_D32_SFLOAT,
     [Format_S8]                 = VK_FORMAT_S8_UINT,
     [Format_D24S8]              = VK_FORMAT_D24_UNORM_S8_UINT,
     [Format_D32S8]              = VK_FORMAT_D32_SFLOAT_S8_UINT,
+
     [Format_BC1_RGB_UNorm]      = VK_FORMAT_BC1_RGB_UNORM_BLOCK,
     [Format_BC1_RGB_SRGB]       = VK_FORMAT_BC1_RGB_SRGB_BLOCK,
     [Format_BC1_RGBA_UNorm]     = VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
@@ -738,15 +745,7 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
             VkFormat ColorAttachmentFormats[MaxColorAttachmentCount] = {};
             for (u32 ColorAttachmentIndex = 0; ColorAttachmentIndex < Info->ColorAttachmentCount; ColorAttachmentIndex++)
             {
-                format Format = Info->ColorAttachments[ColorAttachmentIndex];
-                if (Format == SWAPCHAIN_FORMAT) 
-                {
-                    ColorAttachmentFormats[ColorAttachmentIndex] = Renderer->SurfaceFormat.format;
-                }
-                else
-                {
-                    ColorAttachmentFormats[ColorAttachmentIndex] = FormatTable[Format];
-                }
+                ColorAttachmentFormats[ColorAttachmentIndex] = FormatTable[RenderTargetFormatTable[Info->ColorAttachments[ColorAttachmentIndex]]];
             }
     
             VkPipelineRenderingCreateInfo DynamicRendering = 
@@ -756,8 +755,8 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
                 .viewMask = 0,
                 .colorAttachmentCount = Info->ColorAttachmentCount,
                 .pColorAttachmentFormats = ColorAttachmentFormats,
-                .depthAttachmentFormat = FormatTable[Info->DepthAttachment],
-                .stencilAttachmentFormat = FormatTable[Info->StencilAttachment],
+                .depthAttachmentFormat = FormatTable[RenderTargetFormatTable[Info->DepthAttachment]],
+                .stencilAttachmentFormat = FormatTable[RenderTargetFormatTable[Info->StencilAttachment]],
             };
     
             VkGraphicsPipelineCreateInfo PipelineCreateInfo = 
@@ -863,6 +862,22 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 Renderer->SurfaceFormat = SurfaceFormats[SurfaceFormatIndex];
             }
         }
+
+        switch (Renderer->SurfaceFormat.format)
+        {
+            case VK_FORMAT_R8G8B8A8_SRGB: 
+            {
+                RenderTargetFormatTable[RTFormat_Swapchain] = Format_R8G8B8A8_SRGB;
+            } break;
+            case VK_FORMAT_B8G8R8A8_SRGB: 
+            {
+                RenderTargetFormatTable[RTFormat_Swapchain] = Format_B8G8R8A8_SRGB;
+            } break;
+            default:
+            {
+                UnimplementedCodePath;
+            } break;
+        };
 
         Renderer->SwapchainImageCount = 2;
         // HACK(boti):
@@ -1345,7 +1360,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
 
     // Shadow storage
     {
-        VkFormat ShadowFormat = FormatTable[SHADOW_FORMAT];
+        VkFormat ShadowFormat = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]];
         u32 MemoryTypeIndex = 0;
         {
             VkImageCreateInfo DummyImageInfo = 
@@ -1442,7 +1457,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 .flags = 0,
                 .image = Renderer->ShadowMap,
                 .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
-                .format = FormatTable[SHADOW_FORMAT],
+                .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
                 .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
                 .subresourceRange = 
                 {
@@ -1647,13 +1662,13 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
                 constexpr VkImageUsageFlagBits Sampled = VK_IMAGE_USAGE_SAMPLED_BIT;
                 constexpr VkImageUsageFlagBits Storage = VK_IMAGE_USAGE_STORAGE_BIT;
                 
-                Renderer->DepthBuffer           = PushRenderTarget("Depth",         &Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
-                Renderer->StructureBuffer       = PushRenderTarget("Structure",     &Renderer->RenderTargetHeap, FormatTable[STRUCTURE_BUFFER_FORMAT], Color|Sampled, 1);
-                Renderer->HDRRenderTarget       = PushRenderTarget("HDR",           &Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
-                Renderer->BloomTarget           = PushRenderTarget("Bloom",         &Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
-                Renderer->OcclusionBuffers[0]   = PushRenderTarget("OcclusionRaw",  &Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
-                Renderer->OcclusionBuffers[1]   = PushRenderTarget("Occlusion",     &Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
-                Renderer->VisibilityBuffer      = PushRenderTarget("Visibility",    &Renderer->RenderTargetHeap, FormatTable[VISIBILITY_FORMAT], Color|Sampled, 1);
+                Renderer->DepthBuffer           = PushRenderTarget("Depth",         &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Depth]],      DepthStencil|Sampled,   1);
+                Renderer->StructureBuffer       = PushRenderTarget("Structure",     &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Structure]],  Color|Sampled,          1);
+                Renderer->HDRRenderTarget       = PushRenderTarget("HDR",           &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_HDR]],        Color|Sampled|Storage,  0);
+                Renderer->BloomTarget           = PushRenderTarget("Bloom",         &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_HDR]],        Color|Sampled|Storage,  0);
+                Renderer->OcclusionBuffers[0]   = PushRenderTarget("OcclusionRaw",  &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Occlusion]],  Color|Sampled|Storage,  1);
+                Renderer->OcclusionBuffers[1]   = PushRenderTarget("Occlusion",     &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Occlusion]],  Color|Sampled|Storage,  1);
+                Renderer->VisibilityBuffer      = PushRenderTarget("Visibility",    &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Visibility]], Color|Sampled,          1);
             }
 
             if (!ResizeRenderTargets(&Renderer->RenderTargetHeap, Renderer->SurfaceExtent.width, Renderer->SurfaceExtent.height))

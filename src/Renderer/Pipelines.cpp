@@ -487,9 +487,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .BlendAttachmentCount = 1,
         .BlendAttachments = { { .BlendEnable = false }, },
         .ColorAttachmentCount = 1,
-        .ColorAttachments = { HDR_FORMAT },
-        .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = Format_Undefined,
+        .ColorAttachments = { RTFormat_HDR },
+        .DepthAttachment = RTFormat_Depth,
+        .StencilAttachment = RTFormat_Undefined,
     },
 
     [Pipeline_Prepass] =
@@ -522,9 +522,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .BlendAttachmentCount = 2,
         .BlendAttachments = { { .BlendEnable = false } },
         .ColorAttachmentCount = 2,
-        .ColorAttachments = { VISIBILITY_FORMAT, STRUCTURE_BUFFER_FORMAT },
-        .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = Format_Undefined,
+        .ColorAttachments = { RTFormat_Visibility, RTFormat_Structure },
+        .DepthAttachment = RTFormat_Depth,
+        .StencilAttachment = RTFormat_Undefined,
     },
 
     [Pipeline_Shadow] = 
@@ -558,8 +558,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         //.BlendAttachments,
         .ColorAttachmentCount = 0,
         //.ColorAttachments,
-        .DepthAttachment = SHADOW_FORMAT,
-        .StencilAttachment = Format_Undefined,
+        .DepthAttachment = RTFormat_Shadow,
+        .StencilAttachment = RTFormat_Undefined,
     },
 
     [Pipeline_ShadowAny] =
@@ -593,8 +593,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         //.BlendAttachments,
         .ColorAttachmentCount = 0,
         //.ColorAttachments,
-        .DepthAttachment = SHADOW_FORMAT,
-        .StencilAttachment = Format_Undefined,
+        .DepthAttachment = RTFormat_Shadow,
+        .StencilAttachment = RTFormat_Undefined,
     },
 
     [Pipeline_Gizmo] =
@@ -627,9 +627,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .BlendAttachmentCount = 1,
         .BlendAttachments = { { .BlendEnable = false } },
         .ColorAttachmentCount = 1,
-        .ColorAttachments = { SWAPCHAIN_FORMAT },
-        .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = Format_Undefined,
+        .ColorAttachments = { RTFormat_Swapchain },
+        .DepthAttachment = RTFormat_Depth,
+        .StencilAttachment = RTFormat_Undefined,
     },
 
     [Pipeline_Sky] = 
@@ -671,9 +671,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .BlendAttachmentCount = 1,
         .BlendAttachments = { { .BlendEnable = false } },
         .ColorAttachmentCount = 1,
-        .ColorAttachments = { HDR_FORMAT },
-        .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = Format_Undefined,
+        .ColorAttachments = { RTFormat_HDR },
+        .DepthAttachment = RTFormat_Depth,
+        .StencilAttachment = RTFormat_Undefined,
     },
 
     [Pipeline_UI] = 
@@ -742,9 +742,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         },
 
         .ColorAttachmentCount = 1,
-        .ColorAttachments = { SWAPCHAIN_FORMAT },
-        .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = Format_Undefined,
+        .ColorAttachments = { RTFormat_Swapchain },
+        .DepthAttachment = RTFormat_Depth,
+        .StencilAttachment = RTFormat_Undefined,
     },
 
     [Pipeline_Blit] =
@@ -779,9 +779,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .BlendAttachmentCount = 1,
         .BlendAttachments = { { .BlendEnable = false } },
         .ColorAttachmentCount = 1,
-        .ColorAttachments = { SWAPCHAIN_FORMAT },
-        .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = Format_Undefined,
+        .ColorAttachments = { RTFormat_Swapchain },
+        .DepthAttachment = RTFormat_Depth,
+        .StencilAttachment = RTFormat_Undefined,
     },
 
     [Pipeline_BloomDownsample] =
@@ -871,9 +871,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             } 
         },
         .ColorAttachmentCount = 1,
-        .ColorAttachments = { HDR_FORMAT },
-        .DepthAttachment = DEPTH_FORMAT,
-        .StencilAttachment = Format_Undefined,
+        .ColorAttachments = { RTFormat_HDR },
+        .DepthAttachment = RTFormat_Depth,
+        .StencilAttachment = RTFormat_Undefined,
     },
     
     [Pipeline_Skinning] = 
