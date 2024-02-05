@@ -326,9 +326,9 @@ f32 CalculateCascadedShadow(
     f32 Shadow2 = 0.0;
 
 #if 1
-    f32 Scale = 2.0 * TexelSize.x;
-    Shadow1 = SampleShadowPoisson(Cascades, Sampler, P1, Scale, 64);
-    Shadow2 = SampleShadowPoisson(Cascades, Sampler, P2, Scale, 64);
+    f32 Scale = 4.0 * TexelSize.x;
+    Shadow1 = SampleShadowPoisson(Cascades, Sampler, P1, Scale, 32);
+    Shadow2 = SampleShadowPoisson(Cascades, Sampler, P2, Scale, 32);
 #else
     v2 Jitter = v2(1.0 * (3.0/16.0), 3.0 * (3.0 / 16.0)) * TexelSize.x;
     Shadow1 = SampleShadowJitter4(Cascades, Sampler, P1, Jitter);
