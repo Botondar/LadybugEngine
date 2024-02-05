@@ -600,8 +600,8 @@ struct render_config
     static constexpr f32 DefaultSSAOTangentTau = 0.03125f;
 
     static constexpr f32 DefaultBloomFilterRadius = 0.005f;
-    static constexpr f32 DefaultBloomInternalStrength = 0.65f;
-    static constexpr f32 DefaultBloomStrength = 0.1f;
+    static constexpr f32 DefaultBloomInternalStrength = 1.0f;
+    static constexpr f32 DefaultBloomStrength = 0.04f;
 };
 
 enum draw_group : u32
