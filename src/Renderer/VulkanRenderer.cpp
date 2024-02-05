@@ -2494,8 +2494,14 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .pBufferMemoryBarriers = BeginBarriers,
         };
         vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
-        vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->InstanceBuffer, 1, &InstanceCopy);
-        vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->DrawBuffer, 1, &DrawCopy);
+        if (InstanceCopy.size)
+        {
+            vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->InstanceBuffer, 1, &InstanceCopy);
+        }
+        if (DrawCopy.size)
+        {
+            vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->DrawBuffer, 1, &DrawCopy);
+        }
 
         VkBufferMemoryBarrier2 EndBarriers[] = 
         {
