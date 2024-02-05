@@ -585,6 +585,7 @@ enum shading_mode : u32
 struct render_config
 {
     shading_mode ShadingMode;
+    debug_view_mode DebugViewMode;
     f32 Exposure;
 
     f32 SSAOIntensity;

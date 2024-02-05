@@ -29,8 +29,18 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
+SetBindingLayout(PerFrame, TileBuffer, scalar)
+readonly buffer TileBuffer
+{
+    screen_tile Tiles[];
+};
+
 SetBinding(PerFrame, HDRColorImage) uniform texture2D HDRColorImage;
 SetBinding(PerFrame, BloomImage) uniform texture2D BloomImage;
+
+SetBinding(PerFrame, OcclusionImage) uniform texture2D OcclusionImage;
+SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
+SetBinding(PerFrame, VisibilityImage) uniform utexture2D VisibilityImage;
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 
@@ -81,31 +91,76 @@ v3 ACESFilm2(v3 S)
 
 void main()
 {
-    f32 Exposure = PerFrame.Exposure;
+    if (PerFrame.DebugViewMode == DebugView_None)
+    {
+        f32 Exposure = PerFrame.Exposure;
 
     // Incredibly silly dynamic exposure
 #if 0
-    {
-        v3 AverageColor = textureLod(sampler2D(HDRColorImage, Samplers[Sampler_LinearEdgeClamp]), v2(0.0), 1000.0).rgb;
-        f32 AverageLuminance = GetLuminance(AverageColor);
-        f32 TargetLuminance = 0.4;
-        Exposure = TargetLuminance / AverageLuminance;
-    }
+        {
+            v3 AverageColor = textureLod(sampler2D(HDRColorImage, Samplers[Sampler_LinearEdgeClamp]), v2(0.0), 1000.0).rgb;
+            f32 AverageLuminance = GetLuminance(AverageColor);
+            f32 TargetLuminance = 0.4;
+            Exposure = TargetLuminance / AverageLuminance;
+        }
 #endif
 
-    vec3 Sample = texelFetch(HDRColorImage, v2s(gl_FragCoord.xy), 0).rgb;
-    vec3 SampleBloom = texelFetch(BloomImage, v2s(gl_FragCoord.xy), 0).rgb;
-    Sample = mix(Sample, SampleBloom, PerFrame.BloomStrength);
+        vec3 Sample = texelFetch(HDRColorImage, v2s(gl_FragCoord.xy), 0).rgb;
+        vec3 SampleBloom = texelFetch(BloomImage, v2s(gl_FragCoord.xy), 0).rgb;
+        Sample = mix(Sample, SampleBloom, PerFrame.BloomStrength);
 
-    vec3 Exposed = Sample * Exposure;
+        vec3 Exposed = Sample * Exposure;
 #if 0
-    v3 Tonemapped = vec3(1.0) - exp(-Exposed);
+        v3 Tonemapped = vec3(1.0) - exp(-Exposed);
 #elif 0
-    v3 Tonemapped = Exposed / (vec3(1.0) + Exposed);
+        v3 Tonemapped = Exposed / (vec3(1.0) + Exposed);
 #elif 1
-    v3 Tonemapped = ACESFilm2(Exposed);
+        v3 Tonemapped = ACESFilm2(Exposed);
 #endif
-    Out0 = vec4(Tonemapped, 1.0);
+        Out0 = vec4(Tonemapped, 1.0);
+    }
+    else if (PerFrame.DebugViewMode == DebugView_LightOccupancy)
+    {
+        v2u TileID = v2u(gl_FragCoord.xy) / v2u(R_TileSizeX, R_TileSizeY);
+        uint TileIndex = TileID.x + TileID.y * PerFrame.TileCount.x;
+
+        uint LightCount = Tiles[TileIndex].LightCount;
+        f32 Occupancy = f32(LightCount) / f32(R_MaxLightCountPerTile);
+        
+        v3 Colors[4] = v3[4](
+            v3(0.0, 0.0, 1.0),
+            v3(0.0, 1.0, 0.0),
+            v3(1.0, 1.0, 0.0),
+            v3(1.0, 0.0, 0.0));
+
+        f32 fIndex = f32(Colors.length()) * Occupancy;
+        f32 Factor = fract(fIndex);
+        uint Index = uint(floor(fIndex));
+
+        Out0 = v4(mix(Colors[Index], Colors[Index + 1], Factor), 1.0);
+    }
+    else if (PerFrame.DebugViewMode == DebugView_SSAO)
+    {
+        f32 Occlusion = texelFetch(OcclusionImage, v2s(gl_FragCoord.xy), 0).r;
+        Out0 = v4(Occlusion.xxx, 1.0);
+    }
+    else if (PerFrame.DebugViewMode == DebugView_Structure)
+    {
+        v3 Structure = StructureDecode(texelFetch(StructureImage, v2s(gl_FragCoord.xy), 0));
+        Structure.xy = (1.0 / 0.03) * Structure.xy + v2(0.5);
+        Structure.z = PerFrame.ProjectionTransform[2][2] + PerFrame.ProjectionTransform[2][3] / Structure.z;
+        Out0 = v4(Structure, 1.0);
+    }
+    else if (PerFrame.DebugViewMode == DebugView_InstanceID || PerFrame.DebugViewMode == DebugView_TriangleID)
+    {
+        v2u InstanceTriangleID = texelFetch(VisibilityImage, v2s(gl_FragCoord.xy), 0).xy;
+        uint ID = (PerFrame.DebugViewMode == DebugView_InstanceID) ? InstanceTriangleID.x : InstanceTriangleID.y;
+        uint HashID = HashPCG(ID);
+
+        v3u Color8 = v3u(0xFFu) & v3u(HashID >> 16, HashID >> 8, HashID);
+        v3 Color = (1.0 / 255.0) * v3(Color8);
+        Out0 = v4(Color, 1.0);
+    }
 }
 
 #endif

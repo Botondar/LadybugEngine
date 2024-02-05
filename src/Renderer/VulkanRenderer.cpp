@@ -1915,6 +1915,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     Frame->Uniforms.Ambience                    = 0.25f * v3{ 1.0f, 1.0f, 1.0f }; // TODO(boti): Expose this in the API
     Frame->Uniforms.Exposure                    = Frame->Config.Exposure;
+    Frame->Uniforms.DebugViewMode               = Frame->Config.DebugViewMode;
     Frame->Uniforms.SSAOIntensity               = Frame->Config.SSAOIntensity;
     Frame->Uniforms.SSAOInverseMaxDistance      = 1.0f / Frame->Config.SSAOMaxDistance;
     Frame->Uniforms.SSAOTangentTau              = Frame->Config.SSAOTangentTau;

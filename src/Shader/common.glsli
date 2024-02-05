@@ -96,6 +96,17 @@ v3 SetLuminance(in v3 Color, f32 TargetLuminance)
 }
 
 //
+// Random
+//
+uint HashPCG(uint In)
+{
+    uint State = In * 747796405u + 2891336453u;
+    uint Word = ((State >> ((State >> 28u) + 4u)) ^ State) * 277803737u;
+    uint Result = (Word >> 22u) ^ Word;
+    return(Result);
+}
+
+//
 // PBR shading functions
 //
 

@@ -26,6 +26,8 @@ struct v4u8
 #   define v2u      uvec2
 #   define v2s      ivec2
 #   define v3       vec3
+#   define v3u      uvec3
+#   define v3s      ivec3
 #   define v4       vec4
 #   define v4u8     u8vec4
 #   define m2       mat2
@@ -120,11 +122,6 @@ struct v4u8
 // Bindless bindings
 #define Binding_Bindless_Textures                   0
 
-#define light_flags flags32
-#define LightFlag_None          0x00u
-#define LightFlag_ShadowCaster  0x01u
-#define LightFlag_Volumetric    0x02u
-
 //
 // Shader specific
 //
@@ -163,6 +160,19 @@ struct v4u8
 //
 // Data
 //
+
+#define light_flags flags32
+#define LightFlag_None          0x00u
+#define LightFlag_ShadowCaster  0x01u
+#define LightFlag_Volumetric    0x02u
+
+#define debug_view_mode u32
+#define DebugView_None              0
+#define DebugView_LightOccupancy    1
+#define DebugView_InstanceID        2
+#define DebugView_TriangleID        3
+#define DebugView_SSAO              4
+#define DebugView_Structure         5
 
 struct vertex
 {
@@ -230,6 +240,8 @@ struct per_frame
     u32 LightCount;
 
     v3 Ambience;
+
+    debug_view_mode DebugViewMode;
 
     f32 Exposure;
     f32 SSAOIntensity;

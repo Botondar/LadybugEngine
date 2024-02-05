@@ -119,6 +119,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     
     UpdateEditor(GameState, GameIO, RenderFrame);
     RenderFrame->Config = GameState->RenderConfig;
+    RenderFrame->Config.DebugViewMode = DebugView_None;
     RenderFrame->ConstantFogDensity = GameState->ConstantFogDensity;
     RenderFrame->LinearFogDensityAtBottom = GameState->LinearFogDensityAtBottom;
     RenderFrame->LinearFogMinZ = GameState->LinearFogMinZ;
