@@ -79,46 +79,6 @@ SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
 layout(location = 0) out vec4 Out0;
 
-float CalculateShadow(vec3 CascadeCoord0, in vec3 CascadeBlends)
-{
-    vec3 CascadeCoord1 = PerFrame.CascadeScales[0] * CascadeCoord0 + PerFrame.CascadeOffsets[0];
-    vec3 CascadeCoord2 = PerFrame.CascadeScales[1] * CascadeCoord0 + PerFrame.CascadeOffsets[1];
-    vec3 CascadeCoord3 = PerFrame.CascadeScales[2] * CascadeCoord0 + PerFrame.CascadeOffsets[2];
-
-    vec2 ShadowMapSize = vec2(textureSize(CascadedShadow, 0).xy);
-    vec2 TexelSize = 1.0 / ShadowMapSize;
-
-    bool BeyondCascade2 = (CascadeBlends.y >= 0.0);
-    bool BeyondCascade3 = (CascadeBlends.z >= 0.0);
-
-    v2 ShadowP1 = (BeyondCascade2) ? CascadeCoord2.xy : CascadeCoord0.xy;
-    v2 ShadowP2 = (BeyondCascade3) ? CascadeCoord3.xy : CascadeCoord1.xy;
-    float Depth1 = (BeyondCascade2) ? CascadeCoord2.z : CascadeCoord0.z;
-    float Depth2 = (BeyondCascade3) ? clamp(CascadeCoord3.z, 0.0, 1.0) : CascadeCoord1.z;
-
-    v3 Blends = clamp(CascadeBlends, v3(0.0), v3(1.0));
-    float Blend = (BeyondCascade2) ? Blends.y - Blends.z : 1.0 - Blends.x;
-
-    v4 P1 = v4(ShadowP1.xy, 2.0 * float(BeyondCascade2),       Depth1);
-    v4 P2 = v4(ShadowP2.xy, 2.0 * float(BeyondCascade3) + 1.0, Depth2);
-
-    float Shadow1 = 0.0;
-    float Shadow2 = 0.0;
-
-#if 1
-    float Scale = 2.0 * TexelSize.x;
-    Shadow1 = SampleShadowPoisson(CascadedShadow, Samplers[Sampler_Shadow], P1, Scale, 64);
-    Shadow2 = SampleShadowPoisson(CascadedShadow, Samplers[Sampler_Shadow], P2, Scale, 64);
-#else
-    v2 Jitter = v2(1.0 * (3.0/16.0), 3.0 * (3.0 / 16.0)) * TexelSize.x;
-    Shadow1 = SampleShadowJitter4(CascadedShadow, Samplers[Sampler_Shadow], P1, Jitter);
-    Shadow2 = SampleShadowJitter4(CascadedShadow, Samplers[Sampler_Shadow], P2, Jitter);
-#endif
-
-    float Result = mix(Shadow2, Shadow1, Blend);
-    return(Result);
-}
-
 void main()
 {
     v3 Lo = vec3(0.0);
@@ -157,7 +117,10 @@ void main()
         vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);
         vec3 DiffuseBase = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb;
 
-        float SunShadow = CalculateShadow(ShadowP, CascadeBlends);
+        float SunShadow = CalculateCascadedShadow(
+            CascadedShadow, Samplers[Sampler_Shadow], 
+            ShadowP, CascadeBlends,
+            PerFrame.CascadeScales, PerFrame.CascadeOffsets);
         Lo += CalculateOutgoingLuminance(SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
                                          DiffuseBase, F0, Roughness);
 

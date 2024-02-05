@@ -253,6 +253,49 @@ float SampleShadowJitter4(sampler2DArrayShadow Sampler, v4 P, v2 Jitter)
     return Result;
 }
 
+f32 CalculateCascadedShadow(
+    texture2DArray Cascades, sampler Sampler, 
+    v3 CascadeCoord0, v3 CascadeBlends,
+    v3 CascadeScales[3], v3 CascadeOffsets[3])
+{
+    v3 CascadeCoord1 = CascadeScales[0] * CascadeCoord0 + CascadeOffsets[0];
+    v3 CascadeCoord2 = CascadeScales[1] * CascadeCoord0 + CascadeOffsets[1];
+    v3 CascadeCoord3 = CascadeScales[2] * CascadeCoord0 + CascadeOffsets[2];
+
+    vec2 ShadowMapSize = v2(textureSize(Cascades, 0).xy);
+    v2 TexelSize = 1.0 / ShadowMapSize;
+
+    bool BeyondCascade2 = (CascadeBlends.y >= 0.0);
+    bool BeyondCascade3 = (CascadeBlends.z >= 0.0);
+
+    v2 ShadowP1 = (BeyondCascade2) ? CascadeCoord2.xy : CascadeCoord0.xy;
+    v2 ShadowP2 = (BeyondCascade3) ? CascadeCoord3.xy : CascadeCoord1.xy;
+    f32 Depth1 = (BeyondCascade2) ? CascadeCoord2.z : CascadeCoord0.z;
+    f32 Depth2 = (BeyondCascade3) ? clamp(CascadeCoord3.z, 0.0, 1.0) : CascadeCoord1.z;
+
+    v3 Blends = clamp(CascadeBlends, v3(0.0), v3(1.0));
+    f32 Blend = (BeyondCascade2) ? Blends.y - Blends.z : 1.0 - Blends.x;
+
+    v4 P1 = v4(ShadowP1.xy, 2.0 * f32(BeyondCascade2),       Depth1);
+    v4 P2 = v4(ShadowP2.xy, 2.0 * f32(BeyondCascade3) + 1.0, Depth2);
+
+    f32 Shadow1 = 0.0;
+    f32 Shadow2 = 0.0;
+
+#if 1
+    f32 Scale = 2.0 * TexelSize.x;
+    Shadow1 = SampleShadowPoisson(Cascades, Sampler, P1, Scale, 64);
+    Shadow2 = SampleShadowPoisson(Cascades, Sampler, P2, Scale, 64);
+#else
+    v2 Jitter = v2(1.0 * (3.0/16.0), 3.0 * (3.0 / 16.0)) * TexelSize.x;
+    Shadow1 = SampleShadowJitter4(Cascades, Sampler, P1, Jitter);
+    Shadow2 = SampleShadowJitter4(Cascades, Sampler, P2, Jitter);
+#endif
+
+    float Result = mix(Shadow2, Shadow1, Blend);
+    return(Result);
+}
+
 //
 // Structure buffer
 //

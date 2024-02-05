@@ -244,32 +244,11 @@ void main()
             // NOTE(boti): This works because orthographic projection is an affine transform
             v3 CascadeP0 = TransformPoint(PerFrame.CascadeViewProjections[0], WorldP);
             CascadeP0.xy = 0.5 * CascadeP0.xy + v2(0.5);
-            v3 CascadeP1 = PerFrame.CascadeScales[0] * CascadeP0 + PerFrame.CascadeOffsets[0];
-            v3 CascadeP2 = PerFrame.CascadeScales[1] * CascadeP0 + PerFrame.CascadeOffsets[1];
-            v3 CascadeP3 = PerFrame.CascadeScales[2] * CascadeP0 + PerFrame.CascadeOffsets[2];
 
-            v2 ShadowMapSize = v2(textureSize(CascadedShadow, 0).xy);
-            v2 TexelSize = v2(1.0) / ShadowMapSize;
-
-            bool BeyondCascade2 = (CascadeBlends.y >= 0.0);
-            bool BeyondCascade3 = (CascadeBlends.z >= 0.0);
-
-            v2 ShadowP1 = (BeyondCascade2) ? CascadeP2.xy : CascadeP0.xy;
-            v2 ShadowP2 = (BeyondCascade3) ? CascadeP3.xy : CascadeP1.xy;
-            f32 Depth1 = (BeyondCascade2) ? CascadeP2.z : CascadeP0.z;
-            f32 Depth2 = (BeyondCascade3) ? clamp(CascadeP3.z, 0.0, 1.0) : CascadeP1.z;
-
-            v3 Blends = clamp(CascadeBlends, v3(0.0), v3(1.0));
-            f32 Blend = (BeyondCascade2) ? Blends.y - Blends.z : 1.0 - Blends.x;
-
-            v4 P1 = v4(ShadowP1.xy, 2.0 * f32(BeyondCascade2),          Depth1);
-            v4 P2 = v4(ShadowP2.xy, 2.0 * f32(BeyondCascade3) + 1.0,    Depth2);
-
-            // TODO(boti): Move this scale to per-frame
-            f32 Scale = 2.0 * TexelSize.x;
-            f32 Shadow1 = SampleShadowPoisson(CascadedShadow, Samplers[Sampler_Shadow], P1, Scale, 64);
-            f32 Shadow2 = SampleShadowPoisson(CascadedShadow, Samplers[Sampler_Shadow], P2, Scale, 64);
-            SunShadow = mix(Shadow2, Shadow1, Blend);
+            SunShadow = CalculateCascadedShadow(
+                CascadedShadow, Samplers[Sampler_Shadow],
+                CascadeP0, CascadeBlends,
+                PerFrame.CascadeScales, PerFrame.CascadeOffsets);
         }
 
         Lo += CalculateOutgoingLuminance(SunShadow * PerFrame.SunL, PerFrame.SunV, N, V, DiffuseBase, F0, MetallicRoughness.g);
