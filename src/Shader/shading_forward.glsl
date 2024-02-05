@@ -101,7 +101,7 @@ void main()
         f32 Roughness = MetallicRoughness.g * BaseMetallicRoughness.g;
         f32 Metallic = MetallicRoughness.b * BaseMetallicRoughness.b;
         v3 N = UnpackSurfaceNormal01(texture(sampler2D(Textures[Instance.Material.NormalID], Samplers[Sampler_Default]), TexCoord).xy);
-        N = TriT * N.x + TriB * N.y + TriN* N.z;
+        N = normalize(TriT) * N.x + normalize(TriB) * N.y + normalize(TriN) * N.z;
 
         vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);
         vec3 DiffuseBase = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb;
@@ -136,7 +136,9 @@ void main()
         }
     }
 
-#if 0
+#if 1
+    Lo += AtmosphereIntensity * CalculateAtmosphere(gl_FragCoord.xy, P, PerFrame, CascadedShadow, Samplers[Sampler_Shadow]) * PerFrame.SunL;
+#else
     {
         uint StepCount = 64;
         f32 InvStepCount = 1.0 / float(StepCount);
@@ -194,8 +196,6 @@ void main()
     }
 #endif
     Out0 = vec4(Lo, 1.0);
-    //f32 LightOccupancy = float(Tiles[TileIndex].LightCount) / float( R_MaxLightCountPerTile);
-    //Out0 = vec4(LightOccupancy.rrr, 1.0);
 }
 
 #endif

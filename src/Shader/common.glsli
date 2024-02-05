@@ -8,6 +8,8 @@
 #include "ShaderInterop.h"
 
 #define MieBetaFactor 21e-4
+// TODO(boti): Figure out some actual physical quantities that we can base this off of
+#define AtmosphereIntensity 0.025
 
 #if defined(VS)
 #   define interpolant(n) layout(location = n) out
@@ -415,7 +417,6 @@ vec3 StructureDecode(in vec4 Structure)
 // Atmosphere
 //
 
-#if defined(FS)
 float AtmosphereSampleDistribution(float m, float t)
 {
     float Result = (1.0 - m) * t*t + m*t;
@@ -431,7 +432,7 @@ float AtmosphereNoise(vec2 P)
 }
 
 // NOTE(boti): g2 is g*g
-float PhaseMie(in float g, in float g2, in float CosTheta)
+float PhaseHG(in float g, in float g2, in float CosTheta)
 {
     const float OneOver4Pi = 0.07957747;
 
@@ -448,7 +449,7 @@ float PhaseMie(in float g, in float g2, in float CosTheta)
     return(Phase);
 }
 
-float CalculateAtmosphere(v3 P, per_frame PerFrame, texture2DArray Cascades, sampler Sampler)
+float CalculateAtmosphere(v2 ScreenP, v3 P, per_frame PerFrame, texture2DArray Cascades, sampler Sampler)
 {
     const int StepCount = 32;
     const float StepDistribution = 0.25;
@@ -462,14 +463,14 @@ float CalculateAtmosphere(v3 P, per_frame PerFrame, texture2DArray Cascades, sam
 
     const float g = 0.65;
     const float g2 = g*g;
-    float PhaseIn = PhaseMie(g, g2, CosTheta);
-    float PhaseOut = 1.0 - PhaseMie(g, g2, 1.0);
+    float PhaseIn = PhaseHG(g, g2, CosTheta);
+    float PhaseOut = 1.0 - PhaseHG(g, g2, 1.0);
 
     float RayleighPhase = 0.059683103 * (1.0 + CosTheta); // constant is 3 / 16pi
     const vec3 BetaR0 = vec3(3.8e-6, 13.5e-6, 33.1e-6);
     const vec3 BetaM0 = vec3(21e-4);
 
-    float Delta = AtmosphereNoise(0.5 * gl_FragCoord.xy);
+    float Delta = AtmosphereNoise(0.5 * ScreenP);
     float InScatter = 0.0;
     uint CascadeIndex = 0;
     float Weight = StepDistribution;
@@ -508,4 +509,3 @@ float CalculateAtmosphere(v3 P, per_frame PerFrame, texture2DArray Cascades, sam
     float Result = InScatter * PhaseIn * Norm;
     return Result;
 }
-#endif

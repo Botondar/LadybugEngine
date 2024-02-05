@@ -274,6 +274,11 @@ void main()
             }
             Lo += CalculateOutgoingLuminance(Shadow * E, normalize(dP), N, V, DiffuseBase, F0, MetallicRoughness.g);
         }
+
+        //
+        // Atmosphere
+        //
+        Lo += AtmosphereIntensity * CalculateAtmosphere(v2(TexelID), P, PerFrame, CascadedShadow, Samplers[Sampler_Shadow]) * PerFrame.SunL;
     }
 
     imageStore(HDRTarget, TexelID, v4(Lo, 1.0));

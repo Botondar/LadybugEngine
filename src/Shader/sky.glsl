@@ -100,7 +100,7 @@ void main()
 #endif
     // NOTE(boti): We assume the fog dissipates at some distance...
     Lo = ApplyFog(Lo, PerFrame.Ambience, PerFrame.ConstantFogDensity, 1000.0f);
-    Lo += (0.9 * MieBetaFactor) * PerFrame.SunL * CalculateAtmosphere(PerFrame.FarZ * V, PerFrame, CascadedShadow, Samplers[Sampler_Shadow]);
+    Lo += AtmosphereIntensity * CalculateAtmosphere(gl_FragCoord.xy, PerFrame.FarZ * V, PerFrame, CascadedShadow, Samplers[Sampler_Shadow]) * PerFrame.SunL;
     Out0 = vec4(Lo, 1.0);
 }
 
