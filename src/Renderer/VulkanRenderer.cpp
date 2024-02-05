@@ -151,6 +151,21 @@ static VkCompareOp CompareOpTable[Compare_Count] =
     [Compare_GreaterEqual]  = VK_COMPARE_OP_GREATER_OR_EQUAL,
 };
 
+static VkDescriptorType DescriptorTypeTable[Descriptor_Count] =
+{
+    [Descriptor_Sampler]                = VK_DESCRIPTOR_TYPE_SAMPLER,
+    [Descriptor_ImageSampler]           = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    [Descriptor_SampledImage]           = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+    [Descriptor_StorageImage]           = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+    [Descriptor_UniformTexelBuffer]     = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+    [Descriptor_StorageTexelBuffer]     = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
+    [Descriptor_UniformBuffer]          = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    [Descriptor_StorageBuffer]          = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+    [Descriptor_DynamicUniformBuffer]   = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
+    [Descriptor_DynamicStorageBuffer]   = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC,
+    [Descriptor_InlineUniformBlock]     = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,
+};
+
 internal VkShaderStageFlags PipelineStagesToVulkan(flags32 Stages)
 {
     VkShaderStageFlags Result = 0;
@@ -208,9 +223,6 @@ internal VkSamplerCreateInfo SamplerStateToVulkanSamplerInfo(sampler_state Sampl
 #include "TextureManager.cpp"
 #include "Pipelines.cpp"
 
-internal VkMemoryRequirements 
-GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInfo);
-
 internal VkResult 
 ResizeRenderTargets(renderer* Renderer, b32 Forced);
 
@@ -235,6 +247,26 @@ GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInf
     return(Result);
 }
 
+internal VkMemoryRequirements
+GetImageMemoryRequirements(VkDevice Device, const VkImageCreateInfo* ImageInfo, VkImageAspectFlagBits Aspects)
+{
+    VkMemoryRequirements Result = {};
+
+    VkMemoryRequirements2 MemoryRequirements = { VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2 };
+    VkDeviceImageMemoryRequirements Query = 
+    {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS,
+        .pNext = nullptr,
+        .pCreateInfo = ImageInfo,
+        .planeAspect = Aspects,
+    };
+
+    vkGetDeviceImageMemoryRequirements(Device, &Query, &MemoryRequirements);
+    Result = MemoryRequirements.memoryRequirements;
+
+    return(Result);
+}
+
 internal VkResult CreateDedicatedBuffer(
     VkBufferUsageFlags Usage, u32 MemoryTypes, 
     umm Size, VkBuffer* pBuffer, VkDeviceMemory* pMemory)
@@ -247,7 +279,7 @@ internal VkResult CreateDedicatedBuffer(
         .pNext = nullptr,
         .flags = 0,
         .size = Size,
-        .usage = Usage,
+        .usage = Usage|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
@@ -260,10 +292,17 @@ internal VkResult CreateDedicatedBuffer(
         VkBuffer Buffer = VK_NULL_HANDLE;
         if ((Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Buffer)) == VK_SUCCESS)
         {
+            VkMemoryAllocateFlagsInfo AllocFlags = 
+            {
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+                .pNext = nullptr,
+                .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+                .deviceMask = 0,
+            };
             VkMemoryAllocateInfo AllocInfo = 
             {
                 .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                .pNext = nullptr,
+                .pNext = &AllocFlags,
                 .allocationSize = Size,
                 .memoryTypeIndex = MemoryTypeIndex,
             };
@@ -451,7 +490,7 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
                 {
                     .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
                     .pNext = nullptr,
-                    .flags = 0,
+                    .flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
                     .stage = 
                     {
                         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -725,7 +764,7 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
             {
                 .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
                 .pNext = &DynamicRendering,
-                .flags = 0,
+                .flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT ,
                 .stageCount = StageCount,
                 .pStages = StageInfos,
                 .pVertexInputState = &VertexInputState,
@@ -960,7 +999,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                 .pNext = &FlagsInfo,
-                .flags = 0,
+                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
                 .bindingCount = Info->BindingCount,
                 .pBindings = Bindings,
             };
@@ -969,7 +1008,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             {
                 const descriptor_set_binding* Binding = Info->Bindings + BindingIndex;
                 Bindings[BindingIndex].binding = Binding->Binding;
-                Bindings[BindingIndex].descriptorType = (VkDescriptorType)Binding->Type; // TODO(boti): create a helper for this
+                Bindings[BindingIndex].descriptorType = DescriptorTypeTable[Binding->Type];
                 Bindings[BindingIndex].descriptorCount = Binding->DescriptorCount;
                 Bindings[BindingIndex].stageFlags = PipelineStagesToVulkan(Binding->Stages);
                 Bindings[BindingIndex].pImmutableSamplers = nullptr;
@@ -979,11 +1018,10 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 }
                 if (Binding->Flags & DescriptorFlag_Bindless)
                 {
-                    CreateInfo.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-                    BindingFlags[BindingIndex] |= VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT|VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
                     // HACK(boti): see texture manager;
                     // TODO(boti) [update]: I don't see a reason why this can't just be part of the set layout?
-                    Bindings[BindingIndex].descriptorCount = 1 << 18; 
+                    Bindings[BindingIndex].descriptorCount = texture_manager::MaxTextureCount;
+                    BindingFlags[BindingIndex] |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
                 }
             }
 
@@ -1004,7 +1042,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     // Texture Manager
     // TODO(boti): remove this
     Renderer->TextureManager.DescriptorSetLayout = Renderer->SetLayouts[SetLayout_Bindless];
-    if (!CreateTextureManager(&Renderer->TextureManager, R_TextureMemorySize, VK.GPUMemTypes))
+    if (!CreateTextureManager(&Renderer->TextureManager, R_TextureMemorySize, VK.GPUMemTypes, Renderer->SetLayouts))
     {
         Result = VK_ERROR_INITIALIZATION_FAILED;
         ReturnOnFailure();
@@ -1124,10 +1162,17 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             BitScanForward(&MemoryTypeIndex, VK.BARMemTypes);
             
             u64 MemorySize = MiB(64);
+            VkMemoryAllocateFlagsInfo AllocFlags = 
+            {
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+                .pNext = nullptr,
+                .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+                .deviceMask = 0,
+            };
             VkMemoryAllocateInfo AllocInfo = 
             {
                 .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                .pNext = nullptr,
+                .pNext = &AllocFlags,
                 .allocationSize = MemorySize,
                 .memoryTypeIndex = MemoryTypeIndex,
             };
@@ -1146,6 +1191,35 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 .MemoryTypeIndex = MemoryTypeIndex,
                 .Mapping = Mapping,
             };
+        }
+
+        // Per-frame descriptor buffer
+        {
+            umm SamplerBufferSize = KiB(16);
+            umm ResourceBufferSize = KiB(128);
+            for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
+            {
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, ResourceBufferSize, VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                                            Renderer->PerFrameResourceDescriptorBuffers + FrameIndex,
+                                            Renderer->PerFrameResourceDescriptorMappings + FrameIndex);
+                if (!PushResult)
+                {
+                    UnhandledError("Failed to push sampler descriptor buffer");
+                    return(0);
+                }
+
+            }
+            for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
+            {
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, SamplerBufferSize, VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                                            Renderer->PerFrameSamplerDescriptorBuffers + FrameIndex,
+                                            Renderer->PerFrameSamplerDescriptorMappings + FrameIndex);
+                if (!PushResult)
+                {
+                    UnhandledError("Failed to push resource descriptor buffer");
+                    return(0);
+                }
+            }
         }
 
         // Vertex stack
@@ -1169,7 +1243,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             u64 BufferSizePerFrame = render_frame::MaxJointCount * sizeof(m4);
             for (u32 i = 0; i < R_MaxFramesInFlight; i++)
             {
-                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSizePerFrame, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSizePerFrame, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                                             Renderer->PerFrameJointBuffers + i, 
                                             Renderer->PerFrameJointBufferMappings + i);
                 if (!PushResult)
@@ -1184,7 +1258,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             u64 BufferSizePerFrame = render_frame::MaxParticleCount * sizeof(render_particle);
             for (u32 i = 0; i < R_MaxFramesInFlight; i++)
             {
-                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSizePerFrame, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSizePerFrame, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                                             Renderer->PerFrameParticleBuffers + i, 
                                             Renderer->PerFrameParticleBufferMappings + i);
                 if (!PushResult)
@@ -1199,7 +1273,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             constexpr u64 BufferSize = KiB(64);
             for (u32 i = 0; i < R_MaxFramesInFlight; i++)
             {
-                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSize,  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSize,  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                                             Renderer->PerFrameUniformBuffers + i,
                                             Renderer->PerFrameUniformBufferMappings + i);
                 if (!PushResult)
@@ -1573,13 +1647,13 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
                 constexpr VkImageUsageFlagBits Sampled = VK_IMAGE_USAGE_SAMPLED_BIT;
                 constexpr VkImageUsageFlagBits Storage = VK_IMAGE_USAGE_STORAGE_BIT;
                 
-                Renderer->DepthBuffer           = PushRenderTarget("Depth", &Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
-                Renderer->StructureBuffer       = PushRenderTarget("Structure", &Renderer->RenderTargetHeap, FormatTable[STRUCTURE_BUFFER_FORMAT], Color|Sampled, 1);
-                Renderer->HDRRenderTarget       = PushRenderTarget("HDR", &Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
-                Renderer->BloomTarget           = PushRenderTarget("Bloom", &Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
-                Renderer->OcclusionBuffers[0]   = PushRenderTarget("OcclusionRaw", &Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
-                Renderer->OcclusionBuffers[1]   = PushRenderTarget("Occlusion", &Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
-                Renderer->VisibilityBuffer      = PushRenderTarget("Visibility", &Renderer->RenderTargetHeap, FormatTable[VISIBILITY_FORMAT], Color|Sampled, 1);
+                Renderer->DepthBuffer           = PushRenderTarget("Depth",         &Renderer->RenderTargetHeap, FormatTable[DEPTH_FORMAT], DepthStencil|Sampled, 1);
+                Renderer->StructureBuffer       = PushRenderTarget("Structure",     &Renderer->RenderTargetHeap, FormatTable[STRUCTURE_BUFFER_FORMAT], Color|Sampled, 1);
+                Renderer->HDRRenderTarget       = PushRenderTarget("HDR",           &Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
+                Renderer->BloomTarget           = PushRenderTarget("Bloom",         &Renderer->RenderTargetHeap, FormatTable[HDR_FORMAT], Color|Sampled|Storage, 0);
+                Renderer->OcclusionBuffers[0]   = PushRenderTarget("OcclusionRaw",  &Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
+                Renderer->OcclusionBuffers[1]   = PushRenderTarget("Occlusion",     &Renderer->RenderTargetHeap, FormatTable[SSAO_FORMAT], Color|Sampled|Storage, 1);
+                Renderer->VisibilityBuffer      = PushRenderTarget("Visibility",    &Renderer->RenderTargetHeap, FormatTable[VISIBILITY_FORMAT], Color|Sampled, 1);
             }
 
             if (!ResizeRenderTargets(&Renderer->RenderTargetHeap, Renderer->SurfaceExtent.width, Renderer->SurfaceExtent.height))
@@ -1725,8 +1799,6 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
     Frame->Backend->ComputeCmdPool = Renderer->ComputeCmdPools[FrameID];
     Frame->Backend->ComputeCmdBuffer = Renderer->ComputeCmdBuffers[FrameID];
 
-    Frame->Backend->DescriptorPool = Renderer->PerFrameDescriptorPool[FrameID];    
-
     // Reset buffers
     {
         Frame->StagingBufferAt = 0;
@@ -1820,8 +1892,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     // NOTE(boti): Light binning, SSAO
     VkCommandBuffer PreLightCmd = Frame->Backend->ComputeCmdBuffer;
     VkCommandBuffer ShadowCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
-
-    vkResetDescriptorPool(VK.Device, Frame->Backend->DescriptorPool, 0);
 
     f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
 
@@ -2651,43 +2721,28 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         }
     }
 
-    VkDescriptorSet CascadeDescriptorSet = PushImageDescriptor(
-        Frame,
-        Renderer->SetLayouts[SetLayout_CascadeShadow],
-        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        Renderer->ShadowView,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        Renderer->Samplers[Sampler_Shadow]);
-
-    VkDescriptorSet SamplersDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_Samplers]);
-    Frame->Backend->SamplersDescriptorSet = SamplersDescriptorSet;
+    // TODO(boti): Move these out of the frame, these descriptors are static
     {
-        VkDescriptorImageInfo SamplerDescriptorInfos[Sampler_Count];
+        VkBuffer SamplerBuffer = Renderer->PerFrameSamplerDescriptorBuffers[Frame->FrameID];
+        void* SamplerBufferMapping = Renderer->PerFrameSamplerDescriptorMappings[Frame->FrameID];
+
+        umm SamplerDescriptorSize = VK.DescriptorBufferProps.samplerDescriptorSize;
+        VkDeviceSize SamplerTableOffset = 0;
+        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Renderer->SetLayouts[SetLayout_Samplers], Binding_Sampler_NamedSamplers, &SamplerTableOffset);
         for (u32 SamplerIndex = 0; SamplerIndex < Sampler_Count; SamplerIndex++)
         {
-            SamplerDescriptorInfos[SamplerIndex] = 
+            VkDescriptorGetInfoEXT DescriptorInfo = 
             {
-                .sampler = Renderer->Samplers[SamplerIndex],
-                .imageView = VK_NULL_HANDLE,
-                .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                .pNext = nullptr,
+                .type = VK_DESCRIPTOR_TYPE_SAMPLER,
+                .data = { .pSampler = &Renderer->Samplers[SamplerIndex] },
             };
-        }
 
-        VkWriteDescriptorSet Write = 
-        {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-            .dstSet = SamplersDescriptorSet,
-            .dstBinding = Binding_Sampler_NamedSamplers,
-            .descriptorCount = Sampler_Count,
-            .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-            .pImageInfo = SamplerDescriptorInfos,
-        };
-        vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
+            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, SamplerDescriptorSize, OffsetPtr(SamplerBufferMapping, SamplerTableOffset + SamplerIndex*SamplerDescriptorSize));
+        }
     }
 
-    VkDescriptorSet PerFrameDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PerFrame]);
-    Frame->Backend->PerFrameDescriptorSet = PerFrameDescriptorSet;
     {
         VkDescriptorBufferInfo ConstantsInfo = 
         {
@@ -2695,47 +2750,48 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .offset = 0,
             .range = KiB(64),
         };
+
         VkDescriptorBufferInfo LightBufferInfo = 
         {
             .buffer = Renderer->LightBuffer,
             .offset = 0,
-            .range = VK_WHOLE_SIZE,
+            .range = Renderer->LightBufferMemorySize,
         };
         VkDescriptorBufferInfo TileBufferInfo = 
         {
             .buffer = Renderer->TileBuffer,
             .offset = 0,
-            .range = VK_WHOLE_SIZE,
+            .range = Renderer->TileMemorySize,
         };
         VkDescriptorBufferInfo InstanceBufferInfo = 
         {
             .buffer = Renderer->InstanceBuffer,
             .offset = 0,
-            .range = VK_WHOLE_SIZE,
+            .range = Renderer->InstanceMemorySize,
         };
         VkDescriptorBufferInfo DrawBufferInfo = 
         {
             .buffer = Renderer->DrawBuffer,
             .offset = 0,
-            .range = VK_WHOLE_SIZE,
+            .range = Renderer->DrawMemorySize,
         };
         VkDescriptorBufferInfo IndexBufferInfo = 
         {
             .buffer = Renderer->GeometryBuffer.IndexMemory.Buffer,
             .offset = 0,
-            .range = VK_WHOLE_SIZE,
+            .range = geometry_memory::GPUBlockSize,
         };
         VkDescriptorBufferInfo VertexBufferInfo = 
         {
             .buffer = Renderer->GeometryBuffer.VertexMemory.Buffer,
             .offset = 0,
-            .range = VK_WHOLE_SIZE,
+            .range = geometry_memory::GPUBlockSize,
         };
         VkDescriptorBufferInfo SkinnedVertexBufferInfo = 
         {
             .buffer = Renderer->SkinningBuffer,
             .offset = 0,
-            .range = VK_WHOLE_SIZE,
+            .range = Renderer->SkinningMemorySize,
         };
         VkDescriptorImageInfo VisibilityBufferInfo = 
         {
@@ -2830,12 +2886,47 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         };
 
+        VkDescriptorImageInfo PointShadowInfos[R_MaxShadowCount] = {};
+        for (u32 PointShadowIndex = 0; PointShadowIndex < R_MaxShadowCount; PointShadowIndex++)
+        {
+            PointShadowInfos[PointShadowIndex] = 
+            {
+                .sampler = VK_NULL_HANDLE,
+                .imageView = Renderer->PointShadowMaps[PointShadowIndex].CubeView,
+                .imageLayout= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            };
+        }
+        VkDescriptorBufferInfo JointBufferInfo = 
+        {
+            .buffer = Renderer->PerFrameJointBuffers[Frame->FrameID],
+            .offset = 0,
+            .range = render_frame::MaxJointCount * sizeof(m4), // TODO(boti): deduplicate (this is also in init)
+        };
+        VkDescriptorBufferInfo ParticleBufferInfo = 
+        {
+            .buffer = Renderer->PerFrameParticleBuffers[Frame->FrameID],
+            .offset = 0,
+            .range = render_frame::MaxParticleCount * sizeof(render_particle), // TODO(boti): deduplicate (this is also in init)
+        };
+        VkDescriptorImageInfo ParticleImageInfo = 
+        {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = *GetImageView(&Renderer->TextureManager, Frame->ParticleTextureID),
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        VkDescriptorImageInfo UIImageInfo = 
+        {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = *GetImageView(&Renderer->TextureManager, Frame->ImmediateTextureID),
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+
         VkWriteDescriptorSet Writes[] = 
         {
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_Constants,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2845,7 +2936,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_LightBuffer,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2855,7 +2946,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_TileBuffer,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2865,7 +2956,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_InstanceBuffer,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2875,7 +2966,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_DrawBuffer,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2885,7 +2976,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_IndexBuffer,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2895,7 +2986,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_VertexBuffer,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2905,7 +2996,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_SkinnedVertexBuffer,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2915,7 +3006,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_VisibilityImage,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2925,7 +3016,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_OcclusionImage,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2935,7 +3026,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_StructureImage,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2945,7 +3036,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_OcclusionRawStorageImage,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2955,7 +3046,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_OcclusionStorageImage,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2965,7 +3056,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_OcclusionRawImage,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2975,7 +3066,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_HDRColorStorageImage,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2985,7 +3076,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_HDRColorImage,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -2995,7 +3086,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_BloomImage,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -3005,7 +3096,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_CascadedShadow,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -3015,7 +3106,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_HDRMipStorageImages,
                 .dstArrayElement = 0,
                 .descriptorCount = Renderer->HDRRenderTarget->MipCount,
@@ -3025,7 +3116,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_BloomMipStorageImages,
                 .dstArrayElement = 0,
                 .descriptorCount = Renderer->BloomTarget->MipCount,
@@ -3035,7 +3126,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_HDRColorImageGeneral,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
@@ -3045,61 +3136,156 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
-                .dstSet = PerFrameDescriptorSet,
+                .dstSet = VK_NULL_HANDLE,
                 .dstBinding = Binding_PerFrame_BloomImageGeneral,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
                 .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
                 .pImageInfo = &BloomImageGeneralInfo,
             },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_PerFrame_PointShadows,
+                .dstArrayElement = 0,
+                .descriptorCount = R_MaxShadowCount,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = PointShadowInfos,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_PerFrame_JointBuffer,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = &JointBufferInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_PerFrame_ParticleBuffer,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = &ParticleBufferInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_PerFrame_ParticleTexture,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &ParticleImageInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_PerFrame_TextureUI,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &UIImageInfo,
+            },
         };
         static_assert(CountOf(Writes) == Binding_PerFrame_Count);
 
-        vkUpdateDescriptorSets(VK.Device, CountOf(Writes), Writes, 0, nullptr);
-    }
+        void* Mapping = Renderer->PerFrameResourceDescriptorMappings[Frame->FrameID];
+        VkDeviceAddress ResourceDescriptorsDeviceAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameResourceDescriptorBuffers[Frame->FrameID]);
 
-    // TODO(boti): This descriptor set update could just be done at init, no need to do it every frame
-    VkDescriptorSet PointShadowsDescriptorSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_PointShadows]);
-    {
-        VkDescriptorImageInfo* DescriptorImages = PushArray(Frame->Arena, 0, VkDescriptorImageInfo, Frame->MaxShadowCount);
-        for (u32 ShadowIndex = 0; ShadowIndex < Frame->MaxShadowCount; ShadowIndex++)
+        // TODO(boti): Keep track of the maximum used address (max(CurrentOffset + DescriptorSize))
+        // to allow us to use the rest of the buffer for the "push" or temporary descriptors
+        for (u32 WriteIndex = 0; WriteIndex < CountOf(Writes); WriteIndex++)
         {
-            point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;
-            DescriptorImages[ShadowIndex] = 
+            VkWriteDescriptorSet* Write = Writes + WriteIndex;
+
+            VkDeviceSize BaseOffset = 0;
+            vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Renderer->SetLayouts[SetLayout_PerFrame], Write->dstBinding, &BaseOffset);
+            
+            for (u32 Element = 0; Element < Write->descriptorCount; Element++)
             {
-                .sampler = Renderer->Samplers[Sampler_Shadow],
-                .imageView = ShadowMap->CubeView,
-                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            };
-        }
+                u32 ActualElement = Element + Write->dstArrayElement;
 
-        VkWriteDescriptorSet Write = 
-        {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-            .dstSet = PointShadowsDescriptorSet,
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = Frame->MaxShadowCount,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .pImageInfo = DescriptorImages,
-        };
-        vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
+                const void* Data = nullptr;
+                umm DescriptorSize = 0;
+            
+                VkDescriptorAddressInfoEXT BufferInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT };
+                switch (Write->descriptorType)
+                {
+                    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize; goto IMAGE_CASE;
+                    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: DescriptorSize = VK.DescriptorBufferProps.storageImageDescriptorSize; goto IMAGE_CASE;
+                    IMAGE_CASE:
+                    {
+                        Data = Write->pImageInfo + Element;
+                    } break;
+                    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: DescriptorSize = VK.DescriptorBufferProps.storageBufferDescriptorSize; goto BUFFER_CASE;
+                    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: DescriptorSize = VK.DescriptorBufferProps.uniformBufferDescriptorSize; goto BUFFER_CASE;
+                    BUFFER_CASE:
+                    {
+                        BufferInfo.address = GetBufferDeviceAddress(VK.Device, Write->pBufferInfo[Element].buffer) + Write->pBufferInfo[Element].offset;
+                        BufferInfo.range = Write->pBufferInfo[Element].range;
+                        Data = &BufferInfo;
+                    } break;
+                    InvalidDefaultCase;
+                }
+
+                // NOTE(boti): descriptors live in their own dedicated buffer starting at offset 0 for now, but may not in the future
+                VkDeviceSize Offset = 0 + BaseOffset + ActualElement*DescriptorSize;
+
+                VkDescriptorGetInfoEXT DescriptorInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                    .pNext = nullptr,
+                    .type = Write->descriptorType,
+                    .data = { (VkSampler*)Data }, // HACK(boti): This is just a union of pointers, there really should be a void* in there...
+                };
+                vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Mapping, Offset));
+            }
+        }
     }
 
-    VkDescriptorSet SystemDescriptorSets[] = 
+    auto BindSystemDescriptors = [=](VkCommandBuffer CmdBuffer)
     {
-        PerFrameDescriptorSet,
-        SamplersDescriptorSet,
-        Renderer->TextureManager.DescriptorSet,
+        VkDeviceAddress PerFrameResourceBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameResourceDescriptorBuffers[Frame->FrameID]);
+        VkDeviceAddress SamplerBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameSamplerDescriptorBuffers[Frame->FrameID]);
+        VkDescriptorBufferBindingInfoEXT DescriptorBufferBindings[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                .pNext = nullptr,
+                .address = PerFrameResourceBufferAddress,
+                .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT 
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                .pNext = nullptr,
+                .address = SamplerBufferAddress,
+                .usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT 
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                .pNext = nullptr,
+                .address = Renderer->TextureManager.DescriptorDeviceAddress,
+                .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT 
+            },
+        };
+        vkCmdBindDescriptorBuffersEXT(CmdBuffer, CountOf(DescriptorBufferBindings), DescriptorBufferBindings);
+
+        u32 DescriptorBufferIndices[SystemSet_Count] = { 0, 1, 2 };
+        VkDeviceSize DescriptorBufferOffsets[SystemSet_Count] = { 0, 0, 0 };
+        vkCmdSetDescriptorBufferOffsetsEXT(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SystemPipelineLayout,
+                                           0, CountOf(DescriptorBufferBindings), DescriptorBufferIndices, DescriptorBufferOffsets);
+        vkCmdSetDescriptorBufferOffsetsEXT(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->SystemPipelineLayout,
+                                           0, CountOf(DescriptorBufferBindings), DescriptorBufferIndices, DescriptorBufferOffsets);
     };
 
-    vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SystemPipelineLayout,
-                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
-                            0, nullptr);
-    vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->SystemPipelineLayout,
-                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
-                            0, nullptr);
+    BindSystemDescriptors(PrepassCmd);
 
     VkViewport FrameViewport = 
     {
@@ -3119,13 +3305,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     //
     // Skinning
     //
+    vkCmdBeginDebugUtilsLabelEXT(PrepassCmd, "Skinning");
     {
-        vkCmdBeginDebugUtilsLabelEXT(PrepassCmd, "Skinning");
-        VkDescriptorSet JointDescriptorSet = 
-            PushBufferDescriptor(Frame, 
-                                 Renderer->SetLayouts[SetLayout_PoseTransform], VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 
-                                 Frame->Backend->JointBuffer, 0, VK.MaxConstantBufferByteSize);
-
         pipeline_with_layout SkinningPipeline = Renderer->Pipelines[Pipeline_Skinning];
         vkCmdBindPipeline(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Pipeline);
 
@@ -3159,15 +3340,12 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         for (u32 SkinningCmdIndex = 0; SkinningCmdIndex < Frame->SkinningCmdCount; SkinningCmdIndex++)
         {
             skinning_cmd* Cmd = Frame->SkinningCmds + SkinningCmdIndex;
-            vkCmdBindDescriptorSets(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Layout,
-                                    Set_User0, 1, &JointDescriptorSet,
-                                    1, &Cmd->PoseOffset);
-
-            u32 PushConstants[3] = 
+            u32 PushConstants[4] = 
             {
                 Cmd->SrcVertexOffset,
                 Cmd->DstVertexOffset,
                 Cmd->VertexCount,
+                (u32)(Cmd->PoseOffset / sizeof(m4)),
             };
             vkCmdPushConstants(PrepassCmd, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
                                0, sizeof(PushConstants), PushConstants);
@@ -3201,9 +3379,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .pBufferMemoryBarriers = EndBarriers,
         };
         vkCmdPipelineBarrier2(PrepassCmd, &EndDependencies);
-
-        vkCmdEndDebugUtilsLabelEXT(PrepassCmd);
     }
+    vkCmdEndDebugUtilsLabelEXT(PrepassCmd);
 
     vkCmdSetViewport(PrepassCmd, 0, 1, &FrameViewport);
     vkCmdSetScissor(PrepassCmd, 0, 1, &FrameScissor);
@@ -3251,12 +3428,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitPrepass, nullptr);
 
     vkBeginCommandBuffer(PreLightCmd, &CmdBufferBegin);
-    vkCmdBindDescriptorSets(PreLightCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SystemPipelineLayout,
-                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
-                            0, nullptr);
-    vkCmdBindDescriptorSets(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->SystemPipelineLayout,
-                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
-                            0, nullptr);
+    BindSystemDescriptors(PreLightCmd);
 
     //
     // SSAO
@@ -3515,12 +3687,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     vkQueueSubmit2(VK.ComputeQueue, 1, &SubmitPreLight, nullptr);
 
     vkBeginCommandBuffer(ShadowCmd, &CmdBufferBegin);
-    vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SystemPipelineLayout,
-                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
-                            0, nullptr);
-    vkCmdBindDescriptorSets(ShadowCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->SystemPipelineLayout,
-                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
-                            0, nullptr);
+    BindSystemDescriptors(ShadowCmd);
 
     //
     // Cascaded shadows
@@ -3783,12 +3950,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitShadow, nullptr);
     
     vkBeginCommandBuffer(RenderCmd, &CmdBufferBegin);
-    vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SystemPipelineLayout,
-                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
-                            0, nullptr);
-    vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->SystemPipelineLayout,
-                            0, CountOf(SystemDescriptorSets), SystemDescriptorSets,
-                            0, nullptr);
+    BindSystemDescriptors(RenderCmd);
 
     vkCmdSetViewport(RenderCmd, 0, 1, &FrameViewport);
     vkCmdSetScissor(RenderCmd, 0, 1, &FrameScissor);
@@ -3970,9 +4132,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         pipeline_with_layout Pipeline = Renderer->Pipelines[PipelineID];
         vkCmdBindPipeline(RenderCmd, BindPoint, Pipeline.Pipeline);
-        vkCmdBindDescriptorSets(RenderCmd, BindPoint, Pipeline.Layout, 
-                                Set_User0, 1, &PointShadowsDescriptorSet, 
-                                0, nullptr);
 
         switch (Frame->Config.ShadingMode)
         {
@@ -4038,45 +4197,10 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     vkCmdEndDebugUtilsLabelEXT(RenderCmd);
 
     // Particles
+    vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Particle");
     {
-        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Particle");
-
-        VkImageView ParticleView = *GetImageView(&Renderer->TextureManager, Frame->ParticleTextureID);
-        VkDescriptorSet TextureSet = PushDescriptorSet(Frame, Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS]);
-        VkDescriptorImageInfo DescriptorImage = 
-        {
-            .sampler = Renderer->Samplers[Sampler_Default],
-            .imageView = ParticleView,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-
-        VkWriteDescriptorSet TextureWrite = 
-        {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-            .dstSet = TextureSet,
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .pImageInfo = &DescriptorImage,
-        };
-        vkUpdateDescriptorSets(VK.Device, 1, &TextureWrite, 0, nullptr);
-
-        VkDescriptorSet ParticleBufferDescriptor = 
-        PushBufferDescriptor(Frame, Renderer->SetLayouts[SetLayout_ParticleBuffer], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                             Frame->Backend->ParticleBuffer, 0, VK_WHOLE_SIZE);
-        VkDescriptorSet ParticleDescriptorSets[] = 
-        {
-            ParticleBufferDescriptor,
-            TextureSet,
-        };
-
         pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
         vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
-        vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Layout,
-                                Set_User0, CountOf(ParticleDescriptorSets), ParticleDescriptorSets, 
-                                0, nullptr);
 
         for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
         {
@@ -4087,9 +4211,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                0, sizeof(Cmd->Mode), &Cmd->Mode);
             vkCmdDraw(RenderCmd, VertexCount, 1, FirstVertex, 0);
         }
-
-        vkCmdEndDebugUtilsLabelEXT(RenderCmd);
     }
+    vkCmdEndDebugUtilsLabelEXT(RenderCmd);
 
     vkCmdEndRendering(RenderCmd);
 
@@ -4099,9 +4222,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 Renderer->Pipelines[Pipeline_BloomDownsample].Layout,
                 Renderer->Pipelines[Pipeline_BloomDownsample].Pipeline,
                 Renderer->Pipelines[Pipeline_BloomUpsample].Layout,
-                Renderer->Pipelines[Pipeline_BloomUpsample].Pipeline,
-                Renderer->SetLayouts[SetLayout_Bloom],
-                Renderer->SetLayouts[SetLayout_BloomUpsample]);
+                Renderer->Pipelines[Pipeline_BloomUpsample].Pipeline);
 
     // Blit + UI
     {
@@ -4205,9 +4326,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
             pipeline_with_layout GizmoPipeline = Renderer->Pipelines[Pipeline_Gizmo];
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
-            vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Layout,
-                                    0, 1, &PerFrameDescriptorSet, 
-                                    0, nullptr);
 
             for (u32 CmdIndex = 0; CmdIndex < Frame->DrawWidget3DCmdCount; CmdIndex++)
             {
@@ -4227,21 +4345,15 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             vkCmdBindVertexBuffers(RenderCmd, 0, 1, &Frame->Backend->Vertex2DBuffer, &ZeroOffset);
 
             pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
-            VkDescriptorSetLayout SetLayout = Frame->Renderer->SetLayouts[SetLayout_SingleCombinedTexturePS];
-            VkDescriptorSet ImmediateDescriptorSet = PushImageDescriptor(Frame, SetLayout, Frame->ImmediateTextureID, Renderer->Samplers[Sampler_Default]);
-
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Pipeline);
-            vkCmdBindDescriptorSets(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Layout, 
-                                    Set_User0, 1, &ImmediateDescriptorSet, 
-                                    0, nullptr);
 
             m4 OrthoTransform = M4(2.0f / Frame->RenderWidth, 0.0f, 0.0f, -1.0f,
                                    0.0f, 2.0f / Frame->RenderHeight, 0.0f, -1.0f,
                                    0.0f, 0.0f, 1.0f, 0.0f,
                                    0.0f, 0.0f, 0.0f, 1.0f);
-
             vkCmdPushConstants(RenderCmd, UIPipeline.Layout, VK_SHADER_STAGE_ALL, 
                                0, sizeof(OrthoTransform), &OrthoTransform);
+
             vkCmdDraw(RenderCmd, Frame->Vertex2DCount, 1, 0, 0);
         }
 

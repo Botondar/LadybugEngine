@@ -8,7 +8,7 @@ internal bool CreateGeometryMemory(geometry_memory* Memory, geometry_buffer_type
 {
     bool Result = false;
 
-    VkBufferUsageFlags Usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    VkBufferUsageFlags Usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     u32 Stride = 0;
     switch (Type)
     {
@@ -119,10 +119,17 @@ internal bool AllocateGPUBlocks(geometry_memory* Memory, geometry_buffer_block*&
 
     if (Memory->AllocationCount < Memory->MaxGPUAllocationCount)
     {
+        VkMemoryAllocateFlagsInfo AllocFlags = 
+        {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+            .pNext = nullptr,
+            .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+            .deviceMask = 0,
+        };
         VkMemoryAllocateInfo AllocInfo = 
         {
             .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-            .pNext = nullptr,
+            .pNext = &AllocFlags,
             .allocationSize = Memory->GPUBlockSize,
             .memoryTypeIndex = Memory->MemoryTypeIndex,
         };

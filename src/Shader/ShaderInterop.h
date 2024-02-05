@@ -95,8 +95,14 @@ struct v4u8
 // TODO(boti): Enhanced barriers are need for this in D3D12 (same-queue read + read/write)
 #define Binding_PerFrame_HDRColorImageGeneral       20
 #define Binding_PerFrame_BloomImageGeneral          21
+#define Binding_PerFrame_PointShadows               22
+#define Binding_PerFrame_JointBuffer                23
+// TODO(boti): Maybe these are fine here, but I'd really rather have them in their own descriptor set
+#define Binding_PerFrame_ParticleBuffer             24
+#define Binding_PerFrame_ParticleTexture            25
+#define Binding_PerFrame_TextureUI                  26
 
-#define Binding_PerFrame_Count                      22
+#define Binding_PerFrame_Count                      27
 
 // Sampler set bindings
 #define Binding_Sampler_NamedSamplers               0

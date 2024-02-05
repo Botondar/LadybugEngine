@@ -2,38 +2,34 @@
 
 constexpr u32 SpecialTextureBit = (1u << 31);
 
-internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes)
+internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes, VkDescriptorSetLayout* SetLayouts)
 {
     VkResult Result = VK_SUCCESS;
 
-    VkImageCreateInfo ImageInfo = 
     {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .pNext = nullptr,
-        .imageType = VK_IMAGE_TYPE_2D,
-        .format = VK_FORMAT_R8G8B8A8_SRGB,
-        .extent = { 1024, 1024, 1 },
-        .mipLevels = 10,
-        .arrayLayers = 1,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .queueFamilyIndexCount = 0,
-        .pQueueFamilyIndices = nullptr,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-    };
-    VkImage Image = VK_NULL_HANDLE;
-    Result = vkCreateImage(VK.Device, &ImageInfo, nullptr, &Image);
-    if (Result != VK_SUCCESS)
-    {
-        return false;
+        VkImageCreateInfo DummyImageInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = VK_FORMAT_R8G8B8A8_SRGB,
+            .extent = { 1024, 1024, 1 },
+            .mipLevels = 10,
+            .arrayLayers = 1,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        };
+
+        VkMemoryRequirements MemoryRequirements = GetImageMemoryRequirements(VK.Device, &DummyImageInfo, VK_IMAGE_ASPECT_COLOR_BIT);
+        MemoryTypes &= MemoryRequirements.memoryTypeBits;
     }
 
-    VkMemoryRequirements MemoryRequirements = {};
-    vkGetImageMemoryRequirements(VK.Device, Image, &MemoryRequirements);
-    MemoryTypes &= MemoryRequirements.memoryTypeBits;
-
+    // TODO(boti): Error handling cleanup
     u32 MemoryTypeIndex = 0;
     if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
     {
@@ -47,53 +43,80 @@ internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32
             .memoryTypeIndex = MemoryTypeIndex,
         };
         Result = vkAllocateMemory(VK.Device, &MemAllocInfo, nullptr, &Manager->Memory);
-        if (Result != VK_SUCCESS)
+        if (Result == VK_SUCCESS)
         {
-            return false;
-        }
+            vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, SetLayouts[SetLayout_Bindless], Binding_Bindless_Textures, &Manager->TextureTableOffset);
+            vkGetDescriptorSetLayoutSizeEXT(VK.Device, SetLayouts[SetLayout_Bindless], &Manager->DescriptorBufferSize);
 
-        VkDescriptorPoolSize PoolSizes[] = 
-        {
+            VkBufferCreateInfo DescriptorBufferInfo = 
             {
-                .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .descriptorCount = Manager->MaxTextureCount,
-            },
-        };
+                .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .size = Manager->DescriptorBufferSize,
+                .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                .queueFamilyIndexCount = 0,
+                .pQueueFamilyIndices = nullptr,
+            };
+            Result = vkCreateBuffer(VK.Device, &DescriptorBufferInfo, nullptr, &Manager->DescriptorBuffer);
+            Assert(Result == VK_SUCCESS);
 
-        VkDescriptorPoolCreateInfo PoolInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
-            .maxSets = 1,
-            .poolSizeCount = CountOf(PoolSizes),
-            .pPoolSizes = PoolSizes,
-        };
-        Result = vkCreateDescriptorPool(VK.Device, &PoolInfo, nullptr, &Manager->DescriptorPool);
-        if (Result != VK_SUCCESS)
-        {
-            return false;
+            u32 DescriptorBufferMemoryTypes = VK.BARMemTypes;
+            {
+                VkMemoryRequirements MemoryRequirements = GetBufferMemoryRequirements(VK.Device, &DescriptorBufferInfo);
+                DescriptorBufferMemoryTypes &= MemoryRequirements.memoryTypeBits;
+
+                u32 DescriptorMemoryType = 0;
+                if (BitScanForward(&DescriptorMemoryType, DescriptorBufferMemoryTypes))
+                {
+                    VkMemoryAllocateFlagsInfo AllocFlags = 
+                    {
+                        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+                        .pNext = nullptr,
+                        .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+                        .deviceMask = 0,
+                    };
+                    VkMemoryAllocateInfo AllocInfo = 
+                    {
+                        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                        .pNext = &AllocFlags,
+                        .allocationSize = Manager->DescriptorBufferSize,
+                        .memoryTypeIndex = DescriptorMemoryType,
+                    };
+                    Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Manager->DescriptorMemory);
+                    if (Result == VK_SUCCESS)
+                    {
+                        Result = vkBindBufferMemory(VK.Device, Manager->DescriptorBuffer, Manager->DescriptorMemory, 0);
+                        Assert(Result == VK_SUCCESS);
+
+                        Result = vkMapMemory(VK.Device, Manager->DescriptorMemory, 0, VK_WHOLE_SIZE, 0, &Manager->DescriptorMapping);
+                        Assert(Result == VK_SUCCESS);
+
+                        VkBufferDeviceAddressInfo DeviceAddressInfo = 
+                        {
+                            .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                            .pNext = nullptr,
+                            .buffer = Manager->DescriptorBuffer,
+                        };
+                        Manager->DescriptorDeviceAddress = vkGetBufferDeviceAddress(VK.Device, &DeviceAddressInfo);
+                    }
+                    else
+                    {
+                        return(false);
+                    }
+                }
+            }
         }
-        VkDescriptorSetAllocateInfo DescriptorInfo = 
+        else
         {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .descriptorPool = Manager->DescriptorPool,
-            .descriptorSetCount = 1,
-            .pSetLayouts = &Manager->DescriptorSetLayout,
-        };
-        Result = vkAllocateDescriptorSets(VK.Device, &DescriptorInfo, &Manager->DescriptorSet);
-        if (Result != VK_SUCCESS)
-        {
-            return false;
+            return(false);
         }
     }
     else
     {
         UnhandledError("No suitable memory type for textures");
     }
-
-    vkDestroyImage(VK.Device, Image, nullptr);
 
     return (Result == VK_SUCCESS);
 }
@@ -174,6 +197,7 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
 
     if (IsValid(ID))
     {
+        u32 Index = ID.Value & (~SpecialTextureBit);
         VkImage* Image = GetImage(Manager, ID);
         VkImageView* View = GetImageView(Manager, ID);
 
@@ -261,19 +285,17 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
                                 .imageView = *View,
                                 .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
                             };
-
-                            VkWriteDescriptorSet DescriptorWrite = 
+                            umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
+                            umm DescriptorOffset = Manager->TextureTableOffset + Index * DescriptorSize;
+                            VkDescriptorGetInfoEXT DescriptorInfo = 
                             {
-                                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
                                 .pNext = nullptr,
-                                .dstSet = Manager->DescriptorSet,
-                                .dstBinding = 0,
-                                .dstArrayElement = ID.Value,
-                                .descriptorCount = 1,
-                                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                                .pImageInfo = &DescriptorImage,
+                                .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                .data = { .pSampledImage = &DescriptorImage },
                             };
-                            vkUpdateDescriptorSets(VK.Device, 1, &DescriptorWrite, 0, nullptr);
+
+                            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Manager->DescriptorMapping, DescriptorOffset));
                         }
 
                         Result = true;
@@ -330,6 +352,7 @@ CreateTexture2D(texture_manager* Manager, texture_flags Flags,
 
     if (IsValid(ID))
     {
+        u32 Index = ID.Value & (~SpecialTextureBit);
         VkImageCreateInfo ImageInfo = 
         {
             .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -400,19 +423,17 @@ CreateTexture2D(texture_manager* Manager, texture_flags Flags,
                                 .imageView = *ImageView,
                                 .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
                             };
-
-                            VkWriteDescriptorSet DescriptorWrite = 
+                            umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
+                            umm DescriptorOffset = Manager->TextureTableOffset + Index * DescriptorSize;
+                            VkDescriptorGetInfoEXT DescriptorInfo = 
                             {
-                                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
                                 .pNext = nullptr,
-                                .dstSet = Manager->DescriptorSet,
-                                .dstBinding = 0,
-                                .dstArrayElement = ID.Value,
-                                .descriptorCount = 1,
-                                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                                .pImageInfo = &DescriptorImage,
+                                .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                .data = { .pSampledImage = &DescriptorImage },
                             };
-                            vkUpdateDescriptorSets(VK.Device, 1, &DescriptorWrite, 0, nullptr);
+
+                            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Manager->DescriptorMapping, DescriptorOffset));
                         }
                     }
                     else

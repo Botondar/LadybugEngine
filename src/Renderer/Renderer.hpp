@@ -53,8 +53,7 @@ constexpr u32 MaxVertexBindingCount = 16;
 constexpr u32 MaxVertexAttribCount = 32;
 constexpr u32 MaxColorAttachmentCount = 8;
 constexpr u32 MaxDescriptorSetCount = 32;
-constexpr u32 MaxPushConstantRangeCount = 64;
-constexpr u32 MaxDescriptorSetLayoutBindingCount = 128;
+constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
 constexpr u32 MinPushConstantSize = 128;
 
 //
@@ -272,7 +271,7 @@ inline sampler_state UnpackSampler(packed_sampler Sampler);
 enum descriptor_type : u32
 {
     Descriptor_Sampler = 0,
-    Descriptor_ImageSampler = 1,
+    Descriptor_ImageSampler = 1, // TODO(boti): Remove combined image sampler
     Descriptor_SampledImage = 2,
     Descriptor_StorageImage = 3,
     Descriptor_UniformTexelBuffer = 4,
@@ -283,6 +282,8 @@ enum descriptor_type : u32
     Descriptor_DynamicStorageBuffer = 9,
 //  Descriptor_InputAttachment, 
     Descriptor_InlineUniformBlock = 11,
+
+    Descriptor_Count,
 };
 
 typedef flags32 descriptor_flags;

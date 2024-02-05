@@ -23,13 +23,14 @@ void main()
 }
 #else
 
-layout(set = Set_User0, binding = 0) uniform sampler2D Sampler;
+SetBinding(PerFrame, TextureUI) uniform texture2D Texture;
+SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 
 layout(location = 0) out vec4 Out0;
 
 void main()
 {
-    vec4 Sample = texture(Sampler, TexCoord);
+    vec4 Sample = texture(sampler2D(Texture, Samplers[Sampler_LinearEdgeClamp]), TexCoord);
     Out0 = Color * Sample;
 }
 

@@ -10,6 +10,8 @@ uniform PushConstants
     uint SrcOffset;
     uint DstOffset;
     uint Count;
+
+    uint JointOffset;
 };
 
 SetBindingLayout(PerFrame, VertexBuffer, scalar)
@@ -24,10 +26,10 @@ writeonly buffer DstVB_SSBO
     vertex Data[];
 } DstVB;
 
-layout(set = Set_User0, binding = 0, std140)
-uniform Skin
+SetBindingLayout(PerFrame, JointBuffer, std430)
+readonly buffer Skin
 {
-    m4 Joints[1024];
+    m4 Joints[];
 };
 
 void main()
@@ -42,10 +44,10 @@ void main()
         v4 Weights = SrcVB.Data[SrcOffset + Index].Weights;
         uvec4 JointIndices = uvec4(SrcVB.Data[SrcOffset + Index].Joints);
 
-        m4 J0 = Joints[JointIndices[0]];
-        m4 J1 = Joints[JointIndices[1]];
-        m4 J2 = Joints[JointIndices[2]];
-        m4 J3 = Joints[JointIndices[3]];
+        m4 J0 = Joints[JointOffset + JointIndices[0]];
+        m4 J1 = Joints[JointOffset + JointIndices[1]];
+        m4 J2 = Joints[JointOffset + JointIndices[2]];
+        m4 J3 = Joints[JointOffset + JointIndices[3]];
 
         v3 P = 
             Weights[0] * TransformPoint(J0, InP) +

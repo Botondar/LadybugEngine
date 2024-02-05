@@ -1,104 +1,3 @@
-
-internal VkDescriptorSet PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayout Layout)
-{
-    VkDescriptorSet Set = VK_NULL_HANDLE;
-
-    VkDescriptorSetAllocateInfo AllocInfo = 
-    {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .pNext = nullptr,
-        .descriptorPool = Frame->Backend->DescriptorPool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &Layout,
-    };
-
-    VkResult Result = vkAllocateDescriptorSets(VK.Device, &AllocInfo, &Set);
-    if (Result != VK_SUCCESS)
-    {
-        UnhandledError("Failed to push descriptor set");
-    }
-
-    return Set;
-}
-
-internal VkDescriptorSet 
-PushBufferDescriptor(render_frame* Frame, 
-                     VkDescriptorSetLayout Layout,
-                     VkDescriptorType Type,
-                     VkBuffer Buffer, u64 Offset, u64 Size)
-{
-    VkDescriptorSet Set = PushDescriptorSet(Frame, Layout);
-    if (Set)
-    {
-        VkDescriptorBufferInfo Info = { Buffer, Offset, Size };
-        VkWriteDescriptorSet Write = 
-        {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-            .dstSet = Set,
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 1 ,
-            .descriptorType = Type,
-            .pBufferInfo = &Info,
-        };
-
-        vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
-    }
-    else
-    {
-        UnhandledError("Failed to push buffer descriptor set");
-    }
-    return Set;
-}
-
-internal VkDescriptorSet 
-PushImageDescriptor(render_frame* Frame, 
-                    VkDescriptorSetLayout Layout,
-                    VkDescriptorType Type,
-                    VkImageView View, 
-                    VkImageLayout ImageLayout,
-                    VkSampler Sampler)
-{
-    VkDescriptorSet Set = PushDescriptorSet(Frame, Layout);
-    if (Set)
-    {
-        VkDescriptorImageInfo Info = { Sampler, View, ImageLayout };
-        VkWriteDescriptorSet Write = 
-        {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = nullptr,
-            .dstSet = Set,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = Type,
-            .pImageInfo = &Info,
-        };
-        vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
-    }
-    else
-    {
-        UnhandledError("Failed to push image descriptor set");
-    }
-    return Set;
-}
-
-internal VkDescriptorSet 
-PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, renderer_texture_id ID, VkSampler Sampler)
-{
-    texture_manager* TextureManager = &Frame->Renderer->TextureManager;
-    VkDescriptorSet Set = PushImageDescriptor(Frame, Layout,
-                                              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                              *GetImageView(TextureManager, ID),
-                                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                              Sampler);
-    return(Set);
-}
-
-//
-// Rendering
-//
-
 internal void BeginPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer)
 {
     vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, "Prepass");
@@ -336,9 +235,7 @@ internal void RenderBloom(
     VkPipelineLayout DownsamplePipelineLayout,
     VkPipeline DownsamplePipeline, 
     VkPipelineLayout UpsamplePipelineLayout,
-    VkPipeline UpsamplePipeline, 
-    VkDescriptorSetLayout DownsampleSetLayout,
-    VkDescriptorSetLayout UpsampleSetLayout)
+    VkPipeline UpsamplePipeline)
 {
     vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, "Bloom");
 

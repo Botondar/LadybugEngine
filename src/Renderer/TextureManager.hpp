@@ -5,14 +5,19 @@ struct texture_manager
     static constexpr u32 MaxTextureCount = 1u << 18;
     static constexpr u32 MaxSpecialTextureCount = 2048u;
 
-    VkDescriptorPool DescriptorPool;
     VkDescriptorSetLayout DescriptorSetLayout;
-    VkDescriptorSet DescriptorSet; 
-    VkDescriptorSet PackedSamplerDescriptorSet;
 
-    u64 MemorySize;
+    umm MemorySize;
     VkDeviceMemory Memory;
-    u64 MemoryOffset;
+    umm MemoryOffset;
+
+    VkDeviceMemory DescriptorMemory;
+    umm DescriptorBufferSize;
+    VkBuffer DescriptorBuffer;
+    VkDeviceAddress DescriptorDeviceAddress;
+    umm TextureTableOffset;
+    void* DescriptorMapping;
+    
 
     // TODO(boti): Move this to the renderer
     VkSampler PackedSamplers[packed_sampler::MaxSamplerCount];
@@ -26,7 +31,8 @@ struct texture_manager
     VkImageView SpecialImageViews[MaxSpecialTextureCount];
 };
 
-internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes);
+internal bool 
+CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes, VkDescriptorSetLayout* SetLayouts);
 
 internal VkImage* GetImage(texture_manager* Manager, renderer_texture_id ID);
 internal VkImageView* GetImageView(texture_manager* Manager, renderer_texture_id ID);

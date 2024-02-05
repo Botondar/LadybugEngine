@@ -31,7 +31,7 @@ struct particle
     v2 HalfExtent;
 };
 
-layout(set = Set_User0, binding = 0, scalar) 
+SetBindingLayout(PerFrame, ParticleBuffer, scalar) 
 readonly buffer VertexBlock
 {
     particle Particles[];
@@ -88,14 +88,16 @@ void main()
 #else
 
 SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
-layout(set = Set_User0 + 1, binding = 0) uniform sampler2DArray Texture;
+SetBinding(PerFrame, ParticleTexture) uniform texture2DArray Texture;
+
+SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 
 layout(location = 0) out v4 Target0;
 
 void main()
 {
     f32 Depth = StructureDecode(texelFetch(StructureImage, v2s(gl_FragCoord.xy), 0)).z;
-    v4 SampleColor = texture(Texture, vec3(TexCoord, float(ParticleTexture)));
+    v4 SampleColor = texture(sampler2DArray(Texture, Samplers[Sampler_Default]), vec3(TexCoord, float(ParticleTexture)));
 
     f32 FarFade = clamp(2.0 * (Depth - ViewP.z), 0.0, 1.0);
     f32 NearFade = clamp(ViewP.z - (PerFrame.NearZ + 0.01), 0.0, 1.0);

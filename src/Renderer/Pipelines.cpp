@@ -366,6 +366,46 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_All,
             },
+            [Binding_PerFrame_PointShadows] =
+            {
+                .Binding = Binding_PerFrame_PointShadows,
+                .Type = Descriptor_ImageSampler,
+                .DescriptorCount = R_MaxShadowCount,
+                .Stages = PipelineStage_All,
+                .Flags = DescriptorFlag_PartiallyBound,
+            },
+            [Binding_PerFrame_JointBuffer] =
+            {
+                .Binding = Binding_PerFrame_JointBuffer,
+                .Type = Descriptor_StorageBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+                .Flags = 0,
+            },
+            [Binding_PerFrame_ParticleBuffer] =
+            {
+                .Binding = Binding_PerFrame_ParticleBuffer,
+                .Type = Descriptor_StorageBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+                .Flags = 0,
+            },
+            [Binding_PerFrame_ParticleTexture] =
+            {
+                .Binding = Binding_PerFrame_ParticleTexture,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+                .Flags = 0,
+            },
+            [Binding_PerFrame_TextureUI] =
+            {
+                .Binding = Binding_PerFrame_TextureUI,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+                .Flags = 0,
+            },
         },
     },
 
@@ -375,7 +415,7 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
         .Bindings = 
         {
             {
-                .Binding = 0,
+                .Binding = Binding_Bindless_Textures,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 0, // NOTE(boti): actual count is implied by the descriptor pool size for bindless
                 .Stages = PipelineStage_All,
@@ -392,122 +432,6 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .Binding = Binding_Sampler_NamedSamplers,
                 .Type = Descriptor_Sampler,
                 .DescriptorCount = Sampler_Count,
-                .Stages = PipelineStage_All,
-            },
-        },
-    },
-
-    [SetLayout_CascadeShadow] = 
-    {
-        .BindingCount = 1,
-        .Bindings = 
-        {
-            {
-                .Binding = 0,
-                .Type = Descriptor_ImageSampler,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-        },
-    },
-    
-    [SetLayout_Bloom] =
-    {
-        .BindingCount = 2,
-        .Bindings = 
-        {
-            {
-                .Binding = 0,
-                .Type = Descriptor_ImageSampler,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_CS,
-            },
-            {
-                .Binding = 1,
-                .Type = Descriptor_StorageImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_CS,
-            },
-        },
-    },
-
-    [SetLayout_BloomUpsample] = 
-    {
-        .BindingCount = 3,
-        .Bindings = 
-        {
-            {
-                .Binding = 0,
-                .Type = Descriptor_ImageSampler,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_CS,
-            },
-            {
-                .Binding = 1,
-                .Type = Descriptor_ImageSampler,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_CS,
-            },
-            {
-                .Binding = 2,
-                .Type = Descriptor_StorageImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_CS,
-            },
-        },
-    },
-
-    [SetLayout_SingleCombinedTexturePS] = 
-    {
-        .BindingCount = 1,
-        .Bindings = 
-        {
-            {
-                .Binding = 0,
-                .Type = Descriptor_ImageSampler,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_PS,
-            },
-        },
-    },
-
-    [SetLayout_ParticleBuffer] = 
-    {
-        .BindingCount = 1,
-        .Bindings = 
-        {
-            {
-                .Binding = 0,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-        },
-    },
-
-    [SetLayout_PoseTransform] = 
-    {
-        .BindingCount = 1,
-        .Bindings = 
-        {
-            {
-                .Binding = 0,
-                .Type = Descriptor_DynamicUniformBuffer,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-        },
-    },
-    
-    [SetLayout_PointShadows] =
-    {
-        .BindingCount = 1,
-        .Bindings = 
-        {
-            {
-                .Binding = 0,
-                .Type = Descriptor_ImageSampler,
-                .DescriptorCount = R_MaxShadowCount,
                 .Stages = PipelineStage_All,
             },
         },
@@ -539,11 +463,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Graphics,
         .Layout = 
         {
-            .DescriptorSetCount = 1,
-            .DescriptorSets = 
-            {
-                SetLayout_PointShadows,
-            },
+            .DescriptorSetCount = 0,
+            .DescriptorSets = {},
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = InputState_vertex,
@@ -761,8 +682,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Graphics,
         .Layout = 
         {
-            .DescriptorSetCount = 1,
-            .DescriptorSets = { SetLayout_SingleCombinedTexturePS },
+            .DescriptorSetCount = 0,
+            .DescriptorSets = {},
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = 
@@ -912,12 +833,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Graphics,
         .Layout = 
         {
-            .DescriptorSetCount = 2,
-            .DescriptorSets = 
-            {
-                SetLayout_ParticleBuffer,
-                SetLayout_SingleCombinedTexturePS,
-            },
+            .DescriptorSetCount = 0,
+            .DescriptorSets = {},
         },
         .EnabledStages = PipelineStage_VS|PipelineStage_PS,
         .InputAssemblerState = 
@@ -965,11 +882,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Compute,
         .Layout = 
         {
-            .DescriptorSetCount = 1,
-            .DescriptorSets = 
-            {
-                SetLayout_PoseTransform,
-            },
+            .DescriptorSetCount = 0,
+            .DescriptorSets = {},
         },
         .EnabledStages = PipelineStage_CS,
     },
@@ -989,11 +903,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Type = PipelineType_Compute,
         .Layout = 
         {
-            .DescriptorSetCount = 1,
-            .DescriptorSets = 
-            {
-                SetLayout_PointShadows,
-            },
+            .DescriptorSetCount = 0,
+            .DescriptorSets = {},
         },
     },
 };

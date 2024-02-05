@@ -6,29 +6,6 @@
     that most things should go through the frame, so maybe it's time to move these?
 */
 
-internal VkDescriptorSet 
-PushDescriptorSet(render_frame* Frame, VkDescriptorSetLayout Layout);
-
-internal VkDescriptorSet 
-PushBufferDescriptor(render_frame* Frame, 
-                     VkDescriptorSetLayout Layout,
-                     VkDescriptorType Type,
-                     VkBuffer Buffer, u64 Offset, u64 Size);
-
-internal VkDescriptorSet 
-PushImageDescriptor(render_frame* Frame, 
-                    VkDescriptorSetLayout Layout,
-                    VkDescriptorType Type,
-                    VkImageView View, 
-                    VkImageLayout ImageLayout,
-                    VkSampler Sampler);
-
-internal VkDescriptorSet 
-PushImageDescriptor(render_frame* Frame, VkDescriptorSetLayout Layout, renderer_texture_id ID, VkSampler Sampler);
-
-//
-// Rendering
-//
 internal void BeginPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer);
 internal void EndPrepass(render_frame* Frame, VkCommandBuffer CmdBuffer);
 
@@ -43,6 +20,4 @@ RenderBloom(render_frame* Frame,
             VkPipelineLayout DownsamplePipelineLayout,
             VkPipeline DownsamplePipeline, 
             VkPipelineLayout UpsamplePipelineLayout,
-            VkPipeline UpsamplePipeline, 
-            VkDescriptorSetLayout DownsampleSetLayout,
-            VkDescriptorSetLayout UpsampleSetLayout);
+            VkPipeline UpsamplePipeline);

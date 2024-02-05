@@ -26,12 +26,20 @@ PFN_vkGetDescriptorEXT                          vkGetDescriptorEXT_;
 PFN_vkGetDescriptorSetLayoutBindingOffsetEXT    vkGetDescriptorSetLayoutBindingOffsetEXT_;
 PFN_vkGetDescriptorSetLayoutSizeEXT             vkGetDescriptorSetLayoutSizeEXT_;
 
-#define vkCmdBindDescriptorBuffersEXT               vkCmdBindDescriptorBuffersEXT_;
-#define vkCmdSetDescriptorBufferOffsetsEXT          vkCmdSetDescriptorBufferOffsetsEXT_;
-#define vkGetDescriptorEXT                          vkGetDescriptorEXT_;
-#define vkGetDescriptorSetLayoutBindingOffsetEXT    vkGetDescriptorSetLayoutBindingOffsetEXT_;
-#define vkGetDescriptorSetLayoutSizeEXT             vkGetDescriptorSetLayoutSizeEXT_;
+#define vkCmdBindDescriptorBuffersEXT vkCmdBindDescriptorBuffersEXT_
+#define vkCmdSetDescriptorBufferOffsetsEXT vkCmdSetDescriptorBufferOffsetsEXT_
+#define vkGetDescriptorEXT vkGetDescriptorEXT_
+#define vkGetDescriptorSetLayoutBindingOffsetEXT vkGetDescriptorSetLayoutBindingOffsetEXT_
+#define vkGetDescriptorSetLayoutSizeEXT vkGetDescriptorSetLayoutSizeEXT_
 
+internal VkMemoryRequirements 
+GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInfo);
+
+internal VkMemoryRequirements
+GetImageMemoryRequirements(VkDevice Device, const VkImageCreateInfo* ImageInfo, VkImageAspectFlagBits Aspects);
+
+inline VkDeviceAddress 
+GetBufferDeviceAddress(VkDevice Device, VkBuffer Buffer);
 
 struct gpu_memory_arena
 {
@@ -88,11 +96,6 @@ struct backend_render_frame
 
     VkCommandPool ComputeCmdPool;
     VkCommandBuffer ComputeCmdBuffer;
-
-    VkDescriptorPool DescriptorPool;
-    VkDescriptorSet UniformDescriptorSet;
-    VkDescriptorSet PerFrameDescriptorSet;
-    VkDescriptorSet SamplersDescriptorSet;
 
     VkFence ImageAcquiredFence;
     VkSemaphore ImageAcquiredSemaphore;
@@ -186,6 +189,11 @@ struct renderer
     void*       PerFrameParticleBufferMappings[R_MaxFramesInFlight];
     VkBuffer    PerFrameVertex2DBuffers[R_MaxFramesInFlight];
     void*       PerFrameVertex2DMappings[R_MaxFramesInFlight];
+    VkBuffer    PerFrameResourceDescriptorBuffers[R_MaxFramesInFlight];
+    void*       PerFrameResourceDescriptorMappings[R_MaxFramesInFlight];
+    // TODO(boti): We really don't need to create sampler descriptors every frame _or_ to double buffer them
+    VkBuffer    PerFrameSamplerDescriptorBuffers[R_MaxFramesInFlight];
+    void*       PerFrameSamplerDescriptorMappings[R_MaxFramesInFlight];
 
     VkDeviceMemory StagingMemory;
     void* StagingMemoryMapping;
@@ -247,6 +255,20 @@ inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* 
         .color = {},
     };
     vkCmdBeginDebugUtilsLabelEXT_(CmdBuffer, &UtilsLabel);
+}
+
+inline VkDeviceAddress 
+GetBufferDeviceAddress(VkDevice Device, VkBuffer Buffer)
+{
+    VkBufferDeviceAddressInfo Info = 
+    {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+        .pNext = nullptr,
+        .buffer = Buffer,
+    };
+
+    VkDeviceAddress Result = vkGetBufferDeviceAddress(Device, &Info);
+    return(Result);
 }
 
 // NOTE(boti): See Vulkan spec. 16.5.4. Table 17. to find where these transforms come from

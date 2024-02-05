@@ -9,14 +9,7 @@ enum descriptor_set_layout : u32
     SetLayout_Bindless,
     
     // User sets
-    SetLayout_CascadeShadow,
-    SetLayout_Bloom,
-    SetLayout_BloomUpsample,
-    SetLayout_SingleCombinedTexturePS,
-    SetLayout_ParticleBuffer,
-    SetLayout_PoseTransform,
-    SetLayout_PointShadows,
-    SetLayout_PackedSamplers,
+    SetLayout_PackedSamplers, // TODO(boti): This is going to be a binding in SetLayout_Samplers
 
     SetLayout_Count,
 };

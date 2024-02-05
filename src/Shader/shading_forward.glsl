@@ -72,11 +72,10 @@ SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
 SetBinding(PerFrame, OcclusionImage) uniform texture2D OcclusionImage;
 
 SetBinding(PerFrame, CascadedShadow) uniform texture2DArray CascadedShadow;
+SetBinding(PerFrame, PointShadows) uniform textureCube PointShadows[];
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 SetBinding(Bindless, Textures) uniform texture2D Textures[];
-
-layout(set = Set_User0, binding = 0) uniform samplerCubeShadow PointShadows[];
 
 layout(location = 0) out vec4 Out0;
 
@@ -201,7 +200,7 @@ void main()
                 f32 f = PerFrame.PointShadows[ShadowIndex].Far;
                 f32 r = 1.0 / (f - n);
                 f32 ProjDepth = f*r - f*n*r / Depth;
-                Shadow = texture(PointShadows[ShadowIndex], v4(SampleP, ProjDepth));
+                Shadow = texture(samplerCubeShadow(PointShadows[ShadowIndex], Samplers[Sampler_Shadow]), v4(SampleP, ProjDepth));
 
                 f32 dXY = (MaxXY > AbsP.z) ? Offset : 0.0;
                 f32 dX = (AbsP.x > AbsP.y) ? dXY : 0.0;
@@ -216,13 +215,13 @@ void main()
 
                 SampleP.xy -= OffsetXY;
                 SampleP.yz -= OffsetYZ;
-                Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+                Shadow += texture(samplerCubeShadow(PointShadows[ShadowIndex], Samplers[Sampler_Shadow]), v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
                 SampleP.xy += 2.0 * OffsetXY;
-                Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+                Shadow += texture(samplerCubeShadow(PointShadows[ShadowIndex], Samplers[Sampler_Shadow]), v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
                 SampleP.yz += 2.0 * OffsetYZ;
-                Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+                Shadow += texture(samplerCubeShadow(PointShadows[ShadowIndex], Samplers[Sampler_Shadow]), v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
                 SampleP.xy -= 2.0 * OffsetXY;
-                Shadow += texture(PointShadows[ShadowIndex], v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
+                Shadow += texture(samplerCubeShadow(PointShadows[ShadowIndex], Samplers[Sampler_Shadow]), v4(clamp(SampleP, -Limit, +Limit), ProjDepth));
                 Shadow = 0.2 * Shadow;
 
 #if 0
