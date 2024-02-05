@@ -32,6 +32,8 @@ uniform PerFrameBlock
 SetBinding(PerFrame, HDRColorImage) uniform texture2D HDRColorImage;
 SetBinding(PerFrame, BloomImage) uniform texture2D BloomImage;
 
+SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
+
 layout(location = 0) in vec2 TexCoord;
 
 layout(location = 0) out vec4 Out0;
@@ -79,11 +81,23 @@ v3 ACESFilm2(v3 S)
 
 void main()
 {
+    f32 Exposure = PerFrame.Exposure;
+
+    // Incredibly silly dynamic exposure
+#if 0
+    {
+        v3 AverageColor = textureLod(sampler2D(HDRColorImage, Samplers[Sampler_LinearEdgeClamp]), v2(0.0), 1000.0).rgb;
+        f32 AverageLuminance = GetLuminance(AverageColor);
+        f32 TargetLuminance = 0.4;
+        Exposure = TargetLuminance / AverageLuminance;
+    }
+#endif
+
     vec3 Sample = texelFetch(HDRColorImage, v2s(gl_FragCoord.xy), 0).rgb;
     vec3 SampleBloom = texelFetch(BloomImage, v2s(gl_FragCoord.xy), 0).rgb;
     Sample = mix(Sample, SampleBloom, PerFrame.BloomStrength);
 
-    vec3 Exposed = Sample * PerFrame.Exposure;
+    vec3 Exposed = Sample * Exposure;
 #if 0
     v3 Tonemapped = vec3(1.0) - exp(-Exposed);
 #elif 0
