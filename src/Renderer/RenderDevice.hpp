@@ -22,7 +22,8 @@ struct vulkan
 
     u32 GPUMemTypes;
     u32 BARMemTypes;
-    u32 SharedMemTypes;
+    u32 TransferMemTypes;
+    u32 ReadbackMemTypes;
 
     f32 TimestampPeriod;
 

@@ -217,26 +217,30 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
 
             // TODO(boti): This code is incorrect on shared memory devices
             vkGetPhysicalDeviceMemoryProperties(Vulkan->PhysicalDevice, &Vulkan->MemoryProps);
-            for (u32 i = 0; i < Vulkan->MemoryProps.memoryTypeCount; i++)
+            for (u32 MemoryTypeIndex = 0; MemoryTypeIndex < Vulkan->MemoryProps.memoryTypeCount; MemoryTypeIndex++)
             {
-                const VkMemoryType* Type =  Vulkan->MemoryProps.memoryTypes + i;
-                bool bDeviceLocal = Type->propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-                bool bHostVisible = Type->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-                bool bHostCoherent = Type->propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                const VkMemoryType* Type =  Vulkan->MemoryProps.memoryTypes + MemoryTypeIndex;
+                bool IsDeviceLocal  = Type->propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+                bool IsHostVisible  = Type->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+                bool IsHostCoherent = Type->propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                bool IsHostCached   = Type->propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 
-                if (bDeviceLocal && !bHostVisible)
+                if (IsDeviceLocal && !IsHostVisible)
                 {
-                    Vulkan->GPUMemTypes |= (1 << i);
+                    Vulkan->GPUMemTypes |= (1 << MemoryTypeIndex);
                 }
-                else if (bHostVisible && !bDeviceLocal)
+                else if (IsHostVisible)
                 {
-                    Assert(bHostCoherent);
-                    Vulkan->SharedMemTypes |= (1 << i);
-                }
-                else if (bHostVisible && bDeviceLocal)
-                {
-                    Assert(bHostCoherent);
-                    Vulkan->BARMemTypes |= (1 << i);
+                    if (IsHostCoherent)
+                    {
+                        if      (IsDeviceLocal) Vulkan->BARMemTypes         |= (1 << MemoryTypeIndex);
+                        else if (IsHostCached)  Vulkan->ReadbackMemTypes    |= (1 << MemoryTypeIndex);
+                        else                    Vulkan->TransferMemTypes    |= (1 << MemoryTypeIndex);
+                    }
+                    else
+                    {
+                        // NOTE(boti): We don't support non-coherent memory types,
+                    }
                 }
             }
 

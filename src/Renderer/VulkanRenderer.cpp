@@ -1140,7 +1140,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             Assert((Requirements->alignment & BufferInfo.size) == 0);
 
             u32 MemoryType = 0;
-            u8 ScanResult = BitScanForward(&MemoryType, Requirements->memoryTypeBits & VK.SharedMemTypes);
+            u8 ScanResult = BitScanForward(&MemoryType, Requirements->memoryTypeBits & VK.TransferMemTypes);
             if (ScanResult)
             {
                 VkMemoryAllocateInfo AllocInfo = 
