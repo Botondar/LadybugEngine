@@ -202,7 +202,7 @@ AllocateTexture(texture_manager* Manager, texture_flags Flags, const texture_inf
     }
     else
     {
-        MaxCount = Manager->MaxTextureCount;
+        MaxCount = R_MaxTextureCount;
         Count = &Manager->TextureCount;
         Images = Manager->Images;
         Views = Manager->ImageViews;

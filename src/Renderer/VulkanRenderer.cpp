@@ -1038,7 +1038,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 {
                     // HACK(boti): see texture manager;
                     // TODO(boti) [update]: I don't see a reason why this can't just be part of the set layout?
-                    Bindings[BindingIndex].descriptorCount = texture_manager::MaxTextureCount;
+                    Bindings[BindingIndex].descriptorCount = R_MaxTextureCount;
                     BindingFlags[BindingIndex] |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
                 }
             }

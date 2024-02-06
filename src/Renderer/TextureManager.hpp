@@ -2,7 +2,6 @@
 
 struct texture_manager
 {
-    static constexpr u32 MaxTextureCount = 1u << 18;
     static constexpr u32 MaxSpecialTextureCount = 2048u;
 
     VkDescriptorSetLayout DescriptorSetLayout;
@@ -23,14 +22,14 @@ struct texture_manager
     VkSampler PackedSamplers[packed_sampler::MaxSamplerCount];
 
     u32 TextureCount;
-    VkImage Images[MaxTextureCount];
-    VkImageView ImageViews[MaxTextureCount];
-    texture_info TextureInfos[MaxTextureCount];
+    VkImage Images[R_MaxTextureCount];
+    VkImageView ImageViews[R_MaxTextureCount];
+    texture_info TextureInfos[R_MaxTextureCount];
 
     u32 SpecialTextureCount;
     VkImage SpecialImages[MaxSpecialTextureCount];
     VkImageView SpecialImageViews[MaxSpecialTextureCount];
-    texture_info SpecialTextureInfos[MaxTextureCount];
+    texture_info SpecialTextureInfos[MaxSpecialTextureCount];
 };
 
 // TODO(boti): Rework this API, it's horrible

@@ -52,6 +52,7 @@ struct v4u8
 #define R_MaxLightCountPerTile  255
 #define R_LuminanceThreshold    1e-2f
 #define R_MaxLightCount         16384
+#define R_MaxTextureCount       262144u
 #define R_MaxShadowCount        64
 #define R_MaxMipCount           16
 
