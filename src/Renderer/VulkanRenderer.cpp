@@ -1128,20 +1128,10 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 .pQueueFamilyIndices = nullptr,
             };
 
-            VkDeviceBufferMemoryRequirements Query = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DEVICE_BUFFER_MEMORY_REQUIREMENTS,
-                .pNext = nullptr,
-                .pCreateInfo = &BufferInfo,
-            };
-            VkMemoryRequirements2 MemoryRequirements = { VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2 };
-            vkGetDeviceBufferMemoryRequirements(VK.Device, &Query, &MemoryRequirements);
-            VkMemoryRequirements* Requirements = &MemoryRequirements.memoryRequirements;
-            Assert((Requirements->alignment & BufferInfo.size) == 0);
+            VkMemoryRequirements MemoryRequirements = GetBufferMemoryRequirements(VK.Device, &BufferInfo);
 
             u32 MemoryType = 0;
-            u8 ScanResult = BitScanForward(&MemoryType, Requirements->memoryTypeBits & VK.TransferMemTypes);
-            if (ScanResult)
+            if (BitScanForward(&MemoryType, MemoryRequirements.memoryTypeBits & VK.TransferMemTypes))
             {
                 VkMemoryAllocateInfo AllocInfo = 
                 {
@@ -1171,6 +1161,50 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             else
             {
                 return(0);
+            }
+        }
+
+        // Per-frame (texture mip) readback buffer
+        {
+            VkBufferCreateInfo BufferInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .size = R_MaxTextureCount * sizeof(u32),
+                .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                .queueFamilyIndexCount = 0,
+                .pQueueFamilyIndices = nullptr,
+            };
+
+            VkMemoryRequirements MemoryRequirements = GetBufferMemoryRequirements(VK.Device, &BufferInfo);
+
+            u32 MemoryType = 0;
+            if (BitScanForward(&MemoryType, MemoryRequirements.memoryTypeBits & VK.ReadbackMemTypes))
+            {
+                VkMemoryAllocateInfo AllocInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                    .pNext = nullptr,
+                    .allocationSize = R_MaxFramesInFlight * BufferInfo.size,
+                    .memoryTypeIndex = MemoryType,
+                };
+                Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->DesiredMipReadbackMemory);
+                ReturnOnFailure();
+
+                Result = vkMapMemory(VK.Device, Renderer->DesiredMipReadbackMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->DesiredMipReadbackMapping);
+                for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
+                {
+                    Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->DesiredMipReadbackBuffers[FrameIndex]);
+                    ReturnOnFailure();
+
+                    umm Offset = FrameIndex * BufferInfo.size;
+                    Result = vkBindBufferMemory(VK.Device, Renderer->DesiredMipReadbackBuffers[FrameIndex], Renderer->DesiredMipReadbackMemory, Offset);
+                    ReturnOnFailure();
+                    Renderer->DesiredMipReadbackMappings[FrameIndex] = OffsetPtr(Renderer->DesiredMipReadbackMapping, Offset);
+                }
+
             }
         }
 
@@ -1335,6 +1369,11 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             ReturnOnFailure();
         }
     }
+
+    Renderer->DesiredMipMemorySize = R_MaxTextureCount * sizeof(u32);
+    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
+                                   Renderer->DesiredMipMemorySize, &Renderer->DesiredMipBuffer, &Renderer->DesiredMipMemory);
+    ReturnOnFailure();
 
     Renderer->SkinningMemorySize = R_SkinningBufferSize;
     Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK.GPUMemTypes, 
@@ -3019,6 +3058,12 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .imageView = *GetImageView(&Renderer->TextureManager, Frame->ImmediateTextureID),
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         };
+        VkDescriptorBufferInfo MipUsageBufferInfo = 
+        {
+            .buffer = Renderer->DesiredMipBuffer,
+            .offset = 0,
+            .range = Renderer->DesiredMipMemorySize,
+        };
 
         VkWriteDescriptorSet Writes[] = 
         {
@@ -3291,6 +3336,16 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .descriptorCount = 1,
                 .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
                 .pImageInfo = &UIImageInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_PerFrame_DesiredMipBuffer,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = &MipUsageBufferInfo,
             },
         };
         static_assert(CountOf(Writes) == Binding_PerFrame_Count);
@@ -4051,13 +4106,14 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     vkBeginCommandBuffer(RenderCmd, &CmdBufferBegin);
     BindSystemDescriptors(RenderCmd);
 
+    vkCmdFillBuffer(RenderCmd, Renderer->DesiredMipBuffer, 0, VK_WHOLE_SIZE, 0);
+
     vkCmdSetViewport(RenderCmd, 0, 1, &FrameViewport);
     vkCmdSetScissor(RenderCmd, 0, 1, &FrameScissor);
 
     //
     // Shading
     //
-
     VkRenderingAttachmentInfo ShadingColorAttachments[] = 
     {
         {
@@ -4123,7 +4179,24 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             InvalidDefaultCase;
         }
 
-        VkImageMemoryBarrier2 BeginBarriers[] = 
+        VkBufferMemoryBarrier2 BeginBufferBarriers[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_SHADER_WRITE_BIT_KHR,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = Renderer->DesiredMipBuffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE,
+            },
+        };
+
+        VkImageMemoryBarrier2 BeginImageBarriers[] = 
         {
             // HDR Color
             {
@@ -4223,8 +4296,10 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
             .pNext = nullptr,
             .dependencyFlags = 0,
-            .imageMemoryBarrierCount = CountOf(BeginBarriers),
-            .pImageMemoryBarriers = BeginBarriers,
+            .bufferMemoryBarrierCount = CountOf(BeginBufferBarriers),
+            .pBufferMemoryBarriers = BeginBufferBarriers,
+            .imageMemoryBarrierCount = CountOf(BeginImageBarriers),
+            .pImageMemoryBarriers = BeginImageBarriers,
         };
 
         vkCmdPipelineBarrier2(RenderCmd, &BeginDependency);
@@ -4314,6 +4389,36 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     vkCmdEndDebugUtilsLabelEXT(RenderCmd);
 
     vkCmdEndRendering(RenderCmd);
+
+    //
+    // Mip usage copy
+    //
+    {
+        VkBufferMemoryBarrier2 BeginBarriers[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_SHADER_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = Renderer->DesiredMipBuffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE,
+            },
+        };
+
+        VkBufferCopy Copy = 
+        {
+            .srcOffset = 0,
+            .dstOffset = 0,
+            .size = Renderer->DesiredMipMemorySize,
+        };
+        vkCmdCopyBuffer(RenderCmd, Renderer->DesiredMipBuffer, Renderer->DesiredMipReadbackBuffers[Frame->FrameID], 1, &Copy);
+    }
 
     RenderBloom(Frame, RenderCmd,
                 Frame->Renderer->HDRRenderTarget,

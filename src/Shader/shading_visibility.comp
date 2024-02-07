@@ -62,6 +62,12 @@ readonly buffer TileBuffer
     screen_tile Tiles[];
 };
 
+SetBindingLayout(PerFrame, DesiredMipBuffer, scalar)
+buffer DesiredMipBuffer
+{
+    uint DesiredMip[];
+};
+
 #define buffer_type uint
 #define BufferType_Skinned 1
 
@@ -230,6 +236,14 @@ void main()
         Albedo *= UnpackRGBA8(Instance.Material.DiffuseColor);
         v4 MetallicRoughness = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.MetallicRoughnessID)], Samplers[Sampler_Default]), UV, dXdUV, dYdUV);
         MetallicRoughness *= UnpackRGBA8(Instance.Material.BaseMaterial);
+
+        // Desired mip level feedback
+        {
+            uint MipBucket = GetMipBucketFromDerivatives(dXdUV, dYdUV);
+            atomicOr(DesiredMip[Instance.Material.DiffuseID], MipBucket);
+            atomicOr(DesiredMip[Instance.Material.NormalID], MipBucket);
+            atomicOr(DesiredMip[Instance.Material.MetallicRoughnessID], MipBucket);
+        }
 
         //
         // Shading

@@ -68,6 +68,12 @@ readonly buffer TileBuffer
     screen_tile Tiles[];
 };
 
+SetBindingLayout(PerFrame, DesiredMipBuffer, scalar)
+buffer DesiredMipBuffer
+{
+    uint DesiredMip[];
+};
+
 SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
 SetBinding(PerFrame, OcclusionImage) uniform texture2D OcclusionImage;
 
@@ -102,6 +108,14 @@ void main()
         f32 Metallic = MetallicRoughness.b * BaseMetallicRoughness.b;
         v3 N = UnpackSurfaceNormal01(texture(sampler2D(Textures[Instance.Material.NormalID], Samplers[Sampler_Default]), TexCoord).xy);
         N = normalize(TriT) * N.x + normalize(TriB) * N.y + normalize(TriN) * N.z;
+
+        // Desired mip level feedback
+        {
+            uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdxFine(TexCoord));
+            atomicOr(DesiredMip[Instance.Material.DiffuseID], MipBucket);
+            atomicOr(DesiredMip[Instance.Material.NormalID], MipBucket);
+            atomicOr(DesiredMip[Instance.Material.MetallicRoughnessID], MipBucket);
+        }
 
         vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);
         vec3 DiffuseBase = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb;
@@ -195,6 +209,7 @@ void main()
         }
     }
 #endif
+
     Out0 = vec4(Lo, 1.0);
 }
 

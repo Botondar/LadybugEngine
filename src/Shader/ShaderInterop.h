@@ -104,8 +104,9 @@ struct v4u8
 #define Binding_PerFrame_ParticleBuffer             24
 #define Binding_PerFrame_ParticleTexture            25
 #define Binding_PerFrame_TextureUI                  26
+#define Binding_PerFrame_DesiredMipBuffer           27
 
-#define Binding_PerFrame_Count                      27
+#define Binding_PerFrame_Count                      28
 
 // Sampler set bindings
 #define Binding_Sampler_NamedSamplers               0

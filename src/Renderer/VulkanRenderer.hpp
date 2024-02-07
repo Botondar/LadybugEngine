@@ -212,6 +212,15 @@ struct renderer
     void* StagingMemoryMapping;
     VkBuffer StagingBuffers[R_MaxFramesInFlight];
 
+    VkDeviceMemory DesiredMipReadbackMemory;
+    void* DesiredMipReadbackMapping;
+    VkBuffer DesiredMipReadbackBuffers[R_MaxFramesInFlight];
+    void* DesiredMipReadbackMappings[R_MaxFramesInFlight];
+
+    umm DesiredMipMemorySize;
+    VkDeviceMemory DesiredMipMemory;
+    VkBuffer DesiredMipBuffer;
+
     umm SkinningMemorySize;
     VkDeviceMemory SkinningMemory;
     VkBuffer SkinningBuffer;

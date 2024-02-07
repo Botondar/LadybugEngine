@@ -3,7 +3,6 @@
 #extension GL_EXT_shader_8bit_storage : require
 #extension GL_EXT_shader_16bit_storage : require
 #extension GL_EXT_samplerless_texture_functions : require
-#extension GL_KHR_shader_subgroup_ballot : require
 
 #include "ShaderInterop.h"
 
@@ -41,14 +40,6 @@ f32 Ratio1(f32 A, f32 B)
         Result = A / B;
     }
     return(Result);
-}
-
-v3 ApplyFog(in v3 Li, v3 Ambience, f32 Density, f32 Distance)
-{
-    const f32 BetaM0 = 21e-4;
-    f32 FogFactor = exp(-Density * BetaM0 * Distance);
-    v3 Lo = Li * FogFactor + (1.0 - FogFactor) * Ambience;
-    return(Lo);
 }
 
 v3 TransformPoint(m4 M, v3 P)
@@ -93,6 +84,24 @@ v3 SetLuminance(in v3 Color, f32 TargetLuminance)
     f32 CurrentLuminance = GetLuminance(Color);
     v3 Result = Color * (TargetLuminance / CurrentLuminance);
     return Result;
+}
+
+uint GetMipBucketFromDerivatives(v2 dXdUV, v2 dYdUV)
+{
+    // TODO(boti): Figure out if this actually makes sense in the long run
+    f32 MipMag = 0.5 * log2(max(dot(dXdUV, dXdUV), dot(dYdUV, dYdUV)));
+    f32 ResolutionIndependentMip = clamp(ceil(-MipMag), 0.0, 31.0);
+    // TODO(boti): There's probably on off-by-one error here
+    uint MipBucket = 1u << uint(ResolutionIndependentMip);
+    return(MipBucket);
+}
+
+v3 ApplyFog(in v3 Li, v3 Ambience, f32 Density, f32 Distance)
+{
+    const f32 BetaM0 = 21e-4;
+    f32 FogFactor = exp(-Density * BetaM0 * Distance);
+    v3 Lo = Li * FogFactor + (1.0 - FogFactor) * Ambience;
+    return(Lo);
 }
 
 //
