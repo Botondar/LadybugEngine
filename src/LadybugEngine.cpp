@@ -83,7 +83,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
     if (GameIO->dt >= 0.3f)
     {
-        GameIO->dt = 0.0f;
+        GameIO->dt = 0.3f;
     }
 
     if (!RenderFrame)
