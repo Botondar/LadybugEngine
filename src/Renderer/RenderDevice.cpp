@@ -165,6 +165,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                 .bufferDeviceAddress = VK_TRUE,
                 //.bufferDeviceAddressCaptureReplay = VK_TRUE,
                 .vulkanMemoryModel = VK_TRUE,
+                .vulkanMemoryModelDeviceScope = VK_TRUE,
                 .shaderOutputViewportIndex = VK_TRUE,
                 .shaderOutputLayer = VK_TRUE,
                 .subgroupBroadcastDynamicId = VK_TRUE,
