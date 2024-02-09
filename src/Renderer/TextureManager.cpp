@@ -264,10 +264,6 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
 
     if (IsValid(ID))
     {
-        u32 Index = ID.Value & (~SpecialTextureBit);
-        VkImage* Image = GetImage(Manager, ID);
-        VkImageView* View = GetImageView(Manager, ID);
-
         VkImageCreateInfo ImageInfo = 
         {
             .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -286,19 +282,19 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
             .pQueueFamilyIndices = nullptr,
             .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         };
-
-        if (vkCreateImage(VK.Device, &ImageInfo, nullptr, Image) == VK_SUCCESS)
+        VkMemoryRequirements MemoryRequirements = GetImageMemoryRequirements(VK.Device, &ImageInfo, VK_IMAGE_ASPECT_COLOR_BIT);
+        umm EffectiveOffset = Align(Manager->MemoryOffset, MemoryRequirements.alignment);
+        if ((EffectiveOffset + MemoryRequirements.size) <= Manager->MemorySize)
         {
-            VkMemoryRequirements MemoryRequirements = {};
-            vkGetImageMemoryRequirements(VK.Device, *Image, &MemoryRequirements);
+            u32 Index = ID.Value & (~SpecialTextureBit);
+            VkImage* Image = GetImage(Manager, ID);
+            VkImageView* View = GetImageView(Manager, ID);
 
-            umm MemoryOffset = Align(Manager->MemoryOffset, MemoryRequirements.alignment);
-            if (MemoryOffset + MemoryRequirements.size < Manager->MemorySize)
+            if (vkCreateImage(VK.Device, &ImageInfo, nullptr, Image) == VK_SUCCESS)
             {
-                if (vkBindImageMemory(VK.Device, *Image, Manager->Memory, MemoryOffset) == VK_SUCCESS)
+                if (vkBindImageMemory(VK.Device, *Image, Manager->Memory, EffectiveOffset) == VK_SUCCESS)
                 {
-                    Manager->MemoryOffset = MemoryOffset + MemoryRequirements.size;
-
+                    Manager->MemoryOffset = EffectiveOffset + MemoryRequirements.size;
                     auto SwizzleToVulkan = [](texture_swizzle_type Type) -> VkComponentSwizzle 
                     {
                         VkComponentSwizzle Result = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -356,12 +352,12 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
             }
             else
             {
-                UnhandledError("Out of texture memory");
+                UnhandledError("Failed to create image");
             }
         }
         else
         {
-            UnhandledError("Failed to create texture");
+            // TODO(boti): Logging; failed to allocate, but we can keep using the placeholder
         }
     }
 
