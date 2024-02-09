@@ -88,10 +88,9 @@ v3 SetLuminance(in v3 Color, f32 TargetLuminance)
 
 uint GetMipBucketFromDerivatives(v2 dXdUV, v2 dYdUV)
 {
-    // TODO(boti): Figure out if this actually makes sense in the long run
-    f32 MipMag = 0.5 * log2(max(dot(dXdUV, dXdUV), dot(dYdUV, dYdUV)));
-    f32 ResolutionIndependentMip = clamp(ceil(-MipMag), 0.0, 31.0);
-    // TODO(boti): There's probably on off-by-one error here
+    // TODO(boti): Figure out whether we actually want to feedback the desired _resolution_, or the desired mip level to the CPU
+    f32 InverseMipBucketLog = 0.5 * log2(max(dot(dXdUV, dXdUV), dot(dYdUV, dYdUV)));
+    f32 ResolutionIndependentMip = clamp(ceil(-InverseMipBucketLog), 0.0, 31.0);
     uint MipBucket = 1u << uint(ResolutionIndependentMip);
     return(MipBucket);
 }
