@@ -25,6 +25,7 @@ struct texture_manager
     VkImage Images[R_MaxTextureCount];
     VkImageView ImageViews[R_MaxTextureCount];
     texture_info TextureInfos[R_MaxTextureCount];
+    u32 TextureMipResidency[R_MaxTextureCount];
 
     u32 SpecialTextureCount;
     VkImage SpecialImages[MaxSpecialTextureCount];

@@ -1121,7 +1121,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
-                .size = MiB(128),
+                .size = MiB(512),
                 .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
                 .queueFamilyIndexCount = 0,
@@ -1931,6 +1931,38 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
     vkResetCommandPool(VK.Device, Frame->Backend->CmdPool, 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
     vkResetCommandPool(VK.Device, Frame->Backend->ComputeCmdPool, 0);
 
+    // Mip readback
+    {
+        texture_manager* Manager = &Renderer->TextureManager;
+        u32* DesiredMips = (u32*)Renderer->DesiredMipReadbackMappings[FrameID];
+        for (u32 TextureIndex = 0; TextureIndex < R_MaxTextureCount; TextureIndex++)
+        {
+            if (TextureIndex >= Manager->TextureCount)
+            {
+                break;
+            }
+
+            u32 DesiredMip = DesiredMips[TextureIndex];
+            u32 DesiredMipMask;
+            if (BitScanReverse(&DesiredMipMask, DesiredMip))
+            {
+                DesiredMipMask = (1 << (DesiredMipMask + 1)) - 1;
+                //if (DesiredMipMask != Manager->TextureMipResidency[TextureIndex])
+                {
+                    char MipStr[16 + 1] = {};
+                    char MaskStr[16 + 1] = {};
+                    for (u32 Bit = 0; Bit < 16; Bit++)
+                    {
+                        MipStr[16 - Bit - 1]     = (DesiredMip       & (1 << Bit)) ? '1' : '0';
+                        MaskStr[16 - Bit - 1]    = (DesiredMipMask   & (1 << Bit)) ? '1' : '0';
+
+                    }
+                    Platform.DebugPrint("%u: %s -> %s\n", TextureIndex, MipStr, MaskStr);
+                }
+            }
+        }
+    }
+
     return(Frame);
 }
 
@@ -2248,6 +2280,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     {
                         UnimplementedCodePath;
                     }
+
+                    u32 MipBucket;
+                    BitScanReverse(&MipBucket, Max(Info->Width, Info->Height));
+                    u32 MipMask = (1 << (MipBucket + 1)) - 1;
+                    Renderer->TextureManager.TextureMipResidency[Op->Texture.TargetID.Value] = MipMask;
                 }
 
                 VkImageMemoryBarrier2 BeginBarrier = 
