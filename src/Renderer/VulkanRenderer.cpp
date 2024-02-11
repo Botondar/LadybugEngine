@@ -806,6 +806,35 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
     return(Result);
 }
 
+internal b32 
+AddTextureDeletionEntry(texture_deletion_queue* Queue, u32 FrameID, VkImage Image, VkImageView View)
+{
+    b32 Result = false;
+    if (Queue->EntryWriteAt - Queue->EntryReadAt < Queue->MaxEntryCount)
+    {
+        u32 Index = (Queue->EntryWriteAt++) % Queue->MaxEntryCount;
+        Queue->Entries[Index] = { Image, View };
+        Queue->FrameEntryWriteAt[FrameID] = Queue->EntryWriteAt;
+    }
+    else
+    {
+        UnhandledError("Texture deletion queue full");
+    }
+    return(Result);
+}
+
+internal void 
+ProcessTextureDeletionEntries(texture_deletion_queue* Queue, u32 FrameID)
+{
+    for (; Queue->EntryReadAt < Queue->FrameEntryWriteAt[FrameID]; Queue->EntryReadAt++)
+    {
+        u32 Index = Queue->EntryReadAt % Queue->MaxEntryCount;
+        vkDestroyImage(VK.Device, Queue->Entries[Index].ImageHandle, nullptr);
+        vkDestroyImageView(VK.Device, Queue->Entries[Index].ViewHandle, nullptr);
+    }
+    Queue->FrameEntryWriteAt[FrameID] = Queue->EntryWriteAt;
+}
+
 extern "C" Signature_GetDeviceName(GetDeviceName)
 {
     const char* Result = Renderer->Vulkan.DeviceProps.deviceName;
@@ -1190,19 +1219,19 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                     .allocationSize = R_MaxFramesInFlight * BufferInfo.size,
                     .memoryTypeIndex = MemoryType,
                 };
-                Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->DesiredMipReadbackMemory);
+                Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->MipMaskReadbackMemory);
                 ReturnOnFailure();
 
-                Result = vkMapMemory(VK.Device, Renderer->DesiredMipReadbackMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->DesiredMipReadbackMapping);
+                Result = vkMapMemory(VK.Device, Renderer->MipMaskReadbackMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->MipMaskReadbackMapping);
                 for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
                 {
-                    Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->DesiredMipReadbackBuffers[FrameIndex]);
+                    Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->MipMaskReadbackBuffers[FrameIndex]);
                     ReturnOnFailure();
 
                     umm Offset = FrameIndex * BufferInfo.size;
-                    Result = vkBindBufferMemory(VK.Device, Renderer->DesiredMipReadbackBuffers[FrameIndex], Renderer->DesiredMipReadbackMemory, Offset);
+                    Result = vkBindBufferMemory(VK.Device, Renderer->MipMaskReadbackBuffers[FrameIndex], Renderer->MipMaskReadbackMemory, Offset);
                     ReturnOnFailure();
-                    Renderer->DesiredMipReadbackMappings[FrameIndex] = OffsetPtr(Renderer->DesiredMipReadbackMapping, Offset);
+                    Renderer->MipMaskReadbackMappings[FrameIndex] = OffsetPtr(Renderer->MipMaskReadbackMapping, Offset);
                 }
 
             }
@@ -1370,9 +1399,9 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         }
     }
 
-    Renderer->DesiredMipMemorySize = R_MaxTextureCount * sizeof(u32);
+    Renderer->MipMaskMemorySize = R_MaxTextureCount * sizeof(u32);
     Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
-                                   Renderer->DesiredMipMemorySize, &Renderer->DesiredMipBuffer, &Renderer->DesiredMipMemory);
+                                   Renderer->MipMaskMemorySize, &Renderer->MipMaskBuffer, &Renderer->MipMaskMemory);
     ReturnOnFailure();
 
     Renderer->SkinningMemorySize = R_SkinningBufferSize;
@@ -1931,10 +1960,16 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
     vkResetCommandPool(VK.Device, Frame->Backend->CmdPool, 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
     vkResetCommandPool(VK.Device, Frame->Backend->ComputeCmdPool, 0);
 
+    ProcessTextureDeletionEntries(&Renderer->TextureDeletionQueue, FrameID);
+
     // Mip readback
     {
         texture_manager* Manager = &Renderer->TextureManager;
-        u32* DesiredMips = (u32*)Renderer->DesiredMipReadbackMappings[FrameID];
+        u32 RealRequestCount = 0;
+        u32* RealRequests = PushArray(Frame->Arena, 0, u32, Manager->TextureCount);
+        u32* RealRequestMasks = PushArray(Frame->Arena, 0, u32, Manager->TextureCount);
+
+        u32* MipMasks = (u32*)Renderer->MipMaskReadbackMappings[FrameID];
         for (u32 TextureIndex = 0; TextureIndex < R_MaxTextureCount; TextureIndex++)
         {
             if (TextureIndex >= Manager->TextureCount)
@@ -1942,24 +1977,27 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
                 break;
             }
 
-            u32 DesiredMip = DesiredMips[TextureIndex];
-            u32 DesiredMipMask;
-            if (BitScanReverse(&DesiredMipMask, DesiredMip))
+            u32 MipMask = MipMasks[TextureIndex];
+            u32 CurrentMipMask = Manager->MipResidencyMask[TextureIndex];
+            // NOTE(boti): Only request mips that are not present
+            // TODO(boti): Pad the request with the low resolution mips if they're not present
+            MipMask &= ~CurrentMipMask;
+            if (MipMask)
             {
-                DesiredMipMask = (1 << (DesiredMipMask + 1)) - 1;
-                //if (DesiredMipMask != Manager->TextureMipResidency[TextureIndex])
-                {
-                    char MipStr[16 + 1] = {};
-                    char MaskStr[16 + 1] = {};
-                    for (u32 Bit = 0; Bit < 16; Bit++)
-                    {
-                        MipStr[16 - Bit - 1]     = (DesiredMip       & (1 << Bit)) ? '1' : '0';
-                        MaskStr[16 - Bit - 1]    = (DesiredMipMask   & (1 << Bit)) ? '1' : '0';
-
-                    }
-                    //Platform.DebugPrint("%u: %s -> %s\n", TextureIndex, MipStr, MaskStr);
-                }
+                u32 RequestIndex = RealRequestCount++;
+                RealRequests[RequestIndex] = TextureIndex;
+                RealRequestMasks[RequestIndex] = MipMask;
             }
+        }
+
+        Frame->TextureRequestCount = RealRequestCount;
+        Frame->TextureRequests = PushArray(Frame->Arena, 0, texture_request, RealRequestCount);
+        for (u32 RequestIndex = 0; RequestIndex < RealRequestCount; RequestIndex++)
+        {
+            u32 TextureIndex = RealRequests[RequestIndex];
+            u32 MipMask = RealRequestMasks[RequestIndex];
+
+            Frame->TextureRequests[RequestIndex] = { { TextureIndex }, MipMask };
         }
     }
 
@@ -2176,6 +2214,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             case TransferOp_Texture:
             {
                 texture_info* Info = &Op->Texture.Info;
+                texture_subresource_range* Range = &Op->Texture.SubresourceRange;
                 if (Info->Depth > 1)
                 {
                     UnimplementedCodePath;
@@ -2232,6 +2271,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
                 b32 IsAllocated = false;
                 VkImage* Image = GetImage(&Renderer->TextureManager, Op->Texture.TargetID);
+                VkImageView* ImageView = GetImageView(&Renderer->TextureManager, Op->Texture.TargetID);
                 if (*Image == VK_NULL_HANDLE)
                 {
                     IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
@@ -2244,7 +2284,10 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 }
                 else
                 {
-                    UnimplementedCodePath;
+                    AddTextureDeletionEntry(&Renderer->TextureDeletionQueue, Frame->FrameID, *Image, *ImageView);
+                    *Image = VK_NULL_HANDLE;
+                    *ImageView = VK_NULL_HANDLE;
+                    IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
                 }
 
                 if (IsAllocated)
@@ -2257,7 +2300,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                             VkDescriptorImageInfo DescriptorImage = 
                             {
                                 .sampler = VK_NULL_HANDLE,
-                                .imageView = *GetImageView(&Renderer->TextureManager, Op->Texture.TargetID),
+                                .imageView = *ImageView,
                                 .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
                             };
                             VkDescriptorGetInfoEXT DescriptorInfo = 
@@ -2279,16 +2322,17 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                             vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
 
                             Frame->StagingBufferAt += DescriptorSize;
+
+                            u32 MipBucket;
+                            BitScanReverse(&MipBucket, Max(Info->Width, Info->Height));
+                            u32 MipMask = (1 << (MipBucket + 1)) - 1;
+                            Renderer->TextureManager.MipResidencyMask[Op->Texture.TargetID.Value] = MipMask;
+                            Renderer->TextureManager.TextureInfos[Op->Texture.TargetID.Value] = Op->Texture.Info;
                         }
                         else
                         {
                             UnimplementedCodePath;
                         }
-
-                        u32 MipBucket;
-                        BitScanReverse(&MipBucket, Max(Info->Width, Info->Height));
-                        u32 MipMask = (1 << (MipBucket + 1)) - 1;
-                        Renderer->TextureManager.TextureMipResidency[Op->Texture.TargetID.Value] = MipMask;
                     }
 
                     VkImageMemoryBarrier2 BeginBarrier = 
@@ -2360,6 +2404,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 else
                 {
                     // TODO(boti): Logging
+                    //UnimplementedCodePath;
                 }
             } break;
 
@@ -3106,9 +3151,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         };
         VkDescriptorBufferInfo MipUsageBufferInfo = 
         {
-            .buffer = Renderer->DesiredMipBuffer,
+            .buffer = Renderer->MipMaskBuffer,
             .offset = 0,
-            .range = Renderer->DesiredMipMemorySize,
+            .range = Renderer->MipMaskMemorySize,
         };
 
         VkWriteDescriptorSet Writes[] = 
@@ -3387,7 +3432,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
                 .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_DesiredMipBuffer,
+                .dstBinding = Binding_PerFrame_MipMaskBuffer,
                 .dstArrayElement = 0,
                 .descriptorCount = 1,
                 .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -4152,7 +4197,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     vkBeginCommandBuffer(RenderCmd, &CmdBufferBegin);
     BindSystemDescriptors(RenderCmd);
 
-    vkCmdFillBuffer(RenderCmd, Renderer->DesiredMipBuffer, 0, VK_WHOLE_SIZE, 0);
+    vkCmdFillBuffer(RenderCmd, Renderer->MipMaskBuffer, 0, VK_WHOLE_SIZE, 0);
 
     vkCmdSetViewport(RenderCmd, 0, 1, &FrameViewport);
     vkCmdSetScissor(RenderCmd, 0, 1, &FrameScissor);
@@ -4236,7 +4281,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_SHADER_WRITE_BIT_KHR,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Renderer->DesiredMipBuffer,
+                .buffer = Renderer->MipMaskBuffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE,
             },
@@ -4451,7 +4496,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Renderer->DesiredMipBuffer,
+                .buffer = Renderer->MipMaskBuffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE,
             },
@@ -4461,9 +4506,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         {
             .srcOffset = 0,
             .dstOffset = 0,
-            .size = Renderer->DesiredMipMemorySize,
+            .size = Renderer->MipMaskMemorySize,
         };
-        vkCmdCopyBuffer(RenderCmd, Renderer->DesiredMipBuffer, Renderer->DesiredMipReadbackBuffers[Frame->FrameID], 1, &Copy);
+        vkCmdCopyBuffer(RenderCmd, Renderer->MipMaskBuffer, Renderer->MipMaskReadbackBuffers[Frame->FrameID], 1, &Copy);
     }
 
     RenderBloom(Frame, RenderCmd,

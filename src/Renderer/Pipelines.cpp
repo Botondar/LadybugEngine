@@ -406,9 +406,9 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .Stages = PipelineStage_All,
                 .Flags = 0,
             },
-            [Binding_PerFrame_DesiredMipBuffer] =
+            [Binding_PerFrame_MipMaskBuffer] =
             {
-                .Binding = Binding_PerFrame_DesiredMipBuffer,
+                .Binding = Binding_PerFrame_MipMaskBuffer,
                 .Type = Descriptor_StorageBuffer,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_All,

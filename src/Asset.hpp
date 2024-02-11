@@ -71,6 +71,8 @@ struct texture
 {
     renderer_texture_id RendererID;
     b32 IsLoaded;
+    texture_info Info;
+    void* Memory;
 };
 
 enum texture_type : u32
@@ -155,9 +157,11 @@ struct mesh
 //
 // Assets
 //
+
 struct assets
 {
     memory_arena Arena;
+    memory_arena TextureCache;
     texture_queue TextureQueue;
 
     u32 WhitenessID;

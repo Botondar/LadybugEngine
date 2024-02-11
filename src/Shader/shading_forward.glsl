@@ -68,10 +68,10 @@ readonly buffer TileBuffer
     screen_tile Tiles[];
 };
 
-SetBindingLayout(PerFrame, DesiredMipBuffer, scalar)
-buffer DesiredMipBuffer
+SetBindingLayout(PerFrame, MipMaskBuffer, scalar)
+buffer MipMaskBuffer
 {
-    uint DesiredMip[];
+    uint MipMasks[];
 };
 
 SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
@@ -112,9 +112,9 @@ void main()
         // Desired mip level feedback
         {
             uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdxFine(TexCoord));
-            atomicOr(DesiredMip[Instance.Material.DiffuseID], MipBucket);
-            atomicOr(DesiredMip[Instance.Material.NormalID], MipBucket);
-            atomicOr(DesiredMip[Instance.Material.MetallicRoughnessID], MipBucket);
+            atomicOr(MipMasks[Instance.Material.DiffuseID], MipBucket);
+            atomicOr(MipMasks[Instance.Material.NormalID], MipBucket);
+            atomicOr(MipMasks[Instance.Material.MetallicRoughnessID], MipBucket);
         }
 
         vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);

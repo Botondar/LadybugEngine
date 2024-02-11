@@ -62,10 +62,10 @@ readonly buffer TileBuffer
     screen_tile Tiles[];
 };
 
-SetBindingLayout(PerFrame, DesiredMipBuffer, scalar)
-buffer DesiredMipBuffer
+SetBindingLayout(PerFrame, MipMaskBuffer, scalar)
+buffer MipMaskBuffer
 {
-    uint DesiredMip[];
+    uint MipMasks[];
 };
 
 #define buffer_type uint
@@ -240,9 +240,9 @@ void main()
         // Desired mip level feedback
         {
             uint MipBucket = GetMipBucketFromDerivatives(dXdUV, dYdUV);
-            atomicOr(DesiredMip[Instance.Material.DiffuseID], MipBucket);
-            atomicOr(DesiredMip[Instance.Material.NormalID], MipBucket);
-            atomicOr(DesiredMip[Instance.Material.MetallicRoughnessID], MipBucket);
+            atomicOr(MipMasks[Instance.Material.DiffuseID], MipBucket);
+            atomicOr(MipMasks[Instance.Material.NormalID], MipBucket);
+            atomicOr(MipMasks[Instance.Material.MetallicRoughnessID], MipBucket);
         }
 
         //

@@ -126,6 +126,28 @@ struct backend_render_frame
     VkBuffer Vertex2DBuffer;
 };
 
+struct texture_deletion_entry
+{
+    VkImage ImageHandle;
+    VkImageView ViewHandle;
+};
+
+struct texture_deletion_queue
+{
+    static constexpr u32 MaxEntryCount = 4096;
+    u32 EntryWriteAt;
+    u32 EntryReadAt;
+    u32 FrameEntryWriteAt[R_MaxFramesInFlight];
+
+    texture_deletion_entry Entries[MaxEntryCount];
+};
+
+internal b32 
+AddTextureDeletionEntry(texture_deletion_queue* Queue, u32 FrameID, VkImage Image, VkImageView View);
+
+internal void 
+ProcessTextureDeletionEntries(texture_deletion_queue* Queue, u32 FrameID);
+
 struct renderer
 {
     vulkan Vulkan;
@@ -183,6 +205,8 @@ struct renderer
     //
     // Per frame stuff
     // 
+    texture_deletion_queue TextureDeletionQueue;
+
     VkCommandPool CmdPools[2];
     VkCommandBuffer CmdBuffers[2][backend_render_frame::MaxCmdBufferCount];
 
@@ -212,14 +236,14 @@ struct renderer
     void* StagingMemoryMapping;
     VkBuffer StagingBuffers[R_MaxFramesInFlight];
 
-    VkDeviceMemory DesiredMipReadbackMemory;
-    void* DesiredMipReadbackMapping;
-    VkBuffer DesiredMipReadbackBuffers[R_MaxFramesInFlight];
-    void* DesiredMipReadbackMappings[R_MaxFramesInFlight];
+    VkDeviceMemory MipMaskReadbackMemory;
+    void* MipMaskReadbackMapping;
+    VkBuffer MipMaskReadbackBuffers[R_MaxFramesInFlight];
+    void* MipMaskReadbackMappings[R_MaxFramesInFlight];
 
-    umm DesiredMipMemorySize;
-    VkDeviceMemory DesiredMipMemory;
-    VkBuffer DesiredMipBuffer;
+    umm MipMaskMemorySize;
+    VkDeviceMemory MipMaskMemory;
+    VkBuffer MipMaskBuffer;
 
     umm SkinningMemorySize;
     VkDeviceMemory SkinningMemory;
