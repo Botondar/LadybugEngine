@@ -130,9 +130,9 @@ constexpr s64 S64_MAX = 0x7FFFFFFFFFFFFFFFll;
 
 constexpr u32 INVALID_INDEX_U32 = U32_MAX;
 
-inline size_t Align(size_t Value, size_t Alignment)
+inline umm Align(umm Value, umm Alignment)
 {
-    size_t Result = (Value + Alignment - 1) & ~(Alignment - 1);
+    umm Result = (Value + Alignment - 1) & ~(Alignment - 1);
     return Result;
 }
 
