@@ -44,11 +44,17 @@ GetBufferDeviceAddress(VkDevice Device, VkBuffer Buffer);
 struct gpu_memory_arena
 {
     VkDeviceMemory Memory;
-    u64 Size;
-    u64 MemoryAt;
+    umm Size;
+    umm MemoryAt;
     u32 MemoryTypeIndex;
     void* Mapping;
 };
+
+internal gpu_memory_arena 
+CreateGPUArena(VkDevice Device, umm Size, u32 MemoryTypeIndex, b32 IsMemoryMapped);
+
+internal b32 
+PushImage(gpu_memory_arena* Arena, VkImage Image);
 
 internal b32 
 PushBuffer(gpu_memory_arena* Arena, 

@@ -41,37 +41,38 @@ Mip exclusive (requires sparse binding/residency):
 
 constexpr umm TexturePageSize = KiB(64);
 
+struct renderer_texture
+{
+    VkImage         ImageHandle;
+    VkImageView     ViewHandle;
+    texture_info    Info;
+    texture_flags   Flags;
+    u32             MipResidencyMask;
+};
+
 struct texture_manager
 {
     static constexpr u32 MaxSpecialTextureCount = 2048u;
 
     VkDescriptorSetLayout DescriptorSetLayout;
 
-    umm MemorySize;
-    VkDeviceMemory Memory;
-    umm MemoryOffset;
+    gpu_memory_arena    PersistentArena;
+    gpu_memory_arena    CacheArena;
 
-    VkDeviceMemory DescriptorMemory;
-    umm DescriptorBufferSize;
-    VkBuffer DescriptorBuffer;
-    VkDeviceAddress DescriptorDeviceAddress;
-    umm TextureTableOffset;
-    void* DescriptorMapping;
-    
+    gpu_memory_arena    DescriptorArena;
+    VkBuffer            DescriptorBuffer;
+    VkDeviceAddress     DescriptorAddress;
+    void*               DescriptorMapping;
+    umm                 TextureTableOffset;
 
     // TODO(boti): Move this to the renderer
     VkSampler PackedSamplers[packed_sampler::MaxSamplerCount];
 
-    u32 TextureCount;
-    VkImage Images[R_MaxTextureCount];
-    VkImageView ImageViews[R_MaxTextureCount];
-    texture_info TextureInfos[R_MaxTextureCount];
-    u32 MipResidencyMask[R_MaxTextureCount];
+    u32                 TextureCount;
+    renderer_texture    Textures[R_MaxTextureCount];
 
-    u32 SpecialTextureCount;
-    VkImage SpecialImages[MaxSpecialTextureCount];
-    VkImageView SpecialImageViews[MaxSpecialTextureCount];
-    texture_info SpecialTextureInfos[MaxSpecialTextureCount];
+    u32                 SpecialTextureCount;
+    renderer_texture    SpecialTextures[MaxSpecialTextureCount];
 };
 
 // TODO(boti): Rework this API, it's horrible
@@ -79,9 +80,8 @@ struct texture_manager
 internal bool 
 CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes, VkDescriptorSetLayout* SetLayouts);
 
-internal VkImage* GetImage(texture_manager* Manager, renderer_texture_id ID);
-internal VkImageView* GetImageView(texture_manager* Manager, renderer_texture_id ID);
-internal texture_info GetTextureInfo(texture_manager* Manager, renderer_texture_id ID);
+internal renderer_texture* 
+GetTexture(texture_manager* Manager, renderer_texture_id ID);
 
 internal b32 IsTextureSpecial(renderer_texture_id ID);
 

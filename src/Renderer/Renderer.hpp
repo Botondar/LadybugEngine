@@ -607,8 +607,10 @@ inline v3 SetLuminance(v3 RGB, f32 Luminance);
 typedef flags32 texture_flags;
 enum texture_flag_bits : texture_flags
 {
-    TextureFlag_None = 0,
-    TextureFlag_Special = (1 << 0),
+    TextureFlag_None                = 0,
+
+    TextureFlag_Special             = (1u << 0),
+    TextureFlag_PersistentMemory    = (1u << 1),
 };
 
 struct texture_request
