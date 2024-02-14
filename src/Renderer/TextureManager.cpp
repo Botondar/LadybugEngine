@@ -140,6 +140,7 @@ AllocateTexture(texture_manager* Manager, texture_flags Flags, const texture_inf
         Assert(Texture->ViewHandle == VK_NULL_HANDLE);
 
         Texture->Info = {};
+        Texture->Flags = Flags;
         if (Info)
         {
             Texture->Info = *Info;
@@ -214,7 +215,8 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
         VkResult ErrorCode = vkCreateImage(VK.Device, &ImageInfo, nullptr, &Texture->ImageHandle);
         if (ErrorCode == VK_SUCCESS)
         {
-            b32 PushResult = PushImage(&Manager->CacheArena, Texture->ImageHandle);
+            gpu_memory_arena* Arena = (Texture->Flags & TextureFlag_PersistentMemory) ? &Manager->PersistentArena : &Manager->CacheArena;
+            b32 PushResult = PushImage(Arena, Texture->ImageHandle);
             if (PushResult)
             {
                 auto SwizzleToVulkan = [](texture_swizzle_type Swizzle) -> VkComponentSwizzle
