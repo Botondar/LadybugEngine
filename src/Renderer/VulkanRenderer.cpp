@@ -1173,7 +1173,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     // Texture Manager
     // TODO(boti): remove this
     Renderer->TextureManager.DescriptorSetLayout = Renderer->SetLayouts[SetLayout_Bindless];
-    if (!CreateTextureManager(&Renderer->TextureManager, R_TextureMemorySize, VK.GPUMemTypes, Renderer->SetLayouts))
+    if (!CreateTextureManager(&Renderer->TextureManager, Arena, R_TextureMemorySize, VK.GPUMemTypes, Renderer->SetLayouts))
     {
         Result = VK_ERROR_INITIALIZATION_FAILED;
         ReturnOnFailure();

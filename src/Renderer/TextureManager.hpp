@@ -50,6 +50,13 @@ struct renderer_texture
     u32             MipResidencyMask;
 };
 
+struct texture_cache
+{
+    umm PageCount;
+    umm UsageBitfieldCount;
+    u64* UsageBitfields;
+};
+
 struct texture_manager
 {
     static constexpr u32 MaxSpecialTextureCount = 2048u;
@@ -58,6 +65,7 @@ struct texture_manager
 
     gpu_memory_arena    PersistentArena;
     gpu_memory_arena    CacheArena;
+    texture_cache       Cache;
 
     gpu_memory_arena    DescriptorArena;
     VkBuffer            DescriptorBuffer;
@@ -78,7 +86,7 @@ struct texture_manager
 // TODO(boti): Rework this API, it's horrible
 
 internal bool 
-CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes, VkDescriptorSetLayout* SetLayouts);
+CreateTextureManager(texture_manager* Manager, memory_arena* Arena, u64 MemorySize, u32 MemoryTypes, VkDescriptorSetLayout* SetLayouts);
 
 internal renderer_texture* 
 GetTexture(texture_manager* Manager, renderer_texture_id ID);

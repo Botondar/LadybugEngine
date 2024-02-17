@@ -14,7 +14,7 @@ internal b32 IsTextureSpecial(renderer_texture_id ID)
     return(Result);
 }
 
-internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes, VkDescriptorSetLayout* SetLayouts)
+internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena, u64 MemorySize, u32 MemoryTypes, VkDescriptorSetLayout* SetLayouts)
 {
     VkResult Result = VK_SUCCESS;
 
@@ -53,6 +53,10 @@ internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32
 
         Manager->PersistentArena    = CreateGPUArena(VK.Device, MiB(32), MemoryTypeIndex, false);
         Manager->CacheArena         = CreateGPUArena(VK.Device, MemorySize, MemoryTypeIndex, false);
+
+        Manager->Cache.PageCount = CeilDiv(MemorySize, TexturePageSize);
+        Manager->Cache.UsageBitfieldCount = CeilDiv(Manager->Cache.PageCount, 64);
+        Manager->Cache.UsageBitfields = PushArray(Arena, MemPush_Clear, u64, Manager->Cache.UsageBitfieldCount);
 
         if (Manager->DescriptorArena.Memory && Manager->PersistentArena.Memory && Manager->CacheArena.Memory)
         {
