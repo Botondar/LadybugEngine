@@ -9,8 +9,8 @@ layout(push_constant) uniform PushConstants
     uint DstMipIndex;
 };
 
-SetBinding(PerFrame, HDRColorImageGeneral) uniform texture2D ColorImage;
-SetBinding(PerFrame, HDRMipStorageImages) uniform restrict writeonly image2D Mips[R_MaxMipCount];
+SetBinding(Static, HDRColorImageGeneral) uniform texture2D ColorImage;
+SetBinding(Static, HDRMipStorageImages) uniform restrict writeonly image2D Mips[R_MaxMipCount];
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 

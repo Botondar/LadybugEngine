@@ -14,13 +14,13 @@ uniform PushConstants
     uint JointOffset;
 };
 
-SetBindingLayout(PerFrame, VertexBuffer, scalar)
+SetBindingLayout(Static, VertexBuffer, scalar)
 readonly buffer SrcVB_SSBO
 {
     vertex Data[];
 } SrcVB;
 
-SetBindingLayout(PerFrame, SkinnedVertexBuffer, scalar)
+SetBindingLayout(Static, SkinnedVertexBuffer, scalar)
 writeonly buffer DstVB_SSBO
 {
     vertex Data[];

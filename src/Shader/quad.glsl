@@ -87,7 +87,7 @@ void main()
 }
 #else
 
-SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
+SetBinding(Static, StructureImage) uniform texture2D StructureImage;
 SetBinding(PerFrame, ParticleTexture) uniform texture2DArray Texture;
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];

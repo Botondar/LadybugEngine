@@ -8,7 +8,7 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-SetBindingLayout(PerFrame, InstanceBuffer, scalar)
+SetBindingLayout(Static, InstanceBuffer, scalar)
 readonly buffer InstanceBuffer
 {
     instance_data Instances[];
@@ -57,28 +57,28 @@ void main()
 
 layout(early_fragment_tests) in;
 
-SetBindingLayout(PerFrame, LightBuffer, scalar)
+SetBindingLayout(Static, LightBuffer, scalar)
 readonly buffer LightBuffer
 {
     light Lights[];
 };
-SetBindingLayout(PerFrame, TileBuffer, scalar)
+SetBindingLayout(Static, TileBuffer, scalar)
 readonly buffer TileBuffer
 {
     screen_tile Tiles[];
 };
 
-SetBindingLayout(PerFrame, DesiredMipBuffer, scalar)
-buffer DesiredMipBuffer
+SetBindingLayout(Static, MipFeedbackBuffer, scalar)
+buffer MipFeedbackBuffer
 {
-    uint DesiredMip[];
+    uint MipFeedbacks[];
 };
 
-SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
-SetBinding(PerFrame, OcclusionImage) uniform texture2D OcclusionImage;
+SetBinding(Static, StructureImage) uniform texture2D StructureImage;
+SetBinding(Static, OcclusionImage) uniform texture2D OcclusionImage;
 
-SetBinding(PerFrame, CascadedShadow) uniform texture2DArray CascadedShadow;
-SetBinding(PerFrame, PointShadows) uniform textureCube PointShadows[];
+SetBinding(Static, CascadedShadow) uniform texture2DArray CascadedShadow;
+SetBinding(Static, PointShadows) uniform textureCube PointShadows[];
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 SetBinding(Bindless, Textures) uniform texture2D Textures[];
@@ -112,9 +112,9 @@ void main()
         // Desired mip level feedback
         {
             uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdxFine(TexCoord));
-            atomicOr(DesiredMip[Instance.Material.DiffuseID], MipBucket);
-            atomicOr(DesiredMip[Instance.Material.NormalID], MipBucket);
-            atomicOr(DesiredMip[Instance.Material.MetallicRoughnessID], MipBucket);
+            atomicOr(MipFeedbacks[Instance.Material.DiffuseID], MipBucket);
+            atomicOr(MipFeedbacks[Instance.Material.NormalID], MipBucket);
+            atomicOr(MipFeedbacks[Instance.Material.MetallicRoughnessID], MipBucket);
         }
 
         vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);

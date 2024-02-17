@@ -51,8 +51,8 @@ internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32
         Result = vkAllocateMemory(VK.Device, &MemAllocInfo, nullptr, &Manager->Memory);
         if (Result == VK_SUCCESS)
         {
-            vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, SetLayouts[SetLayout_Bindless], Binding_Bindless_Textures, &Manager->TextureTableOffset);
-            vkGetDescriptorSetLayoutSizeEXT(VK.Device, SetLayouts[SetLayout_Bindless], &Manager->DescriptorBufferSize);
+            vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, SetLayouts[Set_Bindless], Binding_Bindless_Textures, &Manager->TextureTableOffset);
+            vkGetDescriptorSetLayoutSizeEXT(VK.Device, SetLayouts[Set_Bindless], &Manager->DescriptorBufferSize);
 
             VkBufferCreateInfo DescriptorBufferInfo = 
             {

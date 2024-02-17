@@ -10,62 +10,62 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-SetBindingLayout(PerFrame, InstanceBuffer, scalar)
+SetBindingLayout(Static, InstanceBuffer, scalar)
 readonly buffer InstanceBuffer
 {
     instance_data InstanceData[];
 };
 
-SetBindingLayout(PerFrame, DrawBuffer, scalar)
+SetBindingLayout(Static, DrawBuffer, scalar)
 readonly buffer DrawBuffer
 {
     draw_data DrawData[];
 };
 
-SetBindingLayout(PerFrame, IndexBuffer, scalar)
+SetBindingLayout(Static, IndexBuffer, scalar)
 readonly buffer IndexBuffer
 {
     u32 IndexData[];
 };
 
-SetBindingLayout(PerFrame, VertexBuffer, scalar)
+SetBindingLayout(Static, VertexBuffer, scalar)
 readonly buffer VertexBuffer
 {
     vertex VertexData[];
 };
 
-SetBindingLayout(PerFrame, SkinnedVertexBuffer, scalar)
+SetBindingLayout(Static, SkinnedVertexBuffer, scalar)
 readonly buffer SkinnedVertexBuffer
 {
     vertex SkinnedVertexData[];
 };
 
-SetBinding(PerFrame, VisibilityImage) uniform utexture2D VisibilityImage;
-SetBinding(PerFrame, OcclusionImage) uniform texture2D OcclusionImage;
-SetBinding(PerFrame, HDRColorStorageImage) uniform restrict writeonly image2D HDRTarget;
+SetBinding(Static, VisibilityImage) uniform utexture2D VisibilityImage;
+SetBinding(Static, OcclusionImage) uniform texture2D OcclusionImage;
+SetBinding(Static, HDRMipStorageImages) uniform restrict writeonly image2D HDRTarget[];
 
-SetBinding(PerFrame, CascadedShadow) uniform texture2DArray CascadedShadow;
-SetBinding(PerFrame, PointShadows) uniform textureCube PointShadows[];
+SetBinding(Static, CascadedShadow) uniform texture2DArray CascadedShadow;
+SetBinding(Static, PointShadows) uniform textureCube PointShadows[];
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
-SetBindingLayout(PerFrame, LightBuffer, scalar)
+SetBindingLayout(Static, LightBuffer, scalar)
 readonly buffer LightBuffer
 {
     light Lights[];
 };
 
-SetBindingLayout(PerFrame, TileBuffer, scalar) 
+SetBindingLayout(Static, TileBuffer, scalar) 
 readonly buffer TileBuffer
 {
     screen_tile Tiles[];
 };
 
-SetBindingLayout(PerFrame, DesiredMipBuffer, scalar)
-buffer DesiredMipBuffer
+SetBindingLayout(Static, MipFeedbackBuffer, scalar)
+buffer MipFeedbackBuffer
 {
-    uint DesiredMip[];
+    uint MipFeedbacks[];
 };
 
 #define buffer_type uint
@@ -240,9 +240,9 @@ void main()
         // Desired mip level feedback
         {
             uint MipBucket = GetMipBucketFromDerivatives(dXdUV, dYdUV);
-            atomicOr(DesiredMip[Instance.Material.DiffuseID], MipBucket);
-            atomicOr(DesiredMip[Instance.Material.NormalID], MipBucket);
-            atomicOr(DesiredMip[Instance.Material.MetallicRoughnessID], MipBucket);
+            atomicOr(MipFeedbacks[Instance.Material.DiffuseID], MipBucket);
+            atomicOr(MipFeedbacks[Instance.Material.NormalID], MipBucket);
+            atomicOr(MipFeedbacks[Instance.Material.MetallicRoughnessID], MipBucket);
         }
 
         //
@@ -295,5 +295,5 @@ void main()
         Lo += AtmosphereIntensity * CalculateAtmosphere(v2(TexelID), P, PerFrame, CascadedShadow, Samplers[Sampler_Shadow]) * PerFrame.SunL;
     }
 
-    imageStore(HDRTarget, TexelID, v4(Lo, 1.0));
+    imageStore(HDRTarget[0], TexelID, v4(Lo, 1.0));
 }

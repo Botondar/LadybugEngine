@@ -437,7 +437,7 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
         if (Info->Layout.DescriptorSetCount)
         {
             VkDescriptorSetLayout SetLayouts[MaxDescriptorSetCount] = {};
-            for (u32 SystemSetIndex = 0; SystemSetIndex < SystemSet_Count; SystemSetIndex++)
+            for (u32 SystemSetIndex = 0; SystemSetIndex < Set_Count; SystemSetIndex++)
             {
                 SetLayouts[SystemSetIndex] = Renderer->SetLayouts[SystemSetIndex];
             }
@@ -458,7 +458,7 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
-                .setLayoutCount = SystemSet_Count + Info->Layout.DescriptorSetCount,
+                .setLayoutCount = Set_Count + Info->Layout.DescriptorSetCount,
                 .pSetLayouts = SetLayouts,
                 .pushConstantRangeCount = 1,
                 .pPushConstantRanges = &PushConstantRange,
@@ -998,7 +998,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
 
     // Create descriptor set layouts
     {
-        for (u32 Index = 0; Index < SetLayout_Count; Index++)
+        for (u32 Index = 0; Index < Set_Count; Index++)
         {
             const descriptor_set_layout_info* Info = SetLayoutInfos + Index;
 
@@ -1059,7 +1059,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
 
     // Texture Manager
     // TODO(boti): remove this
-    Renderer->TextureManager.DescriptorSetLayout = Renderer->SetLayouts[SetLayout_Bindless];
+    Renderer->TextureManager.DescriptorSetLayout = Renderer->SetLayouts[Set_Bindless];
     if (!CreateTextureManager(&Renderer->TextureManager, R_TextureMemorySize, VK.GPUMemTypes, Renderer->SetLayouts))
     {
         Result = VK_ERROR_INITIALIZATION_FAILED;
@@ -1248,7 +1248,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         // Per-frame descriptor buffer
         {
             umm SamplerBufferSize = KiB(16);
-            umm ResourceBufferSize = KiB(128);
+            umm ResourceBufferSize = KiB(64);
+            umm StaticResourceBufferSize = KiB(64);
             for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
             {
                 b32 PushResult = PushBuffer(&Renderer->BARMemory, ResourceBufferSize, VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
@@ -1269,6 +1270,17 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 if (!PushResult)
                 {
                     UnhandledError("Failed to push resource descriptor buffer");
+                    return(0);
+                }
+            }
+            for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
+            {
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, StaticResourceBufferSize, VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                                            Renderer->PerFrameStaticResourceDescriptorBuffers + FrameIndex,
+                                            Renderer->PerFrameStaticResourceDescriptorMappings + FrameIndex);
+                if (!PushResult)
+                {
+                    UnhandledError("Failed to push static resource descriptor buffer");
                     return(0);
                 }
             }
@@ -1652,7 +1664,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .setLayoutCount = SystemSet_Count,
+            .setLayoutCount = Set_Count,
             .pSetLayouts = Renderer->SetLayouts,
             .pushConstantRangeCount = 1,
             .pPushConstantRanges = &PushConstantRange,
@@ -2912,7 +2924,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         umm SamplerDescriptorSize = VK.DescriptorBufferProps.samplerDescriptorSize;
         VkDeviceSize SamplerTableOffset = 0;
-        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Renderer->SetLayouts[SetLayout_Samplers], Binding_Sampler_NamedSamplers, &SamplerTableOffset);
+        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Renderer->SetLayouts[Set_Sampler], Binding_Sampler_NamedSamplers, &SamplerTableOffset);
         for (u32 SamplerIndex = 0; SamplerIndex < Sampler_Count; SamplerIndex++)
         {
             VkDescriptorGetInfoEXT DescriptorInfo = 
@@ -3111,7 +3123,232 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .range = Renderer->DesiredMipMemorySize,
         };
 
-        VkWriteDescriptorSet Writes[] = 
+        VkWriteDescriptorSet StaticWrites[] = 
+        {
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_LightBuffer,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = &LightBufferInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_TileBuffer,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = &TileBufferInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_InstanceBuffer,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = &InstanceBufferInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_DrawBuffer,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = &DrawBufferInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_IndexBuffer,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = &IndexBufferInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_VertexBuffer,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = &VertexBufferInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_SkinnedVertexBuffer,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = &SkinnedVertexBufferInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_VisibilityImage,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &VisibilityBufferInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_OcclusionImage,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &OcclusionBufferInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_StructureImage,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &StructureBufferInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_OcclusionRawStorageImage,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .pImageInfo = &OcclusionRawStorageImageInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_OcclusionStorageImage,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .pImageInfo = &OcclusionStorageImageInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_OcclusionRawImage,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &OcclusionRawImageInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_HDRColorImage,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &HDRColorImageInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_BloomImage,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &BloomImageInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_CascadedShadow,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &CascadedShadowImageInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_HDRMipStorageImages,
+                .dstArrayElement = 0,
+                .descriptorCount = Renderer->HDRRenderTarget->MipCount,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .pImageInfo = HDRMipStorageImageInfos,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_BloomMipStorageImages,
+                .dstArrayElement = 0,
+                .descriptorCount = Renderer->BloomTarget->MipCount,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                .pImageInfo = BloomMipStorageImageInfos,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_HDRColorImageGeneral,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &HDRColorImageGeneralInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_BloomImageGeneral,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &BloomImageGeneralInfo,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_PointShadows,
+                .dstArrayElement = 0,
+                .descriptorCount = R_MaxShadowCount,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = PointShadowInfos,
+            },
+            
+            {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .pNext = nullptr,
+                .dstSet = VK_NULL_HANDLE,
+                .dstBinding = Binding_Static_MipFeedbackBuffer,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = &MipUsageBufferInfo,
+            },
+        };
+
+        VkWriteDescriptorSet PerFrameWrites[] = 
         {
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -3123,226 +3360,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                 .pBufferInfo = &ConstantsInfo,
             },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_LightBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &LightBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_TileBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &TileBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_InstanceBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &InstanceBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_DrawBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &DrawBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_IndexBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &IndexBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_VertexBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &VertexBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_SkinnedVertexBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &SkinnedVertexBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_VisibilityImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &VisibilityBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_OcclusionImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &OcclusionBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_StructureImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &StructureBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_OcclusionRawStorageImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .pImageInfo = &OcclusionRawStorageImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_OcclusionStorageImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .pImageInfo = &OcclusionStorageImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_OcclusionRawImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &OcclusionRawImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_HDRColorStorageImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .pImageInfo = &HDRColorStorageImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_HDRColorImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &HDRColorImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_BloomImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &BloomImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_CascadedShadow,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &CascadedShadowImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_HDRMipStorageImages,
-                .dstArrayElement = 0,
-                .descriptorCount = Renderer->HDRRenderTarget->MipCount,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .pImageInfo = HDRMipStorageImageInfos,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_BloomMipStorageImages,
-                .dstArrayElement = 0,
-                .descriptorCount = Renderer->BloomTarget->MipCount,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .pImageInfo = BloomMipStorageImageInfos,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_HDRColorImageGeneral,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &HDRColorImageGeneralInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_BloomImageGeneral,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &BloomImageGeneralInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_PointShadows,
-                .dstArrayElement = 0,
-                .descriptorCount = R_MaxShadowCount,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = PointShadowInfos,
-            },
+            
+            
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
@@ -3383,102 +3402,103 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
                 .pImageInfo = &UIImageInfo,
             },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_DesiredMipBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &MipUsageBufferInfo,
-            },
         };
-        static_assert(CountOf(Writes) == Binding_PerFrame_Count);
+        static_assert(CountOf(StaticWrites) == Binding_Static_Count);
+        static_assert(CountOf(PerFrameWrites) == Binding_PerFrame_Count);
 
-        void* Mapping = Renderer->PerFrameResourceDescriptorMappings[Frame->FrameID];
-        VkDeviceAddress ResourceDescriptorsDeviceAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameResourceDescriptorBuffers[Frame->FrameID]);
-
-        // TODO(boti): Keep track of the maximum used address (max(CurrentOffset + DescriptorSize))
-        // to allow us to use the rest of the buffer for the "push" or temporary descriptors
-        for (u32 WriteIndex = 0; WriteIndex < CountOf(Writes); WriteIndex++)
+        auto UpdateDescriptors = [=](u32 WriteCount, VkWriteDescriptorSet* Writes, VkDescriptorSetLayout Layout, void* DescriptorBuffer)
         {
-            VkWriteDescriptorSet* Write = Writes + WriteIndex;
-
-            VkDeviceSize BaseOffset = 0;
-            vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Renderer->SetLayouts[SetLayout_PerFrame], Write->dstBinding, &BaseOffset);
-            
-            for (u32 Element = 0; Element < Write->descriptorCount; Element++)
+            // TODO(boti): Keep track of the maximum used address (max(CurrentOffset + DescriptorSize))
+            // to allow us to use the rest of the buffer for the "push" or temporary descriptors
+            for (u32 WriteIndex = 0; WriteIndex < WriteCount; WriteIndex++)
             {
-                u32 EffectiveElement = Element + Write->dstArrayElement;
+                VkWriteDescriptorSet* Write = Writes + WriteIndex;
 
-                const void* Data = nullptr;
-                umm DescriptorSize = 0;
+                VkDeviceSize BaseOffset = 0;
+                vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Layout, Write->dstBinding, &BaseOffset);
             
-                VkDescriptorAddressInfoEXT BufferInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT };
-                switch (Write->descriptorType)
+                for (u32 Element = 0; Element < Write->descriptorCount; Element++)
                 {
-                    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize; goto IMAGE_CASE;
-                    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: DescriptorSize = VK.DescriptorBufferProps.storageImageDescriptorSize; goto IMAGE_CASE;
-                    IMAGE_CASE:
+                    u32 EffectiveElement = Element + Write->dstArrayElement;
+
+                    const void* Data = nullptr;
+                    umm DescriptorSize = 0;
+            
+                    VkDescriptorAddressInfoEXT BufferInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT };
+                    switch (Write->descriptorType)
                     {
-                        Data = Write->pImageInfo + Element;
-                    } break;
-                    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: DescriptorSize = VK.DescriptorBufferProps.storageBufferDescriptorSize; goto BUFFER_CASE;
-                    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: DescriptorSize = VK.DescriptorBufferProps.uniformBufferDescriptorSize; goto BUFFER_CASE;
-                    BUFFER_CASE:
+                        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize; goto IMAGE_CASE;
+                        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: DescriptorSize = VK.DescriptorBufferProps.storageImageDescriptorSize; goto IMAGE_CASE;
+                        IMAGE_CASE:
+                        {
+                            Data = Write->pImageInfo + Element;
+                        } break;
+                        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: DescriptorSize = VK.DescriptorBufferProps.storageBufferDescriptorSize; goto BUFFER_CASE;
+                        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: DescriptorSize = VK.DescriptorBufferProps.uniformBufferDescriptorSize; goto BUFFER_CASE;
+                        BUFFER_CASE:
+                        {
+                            BufferInfo.address = GetBufferDeviceAddress(VK.Device, Write->pBufferInfo[Element].buffer) + Write->pBufferInfo[Element].offset;
+                            BufferInfo.range = Write->pBufferInfo[Element].range;
+                            Data = &BufferInfo;
+                        } break;
+                        InvalidDefaultCase;
+                    }
+
+                    // NOTE(boti): descriptors live in their own dedicated buffer starting at offset 0 for now, but may not in the future
+                    VkDeviceSize Offset = 0 + BaseOffset + EffectiveElement*DescriptorSize;
+
+                    VkDescriptorGetInfoEXT DescriptorInfo = 
                     {
-                        BufferInfo.address = GetBufferDeviceAddress(VK.Device, Write->pBufferInfo[Element].buffer) + Write->pBufferInfo[Element].offset;
-                        BufferInfo.range = Write->pBufferInfo[Element].range;
-                        Data = &BufferInfo;
-                    } break;
-                    InvalidDefaultCase;
+                        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                        .pNext = nullptr,
+                        .type = Write->descriptorType,
+                        .data = { (VkSampler*)Data }, // HACK(boti): This is just a union of pointers, there really should be a void* in there...
+                    };
+                    vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(DescriptorBuffer, Offset));
                 }
-
-                // NOTE(boti): descriptors live in their own dedicated buffer starting at offset 0 for now, but may not in the future
-                VkDeviceSize Offset = 0 + BaseOffset + EffectiveElement*DescriptorSize;
-
-                VkDescriptorGetInfoEXT DescriptorInfo = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-                    .pNext = nullptr,
-                    .type = Write->descriptorType,
-                    .data = { (VkSampler*)Data }, // HACK(boti): This is just a union of pointers, there really should be a void* in there...
-                };
-                vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Mapping, Offset));
             }
-        }
+        };
+
+        UpdateDescriptors(CountOf(StaticWrites), StaticWrites, Renderer->SetLayouts[Set_Static], Renderer->PerFrameStaticResourceDescriptorMappings[Frame->FrameID]);
+        UpdateDescriptors(CountOf(PerFrameWrites), PerFrameWrites, Renderer->SetLayouts[Set_Static], Renderer->PerFrameResourceDescriptorMappings[Frame->FrameID]);
     }
 
     auto BindSystemDescriptors = [=](VkCommandBuffer CmdBuffer)
     {
         VkDeviceAddress PerFrameResourceBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameResourceDescriptorBuffers[Frame->FrameID]);
         VkDeviceAddress SamplerBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameSamplerDescriptorBuffers[Frame->FrameID]);
+        VkDeviceAddress StaticResourceBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameStaticResourceDescriptorBuffers[Frame->FrameID]);
         VkDescriptorBufferBindingInfoEXT DescriptorBufferBindings[] = 
         {
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
                 .pNext = nullptr,
-                .address = PerFrameResourceBufferAddress,
-                .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT 
+                .address = StaticResourceBufferAddress,
+                .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
             },
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
                 .pNext = nullptr,
                 .address = SamplerBufferAddress,
-                .usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT 
+                .usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
             },
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
                 .pNext = nullptr,
                 .address = Renderer->TextureManager.DescriptorDeviceAddress,
-                .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT 
+                .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
+            },
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+                .pNext = nullptr,
+                .address = PerFrameResourceBufferAddress,
+                .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
             },
         };
         vkCmdBindDescriptorBuffersEXT(CmdBuffer, CountOf(DescriptorBufferBindings), DescriptorBufferBindings);
 
-        u32 DescriptorBufferIndices[SystemSet_Count] = { 0, 1, 2 };
-        VkDeviceSize DescriptorBufferOffsets[SystemSet_Count] = { 0, 0, 0 };
+        u32 DescriptorBufferIndices[Set_Count] = { 0, 1, 2, 3 };
+        VkDeviceSize DescriptorBufferOffsets[Set_Count] = { 0, 0, 0, 0 };
         vkCmdSetDescriptorBufferOffsetsEXT(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SystemPipelineLayout,
                                            0, CountOf(DescriptorBufferBindings), DescriptorBufferIndices, DescriptorBufferOffsets);
         vkCmdSetDescriptorBufferOffsetsEXT(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->SystemPipelineLayout,

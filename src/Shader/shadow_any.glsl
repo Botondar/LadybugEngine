@@ -8,7 +8,7 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-SetBindingLayout(PerFrame, InstanceBuffer, scalar)
+SetBindingLayout(Static, InstanceBuffer, scalar)
 buffer InstanceBuffer
 {
     instance_data Instances[];

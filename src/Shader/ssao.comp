@@ -9,8 +9,8 @@ uniform PerFrameBlock
 {
     per_frame PerFrame;
 };
-SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
-SetBinding(PerFrame, OcclusionRawStorageImage) uniform writeonly restrict image2D SSAOImage;
+SetBinding(Static, StructureImage) uniform texture2D StructureImage;
+SetBinding(Static, OcclusionRawStorageImage) uniform writeonly restrict image2D SSAOImage;
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 

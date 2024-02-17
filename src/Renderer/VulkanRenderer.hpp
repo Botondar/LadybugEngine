@@ -207,6 +207,8 @@ struct renderer
     // TODO(boti): We really don't need to create sampler descriptors every frame _or_ to double buffer them
     VkBuffer    PerFrameSamplerDescriptorBuffers[R_MaxFramesInFlight];
     void*       PerFrameSamplerDescriptorMappings[R_MaxFramesInFlight];
+    VkBuffer    PerFrameStaticResourceDescriptorBuffers[R_MaxFramesInFlight];
+    void*       PerFrameStaticResourceDescriptorMappings[R_MaxFramesInFlight];
 
     VkDeviceMemory StagingMemory;
     void* StagingMemoryMapping;
@@ -252,7 +254,7 @@ struct renderer
     // Pipelines, pipeline layouts and associated descriptor set layouts
     //
     pipeline_with_layout Pipelines[Pipeline_Count];
-    VkDescriptorSetLayout SetLayouts[SetLayout_Count];
+    VkDescriptorSetLayout SetLayouts[Set_Count];
     VkSampler Samplers[Sampler_Count];
 
     u64 CurrentFrameID;

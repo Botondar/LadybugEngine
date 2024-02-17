@@ -28,7 +28,7 @@ void main()
 
 #elif defined(FS)
 
-SetBinding(PerFrame, CascadedShadow) uniform texture2DArray CascadedShadow;
+SetBinding(Static, CascadedShadow) uniform texture2DArray CascadedShadow;
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 
 layout(location = 0) out vec4 Out0;

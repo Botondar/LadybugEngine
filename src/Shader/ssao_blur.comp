@@ -4,9 +4,9 @@
 
 LayoutGroupSize(SSAOBlur);
 
-SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
-SetBinding(PerFrame, OcclusionRawImage) uniform texture2D OcclusionImage;
-SetBinding(PerFrame, OcclusionStorageImage) uniform writeonly restrict image2D OcclusionOut;
+SetBinding(Static, StructureImage) uniform texture2D StructureImage;
+SetBinding(Static, OcclusionRawImage) uniform texture2D OcclusionImage;
+SetBinding(Static, OcclusionStorageImage) uniform writeonly restrict image2D OcclusionOut;
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 

@@ -15,9 +15,9 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-SetBinding(PerFrame, HDRColorImage)         uniform texture2D ColorImage;
-SetBinding(PerFrame, BloomImageGeneral)     uniform texture2D BloomImage;
-SetBinding(PerFrame, BloomMipStorageImages) uniform restrict writeonly image2D BloomMips[R_MaxMipCount];
+SetBinding(Static, HDRColorImage)         uniform texture2D ColorImage;
+SetBinding(Static, BloomImageGeneral)     uniform texture2D BloomImage;
+SetBinding(Static, BloomMipStorageImages) uniform restrict writeonly image2D BloomMips[R_MaxMipCount];
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 

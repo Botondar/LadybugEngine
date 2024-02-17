@@ -202,10 +202,214 @@ const sampler_state SamplerInfos[Sampler_Count] =
     },
 };
 
-
-const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] = 
+const descriptor_set_layout_info SetLayoutInfos[Set_Count] = 
 {
-    [SetLayout_PerFrame] = 
+    [Set_Static] = 
+    {
+        .BindingCount = Binding_Static_Count,
+        .Bindings = 
+        {
+            // Geometry
+            [Binding_Static_IndexBuffer] = 
+            {
+                .Binding = Binding_Static_IndexBuffer,
+                .Type = Descriptor_StorageBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_VertexBuffer] = 
+            {
+                .Binding = Binding_Static_VertexBuffer,
+                .Type = Descriptor_StorageBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_SkinnedVertexBuffer] = 
+            {
+                .Binding = Binding_Static_SkinnedVertexBuffer,
+                .Type = Descriptor_StorageBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+
+            // Draw
+            [Binding_Static_InstanceBuffer] = 
+            {
+                .Binding = Binding_Static_InstanceBuffer,
+                .Type = Descriptor_StorageBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_DrawBuffer] = 
+            {
+                .Binding = Binding_Static_DrawBuffer,
+                .Type = Descriptor_StorageBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+
+            // Light
+            [Binding_Static_LightBuffer] = 
+            {
+                .Binding = Binding_Static_LightBuffer,
+                .Type = Descriptor_StorageBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_TileBuffer] = 
+            {
+                .Binding = Binding_Static_TileBuffer,
+                .Type = Descriptor_StorageBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+
+            // Shadow
+            [Binding_Static_CascadedShadow] = 
+            {
+                .Binding = Binding_Static_CascadedShadow,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_PointShadows] =
+            {
+                .Binding = Binding_Static_PointShadows,
+                .Type = Descriptor_ImageSampler,
+                .DescriptorCount = R_MaxShadowCount,
+                .Stages = PipelineStage_All,
+                .Flags = DescriptorFlag_PartiallyBound,
+            },
+
+            // Mip feedback
+            [Binding_Static_MipFeedbackBuffer] =
+            {
+                .Binding = Binding_Static_MipFeedbackBuffer,
+                .Type = Descriptor_StorageBuffer,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+                .Flags = 0,
+            },
+
+            // Render targets
+            [Binding_Static_VisibilityImage] = 
+            {
+                .Binding = Binding_Static_VisibilityImage,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_OcclusionImage] = 
+            {
+                .Binding = Binding_Static_OcclusionImage,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_StructureImage] = 
+            {
+                .Binding = Binding_Static_StructureImage,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_OcclusionRawStorageImage] =
+            {
+                .Binding = Binding_Static_OcclusionRawStorageImage,
+                .Type = Descriptor_StorageImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_OcclusionStorageImage] =
+            {
+                .Binding = Binding_Static_OcclusionStorageImage,
+                .Type = Descriptor_StorageImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_OcclusionRawImage] =
+            {
+                .Binding = Binding_Static_OcclusionRawImage,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_HDRColorImage] =
+            {
+                .Binding = Binding_Static_HDRColorImage,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_BloomImage] =
+            {
+                .Binding = Binding_Static_BloomImage,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_HDRMipStorageImages] = 
+            {
+                .Binding = Binding_Static_HDRMipStorageImages,
+                .Type = Descriptor_StorageImage,
+                .DescriptorCount = R_MaxMipCount,
+                .Stages = PipelineStage_All,
+                .Flags = DescriptorFlag_PartiallyBound,
+            },
+            [Binding_Static_BloomMipStorageImages] = 
+            {
+                .Binding = Binding_Static_BloomMipStorageImages,
+                .Type = Descriptor_StorageImage,
+                .DescriptorCount = R_MaxMipCount,
+                .Stages = PipelineStage_All,
+                .Flags = DescriptorFlag_PartiallyBound,
+            },
+            [Binding_Static_HDRColorImageGeneral] =
+            {
+                .Binding = Binding_Static_HDRColorImageGeneral,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+            [Binding_Static_BloomImageGeneral] =
+            {
+                .Binding = Binding_Static_BloomImageGeneral,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = PipelineStage_All,
+            },
+        },
+    },
+
+    [Set_Sampler] = 
+    {
+        .BindingCount = Binding_Sampler_Count,
+        {
+            {
+                .Binding = Binding_Sampler_NamedSamplers,
+                .Type = Descriptor_Sampler,
+                .DescriptorCount = Sampler_Count,
+                .Stages = PipelineStage_All,
+            },
+        },
+    },
+
+    [Set_Bindless] = 
+    {
+        .BindingCount = Binding_Bindless_Count,
+        .Bindings = 
+        {
+            {
+                .Binding = Binding_Bindless_Textures,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 0, // NOTE(boti): actual count is implied by the descriptor pool size for bindless
+                .Stages = PipelineStage_All,
+                .Flags = DescriptorFlag_Bindless,
+            },
+        },
+    },
+
+    [Set_PerFrame] = 
     {
         .BindingCount = Binding_PerFrame_Count,
         .Bindings = 
@@ -216,163 +420,6 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .Type = Descriptor_UniformBuffer,
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_LightBuffer] = 
-            {
-                .Binding = Binding_PerFrame_LightBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_TileBuffer] = 
-            {
-                .Binding = Binding_PerFrame_TileBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_InstanceBuffer] = 
-            {
-                .Binding = Binding_PerFrame_InstanceBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_DrawBuffer] = 
-            {
-                .Binding = Binding_PerFrame_DrawBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_IndexBuffer] = 
-            {
-                .Binding = Binding_PerFrame_IndexBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_VertexBuffer] = 
-            {
-                .Binding = Binding_PerFrame_VertexBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_SkinnedVertexBuffer] = 
-            {
-                .Binding = Binding_PerFrame_SkinnedVertexBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_VisibilityImage] = 
-            {
-                .Binding = Binding_PerFrame_VisibilityImage,
-                .Type = Descriptor_SampledImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_OcclusionImage] = 
-            {
-                .Binding = Binding_PerFrame_OcclusionImage,
-                .Type = Descriptor_SampledImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_StructureImage] = 
-            {
-                .Binding = Binding_PerFrame_StructureImage,
-                .Type = Descriptor_SampledImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_OcclusionRawStorageImage] =
-            {
-                .Binding = Binding_PerFrame_OcclusionRawStorageImage,
-                .Type = Descriptor_StorageImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_OcclusionStorageImage] =
-            {
-                .Binding = Binding_PerFrame_OcclusionStorageImage,
-                .Type = Descriptor_StorageImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_OcclusionRawImage] =
-            {
-                .Binding = Binding_PerFrame_OcclusionRawImage,
-                .Type = Descriptor_SampledImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_HDRColorStorageImage] =
-            {
-                .Binding = Binding_PerFrame_HDRColorStorageImage,
-                .Type = Descriptor_StorageImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_HDRColorImage] =
-            {
-                .Binding = Binding_PerFrame_HDRColorImage,
-                .Type = Descriptor_SampledImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_BloomImage] =
-            {
-                .Binding = Binding_PerFrame_BloomImage,
-                .Type = Descriptor_SampledImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_CascadedShadow] = 
-            {
-                .Binding = Binding_PerFrame_CascadedShadow,
-                .Type = Descriptor_SampledImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_HDRMipStorageImages] = 
-            {
-                .Binding = Binding_PerFrame_HDRMipStorageImages,
-                .Type = Descriptor_StorageImage,
-                .DescriptorCount = R_MaxMipCount,
-                .Stages = PipelineStage_All,
-                .Flags = DescriptorFlag_PartiallyBound,
-            },
-            [Binding_PerFrame_BloomMipStorageImages] = 
-            {
-                .Binding = Binding_PerFrame_BloomMipStorageImages,
-                .Type = Descriptor_StorageImage,
-                .DescriptorCount = R_MaxMipCount,
-                .Stages = PipelineStage_All,
-                .Flags = DescriptorFlag_PartiallyBound,
-            },
-            [Binding_PerFrame_HDRColorImageGeneral] = 
-            {
-                .Binding = Binding_PerFrame_HDRColorImageGeneral,
-                .Type = Descriptor_SampledImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_BloomImageGeneral] = 
-            {
-                .Binding = Binding_PerFrame_BloomImageGeneral,
-                .Type = Descriptor_SampledImage,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-            },
-            [Binding_PerFrame_PointShadows] =
-            {
-                .Binding = Binding_PerFrame_PointShadows,
-                .Type = Descriptor_ImageSampler,
-                .DescriptorCount = R_MaxShadowCount,
-                .Stages = PipelineStage_All,
-                .Flags = DescriptorFlag_PartiallyBound,
             },
             [Binding_PerFrame_JointBuffer] =
             {
@@ -405,56 +452,6 @@ const descriptor_set_layout_info SetLayoutInfos[SetLayout_Count] =
                 .DescriptorCount = 1,
                 .Stages = PipelineStage_All,
                 .Flags = 0,
-            },
-            [Binding_PerFrame_DesiredMipBuffer] =
-            {
-                .Binding = Binding_PerFrame_DesiredMipBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
-                .Flags = 0,
-            },
-        },
-    },
-
-    [SetLayout_Bindless] = 
-    {
-        .BindingCount = 1,
-        .Bindings = 
-        {
-            {
-                .Binding = Binding_Bindless_Textures,
-                .Type = Descriptor_SampledImage,
-                .DescriptorCount = 0, // NOTE(boti): actual count is implied by the descriptor pool size for bindless
-                .Stages = PipelineStage_All,
-                .Flags = DescriptorFlag_Bindless,
-            },
-        },
-    },
-
-    [SetLayout_Samplers] = 
-    {
-        .BindingCount = 1,
-        {
-            {
-                .Binding = Binding_Sampler_NamedSamplers,
-                .Type = Descriptor_Sampler,
-                .DescriptorCount = Sampler_Count,
-                .Stages = PipelineStage_All,
-            },
-        },
-    },
-    
-    [SetLayout_PackedSamplers] = 
-    {
-        .BindingCount = 1,
-        .Bindings = 
-        {
-            {
-                .Binding = 0,
-                .Type = Descriptor_Sampler,
-                .DescriptorCount = packed_sampler::MaxSamplerCount,
-                .Stages = PipelineStage_All,
             },
         },
     },

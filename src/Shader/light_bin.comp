@@ -10,19 +10,19 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-SetBindingLayout(PerFrame, LightBuffer, scalar)
+SetBindingLayout(Static, LightBuffer, scalar)
 readonly buffer LightBuffer
 {
     light Lights[];
 };
 
-SetBindingLayout(PerFrame, TileBuffer, scalar)
+SetBindingLayout(Static, TileBuffer, scalar)
 buffer TileBuffer
 {
     screen_tile Tiles[];
 };
 
-SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
+SetBinding(Static, StructureImage) uniform texture2D StructureImage;
 
 bool IntersectAABBSphere(v3 P, v3 HalfExtent, v3 C, float R)
 {

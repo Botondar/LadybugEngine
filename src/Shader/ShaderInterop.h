@@ -64,54 +64,64 @@ struct v4u8
 #define Attrib_JointWeights     5
 #define Attrib_JointIndices     6
 
-#define Set_PerFrame            0
+#define Set_Static              0
 #define Set_Sampler             1
 #define Set_Bindless            2
-#define SystemSet_Count         3
+#define Set_PerFrame            3
 
-#define Set_User0               SystemSet_Count
+#define Set_Count               4
 
-// PerFrame set bindings
-#define Binding_PerFrame_Constants                  0
-#define Binding_PerFrame_LightBuffer                1
-#define Binding_PerFrame_TileBuffer                 2
-#define Binding_PerFrame_InstanceBuffer             3
-#define Binding_PerFrame_DrawBuffer                 4
-#define Binding_PerFrame_IndexBuffer                5
-#define Binding_PerFrame_VertexBuffer               6
-#define Binding_PerFrame_SkinnedVertexBuffer        7
-#define Binding_PerFrame_VisibilityImage            8
-#define Binding_PerFrame_OcclusionImage             9
-#define Binding_PerFrame_StructureImage             10
-#define Binding_PerFrame_OcclusionRawStorageImage   11
-#define Binding_PerFrame_OcclusionStorageImage      12
-#define Binding_PerFrame_OcclusionRawImage          13
-// TODO(boti): Remove this once we have the mip views in place
-#define Binding_PerFrame_HDRColorStorageImage       14
-#define Binding_PerFrame_HDRColorImage              15
-#define Binding_PerFrame_BloomImage                 16
-#define Binding_PerFrame_CascadedShadow             17
-#define Binding_PerFrame_HDRMipStorageImages        18
-#define Binding_PerFrame_BloomMipStorageImages      19
+#define Set_User0               Set_Count
+
+// Static set bindings
+#define Binding_Static_IndexBuffer                  0
+#define Binding_Static_VertexBuffer                 1
+#define Binding_Static_SkinnedVertexBuffer          2
+#define Binding_Static_InstanceBuffer               3
+#define Binding_Static_DrawBuffer                   4
+#define Binding_Static_LightBuffer                  5
+#define Binding_Static_TileBuffer                   6
+#define Binding_Static_CascadedShadow               7
+#define Binding_Static_PointShadows                 8
+#define Binding_Static_MipFeedbackBuffer            9
+#define Binding_Static_VisibilityImage              10
+#define Binding_Static_OcclusionImage               11
+#define Binding_Static_StructureImage               12
+#define Binding_Static_OcclusionRawStorageImage     13
+#define Binding_Static_OcclusionStorageImage        14
+#define Binding_Static_OcclusionRawImage            15
+#define Binding_Static_HDRColorImage                16
+#define Binding_Static_BloomImage                   17
 // NOTE(boti): HDR and Bloom general images are workarounds
 // for the image layout being baked into the set
 // TODO(boti): Enhanced barriers are need for this in D3D12 (same-queue read + read/write)
-#define Binding_PerFrame_HDRColorImageGeneral       20
-#define Binding_PerFrame_BloomImageGeneral          21
-#define Binding_PerFrame_PointShadows               22
-#define Binding_PerFrame_JointBuffer                23
-// TODO(boti): Maybe these are fine here, but I'd really rather have them in their own descriptor set
-#define Binding_PerFrame_ParticleBuffer             24
-#define Binding_PerFrame_ParticleTexture            25
-#define Binding_PerFrame_TextureUI                  26
-#define Binding_PerFrame_DesiredMipBuffer           27
+#define Binding_Static_HDRColorImageGeneral         18
+#define Binding_Static_BloomImageGeneral            19
+#define Binding_Static_HDRMipStorageImages          20
+#define Binding_Static_BloomMipStorageImages        21
 
-#define Binding_PerFrame_Count                      28
+#define Binding_Static_Count                        22
 
 // Sampler set bindings
 #define Binding_Sampler_NamedSamplers               0
 
-// TODO(boti): Move this back to an enum once we have C++ metageneration going on
+#define Binding_Sampler_Count                       1
+
+// Bindless bindings
+#define Binding_Bindless_Textures                   0
+
+#define Binding_Bindless_Count                      1
+
+// PerFrame set bindings
+#define Binding_PerFrame_Constants                  0
+#define Binding_PerFrame_JointBuffer                1
+#define Binding_PerFrame_ParticleBuffer             2
+#define Binding_PerFrame_ParticleTexture            3
+#define Binding_PerFrame_TextureUI                  4
+
+#define Binding_PerFrame_Count                      5
+
+// Named sampler binding indices
 #define Sampler_Default                             0
 #define Sampler_LinearUnnormalized                  1
 #define Sampler_Shadow                              2
@@ -120,9 +130,6 @@ struct v4u8
 #define Sampler_NoFilter                            5
 
 #define Sampler_Count                               6
-
-// Bindless bindings
-#define Binding_Bindless_Textures                   0
 
 //
 // Shader specific

@@ -29,18 +29,18 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-SetBindingLayout(PerFrame, TileBuffer, scalar)
+SetBindingLayout(Static, TileBuffer, scalar)
 readonly buffer TileBuffer
 {
     screen_tile Tiles[];
 };
 
-SetBinding(PerFrame, HDRColorImage) uniform texture2D HDRColorImage;
-SetBinding(PerFrame, BloomImage) uniform texture2D BloomImage;
+SetBinding(Static, HDRColorImage) uniform texture2D HDRColorImage;
+SetBinding(Static, BloomImage) uniform texture2D BloomImage;
 
-SetBinding(PerFrame, OcclusionImage) uniform texture2D OcclusionImage;
-SetBinding(PerFrame, StructureImage) uniform texture2D StructureImage;
-SetBinding(PerFrame, VisibilityImage) uniform utexture2D VisibilityImage;
+SetBinding(Static, OcclusionImage) uniform texture2D OcclusionImage;
+SetBinding(Static, StructureImage) uniform texture2D StructureImage;
+SetBinding(Static, VisibilityImage) uniform utexture2D VisibilityImage;
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 
