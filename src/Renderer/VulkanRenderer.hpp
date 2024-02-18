@@ -76,7 +76,6 @@ extern m3 GlobalCubeFaceBases[Layer_Count];
 #include "Renderer/RenderTarget.hpp"
 #include "Renderer/Geometry.hpp"
 #include "Renderer/TextureManager.hpp"
-#include "Renderer/Frame.hpp"
 #include "Platform.hpp"
 
 extern vulkan VK;
