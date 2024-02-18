@@ -46,13 +46,13 @@ internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena
     if (BitScanForward(&MemoryTypeIndex, MemoryTypes) &&
         BitScanForward(&DescriptorMemoryTypeIndex, VK.BARMemTypes))
     {
-        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, SetLayouts[SetLayout_Bindless], Binding_Bindless_Textures, &Manager->TextureTableOffset);
+        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, SetLayouts[Set_Bindless], Binding_Bindless_Textures, &Manager->TextureTableOffset);
         umm DescriptorBufferSize = 0;
-        vkGetDescriptorSetLayoutSizeEXT(VK.Device, SetLayouts[SetLayout_Bindless], &DescriptorBufferSize);
-        Manager->DescriptorArena    = CreateGPUArena(VK.Device, DescriptorBufferSize, DescriptorMemoryTypeIndex, true);
+        vkGetDescriptorSetLayoutSizeEXT(VK.Device, SetLayouts[Set_Bindless], &DescriptorBufferSize);
+        Manager->DescriptorArena    = CreateGPUArena(DescriptorBufferSize, DescriptorMemoryTypeIndex, GpuMemoryFlag_Mapped);
 
-        Manager->PersistentArena    = CreateGPUArena(VK.Device, MiB(32), MemoryTypeIndex, false);
-        Manager->CacheArena         = CreateGPUArena(VK.Device, MemorySize, MemoryTypeIndex, false);
+        Manager->PersistentArena    = CreateGPUArena(MiB(32), MemoryTypeIndex, GpuMemoryFlag_None);
+        Manager->CacheArena         = CreateGPUArena(MemorySize, MemoryTypeIndex, GpuMemoryFlag_None);
 
         Manager->Cache.PageCount = CeilDiv(MemorySize, TexturePageSize);
         Manager->Cache.UsageBitfieldCount = CeilDiv(Manager->Cache.PageCount, 64);

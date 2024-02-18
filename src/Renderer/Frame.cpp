@@ -168,7 +168,7 @@ internal void BeginCascade(render_frame* Frame, VkCommandBuffer CmdBuffer, u32 C
             .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->Renderer->ShadowMap,
+            .image = Frame->Renderer->CascadeMap,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -195,7 +195,7 @@ internal void BeginCascade(render_frame* Frame, VkCommandBuffer CmdBuffer, u32 C
     {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
-        .imageView = Frame->Renderer->ShadowCascadeViews[CascadeIndex],
+        .imageView = Frame->Renderer->CascadeViews[CascadeIndex],
         .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         .resolveMode = VK_RESOLVE_MODE_NONE,
         .resolveImageView = VK_NULL_HANDLE,

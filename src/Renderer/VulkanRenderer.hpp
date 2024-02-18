@@ -192,11 +192,11 @@ struct renderer
 
     VkPipelineLayout SystemPipelineLayout;
 
-    gpu_memory_arena ShadowArena;
-    VkImage CascadeMap;
-    VkImageView CascadeArrayView;
-    VkImageView CascadeViews[R_MaxShadowCount];
-    point_shadow_map PointShadowMaps;
+    gpu_memory_arena        ShadowArena;
+    VkImage                 CascadeMap;
+    VkImageView             CascadeArrayView;
+    VkImageView             CascadeViews[R_MaxShadowCascadeCount];
+    point_shadow_map        PointShadowMaps[R_MaxShadowCount];
 
     struct render_debug
     {
