@@ -49,12 +49,12 @@ constexpr u64 R_SkinningBufferSize          = MiB(128);
 //
 // Limits
 //
-constexpr u32 MaxVertexBindingCount = 16;
-constexpr u32 MaxVertexAttribCount = 32;
-constexpr u32 MaxColorAttachmentCount = 8;
-constexpr u32 MaxDescriptorSetCount = 32;
-constexpr u32 MaxDescriptorSetLayoutBindingCount = 32;
-constexpr u32 MinPushConstantSize = 128;
+constexpr u32 MaxVertexBindingCount                 = 16;
+constexpr u32 MaxVertexAttribCount                  = 32;
+constexpr u32 MaxColorAttachmentCount               = 8;
+constexpr u32 MaxDescriptorSetCount                 = 32;
+constexpr u32 MaxDescriptorSetLayoutBindingCount    = 32;
+constexpr u32 MinPushConstantSize                   = 128;
 
 //
 // Low-level rendering
