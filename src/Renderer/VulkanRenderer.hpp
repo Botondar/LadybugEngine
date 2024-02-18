@@ -1,45 +1,6 @@
 #include "Renderer/Renderer.hpp"
 #include "Renderer/Pipelines.hpp"
-
-#include <vulkan/vulkan.h>
-
-//
-// VK_EXT_debug_utils
-//
-PFN_vkCmdBeginDebugUtilsLabelEXT        vkCmdBeginDebugUtilsLabelEXT_;
-PFN_vkCmdEndDebugUtilsLabelEXT          vkCmdEndDebugUtilsLabelEXT_;
-PFN_vkSetDebugUtilsObjectNameEXT        vkSetDebugUtilsObjectNameEXT_;
-
-//#define vkCmdBeginDebugUtilsLabelEXT    vkCmdBeginDebugUtilsLabelEXT_
-#define vkCmdEndDebugUtilsLabelEXT      vkCmdEndDebugUtilsLabelEXT_
-#define vkSetDebugUtilsObjectNameEXT    vkSetDebugUtilsObjectNameEXT_
-
-inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* Label);
-
-//
-// VK_EXT_descriptor_buffer
-//
-
-PFN_vkCmdBindDescriptorBuffersEXT               vkCmdBindDescriptorBuffersEXT_;
-PFN_vkCmdSetDescriptorBufferOffsetsEXT          vkCmdSetDescriptorBufferOffsetsEXT_;
-PFN_vkGetDescriptorEXT                          vkGetDescriptorEXT_;
-PFN_vkGetDescriptorSetLayoutBindingOffsetEXT    vkGetDescriptorSetLayoutBindingOffsetEXT_;
-PFN_vkGetDescriptorSetLayoutSizeEXT             vkGetDescriptorSetLayoutSizeEXT_;
-
-#define vkCmdBindDescriptorBuffersEXT vkCmdBindDescriptorBuffersEXT_
-#define vkCmdSetDescriptorBufferOffsetsEXT vkCmdSetDescriptorBufferOffsetsEXT_
-#define vkGetDescriptorEXT vkGetDescriptorEXT_
-#define vkGetDescriptorSetLayoutBindingOffsetEXT vkGetDescriptorSetLayoutBindingOffsetEXT_
-#define vkGetDescriptorSetLayoutSizeEXT vkGetDescriptorSetLayoutSizeEXT_
-
-internal VkMemoryRequirements 
-GetBufferMemoryRequirements(VkDevice Device, const VkBufferCreateInfo* BufferInfo);
-
-internal VkMemoryRequirements
-GetImageMemoryRequirements(VkDevice Device, const VkImageCreateInfo* ImageInfo, VkImageAspectFlagBits Aspects);
-
-inline VkDeviceAddress 
-GetBufferDeviceAddress(VkDevice Device, VkBuffer Buffer);
+#include "Renderer/rhi_vulkan.hpp"
 
 struct gpu_memory_arena
 {
@@ -322,32 +283,6 @@ SetupSceneRendering(render_frame* Frame, frustum* CascadeFrustums);
 //
 // Implementation
 //
-
-inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* Label)
-{
-    VkDebugUtilsLabelEXT UtilsLabel = 
-    {
-        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-        .pNext = nullptr,
-        .pLabelName = Label,
-        .color = {},
-    };
-    vkCmdBeginDebugUtilsLabelEXT_(CmdBuffer, &UtilsLabel);
-}
-
-inline VkDeviceAddress 
-GetBufferDeviceAddress(VkDevice Device, VkBuffer Buffer)
-{
-    VkBufferDeviceAddressInfo Info = 
-    {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .pNext = nullptr,
-        .buffer = Buffer,
-    };
-
-    VkDeviceAddress Result = vkGetBufferDeviceAddress(Device, &Info);
-    return(Result);
-}
 
 // NOTE(boti): See Vulkan spec. 16.5.4. Table 17. to find where these transforms come from
 m3 GlobalCubeFaceBases[Layer_Count]
