@@ -59,6 +59,7 @@ typedef int64_t s64;
 
 typedef u32 b32;
 typedef u32 flags32;
+typedef u64 flags64;
 
 typedef float f32;
 typedef double f64;
