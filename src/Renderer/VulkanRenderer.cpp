@@ -1076,6 +1076,26 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         }
     }
 
+    // Sampler descriptor upload
+    {
+        umm DescriptorSize = VK.DescriptorBufferProps.samplerDescriptorSize;
+        VkDeviceSize Offset = 0;
+        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Renderer->SetLayouts[Set_Sampler], Binding_Sampler_NamedSamplers, &Offset);
+        for (u32 SamplerIndex = 0; SamplerIndex < Sampler_Count; SamplerIndex++)
+        {
+            VkDescriptorGetInfoEXT DescriptorInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                .pNext = nullptr,
+                .type = VK_DESCRIPTOR_TYPE_SAMPLER,
+                .data = { .pSampler = &Renderer->Samplers[SamplerIndex] },
+            };
+
+            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, 
+                               OffsetPtr(Renderer->SamplerDescriptorMapping, Offset + SamplerIndex*DescriptorSize));
+        }
+    }
+
     // Surface
     {
         Renderer->Surface = Platform.CreateVulkanSurface(VK.Instance);
@@ -3011,28 +3031,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         }
     }
 
-    // TODO(boti): Move these out of the frame, these descriptors are static
-    {
-        VkBuffer SamplerBuffer = Renderer->SamplerDescriptorBuffer;
-        void* SamplerBufferMapping = Renderer->SamplerDescriptorMapping;
-
-        umm SamplerDescriptorSize = VK.DescriptorBufferProps.samplerDescriptorSize;
-        VkDeviceSize SamplerTableOffset = 0;
-        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Renderer->SetLayouts[Set_Sampler], Binding_Sampler_NamedSamplers, &SamplerTableOffset);
-        for (u32 SamplerIndex = 0; SamplerIndex < Sampler_Count; SamplerIndex++)
-        {
-            VkDescriptorGetInfoEXT DescriptorInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-                .pNext = nullptr,
-                .type = VK_DESCRIPTOR_TYPE_SAMPLER,
-                .data = { .pSampler = &Renderer->Samplers[SamplerIndex] },
-            };
-
-            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, SamplerDescriptorSize, OffsetPtr(SamplerBufferMapping, SamplerTableOffset + SamplerIndex*SamplerDescriptorSize));
-        }
-    }
-
+    // Descriptor update
     {
         VkDescriptorBufferInfo ConstantsInfo = 
         {
