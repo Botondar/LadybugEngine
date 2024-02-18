@@ -2,13 +2,19 @@
 
 constexpr u32 SpecialTextureBit = (1u << 31);
 
+internal u32 GetTextureIndex(renderer_texture_id ID)
+{
+    u32 Result = ID.Value & (~SpecialTextureBit);
+    return(Result);
+}
+
 internal b32 IsTextureSpecial(renderer_texture_id ID)
 {
     b32 Result = (ID.Value & SpecialTextureBit) != 0;
     return(Result);
 }
 
-internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32 MemoryTypes, VkDescriptorSetLayout* SetLayouts)
+internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena, u64 MemorySize, u32 MemoryTypes, VkDescriptorSetLayout* SetLayouts)
 {
     VkResult Result = VK_SUCCESS;
 
@@ -36,206 +42,131 @@ internal bool CreateTextureManager(texture_manager* Manager, u64 MemorySize, u32
     }
 
     // TODO(boti): Error handling cleanup
-    u32 MemoryTypeIndex = 0;
-    if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
+    u32 MemoryTypeIndex, DescriptorMemoryTypeIndex;
+    if (BitScanForward(&MemoryTypeIndex, MemoryTypes) &&
+        BitScanForward(&DescriptorMemoryTypeIndex, VK.BARMemTypes))
     {
-        Manager->MemorySize = MemorySize;
+        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, SetLayouts[SetLayout_Bindless], Binding_Bindless_Textures, &Manager->TextureTableOffset);
+        umm DescriptorBufferSize = 0;
+        vkGetDescriptorSetLayoutSizeEXT(VK.Device, SetLayouts[SetLayout_Bindless], &DescriptorBufferSize);
+        Manager->DescriptorArena    = CreateGPUArena(VK.Device, DescriptorBufferSize, DescriptorMemoryTypeIndex, true);
 
-        VkMemoryAllocateInfo MemAllocInfo =
+        Manager->PersistentArena    = CreateGPUArena(VK.Device, MiB(32), MemoryTypeIndex, false);
+        Manager->CacheArena         = CreateGPUArena(VK.Device, MemorySize, MemoryTypeIndex, false);
+
+        Manager->Cache.PageCount = CeilDiv(MemorySize, TexturePageSize);
+        Manager->Cache.UsageBitfieldCount = CeilDiv(Manager->Cache.PageCount, 64);
+        Manager->Cache.UsageBitfields = PushArray(Arena, MemPush_Clear, u64, Manager->Cache.UsageBitfieldCount);
+
+        if (Manager->DescriptorArena.Memory && Manager->PersistentArena.Memory && Manager->CacheArena.Memory)
         {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .allocationSize = Manager->MemorySize,
-            .memoryTypeIndex = MemoryTypeIndex,
-        };
-        Result = vkAllocateMemory(VK.Device, &MemAllocInfo, nullptr, &Manager->Memory);
-        if (Result == VK_SUCCESS)
-        {
-            vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, SetLayouts[Set_Bindless], Binding_Bindless_Textures, &Manager->TextureTableOffset);
-            vkGetDescriptorSetLayoutSizeEXT(VK.Device, SetLayouts[Set_Bindless], &Manager->DescriptorBufferSize);
-
-            VkBufferCreateInfo DescriptorBufferInfo = 
+            if (PushBuffer(&Manager->DescriptorArena, DescriptorBufferSize,
+                           VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                           &Manager->DescriptorBuffer, &Manager->DescriptorMapping))
             {
-                .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .size = Manager->DescriptorBufferSize,
-                .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-                .queueFamilyIndexCount = 0,
-                .pQueueFamilyIndices = nullptr,
-            };
-            Result = vkCreateBuffer(VK.Device, &DescriptorBufferInfo, nullptr, &Manager->DescriptorBuffer);
-            Assert(Result == VK_SUCCESS);
-
-            u32 DescriptorBufferMemoryTypes = VK.BARMemTypes;
+                Manager->DescriptorAddress = GetBufferDeviceAddress(VK.Device, Manager->DescriptorBuffer);
+            }
+            else
             {
-                VkMemoryRequirements MemoryRequirements = GetBufferMemoryRequirements(VK.Device, &DescriptorBufferInfo);
-                DescriptorBufferMemoryTypes &= MemoryRequirements.memoryTypeBits;
-
-                u32 DescriptorMemoryType = 0;
-                if (BitScanForward(&DescriptorMemoryType, DescriptorBufferMemoryTypes))
-                {
-                    VkMemoryAllocateFlagsInfo AllocFlags = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
-                        .pNext = nullptr,
-                        .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
-                        .deviceMask = 0,
-                    };
-                    VkMemoryAllocateInfo AllocInfo = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                        .pNext = &AllocFlags,
-                        .allocationSize = Manager->DescriptorBufferSize,
-                        .memoryTypeIndex = DescriptorMemoryType,
-                    };
-                    Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Manager->DescriptorMemory);
-                    if (Result == VK_SUCCESS)
-                    {
-                        Result = vkBindBufferMemory(VK.Device, Manager->DescriptorBuffer, Manager->DescriptorMemory, 0);
-                        Assert(Result == VK_SUCCESS);
-
-                        Result = vkMapMemory(VK.Device, Manager->DescriptorMemory, 0, VK_WHOLE_SIZE, 0, &Manager->DescriptorMapping);
-                        Assert(Result == VK_SUCCESS);
-
-                        VkBufferDeviceAddressInfo DeviceAddressInfo = 
-                        {
-                            .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-                            .pNext = nullptr,
-                            .buffer = Manager->DescriptorBuffer,
-                        };
-                        Manager->DescriptorDeviceAddress = vkGetBufferDeviceAddress(VK.Device, &DeviceAddressInfo);
-                    }
-                    else
-                    {
-                        return(false);
-                    }
-                }
+                // TODO(boti)
+                Result = VK_ERROR_UNKNOWN;
             }
         }
         else
         {
-            return(false);
+            UnhandledError("No suitable memory type for textures");
+            Result = VK_ERROR_UNKNOWN;
         }
     }
     else
     {
-        UnhandledError("No suitable memory type for textures");
+        UnhandledError("No suitable memory type for textures or descriptor buffer");
+        Result = VK_ERROR_UNKNOWN;
     }
 
     return (Result == VK_SUCCESS);
 }
 
-internal VkImage* GetImage(texture_manager* Manager, renderer_texture_id ID)
+internal renderer_texture* GetTexture(texture_manager* Manager, renderer_texture_id ID)
 {
-    VkImage* Result = nullptr;
-    if (IsValid(ID))
-    {
-        if (ID.Value & SpecialTextureBit)
-        {
-            u32 Index = ID.Value & (~SpecialTextureBit);
-            Result = Manager->SpecialImages + Index;
-        }
-        else
-        {
-            Result = Manager->Images + ID.Value;
-        }
-    }
-    return Result;
-}
+    renderer_texture* Result = nullptr;
 
-internal VkImageView* GetImageView(texture_manager* Manager, renderer_texture_id ID)
-{
-    VkImageView* Result = nullptr;
     if (IsValid(ID))
     {
-        if (ID.Value & SpecialTextureBit)
+        u32 Index = GetTextureIndex(ID);
+        if (IsTextureSpecial(ID))
         {
-            u32 Index = ID.Value & (~SpecialTextureBit);
-            Result = Manager->SpecialImageViews + Index;
+            Assert(Index < Manager->MaxSpecialTextureCount);
+            Result = Manager->SpecialTextures + Index;
         }
         else
         {
-            Result = Manager->ImageViews + ID.Value;
+            Assert(Index < R_MaxTextureCount);
+            Result = Manager->Textures + Index;
         }
     }
+
     return(Result);
 }
 
-internal texture_info GetTextureInfo(texture_manager* Manager, renderer_texture_id ID)
+internal renderer_texture_id 
+AllocateNextID(texture_manager* Manager, texture_flags Flags)
 {
-    texture_info Info = {};
-    if (IsValid(ID))
+    renderer_texture_id Result = InvalidRendererTextureID;
+
+    if (Flags & TextureFlag_Special)
     {
-        if (ID.Value & SpecialTextureBit)
+        if (Manager->SpecialTextureCount < Manager->MaxSpecialTextureCount)
         {
-            u32 Index = ID.Value & (~SpecialTextureBit);
-            Info = Manager->SpecialTextureInfos[Index];
-        }
-        else
-        {
-            Info = Manager->TextureInfos[ID.Value];
+            Result = { SpecialTextureBit | Manager->SpecialTextureCount++ };
         }
     }
-    return(Info);
+    else
+    {
+        if (Manager->TextureCount < R_MaxTextureCount)
+        {
+            Result = { Manager->TextureCount++ };
+        }
+    }
+
+    return(Result);
 }
 
 internal renderer_texture_id
 AllocateTexture(texture_manager* Manager, texture_flags Flags, const texture_info* Info, renderer_texture_id Placeholder)
 {
-    renderer_texture_id Result = { U32_MAX };
-
-    u32 MaxCount = 0;
-    u32* Count = nullptr;
-    VkImage* Images = nullptr;
-    VkImageView* Views = nullptr;
-    texture_info* Infos = nullptr;
-
-    if (Flags & TextureFlag_Special)
+    renderer_texture_id Result = AllocateNextID(Manager, Flags);
+    if (IsValid(Result))
     {
-        MaxCount = Manager->MaxSpecialTextureCount;
-        Count = &Manager->SpecialTextureCount;
-        Images = Manager->SpecialImages;
-        Views = Manager->SpecialImageViews;
-        Infos = Manager->SpecialTextureInfos;
-    }
-    else
-    {
-        MaxCount = R_MaxTextureCount;
-        Count = &Manager->TextureCount;
-        Images = Manager->Images;
-        Views = Manager->ImageViews;
-        Infos = Manager->TextureInfos;
-    }
+        renderer_texture* Texture = GetTexture(Manager, Result);
+        Assert(Texture);
+        Assert(Texture->ImageHandle == VK_NULL_HANDLE);
+        Assert(Texture->ViewHandle == VK_NULL_HANDLE);
 
-    if (*Count < MaxCount)
-    {
-        u32 Index = (*Count)++;
-        Result = { Index };
-        if (Flags & TextureFlag_Special)
-        {
-            Result.Value |= SpecialTextureBit;
-        }
-
+        Texture->Info = {};
+        Texture->Flags = Flags;
         if (Info)
         {
-            Infos[Index] = *Info;
-            // TODO(boti): We should really just create the VkImage and VkImageView here instead of allocating memory
-            AllocateTexture(Manager, Result, *Info);
-        }
-        else
-        {
-            Infos[Index] = {};
+            Texture->Info = *Info;
+            if (AllocateTexture(Manager, Result, Texture->Info))
+            {
+            }
+            else
+            {
+                // TODO(boti): Check for placeholder here - if there's one we can ignore this case and keep using the placeholder
+            }
         }
 
-        if (IsValid(Placeholder) && !(Flags & TextureFlag_Special))
+        if (IsValid(Placeholder) && !IsTextureSpecial(Result))
         {
+            renderer_texture* PlaceholderTex = GetTexture(Manager, Placeholder);
+            Assert(PlaceholderTex);
+
             umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
             VkDescriptorImageInfo DescriptorImage = 
             {
                 .sampler = VK_NULL_HANDLE,
-                .imageView = *GetImageView(Manager, Placeholder),
+                .imageView = PlaceholderTex->ViewHandle,
                 .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             };
             VkDescriptorGetInfoEXT DescriptorInfo = 
@@ -245,13 +176,13 @@ AllocateTexture(texture_manager* Manager, texture_flags Flags, const texture_inf
                 .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
                 .data = { .pSampledImage = &DescriptorImage },
             };
-            umm DescriptorOffset = Manager->TextureTableOffset + Index*DescriptorSize;
+            umm DescriptorOffset = Manager->TextureTableOffset + Result.Value*DescriptorSize;
             vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Manager->DescriptorMapping, DescriptorOffset));
         }
     }
     else
     {
-        UnhandledError("Out of textures");
+        UnhandledError("Failed to allocate texture ID");
     }
 
     return(Result);
@@ -264,6 +195,9 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
 
     if (IsValid(ID))
     {
+        u32 Index = ID.Value & (~SpecialTextureBit);
+        renderer_texture* Texture = GetTexture(Manager, ID);
+
         VkImageCreateInfo ImageInfo = 
         {
             .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -282,83 +216,77 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
             .pQueueFamilyIndices = nullptr,
             .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         };
-        VkMemoryRequirements MemoryRequirements = GetImageMemoryRequirements(VK.Device, &ImageInfo, VK_IMAGE_ASPECT_COLOR_BIT);
-        umm EffectiveOffset = Align(Manager->MemoryOffset, MemoryRequirements.alignment);
-        if ((EffectiveOffset + MemoryRequirements.size) <= Manager->MemorySize)
+        VkResult ErrorCode = vkCreateImage(VK.Device, &ImageInfo, nullptr, &Texture->ImageHandle);
+        if (ErrorCode == VK_SUCCESS)
         {
-            u32 Index = ID.Value & (~SpecialTextureBit);
-            VkImage* Image = GetImage(Manager, ID);
-            VkImageView* View = GetImageView(Manager, ID);
-
-            if (vkCreateImage(VK.Device, &ImageInfo, nullptr, Image) == VK_SUCCESS)
+            gpu_memory_arena* Arena = (Texture->Flags & TextureFlag_PersistentMemory) ? &Manager->PersistentArena : &Manager->CacheArena;
+            b32 PushResult = PushImage(Arena, Texture->ImageHandle);
+            if (PushResult)
             {
-                if (vkBindImageMemory(VK.Device, *Image, Manager->Memory, EffectiveOffset) == VK_SUCCESS)
+                auto SwizzleToVulkan = [](texture_swizzle_type Swizzle) -> VkComponentSwizzle
                 {
-                    Manager->MemoryOffset = EffectiveOffset + MemoryRequirements.size;
-                    auto SwizzleToVulkan = [](texture_swizzle_type Type) -> VkComponentSwizzle 
+                    VkComponentSwizzle Result = VK_COMPONENT_SWIZZLE_IDENTITY;
+                    switch (Swizzle)
                     {
-                        VkComponentSwizzle Result = VK_COMPONENT_SWIZZLE_IDENTITY;
-                        switch (Type)
-                        {
-                            case Swizzle_Identity: Result = VK_COMPONENT_SWIZZLE_IDENTITY; break;
-                            case Swizzle_Zero: Result = VK_COMPONENT_SWIZZLE_ZERO; break;
-                            case Swizzle_One: Result = VK_COMPONENT_SWIZZLE_ONE; break;
-                            case Swizzle_R: Result = VK_COMPONENT_SWIZZLE_R; break;
-                            case Swizzle_G: Result = VK_COMPONENT_SWIZZLE_G; break;
-                            case Swizzle_B: Result = VK_COMPONENT_SWIZZLE_B; break;
-                            case Swizzle_A: Result = VK_COMPONENT_SWIZZLE_A; break;
-                        }
-                        return(Result);
-                    };
-
-                    VkImageViewCreateInfo ViewInfo = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                        .pNext = nullptr,
-                        .flags = 0,
-                        .image = *Image,
-                        .viewType = (Info.ArrayCount == 1) ? VK_IMAGE_VIEW_TYPE_2D : VK_IMAGE_VIEW_TYPE_2D_ARRAY,
-                        .format = FormatTable[Info.Format],
-                        .components = 
-                        {
-                            SwizzleToVulkan(Info.Swizzle.R),
-                            SwizzleToVulkan(Info.Swizzle.G),
-                            SwizzleToVulkan(Info.Swizzle.B),
-                            SwizzleToVulkan(Info.Swizzle.A),
-                        },
-                        .subresourceRange = 
-                        {
-                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = VK_REMAINING_MIP_LEVELS,
-                            .baseArrayLayer = 0,
-                            .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                        },
-                    };
-
-                    if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, View) == VK_SUCCESS)
-                    {
-                        Result = true;
+                        case Swizzle_Identity: Result = VK_COMPONENT_SWIZZLE_IDENTITY; break;
+                        case Swizzle_Zero: Result = VK_COMPONENT_SWIZZLE_ZERO; break;
+                        case Swizzle_One: Result = VK_COMPONENT_SWIZZLE_ONE; break;
+                        case Swizzle_R: Result = VK_COMPONENT_SWIZZLE_R; break;
+                        case Swizzle_G: Result = VK_COMPONENT_SWIZZLE_G; break;
+                        case Swizzle_B: Result = VK_COMPONENT_SWIZZLE_B; break;
+                        case Swizzle_A: Result = VK_COMPONENT_SWIZZLE_A; break;
+                        InvalidDefaultCase;
                     }
-                    else
+                    return(Result);
+                };
+
+                VkImageViewCreateInfo ViewInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .image = Texture->ImageHandle,
+                    .viewType = (Info.ArrayCount == 1) ? VK_IMAGE_VIEW_TYPE_2D : VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+                    .format = FormatTable[Info.Format],
+                    .components = 
                     {
-                        UnhandledError("Failed to create image view");
-                    }
+                        SwizzleToVulkan(Info.Swizzle.R),
+                        SwizzleToVulkan(Info.Swizzle.G),
+                        SwizzleToVulkan(Info.Swizzle.B),
+                        SwizzleToVulkan(Info.Swizzle.A),
+                    },
+                    .subresourceRange = 
+                    {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                };
+                
+                if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, &Texture->ViewHandle) == VK_SUCCESS)
+                {
+                    Result = true;
                 }
                 else
                 {
-                    UnhandledError("Failed to bind image memory");
+                    UnhandledError("Failed to create image view");
                 }
             }
             else
             {
-                UnhandledError("Failed to create image");
+                UnhandledError("Failed to push image");
             }
         }
         else
         {
-            // TODO(boti): Logging; failed to allocate, but we can keep using the placeholder
+            UnhandledError("Failed to create image");
         }
+    }
+    else
+    {
+        UnhandledError("Invalid ID in allocate texture");
     }
 
     return(Result);

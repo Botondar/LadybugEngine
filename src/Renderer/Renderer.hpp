@@ -38,7 +38,7 @@ constexpr u32 R_MaxTileCountX = CeilDiv(R_MaxRenderTargetSizeX, R_TileSizeX);
 constexpr u32 R_MaxTileCountY = CeilDiv(R_MaxRenderTargetSizeY, R_TileSizeY);
 
 constexpr u64 R_RenderTargetMemorySize      = MiB(320);
-constexpr u64 R_TextureMemorySize           = MiB(256llu);
+constexpr u64 R_TextureMemorySize           = MiB(1024llu);
 constexpr u64 R_ShadowMapMemorySize         = MiB(256);
 constexpr u32 R_MaxShadowCascadeCount       = 4;
 constexpr u32 R_ShadowResolution            = 2048u; // TODO(boti): Rename, this only applies to the cascades
@@ -529,6 +529,44 @@ struct format_byterate
     format_flags Flags;
 };
 
+struct texture_info
+{
+    u32 Width;
+    u32 Height;
+    u32 Depth;
+    u32 MipCount;
+    u32 ArrayCount;
+    format Format;
+    texture_swizzle Swizzle;
+};
+
+// NOTE(boti): Set the counts to U32_MAX to indicate all mips/arrays
+struct texture_subresource_range
+{
+    u32 BaseMip;
+    u32 MipCount;
+    u32 BaseArray;
+    u32 ArrayCount;
+};
+
+inline texture_subresource_range AllTextureSubresourceRange()
+{
+    texture_subresource_range Range = { 0, U32_MAX, 0, U32_MAX };
+    return(Range);
+}
+
+inline b32 AreTextureInfosSameFormat(texture_info A, texture_info B)
+{
+    b32 Result = 
+        (A.Width == B.Width) &&
+        (A.Height == B.Height) &&
+        (A.Depth == B.Depth) &&
+        (A.MipCount == B.MipCount) &&
+        (A.ArrayCount == B.ArrayCount) &&
+        (A.Format == B.Format);
+    return(Result);
+}
+
 //
 // High-level renderer
 //
@@ -569,8 +607,16 @@ inline v3 SetLuminance(v3 RGB, f32 Luminance);
 typedef flags32 texture_flags;
 enum texture_flag_bits : texture_flags
 {
-    TextureFlag_None = 0,
-    TextureFlag_Special = (1 << 0),
+    TextureFlag_None                = 0,
+
+    TextureFlag_Special             = (1u << 0),
+    TextureFlag_PersistentMemory    = (1u << 1),
+};
+
+struct texture_request
+{
+    renderer_texture_id TextureID;
+    u32 MipMask;
 };
 
 // Shading mode for the primary opaque pass
@@ -727,32 +773,10 @@ struct render_stats
     render_stat_entry Entries[MaxEntryCount];
 };
 
-struct texture_info
-{
-    u32 Width;
-    u32 Height;
-    u32 Depth;
-    u32 MipCount;
-    u32 ArrayCount;
-    format Format;
-    texture_swizzle Swizzle;
-};
-
-inline b32 AreTextureInfosSameFormat(texture_info A, texture_info B)
-{
-    b32 Result = 
-        (A.Width == B.Width) &&
-        (A.Height == B.Height) &&
-        (A.Depth == B.Depth) &&
-        (A.MipCount == B.MipCount) &&
-        (A.ArrayCount == B.ArrayCount) &&
-        (A.Format == B.Format);
-    return(Result);
-}
-
 enum transfer_op_type : u32
 {
-    TransferOp_Undefined,
+    TransferOp_Undefined = 0,
+
     TransferOp_Texture,
     TransferOp_Geometry,
 };
@@ -761,6 +785,7 @@ struct transfer_texture
 {
     renderer_texture_id TargetID;
     texture_info Info;
+    texture_subresource_range SubresourceRange;
 };
 
 struct transfer_geometry
@@ -784,6 +809,10 @@ struct render_frame
     renderer* Renderer;
     backend_render_frame* Backend;
     memory_arena* Arena; // NOTE(boti): filled by the game
+
+    // NOTE(boti): Texture upload requests _from_ the renderer _to_ the game
+    u32 TextureRequestCount;
+    texture_request* TextureRequests;
 
     render_stats Stats;
 
@@ -907,7 +936,8 @@ typedef Signature_EndRenderFrame(end_render_frame);
 // Frame rendering
 //
 inline b32 
-TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_info Info, 
+TransferTexture(render_frame* Frame, renderer_texture_id ID, 
+                texture_info Info, texture_subresource_range Range,
                 const void* Data);
 inline b32 TransferGeometry(render_frame* Frame, geometry_buffer_allocation Allocation,
                             const void* VertexData, const void* IndexData);
@@ -943,6 +973,8 @@ inline rgba8 PackRGBA(v4 Color);
 inline u32 GetMaxMipCount(u32 Width, u32 Height);
 inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFFFFFFu);
 inline u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate);
+inline umm GetPackedTexture2DMipOffset(const texture_info* Info, u32 Mip);
+inline texture_subresource_range SubresourceFromMipMask(u32 Mask, texture_info Info);
 
 static format_byterate FormatByterateTable[Format_Count] = 
 {
@@ -1146,7 +1178,82 @@ inline u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, 
     return Result;
 }
 
-inline b32 TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_info Info, const void* Data)
+inline umm GetPackedTexture2DMipOffset(const texture_info* Info, u32 Mip)
+{
+    umm Result = 0;
+
+    // TODO(boti): This is really just the same code as GetMipChainSize...
+    // NOTE(boti): MipCount from info is ignored, 
+    // we return the offset even if that mip level is not present in the texture
+    u32 MipCount = GetMaxMipCount(Info->Width, Info->Height);
+    if (Mip < MipCount)
+    {
+        format_byterate Byterate = FormatByterateTable[Info->Format];
+
+        for (u32 CurrentMip = 0; CurrentMip < Mip; CurrentMip++)
+        {
+            u32 Width = Max(Info->Width >> CurrentMip, 1u);
+            u32 Height = Max(Info->Height >> CurrentMip, 1u);
+            if (Byterate.Flags & FormatFlag_BlockCompressed)
+            {
+                Width = Align(Width, 4u);
+                Height = Align(Height, 4u);
+            }
+            Result += ((umm)Width * (umm)Height * Byterate.Numerator) / Byterate.Denominator;
+        }
+    }
+
+    return(Result);
+}
+
+inline texture_subresource_range SubresourceFromMipMask(u32 Mask, texture_info Info)
+{
+    texture_subresource_range Result = AllTextureSubresourceRange();
+
+    if (Info.ArrayCount != 1) UnimplementedCodePath;
+
+    u32 MostDetailedMipInMask;
+    if (BitScanReverse(&MostDetailedMipInMask, Mask))
+    {
+        u32 MipCount = GetMaxMipCount(Info.Width, Info.Height);
+        u32 ResolutionFromMask = 1 << MostDetailedMipInMask;
+        u32 MipCountFromMask = GetMaxMipCount(ResolutionFromMask, ResolutionFromMask);
+
+        u32 MaxExtent = Max(Info.Width, Info.Height);
+        if (MipCountFromMask > MipCount) 
+        {
+            MipCountFromMask = MipCount;
+        }
+        else
+        {
+            while (MaxExtent && (ResolutionFromMask < MaxExtent))
+            {
+                Result.BaseMip++;
+                MaxExtent >>= 1;
+            }
+        }
+
+        u32 LeastDetailedMipInMask;
+        BitScanForward(&LeastDetailedMipInMask, Mask);
+        u32 LeastDetailedMipResolution = 1 << LeastDetailedMipInMask;
+        if (LeastDetailedMipResolution > MaxExtent)
+        {
+            Result.MipCount = 0;
+        }
+        else
+        {
+            // TODO(boti): Handle all bits from the mask, not just the highest one
+            Result.MipCount = Info.MipCount - Result.BaseMip;
+        }
+    }
+
+    return(Result);
+}
+
+inline b32 
+TransferTexture(render_frame* Frame, renderer_texture_id ID, 
+                texture_info Info, texture_subresource_range Range,
+                const void* Data)
 {
     b32 Result = true;
 
@@ -1154,15 +1261,17 @@ inline b32 TransferTexture(render_frame* Frame, renderer_texture_id ID, texture_
     {
         format_byterate ByteRate = FormatByterateTable[Info.Format];
         umm TotalSize = GetMipChainSize(Info.Width, Info.Height, Info.MipCount, Info.ArrayCount, ByteRate);
-        if (Frame->StagingBufferAt + TotalSize < Frame->StagingBufferSize)
+        umm EffectiveOffset = Align(Frame->StagingBufferAt, 64);
+        if (EffectiveOffset + TotalSize <= Frame->StagingBufferSize)
         {
             transfer_op* Op = Frame->TransferOps + Frame->TransferOpCount++;
             Op->Type = TransferOp_Texture;
-            Op->SourceOffset = Frame->StagingBufferAt;
+            Op->SourceOffset = EffectiveOffset;
             Op->Texture.TargetID = ID;
             Op->Texture.Info = Info;
-            memcpy(OffsetPtr(Frame->StagingBufferBase, Frame->StagingBufferAt), Data, TotalSize);
-            Frame->StagingBufferAt += TotalSize;
+            Op->Texture.SubresourceRange = Range;
+            memcpy(OffsetPtr(Frame->StagingBufferBase, EffectiveOffset), Data, TotalSize);
+            Frame->StagingBufferAt = EffectiveOffset + TotalSize;
         }
         else
         {

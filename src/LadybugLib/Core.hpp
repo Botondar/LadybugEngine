@@ -616,6 +616,12 @@ inline constexpr u32 CeilDiv(u32 x, u32 y)
     return(Result);
 }
 
+inline constexpr umm CeilDiv(umm x, umm y)
+{
+    umm Result = (x / y) + ((x % y) != 0);
+    return(Result);
+}
+
 template<typename T>
 inline constexpr T Min(T a, T b)
 {

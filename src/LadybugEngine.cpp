@@ -54,7 +54,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         }
         RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputExtent);
 
-        constexpr umm AssetArenaSize = GiB(1);
+        constexpr umm AssetArenaSize = GiB(5);
         memory_arena AssetArena = InitializeArena(AssetArenaSize, PushSize_(&GameState->TotalArena, 0, AssetArenaSize, KiB(4)));
         assets* Assets = GameState->Assets = PushStruct(&AssetArena, 0, assets);
         Assets->Arena = AssetArena;
@@ -129,6 +129,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     {
         assets* Assets = GameState->Assets;
         texture_queue* Queue = &Assets->TextureQueue;
+
         for (u32 Completion = Queue->CompletionCount; Completion < Queue->CompletionGoal; Completion++)
         {
             u32 EntryIndex = Completion % Queue->MaxEntryCount;
@@ -139,7 +140,12 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                                                 Entry->Info.MipCount, Entry->Info.ArrayCount,
                                                 FormatByterateTable[Entry->Info.Format]);
                 umm Begin = GetNextEntryOffset(Queue, TotalSize, Queue->RingBufferReadAt);
-                TransferTexture(RenderFrame, Entry->Texture->RendererID, Entry->Info, Queue->RingBufferMemory + (Begin % Queue->RingBufferSize));
+
+                Entry->Texture->Info = Entry->Info;
+                Entry->Texture->Memory = PushSize_(&GameState->Assets->TextureCache, 0, TotalSize, 0);
+                Assert(Entry->Texture->Memory);
+                memcpy(Entry->Texture->Memory, Queue->RingBufferMemory + (Begin % Queue->RingBufferSize), TotalSize);
+
                 Entry->Texture->IsLoaded = true;
                 Queue->RingBufferReadAt = Begin + TotalSize;
                 AtomicLoadAndIncrement(&Queue->CompletionCount);
@@ -147,6 +153,65 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             else
             {
                 break;
+            }
+        }
+    }
+
+    // Process texture requests
+    {
+        assets* Assets = GameState->Assets;
+        for (u32 RequestIndex = 0; RequestIndex < RenderFrame->TextureRequestCount; RequestIndex++)
+        {
+            texture_request* Request = RenderFrame->TextureRequests + RequestIndex;
+
+            b32 IsDefaultTexture = false;
+            for (u32 TextureType = TextureType_Diffuse; TextureType < TextureType_Count; TextureType++)
+            {
+                if (Request->TextureID.Value == Assets->Textures[Assets->DefaultTextures[TextureType]].RendererID.Value)
+                {
+                    IsDefaultTexture = true;
+                    break;
+                }
+            }
+            if (!IsDefaultTexture)
+            {
+                // TODO(boti): Put a user value in the renderer texture so we don't have to search for the texture every time
+                texture* Texture = nullptr;
+                u32 TextureID;
+                for (TextureID = 0; TextureID < Assets->TextureCount; TextureID++)
+                {
+                    texture* It = Assets->Textures + TextureID;
+                    if (Request->TextureID.Value == It->RendererID.Value)
+                    {
+                        Texture = It;
+                        break;
+                    }
+                }
+
+                if (Texture)
+                {
+                    if (Texture->IsLoaded && Texture->Memory)
+                    {
+                        texture_subresource_range Subresource = SubresourceFromMipMask(Request->MipMask, Texture->Info);
+                        if (Subresource.MipCount)
+                        {
+                            if (Subresource.BaseArray != 0 || Subresource.ArrayCount != U32_MAX) UnimplementedCodePath;
+                            umm Offset = GetPackedTexture2DMipOffset(&Texture->Info, Subresource.BaseMip);
+
+                            texture_info CopyInfo = 
+                            {
+                                .Width = Max(Texture->Info.Width >> Subresource.BaseMip, 1u),
+                                .Height = Max(Texture->Info.Height >> Subresource.BaseMip, 1u),
+                                .Depth = 1,
+                                .MipCount = Subresource.MipCount,
+                                .ArrayCount = 1,
+                                .Format = Texture->Info.Format,
+                                .Swizzle = Texture->Info.Swizzle,
+                            };
+                            TransferTexture(RenderFrame, Texture->RendererID, CopyInfo, AllTextureSubresourceRange(), OffsetPtr(Texture->Memory, Offset));
+                        }
+                    }
+                }
             }
         }
     }

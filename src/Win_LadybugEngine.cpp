@@ -404,7 +404,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     }
 
     game_memory GameMemory = {};
-    GameMemory.Size = GiB(4);
+    GameMemory.Size = GiB(8);
     GameMemory.Memory = VirtualAlloc(nullptr, GameMemory.Size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 
     GameMemory.PlatformAPI.DebugPrint           = &Win_DebugPrint;

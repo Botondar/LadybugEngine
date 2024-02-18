@@ -44,8 +44,8 @@ GetBufferDeviceAddress(VkDevice Device, VkBuffer Buffer);
 struct gpu_memory_arena
 {
     VkDeviceMemory Memory;
-    u64 Size;
-    u64 MemoryAt;
+    umm Size;
+    umm MemoryAt;
     u32 MemoryTypeIndex;
     void* Mapping;
 };
@@ -59,6 +59,9 @@ enum gpu_memory_arena_flag_bits : gpu_memory_arena_flags
 
 internal gpu_memory_arena 
 CreateGPUArena(umm Size, u32 MemoryTypeIndex, gpu_memory_arena_flags Flags);
+
+internal b32 
+PushImage(gpu_memory_arena* Arena, VkImage Image);
 
 internal b32 
 PushBuffer(gpu_memory_arena* Arena, 
@@ -136,6 +139,28 @@ struct backend_render_frame
     VkBuffer Vertex2DBuffer;
 };
 
+struct texture_deletion_entry
+{
+    VkImage ImageHandle;
+    VkImageView ViewHandle;
+};
+
+struct texture_deletion_queue
+{
+    static constexpr u32 MaxEntryCount = 4096;
+    u32 EntryWriteAt;
+    u32 EntryReadAt;
+    u32 FrameEntryWriteAt[R_MaxFramesInFlight];
+
+    texture_deletion_entry Entries[MaxEntryCount];
+};
+
+internal b32 
+AddTextureDeletionEntry(texture_deletion_queue* Queue, u32 FrameID, VkImage Image, VkImageView View);
+
+internal void 
+ProcessTextureDeletionEntries(texture_deletion_queue* Queue, u32 FrameID);
+
 struct renderer
 {
     vulkan Vulkan;
@@ -184,6 +209,8 @@ struct renderer
     //
     // Per frame stuff
     // 
+    texture_deletion_queue TextureDeletionQueue;
+
     VkCommandPool CmdPools[2];
     VkCommandBuffer CmdBuffers[2][backend_render_frame::MaxCmdBufferCount];
 
@@ -213,11 +240,10 @@ struct renderer
     void* StagingMemoryMapping;
     VkBuffer StagingBuffers[R_MaxFramesInFlight];
 
-    VkBuffer DesiredMipReadbackBuffers[R_MaxFramesInFlight];
-    void* DesiredMipReadbackMappings[R_MaxFramesInFlight];
-
-    VkDeviceMemory DesiredMipReadbackMemory;
-    void* DesiredMipReadbackMapping;
+    VkDeviceMemory MipMaskReadbackMemory;
+    void* MipMaskReadbackMapping;
+    VkBuffer MipMaskReadbackBuffers[R_MaxFramesInFlight];
+    void* MipMaskReadbackMappings[R_MaxFramesInFlight];
 
     //
     // Persistent
@@ -226,6 +252,10 @@ struct renderer
     void*           SamplerDescriptorMapping;
     VkBuffer        StaticResourceDescriptorBuffer;
     void*           StaticResourceDescriptorMapping;
+
+    umm             MipMaskMemorySize;
+    VkDeviceMemory  MipMaskMemory;
+    VkBuffer        MipMaskBuffer;
 
     umm             DesiredMipMemorySize;
     VkDeviceMemory  DesiredMipMemory;

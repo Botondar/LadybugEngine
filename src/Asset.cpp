@@ -237,10 +237,17 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 {
     b32 Result = true;
 
+    // Texture cache
+    {
+        umm CacheSize = GiB(4);
+        Assets->TextureCache = InitializeArena(CacheSize, PushSize_(&Assets->Arena, 0, CacheSize, KiB(4)));
+    }
+
+    // Texture queue
     {
         texture_queue* Queue = &Assets->TextureQueue;
         Queue->Semaphore = Platform.CreateSemaphore(0, 1);
-        umm ScratchSize = MiB(64);
+        umm ScratchSize = MiB(384);
         Queue->Scratch = InitializeArena(ScratchSize, PushSize_(&Assets->Arena, 0, ScratchSize, KiB(4)));
 
         Queue->RingBufferSize = MiB(128);
@@ -267,12 +274,12 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         Assets->WhitenessID = Assets->TextureCount++;
         texture* Whiteness = Assets->Textures + Assets->WhitenessID;
 
-        Whiteness->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, &Info, InvalidRendererTextureID);
+        Whiteness->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, &Info, InvalidRendererTextureID);
         Assets->DefaultTextures[TextureType_Diffuse] = Assets->WhitenessID;
         Assets->DefaultTextures[TextureType_Material] = Assets->WhitenessID;
 
         u32 Texel = 0xFFFFFFFFu;
-        TransferTexture(Frame, Whiteness->RendererID, Info, &Texel);
+        TransferTexture(Frame, Whiteness->RendererID, Info, AllTextureSubresourceRange(), &Texel);
         Whiteness->IsLoaded = true;
     }
 
@@ -290,9 +297,9 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 
         Assets->DefaultTextures[TextureType_Normal] = Assets->TextureCount++;
         texture* DefaultNormalTexture = Assets->Textures + Assets->DefaultTextures[TextureType_Normal];
-        DefaultNormalTexture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, &Info, InvalidRendererTextureID);
+        DefaultNormalTexture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, &Info, InvalidRendererTextureID);
         u16 Texel = 0x8080u;
-        TransferTexture(Frame, DefaultNormalTexture->RendererID, Info, &Texel);
+        TransferTexture(Frame, DefaultNormalTexture->RendererID, Info, AllTextureSubresourceRange(), &Texel);
         DefaultNormalTexture->IsLoaded = true;
     }
 
@@ -328,7 +335,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
     {
         Assets->ParticleArrayID = Assets->TextureCount++;
         texture* ParticleArray = Assets->Textures + Assets->ParticleArrayID;
-        ParticleArray->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_Special, nullptr, InvalidRendererTextureID);
+        ParticleArray->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_Special|TextureFlag_PersistentMemory, nullptr, InvalidRendererTextureID);
         // TODO(boti): For now we know that the texture pack we're using is 512x512, 
         // but we may want to figure out some way for the user code to pack texture arrays/atlases dynamically
         texture_info Info =
@@ -364,7 +371,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
             }
         }
 
-        TransferTexture(Frame, ParticleArray->RendererID, Info, Memory);
+        TransferTexture(Frame, ParticleArray->RendererID, Info, AllTextureSubresourceRange(), Memory);
         ParticleArray->IsLoaded = true;
     }
 
@@ -458,7 +465,7 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Fra
 
             Assets->DefaultFontTextureID = Assets->TextureCount++;
             texture* DefaultFontTexture = Assets->Textures + Assets->DefaultFontTextureID;
-            DefaultFontTexture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_Special, nullptr, InvalidRendererTextureID);
+            DefaultFontTexture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_Special|TextureFlag_PersistentMemory, nullptr, InvalidRendererTextureID);
 
             texture_info Info = 
             {
@@ -470,7 +477,7 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Fra
                 .Format = Format_R8_UNorm,
                 .Swizzle = { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
             };
-            TransferTexture(Frame, DefaultFontTexture->RendererID, Info, FontFile->Bitmap.Bitmap);
+            TransferTexture(Frame, DefaultFontTexture->RendererID, Info, AllTextureSubresourceRange(), FontFile->Bitmap.Bitmap);
             DefaultFontTexture->IsLoaded = true;
         }
         else
