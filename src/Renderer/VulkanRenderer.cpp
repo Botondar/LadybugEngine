@@ -359,9 +359,9 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
         }
         else if (Info->Type == PipelineType_Graphics)
         {
-            Assert(!HasFlag(Info->EnabledStages, PipelineStage_CS));
+            Assert(!HasFlag(Info->EnabledStages, ShaderStage_CS));
             // Only VS and PS is supported for now
-            if (Info->EnabledStages & ~(PipelineStage_VS|PipelineStage_PS)) 
+            if (Info->EnabledStages & ~(ShaderStage_VS|ShaderStage_PS)) 
             {
                 UnimplementedCodePath;
             }
@@ -370,10 +370,10 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
                 UnimplementedCodePath;
             }
     
-            VkPipelineShaderStageCreateInfo StageInfos[PipelineStage_Count] = {};
+            VkPipelineShaderStageCreateInfo StageInfos[ShaderStage_Count] = {};
             u32 StageCount = 0;
     
-            if (Info->EnabledStages & PipelineStage_VS)
+            if (Info->EnabledStages & ShaderStage_VS)
             {
                 VkPipelineShaderStageCreateInfo* StageInfo = StageInfos + StageCount++;
                 StageInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -399,7 +399,7 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
                     return(VK_ERROR_UNKNOWN);
                 }
             }
-            if (Info->EnabledStages & PipelineStage_PS)
+            if (Info->EnabledStages & ShaderStage_PS)
             {
                 VkPipelineShaderStageCreateInfo* StageInfo = StageInfos + StageCount++;
                 StageInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -783,7 +783,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 Bindings[BindingIndex].binding = Binding->Binding;
                 Bindings[BindingIndex].descriptorType = DescriptorTypeTable[Binding->Type];
                 Bindings[BindingIndex].descriptorCount = Binding->DescriptorCount;
-                Bindings[BindingIndex].stageFlags = PipelineStagesToVulkan(Binding->Stages);
+                Bindings[BindingIndex].stageFlags = ShaderStagesToVulkan(Binding->Stages);
                 Bindings[BindingIndex].pImmutableSamplers = nullptr;
                 if (Binding->Flags & DescriptorFlag_PartiallyBound)
                 {

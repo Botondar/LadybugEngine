@@ -215,21 +215,21 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_Static_IndexBuffer,
                 .Type = Descriptor_StorageBuffer,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_VertexBuffer] = 
             {
                 .Binding = Binding_Static_VertexBuffer,
                 .Type = Descriptor_StorageBuffer,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_SkinnedVertexBuffer] = 
             {
                 .Binding = Binding_Static_SkinnedVertexBuffer,
                 .Type = Descriptor_StorageBuffer,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
 
             // Draw
@@ -238,14 +238,14 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_Static_InstanceBuffer,
                 .Type = Descriptor_StorageBuffer,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_DrawBuffer] = 
             {
                 .Binding = Binding_Static_DrawBuffer,
                 .Type = Descriptor_StorageBuffer,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
 
             // Light
@@ -254,14 +254,14 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_Static_LightBuffer,
                 .Type = Descriptor_StorageBuffer,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_TileBuffer] = 
             {
                 .Binding = Binding_Static_TileBuffer,
                 .Type = Descriptor_StorageBuffer,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
 
             // Shadow
@@ -270,14 +270,14 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_Static_CascadedShadow,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_PointShadows] =
             {
                 .Binding = Binding_Static_PointShadows,
                 .Type = Descriptor_ImageSampler,
                 .DescriptorCount = R_MaxShadowCount,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
                 .Flags = DescriptorFlag_PartiallyBound,
             },
 
@@ -287,7 +287,7 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_Static_MipFeedbackBuffer,
                 .Type = Descriptor_StorageBuffer,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
                 .Flags = 0,
             },
 
@@ -297,63 +297,63 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_Static_VisibilityImage,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_OcclusionImage] = 
             {
                 .Binding = Binding_Static_OcclusionImage,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_StructureImage] = 
             {
                 .Binding = Binding_Static_StructureImage,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_OcclusionRawStorageImage] =
             {
                 .Binding = Binding_Static_OcclusionRawStorageImage,
                 .Type = Descriptor_StorageImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_OcclusionStorageImage] =
             {
                 .Binding = Binding_Static_OcclusionStorageImage,
                 .Type = Descriptor_StorageImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_OcclusionRawImage] =
             {
                 .Binding = Binding_Static_OcclusionRawImage,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_HDRColorImage] =
             {
                 .Binding = Binding_Static_HDRColorImage,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_BloomImage] =
             {
                 .Binding = Binding_Static_BloomImage,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_HDRMipStorageImages] = 
             {
                 .Binding = Binding_Static_HDRMipStorageImages,
                 .Type = Descriptor_StorageImage,
                 .DescriptorCount = R_MaxMipCount,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
                 .Flags = DescriptorFlag_PartiallyBound,
             },
             [Binding_Static_BloomMipStorageImages] = 
@@ -361,7 +361,7 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_Static_BloomMipStorageImages,
                 .Type = Descriptor_StorageImage,
                 .DescriptorCount = R_MaxMipCount,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
                 .Flags = DescriptorFlag_PartiallyBound,
             },
             [Binding_Static_HDRColorImageGeneral] =
@@ -369,14 +369,14 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_Static_HDRColorImageGeneral,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_Static_BloomImageGeneral] =
             {
                 .Binding = Binding_Static_BloomImageGeneral,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
         },
     },
@@ -389,7 +389,7 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_Sampler_NamedSamplers,
                 .Type = Descriptor_Sampler,
                 .DescriptorCount = Sampler_Count,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
         },
     },
@@ -403,7 +403,7 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_Bindless_Textures,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 0, // NOTE(boti): actual count is implied by the descriptor pool size for bindless
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
                 .Flags = DescriptorFlag_Bindless,
             },
         },
@@ -419,14 +419,14 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_PerFrame_Constants,
                 .Type = Descriptor_UniformBuffer,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
             },
             [Binding_PerFrame_JointBuffer] =
             {
                 .Binding = Binding_PerFrame_JointBuffer,
                 .Type = Descriptor_StorageBuffer,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
                 .Flags = 0,
             },
             [Binding_PerFrame_ParticleBuffer] =
@@ -434,7 +434,7 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_PerFrame_ParticleBuffer,
                 .Type = Descriptor_StorageBuffer,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
                 .Flags = 0,
             },
             [Binding_PerFrame_ParticleTexture] =
@@ -442,7 +442,7 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_PerFrame_ParticleTexture,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
                 .Flags = 0,
             },
             [Binding_PerFrame_TextureUI] =
@@ -450,7 +450,7 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .Binding = Binding_PerFrame_TextureUI,
                 .Type = Descriptor_SampledImage,
                 .DescriptorCount = 1,
-                .Stages = PipelineStage_All,
+                .Stages = ShaderStage_All,
                 .Flags = 0,
             },
         },
@@ -471,7 +471,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSetCount = 0,
             .DescriptorSets = {},
         },
-        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
+        .EnabledStages = ShaderStage_VS|ShaderStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
         {
@@ -506,7 +506,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSetCount = 0,
             .DescriptorSets = {},
         },
-        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
+        .EnabledStages = ShaderStage_VS|ShaderStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
         {
@@ -541,7 +541,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSetCount = 0,
             .DescriptorSets = {},
         },
-        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
+        .EnabledStages = ShaderStage_VS|ShaderStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
         {
@@ -576,7 +576,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSetCount = 0,
             .DescriptorSets = {},
         },
-        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
+        .EnabledStages = ShaderStage_VS|ShaderStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
         {
@@ -611,7 +611,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSetCount = 0,
             .DescriptorSets = {},
         },
-        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
+        .EnabledStages = ShaderStage_VS|ShaderStage_PS,
         .InputAssemblerState = InputState_vertex,
         .RasterizerState = 
         {
@@ -646,7 +646,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSetCount = 0,
             .DescriptorSets = {},
         },
-        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
+        .EnabledStages = ShaderStage_VS|ShaderStage_PS,
         .InputAssemblerState = 
         {
             .Topology = Topology_TriangleList,
@@ -690,7 +690,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSetCount = 0,
             .DescriptorSets = {},
         },
-        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
+        .EnabledStages = ShaderStage_VS|ShaderStage_PS,
         .InputAssemblerState = 
         {
             .Topology = Topology_TriangleList,
@@ -761,7 +761,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSetCount = 0,
             .DescriptorSets = {},
         },
-        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
+        .EnabledStages = ShaderStage_VS|ShaderStage_PS,
         .InputAssemblerState = 
         {
             .Topology = Topology_TriangleList,
@@ -841,7 +841,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSetCount = 0,
             .DescriptorSets = {},
         },
-        .EnabledStages = PipelineStage_VS|PipelineStage_PS,
+        .EnabledStages = ShaderStage_VS|ShaderStage_PS,
         .InputAssemblerState = 
         {
             .Topology = Topology_TriangleList,
@@ -890,7 +890,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSetCount = 0,
             .DescriptorSets = {},
         },
-        .EnabledStages = PipelineStage_CS,
+        .EnabledStages = ShaderStage_CS,
     },
     [Pipeline_LightBinning] =
     {

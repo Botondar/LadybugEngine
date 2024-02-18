@@ -42,7 +42,7 @@ extern VkBlendFactor        BlendFactorTable[Blend_Count];
 extern VkCompareOp          CompareOpTable[Compare_Count];
 extern VkDescriptorType     DescriptorTypeTable[Descriptor_Count];
 
-internal VkShaderStageFlags PipelineStagesToVulkan(pipeline_stages Stages);
+internal VkShaderStageFlags ShaderStagesToVulkan(shader_stages Stages);
 internal VkSamplerCreateInfo SamplerStateToVulkanSamplerInfo(sampler_state Sampler);
 
 //

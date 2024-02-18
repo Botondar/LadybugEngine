@@ -206,25 +206,25 @@ VkDescriptorType DescriptorTypeTable[Descriptor_Count] =
     [Descriptor_InlineUniformBlock]     = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,
 };
 
-internal VkShaderStageFlags PipelineStagesToVulkan(flags32 Stages)
+internal VkShaderStageFlags ShaderStagesToVulkan(flags32 Stages)
 {
     VkShaderStageFlags Result = 0;
-    if (Stages == PipelineStage_All)
+    if (Stages == ShaderStage_All)
     {
         Result = VK_SHADER_STAGE_ALL;
     }
-    else if (Stages == PipelineStage_AllGfx)
+    else if (Stages == ShaderStage_AllGfx)
     {
         Result = VK_SHADER_STAGE_ALL_GRAPHICS;
     }
     else 
     {
-        if (HasFlag(Stages, PipelineStage_VS)) Result |= VK_SHADER_STAGE_VERTEX_BIT;
-        if (HasFlag(Stages, PipelineStage_PS)) Result |= VK_SHADER_STAGE_FRAGMENT_BIT;
-        if (HasFlag(Stages, PipelineStage_HS)) Result |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-        if (HasFlag(Stages, PipelineStage_DS)) Result |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-        if (HasFlag(Stages, PipelineStage_GS)) Result |= VK_SHADER_STAGE_GEOMETRY_BIT;
-        if (HasFlag(Stages, PipelineStage_CS)) Result |= VK_SHADER_STAGE_COMPUTE_BIT;
+        if (HasFlag(Stages, ShaderStage_VS)) Result |= VK_SHADER_STAGE_VERTEX_BIT;
+        if (HasFlag(Stages, ShaderStage_PS)) Result |= VK_SHADER_STAGE_FRAGMENT_BIT;
+        if (HasFlag(Stages, ShaderStage_HS)) Result |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+        if (HasFlag(Stages, ShaderStage_DS)) Result |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+        if (HasFlag(Stages, ShaderStage_GS)) Result |= VK_SHADER_STAGE_GEOMETRY_BIT;
+        if (HasFlag(Stages, ShaderStage_CS)) Result |= VK_SHADER_STAGE_COMPUTE_BIT;
     }
     return(Result);
 }

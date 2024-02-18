@@ -305,23 +305,23 @@ enum pipeline_type : u32
     PipelineType_Count,
 };
 
-typedef flags32 pipeline_stages;
-enum pipeline_stage_bits : pipeline_stages
+typedef flags32 shader_stages;
+enum shader_stage_bits : shader_stages
 {
-    PipelineStage_None = 0,
+    ShaderStage_None = 0,
 
-    PipelineStage_VS = (1 << 0),
-    PipelineStage_PS = (1 << 1),
-    PipelineStage_HS = (1 << 2),
-    PipelineStage_DS = (1 << 3),
-    PipelineStage_GS = (1 << 4),
+    ShaderStage_VS = (1 << 0),
+    ShaderStage_PS = (1 << 1),
+    ShaderStage_HS = (1 << 2),
+    ShaderStage_DS = (1 << 3),
+    ShaderStage_GS = (1 << 4),
 
-    PipelineStage_CS = (1 << 5),
+    ShaderStage_CS = (1 << 5),
 
-    PipelineStage_Count = 6, // NOTE(boti): This has to be kept up to date !!!
+    ShaderStage_Count = 6, // NOTE(boti): This has to be kept up to date !!!
 
-    PipelineStage_AllGfx = PipelineStage_VS|PipelineStage_PS|PipelineStage_DS|PipelineStage_HS|PipelineStage_GS,
-    PipelineStage_All = PipelineStage_AllGfx|PipelineStage_CS,
+    ShaderStage_AllGfx = ShaderStage_VS|ShaderStage_PS|ShaderStage_DS|ShaderStage_HS|ShaderStage_GS,
+    ShaderStage_All = ShaderStage_AllGfx|ShaderStage_CS,
 };
 
 
@@ -387,7 +387,7 @@ struct descriptor_set_binding
     u32 Binding;
     descriptor_type Type;
     u32 DescriptorCount;
-    pipeline_stages Stages;
+    shader_stages Stages;
     descriptor_flags Flags;
 };
 
@@ -480,7 +480,7 @@ struct pipeline_info
     //
     // Graphics pipeline specific
     //
-    pipeline_stages EnabledStages;
+    shader_stages EnabledStages;
 
     vertex_state InputAssemblerState;
     rasterizer_state RasterizerState;
