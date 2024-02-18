@@ -2,7 +2,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
 {
     VkResult Result = VK_SUCCESS;
 
-    constexpr b32 UseValidation = true;
+    constexpr b32 UseValidation = false;
     const char* RequiredInstanceLayers_[] = 
     {
         "VK_LAYER_KHRONOS_validation",

@@ -890,6 +890,64 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
     return(Result);
 }
 
+internal void UpdateDescriptorBuffer(u32 WriteCount, const descriptor_write* Writes, 
+                                     VkDescriptorSetLayout Layout, void* Buffer)
+{
+    // TODO(boti): Keep track of the maximum used address (max(CurrentOffset + DescriptorSize))
+    // to allow us to use the rest of the buffer for the "push" or temporary descriptors
+    for (u32 WriteIndex = 0; WriteIndex < WriteCount; WriteIndex++)
+    {
+        const descriptor_write* Write = Writes + WriteIndex;
+
+        VkDeviceSize BaseOffset = 0;
+        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Layout, Write->Binding, &BaseOffset);
+
+        for (u32 Element = 0; Element < Write->Count; Element++)
+        {
+            u32 EffectiveElement = Element + Write->BaseIndex;
+
+            const void* Data = nullptr;
+            umm DescriptorSize = 0;
+            
+            VkDescriptorImageInfo ImageInfo = {};
+            VkDescriptorAddressInfoEXT BufferInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT };
+            switch (Write->Type)
+            {
+                case Descriptor_SampledImage: DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize; goto IMAGE_CASE;
+                case Descriptor_StorageImage: DescriptorSize = VK.DescriptorBufferProps.storageImageDescriptorSize; goto IMAGE_CASE;
+                    IMAGE_CASE:
+                    {
+                        ImageInfo.sampler = VK_NULL_HANDLE,
+                        ImageInfo.imageView = Write->Images[Element].View;
+                        ImageInfo.imageLayout= Write->Images[Element].Layout;
+                        Data = &ImageInfo;
+                    } break;
+                case Descriptor_StorageBuffer: DescriptorSize = VK.DescriptorBufferProps.storageBufferDescriptorSize; goto BUFFER_CASE;
+                case Descriptor_UniformBuffer: DescriptorSize = VK.DescriptorBufferProps.uniformBufferDescriptorSize; goto BUFFER_CASE;
+                    BUFFER_CASE:
+                    {
+                        BufferInfo.address = GetBufferDeviceAddress(VK.Device, Write->Buffers[Element].Buffer) + Write->Buffers[Element].Offset;
+                        BufferInfo.range = Write->Buffers[Element].Range;
+                        Data = &BufferInfo;
+                    } break;
+                InvalidDefaultCase;
+            }
+
+            // NOTE(boti): descriptors live in their own dedicated buffer starting at offset 0 for now, but may not in the future
+            VkDeviceSize Offset = 0 + BaseOffset + EffectiveElement*DescriptorSize;
+
+            VkDescriptorGetInfoEXT DescriptorInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                .pNext = nullptr,
+                .type = DescriptorTypeTable[Write->Type],
+                .data = { (VkSampler*)Data }, // HACK(boti): This is just a union of pointers, there really should be a void* in there...
+            };
+            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Buffer, Offset));
+        }
+    }
+}
+
 internal b32 
 AddTextureDeletionEntry(texture_deletion_queue* Queue, u32 FrameID, VkImage Image, VkImageView View)
 {
@@ -934,15 +992,6 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     VkResult Result = InitializeVulkan(&Renderer->Vulkan);
     ReturnOnFailure();
     VK = Renderer->Vulkan;
-
-    // Vertex Buffer
-    {
-        if (!CreateGeometryBuffer(R_VertexBufferMaxBlockCount, Arena, &Renderer->GeometryBuffer))
-        {
-            Result = VK_ERROR_INITIALIZATION_FAILED;
-            ReturnOnFailure();
-        }
-    }
 
     // Create samplers
     {
@@ -1003,6 +1052,242 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
 
             Result = vkCreateDescriptorSetLayout(VK.Device, &CreateInfo, nullptr, &Renderer->SetLayouts[Index]);
             Assert(Result == VK_SUCCESS);
+        }
+    }
+
+    // Vertex Buffer
+    {
+        if (!CreateGeometryBuffer(R_VertexBufferMaxBlockCount, Arena, &Renderer->GeometryBuffer))
+        {
+            Result = VK_ERROR_INITIALIZATION_FAILED;
+            ReturnOnFailure();
+        }
+    }
+
+    Renderer->MipMaskMemorySize = R_MaxTextureCount * sizeof(u32);
+    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
+                                   Renderer->MipMaskMemorySize, &Renderer->MipMaskBuffer, &Renderer->MipMaskMemory);
+    ReturnOnFailure();
+
+    Renderer->SkinningMemorySize = R_SkinningBufferSize;
+    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK.GPUMemTypes, 
+                                   Renderer->SkinningMemorySize, &Renderer->SkinningBuffer, &Renderer->SkinningMemory);
+    ReturnOnFailure();
+    
+    Renderer->LightBufferMemorySize = R_MaxLightCount * sizeof(light);
+    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
+                                   Renderer->LightBufferMemorySize, &Renderer->LightBuffer, &Renderer->LightBufferMemory);
+    ReturnOnFailure();
+    
+    Renderer->TileMemorySize = sizeof(screen_tile) * R_MaxTileCountX * R_MaxTileCountY;
+    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
+                                   Renderer->TileMemorySize, &Renderer->TileBuffer, &Renderer->TileMemory);
+    ReturnOnFailure();
+
+    Renderer->InstanceMemorySize = MiB(64);
+    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
+                                   Renderer->InstanceMemorySize, &Renderer->InstanceBuffer, &Renderer->InstanceMemory);
+    ReturnOnFailure();
+
+    Renderer->DrawMemorySize = MiB(128);
+    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK.GPUMemTypes,
+                                   Renderer->DrawMemorySize, &Renderer->DrawBuffer, &Renderer->DrawMemory);
+    ReturnOnFailure();
+
+    // Shadow storage
+    {
+        VkImageCreateInfo DummyImageInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
+            .extent = { R_ShadowResolution, R_ShadowResolution, 1 },
+            .mipLevels = 1,
+            .arrayLayers = R_MaxShadowCascadeCount,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        };
+        VkMemoryRequirements MemoryRequirements = GetImageMemoryRequirements(VK.Device, &DummyImageInfo, VK_IMAGE_ASPECT_DEPTH_BIT);
+        u32 MemoryTypes = VK.GPUMemTypes & MemoryRequirements.memoryTypeBits;
+        
+        u32 MemoryTypeIndex = 0;
+        if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
+        {
+            Renderer->ShadowArena = CreateGPUArena(R_ShadowMapMemorySize, MemoryTypeIndex, GpuMemoryFlag_None);
+            if (Renderer->ShadowArena.Memory)
+            {
+                VkImageCreateInfo CascadeImageInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .imageType = VK_IMAGE_TYPE_2D,
+                    .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
+                    .extent = { R_ShadowResolution, R_ShadowResolution, 1 },
+                    .mipLevels = 1,
+                    .arrayLayers = R_MaxShadowCascadeCount,
+                    .samples = VK_SAMPLE_COUNT_1_BIT,
+                    .tiling = VK_IMAGE_TILING_OPTIMAL,
+                    .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
+                    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                    .queueFamilyIndexCount = 0,
+                    .pQueueFamilyIndices = nullptr,
+                    .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                };
+                Result = vkCreateImage(VK.Device, &CascadeImageInfo, nullptr, &Renderer->CascadeMap);
+                ReturnOnFailure();
+
+                b32 PushResult = PushImage(&Renderer->ShadowArena, Renderer->CascadeMap);
+                if (PushResult)
+                {
+                    VkImageViewCreateInfo ViewInfo = 
+                    {
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                        .pNext = nullptr,
+                        .flags = 0,
+                        .image = Renderer->CascadeMap,
+                        .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+                        .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
+                        .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
+                        .subresourceRange = 
+                        {
+                            .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = 1,
+                            .baseArrayLayer = 0,
+                            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                        },
+                    };
+        
+                    Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &Renderer->CascadeArrayView);
+                    ReturnOnFailure();
+        
+                    for (u32 Cascade = 0; Cascade < R_MaxShadowCascadeCount; Cascade++)
+                    {
+                        VkImageViewCreateInfo CascadeViewInfo = 
+                        {
+                            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                            .pNext = nullptr,
+                            .flags = 0,
+                            .image = Renderer->CascadeMap,
+                            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                            .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
+                            .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
+                            .subresourceRange = 
+                            {
+                                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                                .baseMipLevel = 0,
+                                .levelCount = 1,
+                                .baseArrayLayer = Cascade,
+                                .layerCount = 1,
+                            },
+                        };
+        
+                        Result = vkCreateImageView(VK.Device, &CascadeViewInfo, nullptr, &Renderer->CascadeViews[Cascade]);
+                        ReturnOnFailure();
+                    }
+                }
+                else
+                {
+                    return(0);
+                }
+
+                // Point shadow maps
+                for (u32 ShadowMapIndex = 0; ShadowMapIndex < R_MaxShadowCount; ShadowMapIndex++)
+                {
+                    point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowMapIndex;
+
+                    VkImageCreateInfo ImageInfo = 
+                    {
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                        .pNext = nullptr,
+                        .flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
+                        .imageType = VK_IMAGE_TYPE_2D,
+                        .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
+                        .extent = { R_PointShadowResolution, R_PointShadowResolution, 1 },
+                        .mipLevels = 1,
+                        .arrayLayers = 6,
+                        .samples = VK_SAMPLE_COUNT_1_BIT,
+                        .tiling = VK_IMAGE_TILING_OPTIMAL,
+                        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
+                        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                        .queueFamilyIndexCount = 0,
+                        .pQueueFamilyIndices = nullptr,
+                        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    };
+
+                    Result = vkCreateImage(VK.Device, &ImageInfo, nullptr, &ShadowMap->Image);
+                    ReturnOnFailure();
+
+                    PushResult = PushImage(&Renderer->ShadowArena, ShadowMap->Image);
+                    if (PushResult)
+                    {
+                        VkImageViewCreateInfo ViewInfo = 
+                        {
+                            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                            .pNext = nullptr,
+                            .flags = 0,
+                            .image = ShadowMap->Image,
+                            .viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+                            .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
+                            .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
+                            .subresourceRange = 
+                            {
+                                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                                .baseMipLevel = 0,
+                                .levelCount = 1,
+                                .baseArrayLayer = 0,
+                                .layerCount = 6,
+                            },
+                        };
+                        Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &ShadowMap->CubeView);
+                        ReturnOnFailure();
+
+                        for (u32 LayerIndex = 0; LayerIndex < 6; LayerIndex++)
+                        {
+                            VkImageViewCreateInfo LayerViewInfo = 
+                            {
+                                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                                .pNext = nullptr,
+                                .flags = 0,
+                                .image = ShadowMap->Image,
+                                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                                .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
+                                .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
+                                .subresourceRange = 
+                                {
+                                    .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                                    .baseMipLevel = 0,
+                                    .levelCount = 1,
+                                    .baseArrayLayer = LayerIndex,
+                                    .layerCount = 1,
+                                },
+                            };
+                            Result = vkCreateImageView(VK.Device, &LayerViewInfo, nullptr, &ShadowMap->LayerViews[LayerIndex]);
+                            ReturnOnFailure();
+                        }
+                    }
+                    else
+                    {
+                        return(0);
+                    }
+                }
+            }
+            else
+            {
+                return(0);
+            }
+        }
+        else
+        {
+            return(0);
         }
     }
 
@@ -1069,6 +1354,98 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, 
                                OffsetPtr(Renderer->SamplerDescriptorMapping, Offset + SamplerIndex*DescriptorSize));
         }
+    }
+
+    // Static descriptor upload (except RTs)
+    {
+        descriptor_write Writes[] = 
+        {
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_IndexBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->GeometryBuffer.IndexMemory.Buffer, 0, geometry_memory::GPUBlockSize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_VertexBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->GeometryBuffer.VertexMemory.Buffer, 0, geometry_memory::GPUBlockSize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_SkinnedVertexBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->SkinningBuffer, 0, Renderer->SkinningMemorySize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_InstanceBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->InstanceBuffer, 0, Renderer->InstanceMemorySize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_DrawBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->DrawBuffer, 0, Renderer->DrawMemorySize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_LightBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->LightBuffer, 0, Renderer->LightBufferMemorySize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_TileBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->TileBuffer, 0, Renderer->TileMemorySize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_MipFeedbackBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->MipMaskBuffer, 0, Renderer->MipMaskMemorySize } },
+            },
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_CascadedShadow,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->CascadeArrayView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+            },
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_PointShadows,
+                .BaseIndex = 0,
+                .Count = R_MaxShadowCount,
+                .Images = {}, // NOTE(boti): Filled after this array def.
+            },
+        };
+
+        for (u32 WriteIndex = 0; WriteIndex < CountOf(Writes); WriteIndex++)
+        {
+            descriptor_write* Write = Writes + WriteIndex;
+            if (Write->Binding == Binding_Static_PointShadows)
+            {
+                for (u32 ShadowIndex = 0; ShadowIndex < R_MaxShadowCount; ShadowIndex++)
+                {
+                    Write->Images[ShadowIndex].View = Renderer->PointShadowMaps[ShadowIndex].CubeView;
+                    Write->Images[ShadowIndex].Layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                }
+            }
+        }
+
+        UpdateDescriptorBuffer(CountOf(Writes), Writes, Renderer->SetLayouts[Set_Static], Renderer->StaticResourceDescriptorMapping);
     }
 
     // Surface
@@ -1441,235 +1818,6 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         }
     }
 
-    Renderer->MipMaskMemorySize = R_MaxTextureCount * sizeof(u32);
-    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
-                                   Renderer->MipMaskMemorySize, &Renderer->MipMaskBuffer, &Renderer->MipMaskMemory);
-    ReturnOnFailure();
-
-    Renderer->SkinningMemorySize = R_SkinningBufferSize;
-    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK.GPUMemTypes, 
-                                   Renderer->SkinningMemorySize, &Renderer->SkinningBuffer, &Renderer->SkinningMemory);
-    ReturnOnFailure();
-    
-    Renderer->LightBufferMemorySize = R_MaxLightCount * sizeof(light);
-    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
-                                   Renderer->LightBufferMemorySize, &Renderer->LightBuffer, &Renderer->LightBufferMemory);
-    ReturnOnFailure();
-    
-    Renderer->TileMemorySize = sizeof(screen_tile) * R_MaxTileCountX * R_MaxTileCountY;
-    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
-                                   Renderer->TileMemorySize, &Renderer->TileBuffer, &Renderer->TileMemory);
-    ReturnOnFailure();
-
-    Renderer->InstanceMemorySize = MiB(64);
-    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
-                                   Renderer->InstanceMemorySize, &Renderer->InstanceBuffer, &Renderer->InstanceMemory);
-    ReturnOnFailure();
-
-    Renderer->DrawMemorySize = MiB(128);
-    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK.GPUMemTypes,
-                                   Renderer->DrawMemorySize, &Renderer->DrawBuffer, &Renderer->DrawMemory);
-    ReturnOnFailure();
-
-    // Shadow storage
-    {
-        VkImageCreateInfo DummyImageInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = 0,
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
-            .extent = { R_ShadowResolution, R_ShadowResolution, 1 },
-            .mipLevels = 1,
-            .arrayLayers = R_MaxShadowCascadeCount,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = 0,
-            .pQueueFamilyIndices = nullptr,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        };
-        VkMemoryRequirements MemoryRequirements = GetImageMemoryRequirements(VK.Device, &DummyImageInfo, VK_IMAGE_ASPECT_DEPTH_BIT);
-        u32 MemoryTypes = VK.GPUMemTypes & MemoryRequirements.memoryTypeBits;
-        
-        u32 MemoryTypeIndex = 0;
-        if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
-        {
-            Renderer->ShadowArena = CreateGPUArena(R_ShadowMapMemorySize, MemoryTypeIndex, GpuMemoryFlag_None);
-            if (Renderer->ShadowArena.Memory)
-            {
-                VkImageCreateInfo CascadeImageInfo = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .imageType = VK_IMAGE_TYPE_2D,
-                    .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
-                    .extent = { R_ShadowResolution, R_ShadowResolution, 1 },
-                    .mipLevels = 1,
-                    .arrayLayers = R_MaxShadowCascadeCount,
-                    .samples = VK_SAMPLE_COUNT_1_BIT,
-                    .tiling = VK_IMAGE_TILING_OPTIMAL,
-                    .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
-                    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-                    .queueFamilyIndexCount = 0,
-                    .pQueueFamilyIndices = nullptr,
-                    .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                };
-                Result = vkCreateImage(VK.Device, &CascadeImageInfo, nullptr, &Renderer->CascadeMap);
-                ReturnOnFailure();
-
-                b32 PushResult = PushImage(&Renderer->ShadowArena, Renderer->CascadeMap);
-                if (PushResult)
-                {
-                    VkImageViewCreateInfo ViewInfo = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                        .pNext = nullptr,
-                        .flags = 0,
-                        .image = Renderer->CascadeMap,
-                        .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
-                        .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
-                        .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
-                        .subresourceRange = 
-                        {
-                            .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = 1,
-                            .baseArrayLayer = 0,
-                            .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                        },
-                    };
-        
-                    Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &Renderer->CascadeArrayView);
-                    ReturnOnFailure();
-        
-                    for (u32 Cascade = 0; Cascade < R_MaxShadowCascadeCount; Cascade++)
-                    {
-                        VkImageViewCreateInfo CascadeViewInfo = 
-                        {
-                            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                            .pNext = nullptr,
-                            .flags = 0,
-                            .image = Renderer->CascadeMap,
-                            .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                            .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
-                            .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
-                            .subresourceRange = 
-                            {
-                                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                                .baseMipLevel = 0,
-                                .levelCount = 1,
-                                .baseArrayLayer = Cascade,
-                                .layerCount = 1,
-                            },
-                        };
-        
-                        Result = vkCreateImageView(VK.Device, &CascadeViewInfo, nullptr, &Renderer->CascadeViews[Cascade]);
-                        ReturnOnFailure();
-                    }
-                }
-                else
-                {
-                    return(0);
-                }
-
-                // Point shadow maps
-                for (u32 ShadowMapIndex = 0; ShadowMapIndex < R_MaxShadowCount; ShadowMapIndex++)
-                {
-                    point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowMapIndex;
-
-                    VkImageCreateInfo ImageInfo = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-                        .pNext = nullptr,
-                        .flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
-                        .imageType = VK_IMAGE_TYPE_2D,
-                        .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
-                        .extent = { R_PointShadowResolution, R_PointShadowResolution, 1 },
-                        .mipLevels = 1,
-                        .arrayLayers = 6,
-                        .samples = VK_SAMPLE_COUNT_1_BIT,
-                        .tiling = VK_IMAGE_TILING_OPTIMAL,
-                        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,
-                        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-                        .queueFamilyIndexCount = 0,
-                        .pQueueFamilyIndices = nullptr,
-                        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                    };
-
-                    Result = vkCreateImage(VK.Device, &ImageInfo, nullptr, &ShadowMap->Image);
-                    ReturnOnFailure();
-
-                    PushResult = PushImage(&Renderer->ShadowArena, ShadowMap->Image);
-                    if (PushResult)
-                    {
-                        VkImageViewCreateInfo ViewInfo = 
-                        {
-                            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                            .pNext = nullptr,
-                            .flags = 0,
-                            .image = ShadowMap->Image,
-                            .viewType = VK_IMAGE_VIEW_TYPE_CUBE,
-                            .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
-                            .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
-                            .subresourceRange = 
-                            {
-                                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                                .baseMipLevel = 0,
-                                .levelCount = 1,
-                                .baseArrayLayer = 0,
-                                .layerCount = 6,
-                            },
-                        };
-                        Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &ShadowMap->CubeView);
-                        ReturnOnFailure();
-
-                        for (u32 LayerIndex = 0; LayerIndex < 6; LayerIndex++)
-                        {
-                            VkImageViewCreateInfo LayerViewInfo = 
-                            {
-                                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                                .pNext = nullptr,
-                                .flags = 0,
-                                .image = ShadowMap->Image,
-                                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                                .format = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]],
-                                .components = { VK_COMPONENT_SWIZZLE_IDENTITY },
-                                .subresourceRange = 
-                                {
-                                    .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                                    .baseMipLevel = 0,
-                                    .levelCount = 1,
-                                    .baseArrayLayer = LayerIndex,
-                                    .layerCount = 1,
-                                },
-                            };
-                            Result = vkCreateImageView(VK.Device, &LayerViewInfo, nullptr, &ShadowMap->LayerViews[LayerIndex]);
-                            ReturnOnFailure();
-                        }
-                    }
-                    else
-                    {
-                        return(0);
-                    }
-                }
-            }
-            else
-            {
-                return(0);
-            }
-        }
-        else
-        {
-            return(0);
-        }
-
-        
-    }
-
     // Create system pipeline layout
     {
         VkPushConstantRange PushConstantRange = 
@@ -1692,67 +1840,12 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         Result = vkCreatePipelineLayout(VK.Device, &Info, nullptr, &Renderer->SystemPipelineLayout);
         ReturnOnFailure();
     }
+
+    // Pipelines
     Result = CreatePipelines(Renderer, Scratch);
     ReturnOnFailure();
+
     return(Renderer);
-}
-
-internal void UpdateDescriptorBuffer(u32 WriteCount, const descriptor_write* Writes, 
-                                     VkDescriptorSetLayout Layout, void* Buffer)
-{
-    // TODO(boti): Keep track of the maximum used address (max(CurrentOffset + DescriptorSize))
-    // to allow us to use the rest of the buffer for the "push" or temporary descriptors
-    for (u32 WriteIndex = 0; WriteIndex < WriteCount; WriteIndex++)
-    {
-        const descriptor_write* Write = Writes + WriteIndex;
-
-        VkDeviceSize BaseOffset = 0;
-        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Layout, Write->Binding, &BaseOffset);
-
-        for (u32 Element = 0; Element < Write->Count; Element++)
-        {
-            u32 EffectiveElement = Element + Write->BaseIndex;
-
-            const void* Data = nullptr;
-            umm DescriptorSize = 0;
-            
-            VkDescriptorImageInfo ImageInfo = {};
-            VkDescriptorAddressInfoEXT BufferInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT };
-            switch (Write->Type)
-            {
-                case Descriptor_SampledImage: DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize; goto IMAGE_CASE;
-                case Descriptor_StorageImage: DescriptorSize = VK.DescriptorBufferProps.storageImageDescriptorSize; goto IMAGE_CASE;
-                    IMAGE_CASE:
-                    {
-                        ImageInfo.sampler = VK_NULL_HANDLE,
-                        ImageInfo.imageView = Write->Images[Element].View;
-                        ImageInfo.imageLayout= Write->Images[Element].Layout;
-                        Data = &ImageInfo;
-                    } break;
-                case Descriptor_StorageBuffer: DescriptorSize = VK.DescriptorBufferProps.storageBufferDescriptorSize; goto BUFFER_CASE;
-                case Descriptor_UniformBuffer: DescriptorSize = VK.DescriptorBufferProps.uniformBufferDescriptorSize; goto BUFFER_CASE;
-                    BUFFER_CASE:
-                    {
-                        BufferInfo.address = GetBufferDeviceAddress(VK.Device, Write->Buffers[Element].Buffer) + Write->Buffers[Element].Offset;
-                        BufferInfo.range = Write->Buffers[Element].Range;
-                        Data = &BufferInfo;
-                    } break;
-                InvalidDefaultCase;
-            }
-
-            // NOTE(boti): descriptors live in their own dedicated buffer starting at offset 0 for now, but may not in the future
-            VkDeviceSize Offset = 0 + BaseOffset + EffectiveElement*DescriptorSize;
-
-            VkDescriptorGetInfoEXT DescriptorInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-                .pNext = nullptr,
-                .type = DescriptorTypeTable[Write->Type],
-                .data = { (VkSampler*)Data }, // HACK(boti): This is just a union of pointers, there really should be a void* in there...
-            };
-            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Buffer, Offset));
-        }
-    }
 }
 
 internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
@@ -1804,7 +1897,115 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
 
             if (ResizeRenderTargets(&Renderer->RenderTargetHeap, Renderer->SurfaceExtent.width, Renderer->SurfaceExtent.height))
             {
+                descriptor_write Writes[] = 
+                {
+                    {
+                        .Type = Descriptor_SampledImage,
+                        .Binding = Binding_Static_VisibilityImage,
+                        .BaseIndex = 0,
+                        .Count = 1,
+                        .Images = { { Renderer->VisibilityBuffer->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+                    },
+                    {
+                        .Type = Descriptor_SampledImage,
+                        .Binding = Binding_Static_OcclusionImage,
+                        .BaseIndex = 0,
+                        .Count = 1,
+                        .Images = { { Renderer->OcclusionBuffers[1]->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+                    },
+                    {
+                        .Type = Descriptor_SampledImage,
+                        .Binding = Binding_Static_StructureImage,
+                        .BaseIndex = 0,
+                        .Count = 1,
+                        .Images = { { Renderer->StructureBuffer->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+                    },
+                    {
+                        .Type = Descriptor_StorageImage,
+                        .Binding = Binding_Static_OcclusionRawStorageImage,
+                        .BaseIndex = 0,
+                        .Count = 1,
+                        .Images = { { Renderer->OcclusionBuffers[0]->View, VK_IMAGE_LAYOUT_GENERAL } },
+                    },
+                    {
+                        .Type = Descriptor_StorageImage,
+                        .Binding = Binding_Static_OcclusionStorageImage,
+                        .BaseIndex = 0,
+                        .Count = 1,
+                        .Images = { { Renderer->OcclusionBuffers[1]->View, VK_IMAGE_LAYOUT_GENERAL } },
+                    },
+                    {
+                        .Type = Descriptor_SampledImage,
+                        .Binding = Binding_Static_OcclusionRawImage,
+                        .BaseIndex = 0,
+                        .Count = 1,
+                        .Images = { { Renderer->OcclusionBuffers[0]->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+                    },
+                    {
+                        .Type = Descriptor_SampledImage,
+                        .Binding = Binding_Static_HDRColorImage,
+                        .BaseIndex = 0,
+                        .Count = 1,
+                        .Images = { { Renderer->HDRRenderTarget->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+                    },
+                    {
+                        .Type = Descriptor_SampledImage,
+                        .Binding = Binding_Static_BloomImage,
+                        .BaseIndex = 0,
+                        .Count = 1,
+                        .Images = { { Renderer->BloomTarget->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+                    },
+                    {
+                        .Type = Descriptor_SampledImage,
+                        .Binding = Binding_Static_HDRColorImageGeneral,
+                        .BaseIndex = 0,
+                        .Count = 1,
+                        .Images = { { Renderer->HDRRenderTarget->View, VK_IMAGE_LAYOUT_GENERAL } },
+                    },
+                    {
+                        .Type = Descriptor_SampledImage,
+                        .Binding = Binding_Static_BloomImageGeneral,
+                        .BaseIndex = 0,
+                        .Count = 1,
+                        .Images = { { Renderer->BloomTarget->View, VK_IMAGE_LAYOUT_GENERAL } }
+                    },
+                    {
+                        .Type = Descriptor_StorageImage,
+                        .Binding = Binding_Static_HDRMipStorageImages,
+                        .BaseIndex = 0,
+                        .Count = Renderer->HDRRenderTarget->MipCount,
+                        .Images = {}, // NOTE(boti): Filled after this array def.
+                    },
+                    {
+                        .Type = Descriptor_StorageImage,
+                        .Binding = Binding_Static_BloomMipStorageImages,
+                        .BaseIndex = 0,
+                        .Count = Renderer->BloomTarget->MipCount,
+                        .Images = {}, // NOTE(boti): Filled after this array def.
+                    },
+                };
 
+                for (u32 WriteIndex = 0; WriteIndex < CountOf(Writes); WriteIndex++)
+                {
+                    descriptor_write* Write = Writes + WriteIndex;
+
+                    render_target* RenderTarget = nullptr;
+                    switch (Write->Binding)
+                    {
+                        case Binding_Static_HDRMipStorageImages: RenderTarget = Renderer->HDRRenderTarget; break;
+                        case Binding_Static_BloomMipStorageImages: RenderTarget = Renderer->BloomTarget; break;
+                    }
+                    if (RenderTarget)
+                    {
+                        for (u32 Mip = 0; Mip < RenderTarget->MipCount; Mip++)
+                        {
+                            Write->Images[Mip].View = RenderTarget->MipViews[Mip];
+                            Write->Images[Mip].Layout = VK_IMAGE_LAYOUT_GENERAL;
+                        }
+                    }
+                }
+
+                UpdateDescriptorBuffer(CountOf(Writes), Writes, Renderer->SetLayouts[Set_Static], Renderer->StaticResourceDescriptorMapping);
             }
             else
             {
@@ -3014,198 +3215,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         }
     }
 
-    // Descriptor update
+    // Per-frame descriptor update
     {
-        descriptor_write StaticWrites[] = 
-        {
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_IndexBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->GeometryBuffer.IndexMemory.Buffer, 0, geometry_memory::GPUBlockSize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_VertexBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->GeometryBuffer.VertexMemory.Buffer, 0, geometry_memory::GPUBlockSize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_SkinnedVertexBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->SkinningBuffer, 0, Renderer->SkinningMemorySize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_InstanceBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->InstanceBuffer, 0, Renderer->InstanceMemorySize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_DrawBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->DrawBuffer, 0, Renderer->DrawMemorySize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_LightBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->LightBuffer, 0, Renderer->LightBufferMemorySize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_TileBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->TileBuffer, 0, Renderer->TileMemorySize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_MipFeedbackBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->MipMaskBuffer, 0, Renderer->MipMaskMemorySize } },
-            },
-            {
-                .Type = Descriptor_SampledImage,
-                .Binding = Binding_Static_CascadedShadow,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Images = { { Renderer->CascadeArrayView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-            },
-            {
-                .Type = Descriptor_SampledImage,
-                .Binding = Binding_Static_PointShadows,
-                .BaseIndex = 0,
-                .Count = R_MaxShadowCount,
-                .Images = {}, // NOTE(boti): Filled after this array def.
-            },
-
-            //
-            // RT
-            //
-            {
-                .Type = Descriptor_SampledImage,
-                .Binding = Binding_Static_VisibilityImage,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Images = { { Renderer->VisibilityBuffer->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-            },
-            {
-                .Type = Descriptor_SampledImage,
-                .Binding = Binding_Static_OcclusionImage,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Images = { { Renderer->OcclusionBuffers[1]->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-            },
-            {
-                .Type = Descriptor_SampledImage,
-                .Binding = Binding_Static_StructureImage,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Images = { { Renderer->StructureBuffer->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-            },
-            {
-                .Type = Descriptor_StorageImage,
-                .Binding = Binding_Static_OcclusionRawStorageImage,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Images = { { Renderer->OcclusionBuffers[0]->View, VK_IMAGE_LAYOUT_GENERAL } },
-            },
-            {
-                .Type = Descriptor_StorageImage,
-                .Binding = Binding_Static_OcclusionStorageImage,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Images = { { Renderer->OcclusionBuffers[1]->View, VK_IMAGE_LAYOUT_GENERAL } },
-            },
-            {
-                .Type = Descriptor_SampledImage,
-                .Binding = Binding_Static_OcclusionRawImage,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Images = { { Renderer->OcclusionBuffers[0]->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-            },
-            {
-                .Type = Descriptor_SampledImage,
-                .Binding = Binding_Static_HDRColorImage,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Images = { { Renderer->HDRRenderTarget->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-            },
-            {
-                .Type = Descriptor_SampledImage,
-                .Binding = Binding_Static_BloomImage,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Images = { { Renderer->BloomTarget->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-            },
-            {
-                .Type = Descriptor_SampledImage,
-                .Binding = Binding_Static_HDRColorImageGeneral,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Images = { { Renderer->HDRRenderTarget->View, VK_IMAGE_LAYOUT_GENERAL } },
-            },
-            {
-                .Type = Descriptor_SampledImage,
-                .Binding = Binding_Static_BloomImageGeneral,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Images = { { Renderer->BloomTarget->View, VK_IMAGE_LAYOUT_GENERAL } }
-            },
-            {
-                .Type = Descriptor_StorageImage,
-                .Binding = Binding_Static_HDRMipStorageImages,
-                .BaseIndex = 0,
-                .Count = Renderer->HDRRenderTarget->MipCount,
-                .Images = {}, // NOTE(boti): Filled after this array def.
-            },
-            {
-                .Type = Descriptor_StorageImage,
-                .Binding = Binding_Static_BloomMipStorageImages,
-                .BaseIndex = 0,
-                .Count = Renderer->BloomTarget->MipCount,
-                .Images = {}, // NOTE(boti): Filled after this array def.
-            },
-        };
-
-        for (u32 WriteIndex = 0; WriteIndex < CountOf(StaticWrites); WriteIndex++)
-        {
-            descriptor_write* Write = StaticWrites + WriteIndex;
-
-            render_target* RenderTarget = nullptr;
-            switch (Write->Binding)
-            {
-                case Binding_Static_PointShadows:
-                {
-                    for (u32 ShadowIndex = 0; ShadowIndex < R_MaxShadowCount; ShadowIndex++)
-                    {
-                        Write->Images[ShadowIndex].View = Renderer->PointShadowMaps[ShadowIndex].CubeView;
-                        Write->Images[ShadowIndex].Layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                    }
-                } break;
-                case Binding_Static_HDRMipStorageImages: RenderTarget = Renderer->HDRRenderTarget; goto RT_MIP_CASE;
-                case Binding_Static_BloomMipStorageImages: RenderTarget = Renderer->BloomTarget; goto RT_MIP_CASE;
-                RT_MIP_CASE:
-                {
-                    for (u32 Mip = 0; Mip < RenderTarget->MipCount; Mip++)
-                    {
-                        Write->Images[Mip].View = RenderTarget->MipViews[Mip];
-                        Write->Images[Mip].Layout = VK_IMAGE_LAYOUT_GENERAL;
-                    }
-                } break;
-            }
-        }
-        
         descriptor_write PerFrameWrites[] = 
         {
             {
@@ -3244,10 +3255,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .Images = { { GetTexture(&Renderer->TextureManager, Frame->ImmediateTextureID)->ViewHandle, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
             },
         };
-        static_assert(CountOf(StaticWrites) == Binding_Static_Count);
         static_assert(CountOf(PerFrameWrites) == Binding_PerFrame_Count);
-
-        UpdateDescriptorBuffer(CountOf(StaticWrites), StaticWrites, Renderer->SetLayouts[Set_Static], Renderer->StaticResourceDescriptorMapping);
         UpdateDescriptorBuffer(CountOf(PerFrameWrites), PerFrameWrites, Renderer->SetLayouts[Set_PerFrame], Renderer->PerFrameResourceDescriptorMappings[Frame->FrameID]);
     }
 
