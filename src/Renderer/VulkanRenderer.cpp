@@ -935,31 +935,6 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     ReturnOnFailure();
     VK = Renderer->Vulkan;
 
-    // Cmd
-    {
-        VkCommandPoolCreateInfo PoolInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-            .pNext = nullptr,
-            .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-            .queueFamilyIndex = VK.GraphicsQueueIdx,
-        };
-        Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->TransferCmdPool);
-        ReturnOnFailure();
-
-        VkCommandBufferAllocateInfo BufferInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .commandPool = Renderer->TransferCmdPool,
-            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            .commandBufferCount = 1,
-        };
-
-        Result = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->TransferCmdBuffer);
-        ReturnOnFailure();
-    }
-
     // Vertex Buffer
     {
         if (!CreateGeometryBuffer(R_VertexBufferMaxBlockCount, Arena, &Renderer->GeometryBuffer))

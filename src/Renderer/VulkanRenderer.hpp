@@ -203,9 +203,6 @@ struct renderer
         u64 ResizeCount;
     } Debug;
 
-    VkCommandPool TransferCmdPool;
-    VkCommandBuffer TransferCmdBuffer;
-
     //
     // Per frame stuff
     // 
