@@ -12,7 +12,6 @@ PFN_vkSetDebugUtilsObjectNameEXT        vkSetDebugUtilsObjectNameEXT_;
 #define vkSetDebugUtilsObjectNameEXT    vkSetDebugUtilsObjectNameEXT_
 
 inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* Label);
-
 //
 // VK_EXT_descriptor_buffer
 //
@@ -56,6 +55,36 @@ GetImageMemoryRequirements(VkDevice Device, const VkImageCreateInfo* ImageInfo, 
 
 inline VkDeviceAddress 
 GetBufferDeviceAddress(VkDevice Device, VkBuffer Buffer);
+
+struct descriptor_write_image
+{
+    VkImageView View;
+    VkImageLayout Layout;
+};
+
+struct descriptor_write_buffer
+{
+    VkBuffer Buffer;
+    VkDeviceSize Offset;
+    VkDeviceSize Range;
+};
+
+struct descriptor_write
+{
+    descriptor_type Type;
+    u32 Binding;
+    u32 BaseIndex;
+    u32 Count;
+    static constexpr u32 MaxArrayCount = 64;
+    union
+    {
+        descriptor_write_image Images[MaxArrayCount];
+        descriptor_write_buffer Buffers[MaxArrayCount];
+    };
+};
+
+internal void UpdateDescriptorBuffer(u32 WriteCount, const descriptor_write* Writes, 
+                                     VkDescriptorSetLayout Layout, void* Buffer);
 
 
 //

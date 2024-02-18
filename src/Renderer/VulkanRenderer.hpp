@@ -41,33 +41,6 @@ extern m3 GlobalCubeFaceBases[Layer_Count];
 
 extern vulkan VK;
 
-struct descriptor_write_image
-{
-    VkImageView View;
-    VkImageLayout Layout;
-};
-
-struct descriptor_write_buffer
-{
-    VkBuffer Buffer;
-    VkDeviceSize Offset;
-    VkDeviceSize Range;
-};
-
-struct descriptor_write
-{
-    descriptor_type Type;
-    u32 Binding;
-    u32 BaseIndex;
-    u32 Count;
-    static constexpr u32 MaxArrayCount = 64;
-    union
-    {
-        descriptor_write_image Images[MaxArrayCount];
-        descriptor_write_buffer Buffers[MaxArrayCount];
-    };
-};
-
 static format RenderTargetFormatTable[RTFormat_Count]
 {
     [RTFormat_Undefined]    = Format_Undefined,

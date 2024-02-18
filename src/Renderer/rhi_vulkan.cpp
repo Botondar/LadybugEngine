@@ -255,3 +255,58 @@ internal VkSamplerCreateInfo SamplerStateToVulkanSamplerInfo(sampler_state Sampl
     };
     return(Info);
 }
+
+internal void UpdateDescriptorBuffer(u32 WriteCount, const descriptor_write* Writes, 
+                                     VkDescriptorSetLayout Layout, void* Buffer)
+{
+    for (u32 WriteIndex = 0; WriteIndex < WriteCount; WriteIndex++)
+    {
+        const descriptor_write* Write = Writes + WriteIndex;
+
+        VkDeviceSize BaseOffset = 0;
+        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Layout, Write->Binding, &BaseOffset);
+
+        for (u32 Element = 0; Element < Write->Count; Element++)
+        {
+            u32 EffectiveElement = Element + Write->BaseIndex;
+
+            const void* Data = nullptr;
+            umm DescriptorSize = 0;
+            
+            VkDescriptorImageInfo ImageInfo = {};
+            VkDescriptorAddressInfoEXT BufferInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT };
+            switch (Write->Type)
+            {
+                case Descriptor_SampledImage: DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize; goto IMAGE_CASE;
+                case Descriptor_StorageImage: DescriptorSize = VK.DescriptorBufferProps.storageImageDescriptorSize; goto IMAGE_CASE;
+                    IMAGE_CASE:
+                    {
+                        ImageInfo.sampler = VK_NULL_HANDLE,
+                        ImageInfo.imageView = Write->Images[Element].View;
+                        ImageInfo.imageLayout= Write->Images[Element].Layout;
+                        Data = &ImageInfo;
+                    } break;
+                case Descriptor_StorageBuffer: DescriptorSize = VK.DescriptorBufferProps.storageBufferDescriptorSize; goto BUFFER_CASE;
+                case Descriptor_UniformBuffer: DescriptorSize = VK.DescriptorBufferProps.uniformBufferDescriptorSize; goto BUFFER_CASE;
+                    BUFFER_CASE:
+                    {
+                        BufferInfo.address = GetBufferDeviceAddress(VK.Device, Write->Buffers[Element].Buffer) + Write->Buffers[Element].Offset;
+                        BufferInfo.range = Write->Buffers[Element].Range;
+                        Data = &BufferInfo;
+                    } break;
+                InvalidDefaultCase;
+            }
+
+            VkDeviceSize Offset = BaseOffset + EffectiveElement*DescriptorSize;
+
+            VkDescriptorGetInfoEXT DescriptorInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                .pNext = nullptr,
+                .type = DescriptorTypeTable[Write->Type],
+                .data = { (VkSampler*)Data }, // HACK(boti): This is just a union of pointers, there really should be a void* in there...
+            };
+            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Buffer, Offset));
+        }
+    }
+}
