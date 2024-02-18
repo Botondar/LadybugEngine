@@ -1697,40 +1697,44 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     return(Renderer);
 }
 
-internal void UpdateDescriptorBuffer(u32 WriteCount, const VkWriteDescriptorSet* Writes, 
+internal void UpdateDescriptorBuffer(u32 WriteCount, const descriptor_write* Writes, 
                                      VkDescriptorSetLayout Layout, void* Buffer)
 {
     // TODO(boti): Keep track of the maximum used address (max(CurrentOffset + DescriptorSize))
     // to allow us to use the rest of the buffer for the "push" or temporary descriptors
     for (u32 WriteIndex = 0; WriteIndex < WriteCount; WriteIndex++)
     {
-        const VkWriteDescriptorSet* Write = Writes + WriteIndex;
+        const descriptor_write* Write = Writes + WriteIndex;
 
         VkDeviceSize BaseOffset = 0;
-        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Layout, Write->dstBinding, &BaseOffset);
-            
-        for (u32 Element = 0; Element < Write->descriptorCount; Element++)
+        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Layout, Write->Binding, &BaseOffset);
+
+        for (u32 Element = 0; Element < Write->Count; Element++)
         {
-            u32 EffectiveElement = Element + Write->dstArrayElement;
+            u32 EffectiveElement = Element + Write->BaseIndex;
 
             const void* Data = nullptr;
             umm DescriptorSize = 0;
             
+            VkDescriptorImageInfo ImageInfo = {};
             VkDescriptorAddressInfoEXT BufferInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT };
-            switch (Write->descriptorType)
+            switch (Write->Type)
             {
-                case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize; goto IMAGE_CASE;
-                case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: DescriptorSize = VK.DescriptorBufferProps.storageImageDescriptorSize; goto IMAGE_CASE;
+                case Descriptor_SampledImage: DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize; goto IMAGE_CASE;
+                case Descriptor_StorageImage: DescriptorSize = VK.DescriptorBufferProps.storageImageDescriptorSize; goto IMAGE_CASE;
                     IMAGE_CASE:
                     {
-                        Data = Write->pImageInfo + Element;
+                        ImageInfo.sampler = VK_NULL_HANDLE,
+                        ImageInfo.imageView = Write->Images[Element].View;
+                        ImageInfo.imageLayout= Write->Images[Element].Layout;
+                        Data = &ImageInfo;
                     } break;
-                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: DescriptorSize = VK.DescriptorBufferProps.storageBufferDescriptorSize; goto BUFFER_CASE;
-                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: DescriptorSize = VK.DescriptorBufferProps.uniformBufferDescriptorSize; goto BUFFER_CASE;
+                case Descriptor_StorageBuffer: DescriptorSize = VK.DescriptorBufferProps.storageBufferDescriptorSize; goto BUFFER_CASE;
+                case Descriptor_UniformBuffer: DescriptorSize = VK.DescriptorBufferProps.uniformBufferDescriptorSize; goto BUFFER_CASE;
                     BUFFER_CASE:
                     {
-                        BufferInfo.address = GetBufferDeviceAddress(VK.Device, Write->pBufferInfo[Element].buffer) + Write->pBufferInfo[Element].offset;
-                        BufferInfo.range = Write->pBufferInfo[Element].range;
+                        BufferInfo.address = GetBufferDeviceAddress(VK.Device, Write->Buffers[Element].Buffer) + Write->Buffers[Element].Offset;
+                        BufferInfo.range = Write->Buffers[Element].Range;
                         Data = &BufferInfo;
                     } break;
                 InvalidDefaultCase;
@@ -1743,7 +1747,7 @@ internal void UpdateDescriptorBuffer(u32 WriteCount, const VkWriteDescriptorSet*
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
                 .pNext = nullptr,
-                .type = Write->descriptorType,
+                .type = DescriptorTypeTable[Write->Type],
                 .data = { (VkSampler*)Data }, // HACK(boti): This is just a union of pointers, there really should be a void* in there...
             };
             vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Buffer, Offset));
@@ -1798,7 +1802,11 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
                 Renderer->VisibilityBuffer      = PushRenderTarget("Visibility",    &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Visibility]], Color|Sampled,          1);
             }
 
-            if (!ResizeRenderTargets(&Renderer->RenderTargetHeap, Renderer->SurfaceExtent.width, Renderer->SurfaceExtent.height))
+            if (ResizeRenderTargets(&Renderer->RenderTargetHeap, Renderer->SurfaceExtent.width, Renderer->SurfaceExtent.height))
+            {
+
+            }
+            else
             {
                 UnhandledError("Failed to resize render targets");
                 Result = VK_ERROR_UNKNOWN;
@@ -3008,465 +3016,232 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     // Descriptor update
     {
-        VkDescriptorBufferInfo ConstantsInfo = 
+        descriptor_write StaticWrites[] = 
         {
-            .buffer = Frame->Backend->UniformBuffer,
-            .offset = 0,
-            .range = KiB(64),
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_IndexBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->GeometryBuffer.IndexMemory.Buffer, 0, geometry_memory::GPUBlockSize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_VertexBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->GeometryBuffer.VertexMemory.Buffer, 0, geometry_memory::GPUBlockSize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_SkinnedVertexBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->SkinningBuffer, 0, Renderer->SkinningMemorySize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_InstanceBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->InstanceBuffer, 0, Renderer->InstanceMemorySize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_DrawBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->DrawBuffer, 0, Renderer->DrawMemorySize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_LightBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->LightBuffer, 0, Renderer->LightBufferMemorySize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_TileBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->TileBuffer, 0, Renderer->TileMemorySize } },
+            },
+            {
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_Static_MipFeedbackBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->MipMaskBuffer, 0, Renderer->MipMaskMemorySize } },
+            },
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_CascadedShadow,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->CascadeArrayView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+            },
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_PointShadows,
+                .BaseIndex = 0,
+                .Count = R_MaxShadowCount,
+                .Images = {}, // NOTE(boti): Filled after this array def.
+            },
+
+            //
+            // RT
+            //
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_VisibilityImage,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->VisibilityBuffer->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+            },
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_OcclusionImage,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->OcclusionBuffers[1]->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+            },
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_StructureImage,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->StructureBuffer->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+            },
+            {
+                .Type = Descriptor_StorageImage,
+                .Binding = Binding_Static_OcclusionRawStorageImage,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->OcclusionBuffers[0]->View, VK_IMAGE_LAYOUT_GENERAL } },
+            },
+            {
+                .Type = Descriptor_StorageImage,
+                .Binding = Binding_Static_OcclusionStorageImage,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->OcclusionBuffers[1]->View, VK_IMAGE_LAYOUT_GENERAL } },
+            },
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_OcclusionRawImage,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->OcclusionBuffers[0]->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+            },
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_HDRColorImage,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->HDRRenderTarget->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+            },
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_BloomImage,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->BloomTarget->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+            },
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_HDRColorImageGeneral,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->HDRRenderTarget->View, VK_IMAGE_LAYOUT_GENERAL } },
+            },
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_BloomImageGeneral,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->BloomTarget->View, VK_IMAGE_LAYOUT_GENERAL } }
+            },
+            {
+                .Type = Descriptor_StorageImage,
+                .Binding = Binding_Static_HDRMipStorageImages,
+                .BaseIndex = 0,
+                .Count = Renderer->HDRRenderTarget->MipCount,
+                .Images = {}, // NOTE(boti): Filled after this array def.
+            },
+            {
+                .Type = Descriptor_StorageImage,
+                .Binding = Binding_Static_BloomMipStorageImages,
+                .BaseIndex = 0,
+                .Count = Renderer->BloomTarget->MipCount,
+                .Images = {}, // NOTE(boti): Filled after this array def.
+            },
         };
 
-        VkDescriptorBufferInfo LightBufferInfo = 
+        for (u32 WriteIndex = 0; WriteIndex < CountOf(StaticWrites); WriteIndex++)
         {
-            .buffer = Renderer->LightBuffer,
-            .offset = 0,
-            .range = Renderer->LightBufferMemorySize,
-        };
-        VkDescriptorBufferInfo TileBufferInfo = 
-        {
-            .buffer = Renderer->TileBuffer,
-            .offset = 0,
-            .range = Renderer->TileMemorySize,
-        };
-        VkDescriptorBufferInfo InstanceBufferInfo = 
-        {
-            .buffer = Renderer->InstanceBuffer,
-            .offset = 0,
-            .range = Renderer->InstanceMemorySize,
-        };
-        VkDescriptorBufferInfo DrawBufferInfo = 
-        {
-            .buffer = Renderer->DrawBuffer,
-            .offset = 0,
-            .range = Renderer->DrawMemorySize,
-        };
-        VkDescriptorBufferInfo IndexBufferInfo = 
-        {
-            .buffer = Renderer->GeometryBuffer.IndexMemory.Buffer,
-            .offset = 0,
-            .range = geometry_memory::GPUBlockSize,
-        };
-        VkDescriptorBufferInfo VertexBufferInfo = 
-        {
-            .buffer = Renderer->GeometryBuffer.VertexMemory.Buffer,
-            .offset = 0,
-            .range = geometry_memory::GPUBlockSize,
-        };
-        VkDescriptorBufferInfo SkinnedVertexBufferInfo = 
-        {
-            .buffer = Renderer->SkinningBuffer,
-            .offset = 0,
-            .range = Renderer->SkinningMemorySize,
-        };
-        VkDescriptorImageInfo VisibilityBufferInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = Renderer->VisibilityBuffer->View,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        VkDescriptorImageInfo OcclusionBufferInfo =
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = Renderer->OcclusionBuffers[1]->View,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        VkDescriptorImageInfo StructureBufferInfo =
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = Renderer->StructureBuffer->View,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        VkDescriptorImageInfo OcclusionRawStorageImageInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = Renderer->OcclusionBuffers[0]->View,
-            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-        };
-        VkDescriptorImageInfo OcclusionStorageImageInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = Renderer->OcclusionBuffers[1]->View,
-            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-        };
-        VkDescriptorImageInfo OcclusionRawImageInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = Renderer->OcclusionBuffers[0]->View,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        VkDescriptorImageInfo HDRColorStorageImageInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = Renderer->HDRRenderTarget->MipViews[0],
-            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-        };
-        VkDescriptorImageInfo HDRColorImageInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = Renderer->HDRRenderTarget->View,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        VkDescriptorImageInfo BloomImageInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = Renderer->BloomTarget->View,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        VkDescriptorImageInfo CascadedShadowImageInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = Renderer->CascadeArrayView,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
+            descriptor_write* Write = StaticWrites + WriteIndex;
 
-        VkDescriptorImageInfo HDRMipStorageImageInfos[R_MaxMipCount];
-        VkDescriptorImageInfo BloomMipStorageImageInfos[R_MaxMipCount];
-        Assert(Renderer->HDRRenderTarget->MipCount == Renderer->BloomTarget->MipCount);
-        for (u32 Mip = 0; Mip < Renderer->HDRRenderTarget->MipCount; Mip++)
-        {
-            HDRMipStorageImageInfos[Mip] = 
+            render_target* RenderTarget = nullptr;
+            switch (Write->Binding)
             {
-                .sampler = VK_NULL_HANDLE,
-                .imageView = Renderer->HDRRenderTarget->MipViews[Mip],
-                .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-            };
-            BloomMipStorageImageInfos[Mip] = 
-            {
-                .sampler = VK_NULL_HANDLE,
-                .imageView = Renderer->BloomTarget->MipViews[Mip],
-                .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-            };
+                case Binding_Static_PointShadows:
+                {
+                    for (u32 ShadowIndex = 0; ShadowIndex < R_MaxShadowCount; ShadowIndex++)
+                    {
+                        Write->Images[ShadowIndex].View = Renderer->PointShadowMaps[ShadowIndex].CubeView;
+                        Write->Images[ShadowIndex].Layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    }
+                } break;
+                case Binding_Static_HDRMipStorageImages: RenderTarget = Renderer->HDRRenderTarget; goto RT_MIP_CASE;
+                case Binding_Static_BloomMipStorageImages: RenderTarget = Renderer->BloomTarget; goto RT_MIP_CASE;
+                RT_MIP_CASE:
+                {
+                    for (u32 Mip = 0; Mip < RenderTarget->MipCount; Mip++)
+                    {
+                        Write->Images[Mip].View = RenderTarget->MipViews[Mip];
+                        Write->Images[Mip].Layout = VK_IMAGE_LAYOUT_GENERAL;
+                    }
+                } break;
+            }
         }
-
-        VkDescriptorImageInfo HDRColorImageGeneralInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = Renderer->HDRRenderTarget->View,
-            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-        };
-        VkDescriptorImageInfo BloomImageGeneralInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = Renderer->BloomTarget->View,
-            .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
-        };
-
-        VkDescriptorImageInfo PointShadowInfos[R_MaxShadowCount] = {};
-        for (u32 PointShadowIndex = 0; PointShadowIndex < R_MaxShadowCount; PointShadowIndex++)
-        {
-            PointShadowInfos[PointShadowIndex] = 
-            {
-                .sampler = VK_NULL_HANDLE,
-                .imageView = Renderer->PointShadowMaps[PointShadowIndex].CubeView,
-                .imageLayout= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            };
-        }
-        VkDescriptorBufferInfo JointBufferInfo = 
-        {
-            .buffer = Renderer->PerFrameJointBuffers[Frame->FrameID],
-            .offset = 0,
-            .range = render_frame::MaxJointCount * sizeof(m4), // TODO(boti): deduplicate (this is also in init)
-        };
-        VkDescriptorBufferInfo ParticleBufferInfo = 
-        {
-            .buffer = Renderer->PerFrameParticleBuffers[Frame->FrameID],
-            .offset = 0,
-            .range = render_frame::MaxParticleCount * sizeof(render_particle), // TODO(boti): deduplicate (this is also in init)
-        };
-        VkDescriptorImageInfo ParticleImageInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = GetTexture(&Renderer->TextureManager, Frame->ParticleTextureID)->ViewHandle,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        VkDescriptorImageInfo UIImageInfo = 
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = GetTexture(&Renderer->TextureManager, Frame->ImmediateTextureID)->ViewHandle,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        VkDescriptorBufferInfo MipUsageBufferInfo = 
-        {
-            .buffer = Renderer->MipMaskBuffer,
-            .offset = 0,
-            .range = Renderer->MipMaskMemorySize,
-        };
-
-        VkWriteDescriptorSet StaticWrites[] = 
+        
+        descriptor_write PerFrameWrites[] = 
         {
             {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_LightBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &LightBufferInfo,
+                .Type = Descriptor_UniformBuffer,
+                .Binding = Binding_PerFrame_Constants,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->PerFrameUniformBuffers[Frame->FrameID], 0, KiB(64) } },
             },
             {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_TileBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &TileBufferInfo,
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_PerFrame_JointBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->PerFrameJointBuffers[Frame->FrameID], 0, Frame->MaxJointCount * sizeof(m4) } },
             },
             {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_InstanceBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &InstanceBufferInfo,
+                .Type = Descriptor_StorageBuffer,
+                .Binding = Binding_PerFrame_ParticleBuffer,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Buffers = { { Renderer->PerFrameParticleBuffers[Frame->FrameID], 0, Frame->MaxParticleCount * sizeof(render_particle) } },
             },
             {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_DrawBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &DrawBufferInfo,
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_PerFrame_ParticleTexture,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { GetTexture(&Renderer->TextureManager, Frame->ParticleTextureID)->ViewHandle, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
             },
             {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_IndexBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &IndexBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_VertexBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &VertexBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_SkinnedVertexBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &SkinnedVertexBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_VisibilityImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &VisibilityBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_OcclusionImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &OcclusionBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_StructureImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &StructureBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_OcclusionRawStorageImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .pImageInfo = &OcclusionRawStorageImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_OcclusionStorageImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .pImageInfo = &OcclusionStorageImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_OcclusionRawImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &OcclusionRawImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_HDRColorImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &HDRColorImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_BloomImage,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &BloomImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_CascadedShadow,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &CascadedShadowImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_HDRMipStorageImages,
-                .dstArrayElement = 0,
-                .descriptorCount = Renderer->HDRRenderTarget->MipCount,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .pImageInfo = HDRMipStorageImageInfos,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_BloomMipStorageImages,
-                .dstArrayElement = 0,
-                .descriptorCount = Renderer->BloomTarget->MipCount,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .pImageInfo = BloomMipStorageImageInfos,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_HDRColorImageGeneral,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &HDRColorImageGeneralInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_BloomImageGeneral,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &BloomImageGeneralInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_PointShadows,
-                .dstArrayElement = 0,
-                .descriptorCount = R_MaxShadowCount,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = PointShadowInfos,
-            },
-            
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_Static_MipFeedbackBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &MipUsageBufferInfo,
-            },
-        };
-
-        VkWriteDescriptorSet PerFrameWrites[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_Constants,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .pBufferInfo = &ConstantsInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_JointBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &JointBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_ParticleBuffer,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &ParticleBufferInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_ParticleTexture,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &ParticleImageInfo,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = VK_NULL_HANDLE,
-                .dstBinding = Binding_PerFrame_TextureUI,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &UIImageInfo,
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_PerFrame_TextureUI,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { GetTexture(&Renderer->TextureManager, Frame->ImmediateTextureID)->ViewHandle, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
             },
         };
         static_assert(CountOf(StaticWrites) == Binding_Static_Count);

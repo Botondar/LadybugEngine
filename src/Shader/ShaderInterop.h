@@ -81,9 +81,9 @@ struct v4u8
 #define Binding_Static_DrawBuffer                   4
 #define Binding_Static_LightBuffer                  5
 #define Binding_Static_TileBuffer                   6
-#define Binding_Static_CascadedShadow               7
-#define Binding_Static_PointShadows                 8
-#define Binding_Static_MipFeedbackBuffer            9
+#define Binding_Static_MipFeedbackBuffer            7
+#define Binding_Static_CascadedShadow               8
+#define Binding_Static_PointShadows                 9
 #define Binding_Static_VisibilityImage              10
 #define Binding_Static_OcclusionImage               11
 #define Binding_Static_StructureImage               12
