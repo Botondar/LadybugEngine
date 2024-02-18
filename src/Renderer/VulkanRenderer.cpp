@@ -822,6 +822,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     ReturnOnFailure();
     VK = Renderer->Vulkan;
 
+    // Cmd
     {
         VkCommandPoolCreateInfo PoolInfo = 
         {
@@ -844,6 +845,141 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
 
         Result = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->TransferCmdBuffer);
         ReturnOnFailure();
+    }
+
+    // Vertex Buffer
+    {
+        if (!CreateGeometryBuffer(R_VertexBufferMaxBlockCount, Arena, &Renderer->GeometryBuffer))
+        {
+            Result = VK_ERROR_INITIALIZATION_FAILED;
+            ReturnOnFailure();
+        }
+    }
+
+    // Create samplers
+    {
+        for (u32 Index = 0; Index < Sampler_Count; Index++)
+        {
+            VkSamplerCreateInfo Info = SamplerStateToVulkanSamplerInfo(SamplerInfos[Index]);
+            Result = vkCreateSampler(VK.Device, &Info, nullptr, &Renderer->Samplers[Index]);
+            Assert(Result == VK_SUCCESS);
+        }
+    }
+
+    // Create descriptor set layouts
+    {
+        for (u32 Index = 0; Index < Set_Count; Index++)
+        {
+            const descriptor_set_layout_info* Info = SetLayoutInfos + Index;
+
+            VkDescriptorSetLayoutBinding Bindings[MaxDescriptorSetLayoutBindingCount] = {};
+            VkDescriptorBindingFlags BindingFlags[MaxDescriptorSetLayoutBindingCount] = {};
+
+            VkDescriptorSetLayoutBindingFlagsCreateInfo FlagsInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+                .pNext = nullptr,
+                .bindingCount = Info->BindingCount,
+                .pBindingFlags = BindingFlags,
+            };
+
+            VkDescriptorSetLayoutCreateInfo CreateInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                .pNext = &FlagsInfo,
+                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
+                .bindingCount = Info->BindingCount,
+                .pBindings = Bindings,
+            };
+
+            for (u32 BindingIndex = 0; BindingIndex < Info->BindingCount; BindingIndex++)
+            {
+                const descriptor_set_binding* Binding = Info->Bindings + BindingIndex;
+                Bindings[BindingIndex].binding = Binding->Binding;
+                Bindings[BindingIndex].descriptorType = DescriptorTypeTable[Binding->Type];
+                Bindings[BindingIndex].descriptorCount = Binding->DescriptorCount;
+                Bindings[BindingIndex].stageFlags = PipelineStagesToVulkan(Binding->Stages);
+                Bindings[BindingIndex].pImmutableSamplers = nullptr;
+                if (Binding->Flags & DescriptorFlag_PartiallyBound)
+                {
+                    BindingFlags[BindingIndex] |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+                }
+                if (Binding->Flags & DescriptorFlag_Bindless)
+                {
+                    // HACK(boti): see texture manager;
+                    // TODO(boti) [update]: I don't see a reason why this can't just be part of the set layout?
+                    Bindings[BindingIndex].descriptorCount = R_MaxTextureCount;
+                    BindingFlags[BindingIndex] |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+                }
+            }
+
+            Result = vkCreateDescriptorSetLayout(VK.Device, &CreateInfo, nullptr, &Renderer->SetLayouts[Index]);
+            Assert(Result == VK_SUCCESS);
+        }
+    }
+
+    // BAR memory
+    {
+        u32 MemoryTypeIndex = 0;
+        BitScanForward(&MemoryTypeIndex, VK.BARMemTypes);
+        
+        u64 MemorySize = MiB(64);
+        VkMemoryAllocateFlagsInfo AllocFlags = 
+        {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+            .pNext = nullptr,
+            .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+            .deviceMask = 0,
+        };
+        VkMemoryAllocateInfo AllocInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .pNext = &AllocFlags,
+            .allocationSize = MemorySize,
+            .memoryTypeIndex = MemoryTypeIndex,
+        };
+        VkDeviceMemory Memory = VK_NULL_HANDLE;
+        Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Memory);
+        ReturnOnFailure();
+        void* Mapping = nullptr;
+        Result = vkMapMemory(VK.Device, Memory, 0, VK_WHOLE_SIZE, 0, &Mapping);
+        ReturnOnFailure();
+    
+        Renderer->BARMemory = 
+        {
+            .Memory = Memory,
+            .Size = MemorySize,
+            .MemoryAt = 0,
+            .MemoryTypeIndex = MemoryTypeIndex,
+            .Mapping = Mapping,
+        };
+    }
+
+    // Persistent descriptor buffers
+    // TODO(boti): Assert buffer size <=> SetLayout size here
+    {
+        umm StaticResourceBufferSize = KiB(64);
+        b32 PushResult = PushBuffer(&Renderer->BARMemory, StaticResourceBufferSize, 
+                                    VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                                    &Renderer->StaticResourceDescriptorBuffer,
+                                    &Renderer->StaticResourceDescriptorMapping);
+        if (!PushResult)
+        {
+            UnhandledError("Failed to push static resource descriptor buffer");
+            return(0);
+        }
+    
+        
+        umm SamplerBufferSize = KiB(16);
+        PushResult = PushBuffer(&Renderer->BARMemory, SamplerBufferSize, 
+                                VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                                &Renderer->SamplerDescriptorBuffer,
+                                &Renderer->SamplerDescriptorMapping);
+        if (!PushResult)
+        {
+            UnhandledError("Failed to push sampler descriptor buffer");
+            return(0);
+        }
     }
 
     // Surface
@@ -984,77 +1120,6 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             ReturnOnFailure();
         }
         
-    }
-
-    // Create samplers
-    {
-        for (u32 Index = 0; Index < Sampler_Count; Index++)
-        {
-            VkSamplerCreateInfo Info = SamplerStateToVulkanSamplerInfo(SamplerInfos[Index]);
-            Result = vkCreateSampler(VK.Device, &Info, nullptr, &Renderer->Samplers[Index]);
-            Assert(Result == VK_SUCCESS);
-        }
-    }
-
-    // Create descriptor set layouts
-    {
-        for (u32 Index = 0; Index < Set_Count; Index++)
-        {
-            const descriptor_set_layout_info* Info = SetLayoutInfos + Index;
-
-            VkDescriptorSetLayoutBinding Bindings[MaxDescriptorSetLayoutBindingCount] = {};
-            VkDescriptorBindingFlags BindingFlags[MaxDescriptorSetLayoutBindingCount] = {};
-
-            VkDescriptorSetLayoutBindingFlagsCreateInfo FlagsInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-                .pNext = nullptr,
-                .bindingCount = Info->BindingCount,
-                .pBindingFlags = BindingFlags,
-            };
-
-            VkDescriptorSetLayoutCreateInfo CreateInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .pNext = &FlagsInfo,
-                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
-                .bindingCount = Info->BindingCount,
-                .pBindings = Bindings,
-            };
-
-            for (u32 BindingIndex = 0; BindingIndex < Info->BindingCount; BindingIndex++)
-            {
-                const descriptor_set_binding* Binding = Info->Bindings + BindingIndex;
-                Bindings[BindingIndex].binding = Binding->Binding;
-                Bindings[BindingIndex].descriptorType = DescriptorTypeTable[Binding->Type];
-                Bindings[BindingIndex].descriptorCount = Binding->DescriptorCount;
-                Bindings[BindingIndex].stageFlags = PipelineStagesToVulkan(Binding->Stages);
-                Bindings[BindingIndex].pImmutableSamplers = nullptr;
-                if (Binding->Flags & DescriptorFlag_PartiallyBound)
-                {
-                    BindingFlags[BindingIndex] |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
-                }
-                if (Binding->Flags & DescriptorFlag_Bindless)
-                {
-                    // HACK(boti): see texture manager;
-                    // TODO(boti) [update]: I don't see a reason why this can't just be part of the set layout?
-                    Bindings[BindingIndex].descriptorCount = R_MaxTextureCount;
-                    BindingFlags[BindingIndex] |= VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
-                }
-            }
-
-            Result = vkCreateDescriptorSetLayout(VK.Device, &CreateInfo, nullptr, &Renderer->SetLayouts[Index]);
-            Assert(Result == VK_SUCCESS);
-        }
-    }
-
-    // Vertex Buffer
-    {
-        if (!CreateGeometryBuffer(R_VertexBufferMaxBlockCount, Arena, &Renderer->GeometryBuffer))
-        {
-            Result = VK_ERROR_INITIALIZATION_FAILED;
-            ReturnOnFailure();
-        }
     }
 
     // Texture Manager
@@ -1208,79 +1273,18 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             }
         }
 
-        // BAR memory
-        {
-            u32 MemoryTypeIndex = 0;
-            BitScanForward(&MemoryTypeIndex, VK.BARMemTypes);
-            
-            u64 MemorySize = MiB(64);
-            VkMemoryAllocateFlagsInfo AllocFlags = 
-            {
-                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
-                .pNext = nullptr,
-                .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
-                .deviceMask = 0,
-            };
-            VkMemoryAllocateInfo AllocInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                .pNext = &AllocFlags,
-                .allocationSize = MemorySize,
-                .memoryTypeIndex = MemoryTypeIndex,
-            };
-            VkDeviceMemory Memory = VK_NULL_HANDLE;
-            Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Memory);
-            ReturnOnFailure();
-            void* Mapping = nullptr;
-            Result = vkMapMemory(VK.Device, Memory, 0, VK_WHOLE_SIZE, 0, &Mapping);
-            ReturnOnFailure();
-
-            Renderer->BARMemory = 
-            {
-                .Memory = Memory,
-                .Size = MemorySize,
-                .MemoryAt = 0,
-                .MemoryTypeIndex = MemoryTypeIndex,
-                .Mapping = Mapping,
-            };
-        }
-
         // Per-frame descriptor buffer
         {
-            umm SamplerBufferSize = KiB(16);
             umm ResourceBufferSize = KiB(64);
-            umm StaticResourceBufferSize = KiB(64);
             for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
             {
-                b32 PushResult = PushBuffer(&Renderer->BARMemory, ResourceBufferSize, VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, ResourceBufferSize, 
+                                            VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
                                             Renderer->PerFrameResourceDescriptorBuffers + FrameIndex,
                                             Renderer->PerFrameResourceDescriptorMappings + FrameIndex);
                 if (!PushResult)
                 {
-                    UnhandledError("Failed to push sampler descriptor buffer");
-                    return(0);
-                }
-
-            }
-            for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
-            {
-                b32 PushResult = PushBuffer(&Renderer->BARMemory, SamplerBufferSize, VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                                            Renderer->PerFrameSamplerDescriptorBuffers + FrameIndex,
-                                            Renderer->PerFrameSamplerDescriptorMappings + FrameIndex);
-                if (!PushResult)
-                {
-                    UnhandledError("Failed to push resource descriptor buffer");
-                    return(0);
-                }
-            }
-            for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
-            {
-                b32 PushResult = PushBuffer(&Renderer->BARMemory, StaticResourceBufferSize, VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                                            Renderer->PerFrameStaticResourceDescriptorBuffers + FrameIndex,
-                                            Renderer->PerFrameStaticResourceDescriptorMappings + FrameIndex);
-                if (!PushResult)
-                {
-                    UnhandledError("Failed to push static resource descriptor buffer");
+                    UnhandledError("Failed to push per-frame resource descriptor buffer");
                     return(0);
                 }
             }
@@ -1345,40 +1349,6 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                     return(0);
                 }
             }
-            ReturnOnFailure();
-        }
-
-        // Per frame descriptors
-        for (u32 i = 0; i < R_MaxFramesInFlight; i++)
-        {
-            VkDescriptorPoolSize PoolSizes[] = 
-            {
-                {
-                    .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                    .descriptorCount = Renderer->MaxPerFrameDescriptorSetCount,
-                },
-                {
-                    .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                    .descriptorCount = Renderer->MaxPerFrameDescriptorSetCount,
-                },
-                {
-                    .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                    .descriptorCount = Renderer->MaxPerFrameDescriptorSetCount,
-                },
-            };
-
-            VkDescriptorPoolCreateInfo PoolInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
-                .maxSets = 256,
-                .poolSizeCount = CountOf(PoolSizes),
-                .pPoolSizes = PoolSizes,
-            };
-
-            Result = vkCreateDescriptorPool(VK.Device, &PoolInfo, nullptr, &Renderer->PerFrameDescriptorPool[i]);
-            ReturnOnFailure();
         }
     }
 
@@ -1415,7 +1385,6 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     // Shadow storage
     {
         VkFormat ShadowFormat = FormatTable[RenderTargetFormatTable[RTFormat_Shadow]];
-        u32 MemoryTypeIndex = 0;
         {
             VkImageCreateInfo DummyImageInfo = 
             {
@@ -1435,21 +1404,18 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 .pQueueFamilyIndices = nullptr,
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
             };
-            VkImage DummyImage = VK_NULL_HANDLE;
-            Result = vkCreateImage(VK.Device, &DummyImageInfo, nullptr, &DummyImage);
-            ReturnOnFailure();
+            VkMemoryRequirements MemoryRequirements = GetImageMemoryRequirements(VK.Device, &DummyImageInfo, VK_IMAGE_ASPECT_DEPTH_BIT);
+            u32 MemoryTypes = VK.GPUMemTypes & MemoryRequirements.memoryTypeBits;
 
-            VkMemoryRequirements DummyMemoryRequirements;
-            vkGetImageMemoryRequirements(VK.Device, DummyImage, &DummyMemoryRequirements);
-
-            u32 MemoryTypes = DummyMemoryRequirements.memoryTypeBits & VK.GPUMemTypes;
-            if (!BitScanForward(&MemoryTypeIndex, MemoryTypes))
+            u32 MemoryTypeIndex = 0;
+            if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
             {
-                UnhandledError("No suitable memory type for shadow maps");
-                return(nullptr);
-            }
 
-            vkDestroyImage(VK.Device, DummyImage, nullptr);
+            }
+            else
+            {
+                return(0);
+            }
         }
 
         Renderer->ShadowMemorySize = R_ShadowMapMemorySize;
@@ -1676,6 +1642,60 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     Result = CreatePipelines(Renderer, Scratch);
     ReturnOnFailure();
     return(Renderer);
+}
+
+internal void UpdateDescriptorBuffer(u32 WriteCount, const VkWriteDescriptorSet* Writes, 
+                                     VkDescriptorSetLayout Layout, void* Buffer)
+{
+    // TODO(boti): Keep track of the maximum used address (max(CurrentOffset + DescriptorSize))
+    // to allow us to use the rest of the buffer for the "push" or temporary descriptors
+    for (u32 WriteIndex = 0; WriteIndex < WriteCount; WriteIndex++)
+    {
+        const VkWriteDescriptorSet* Write = Writes + WriteIndex;
+
+        VkDeviceSize BaseOffset = 0;
+        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Layout, Write->dstBinding, &BaseOffset);
+            
+        for (u32 Element = 0; Element < Write->descriptorCount; Element++)
+        {
+            u32 EffectiveElement = Element + Write->dstArrayElement;
+
+            const void* Data = nullptr;
+            umm DescriptorSize = 0;
+            
+            VkDescriptorAddressInfoEXT BufferInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT };
+            switch (Write->descriptorType)
+            {
+                case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize; goto IMAGE_CASE;
+                case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: DescriptorSize = VK.DescriptorBufferProps.storageImageDescriptorSize; goto IMAGE_CASE;
+                    IMAGE_CASE:
+                    {
+                        Data = Write->pImageInfo + Element;
+                    } break;
+                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: DescriptorSize = VK.DescriptorBufferProps.storageBufferDescriptorSize; goto BUFFER_CASE;
+                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: DescriptorSize = VK.DescriptorBufferProps.uniformBufferDescriptorSize; goto BUFFER_CASE;
+                    BUFFER_CASE:
+                    {
+                        BufferInfo.address = GetBufferDeviceAddress(VK.Device, Write->pBufferInfo[Element].buffer) + Write->pBufferInfo[Element].offset;
+                        BufferInfo.range = Write->pBufferInfo[Element].range;
+                        Data = &BufferInfo;
+                    } break;
+                InvalidDefaultCase;
+            }
+
+            // NOTE(boti): descriptors live in their own dedicated buffer starting at offset 0 for now, but may not in the future
+            VkDeviceSize Offset = 0 + BaseOffset + EffectiveElement*DescriptorSize;
+
+            VkDescriptorGetInfoEXT DescriptorInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                .pNext = nullptr,
+                .type = Write->descriptorType,
+                .data = { (VkSampler*)Data }, // HACK(boti): This is just a union of pointers, there really should be a void* in there...
+            };
+            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Buffer, Offset));
+        }
+    }
 }
 
 internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
@@ -2919,8 +2939,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     // TODO(boti): Move these out of the frame, these descriptors are static
     {
-        VkBuffer SamplerBuffer = Renderer->PerFrameSamplerDescriptorBuffers[Frame->FrameID];
-        void* SamplerBufferMapping = Renderer->PerFrameSamplerDescriptorMappings[Frame->FrameID];
+        VkBuffer SamplerBuffer = Renderer->SamplerDescriptorBuffer;
+        void* SamplerBufferMapping = Renderer->SamplerDescriptorMapping;
 
         umm SamplerDescriptorSize = VK.DescriptorBufferProps.samplerDescriptorSize;
         VkDeviceSize SamplerTableOffset = 0;
@@ -3360,8 +3380,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                 .pBufferInfo = &ConstantsInfo,
             },
-            
-            
             {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                 .pNext = nullptr,
@@ -3406,68 +3424,15 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         static_assert(CountOf(StaticWrites) == Binding_Static_Count);
         static_assert(CountOf(PerFrameWrites) == Binding_PerFrame_Count);
 
-        auto UpdateDescriptors = [=](u32 WriteCount, VkWriteDescriptorSet* Writes, VkDescriptorSetLayout Layout, void* DescriptorBuffer)
-        {
-            // TODO(boti): Keep track of the maximum used address (max(CurrentOffset + DescriptorSize))
-            // to allow us to use the rest of the buffer for the "push" or temporary descriptors
-            for (u32 WriteIndex = 0; WriteIndex < WriteCount; WriteIndex++)
-            {
-                VkWriteDescriptorSet* Write = Writes + WriteIndex;
-
-                VkDeviceSize BaseOffset = 0;
-                vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Layout, Write->dstBinding, &BaseOffset);
-            
-                for (u32 Element = 0; Element < Write->descriptorCount; Element++)
-                {
-                    u32 EffectiveElement = Element + Write->dstArrayElement;
-
-                    const void* Data = nullptr;
-                    umm DescriptorSize = 0;
-            
-                    VkDescriptorAddressInfoEXT BufferInfo = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT };
-                    switch (Write->descriptorType)
-                    {
-                        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize; goto IMAGE_CASE;
-                        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: DescriptorSize = VK.DescriptorBufferProps.storageImageDescriptorSize; goto IMAGE_CASE;
-                        IMAGE_CASE:
-                        {
-                            Data = Write->pImageInfo + Element;
-                        } break;
-                        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: DescriptorSize = VK.DescriptorBufferProps.storageBufferDescriptorSize; goto BUFFER_CASE;
-                        case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: DescriptorSize = VK.DescriptorBufferProps.uniformBufferDescriptorSize; goto BUFFER_CASE;
-                        BUFFER_CASE:
-                        {
-                            BufferInfo.address = GetBufferDeviceAddress(VK.Device, Write->pBufferInfo[Element].buffer) + Write->pBufferInfo[Element].offset;
-                            BufferInfo.range = Write->pBufferInfo[Element].range;
-                            Data = &BufferInfo;
-                        } break;
-                        InvalidDefaultCase;
-                    }
-
-                    // NOTE(boti): descriptors live in their own dedicated buffer starting at offset 0 for now, but may not in the future
-                    VkDeviceSize Offset = 0 + BaseOffset + EffectiveElement*DescriptorSize;
-
-                    VkDescriptorGetInfoEXT DescriptorInfo = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-                        .pNext = nullptr,
-                        .type = Write->descriptorType,
-                        .data = { (VkSampler*)Data }, // HACK(boti): This is just a union of pointers, there really should be a void* in there...
-                    };
-                    vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(DescriptorBuffer, Offset));
-                }
-            }
-        };
-
-        UpdateDescriptors(CountOf(StaticWrites), StaticWrites, Renderer->SetLayouts[Set_Static], Renderer->PerFrameStaticResourceDescriptorMappings[Frame->FrameID]);
-        UpdateDescriptors(CountOf(PerFrameWrites), PerFrameWrites, Renderer->SetLayouts[Set_Static], Renderer->PerFrameResourceDescriptorMappings[Frame->FrameID]);
+        UpdateDescriptorBuffer(CountOf(StaticWrites), StaticWrites, Renderer->SetLayouts[Set_Static], Renderer->StaticResourceDescriptorMapping);
+        UpdateDescriptorBuffer(CountOf(PerFrameWrites), PerFrameWrites, Renderer->SetLayouts[Set_PerFrame], Renderer->PerFrameResourceDescriptorMappings[Frame->FrameID]);
     }
 
     auto BindSystemDescriptors = [=](VkCommandBuffer CmdBuffer)
     {
+        VkDeviceAddress StaticResourceBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->StaticResourceDescriptorBuffer);
+        VkDeviceAddress SamplerBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->SamplerDescriptorBuffer);
         VkDeviceAddress PerFrameResourceBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameResourceDescriptorBuffers[Frame->FrameID]);
-        VkDeviceAddress SamplerBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameSamplerDescriptorBuffers[Frame->FrameID]);
-        VkDeviceAddress StaticResourceBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameStaticResourceDescriptorBuffers[Frame->FrameID]);
         VkDescriptorBufferBindingInfoEXT DescriptorBufferBindings[] = 
         {
             {

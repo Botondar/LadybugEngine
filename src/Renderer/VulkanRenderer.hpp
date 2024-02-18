@@ -50,6 +50,16 @@ struct gpu_memory_arena
     void* Mapping;
 };
 
+typedef flags32 gpu_memory_arena_flags;
+enum gpu_memory_arena_flag_bits : gpu_memory_arena_flags
+{
+    GpuMemoryFlag_None      = 0,
+    GpuMemoryFlag_Mapped    = (1 << 0),
+};
+
+internal gpu_memory_arena 
+CreateGPUArena(umm Size, u32 MemoryTypeIndex, gpu_memory_arena_flags Flags);
+
 internal b32 
 PushBuffer(gpu_memory_arena* Arena, 
            VkDeviceSize Size, 
@@ -157,25 +167,16 @@ struct renderer
 
     VkPipelineLayout SystemPipelineLayout;
 
+    gpu_memory_arena ShadowArena;
+    VkImage CascadeMap;
+    VkImageView CascadeArrayView;
+    VkImageView CascadeViews[R_MaxShadowCount];
+    point_shadow_map PointShadowMaps;
+
     struct render_debug
     {
         u64 ResizeCount;
     } Debug;
-
-    // Shadows
-    struct
-    {
-        size_t ShadowMemorySize;
-        VkDeviceMemory ShadowMemory;
-        size_t ShadowMemoryOffset;
-
-        u32 ShadowCascadeCount;
-        VkImage ShadowMap;
-        VkImageView ShadowView;
-        VkImageView ShadowCascadeViews[R_MaxShadowCascadeCount];
-
-        point_shadow_map PointShadowMaps[R_MaxShadowCount];
-    };
 
     VkCommandPool TransferCmdPool;
     VkCommandBuffer TransferCmdBuffer;
@@ -189,11 +190,14 @@ struct renderer
     VkCommandPool ComputeCmdPools[2];
     VkCommandBuffer ComputeCmdBuffers[2];
 
-    static constexpr u32 MaxPerFrameDescriptorSetCount = 1024;
-    VkDescriptorPool PerFrameDescriptorPool[2];
+    VkSemaphore ImageAcquiredSemaphores[R_MaxFramesInFlight];
+    VkFence ImageAcquiredFences[R_MaxFramesInFlight];
+    VkSemaphore TimelineSemaphore;
+    u64 TimelineSemaphoreCounter;
+    VkSemaphore ComputeTimelineSemaphore;
+    u64 ComputeTimelineSemaphoreCounter;
 
     // NOTE(boti): These are all allocated from BAR memory
-    // TODO(boti): These memory mappings should probably just be stored in render_frame directly
     VkBuffer    PerFrameUniformBuffers[R_MaxFramesInFlight];
     void*       PerFrameUniformBufferMappings[R_MaxFramesInFlight];
     VkBuffer    PerFrameJointBuffers[R_MaxFramesInFlight];
@@ -204,51 +208,48 @@ struct renderer
     void*       PerFrameVertex2DMappings[R_MaxFramesInFlight];
     VkBuffer    PerFrameResourceDescriptorBuffers[R_MaxFramesInFlight];
     void*       PerFrameResourceDescriptorMappings[R_MaxFramesInFlight];
-    // TODO(boti): We really don't need to create sampler descriptors every frame _or_ to double buffer them
-    VkBuffer    PerFrameSamplerDescriptorBuffers[R_MaxFramesInFlight];
-    void*       PerFrameSamplerDescriptorMappings[R_MaxFramesInFlight];
-    VkBuffer    PerFrameStaticResourceDescriptorBuffers[R_MaxFramesInFlight];
-    void*       PerFrameStaticResourceDescriptorMappings[R_MaxFramesInFlight];
 
     VkDeviceMemory StagingMemory;
     void* StagingMemoryMapping;
     VkBuffer StagingBuffers[R_MaxFramesInFlight];
 
-    VkDeviceMemory DesiredMipReadbackMemory;
-    void* DesiredMipReadbackMapping;
     VkBuffer DesiredMipReadbackBuffers[R_MaxFramesInFlight];
     void* DesiredMipReadbackMappings[R_MaxFramesInFlight];
 
-    umm DesiredMipMemorySize;
-    VkDeviceMemory DesiredMipMemory;
-    VkBuffer DesiredMipBuffer;
+    VkDeviceMemory DesiredMipReadbackMemory;
+    void* DesiredMipReadbackMapping;
 
-    umm SkinningMemorySize;
-    VkDeviceMemory SkinningMemory;
-    VkBuffer SkinningBuffer;
+    //
+    // Persistent
+    //
+    VkBuffer        SamplerDescriptorBuffer;
+    void*           SamplerDescriptorMapping;
+    VkBuffer        StaticResourceDescriptorBuffer;
+    void*           StaticResourceDescriptorMapping;
 
-    umm LightBufferMemorySize;
-    VkDeviceMemory LightBufferMemory;
-    VkBuffer LightBuffer;
+    umm             DesiredMipMemorySize;
+    VkDeviceMemory  DesiredMipMemory;
+    VkBuffer        DesiredMipBuffer;
 
-    umm TileMemorySize;
-    VkDeviceMemory TileMemory;
-    VkBuffer TileBuffer;
+    umm             SkinningMemorySize;
+    VkDeviceMemory  SkinningMemory;
+    VkBuffer        SkinningBuffer;
 
-    umm InstanceMemorySize;
-    VkDeviceMemory InstanceMemory;
-    VkBuffer InstanceBuffer;
+    umm             LightBufferMemorySize;
+    VkDeviceMemory  LightBufferMemory;
+    VkBuffer        LightBuffer;
 
-    umm DrawMemorySize;
-    VkDeviceMemory DrawMemory;
-    VkBuffer DrawBuffer;
+    umm             TileMemorySize;
+    VkDeviceMemory  TileMemory;
+    VkBuffer        TileBuffer;
 
-    VkSemaphore ImageAcquiredSemaphores[R_MaxFramesInFlight];
-    VkFence ImageAcquiredFences[R_MaxFramesInFlight];
-    VkSemaphore TimelineSemaphore;
-    u64 TimelineSemaphoreCounter;
-    VkSemaphore ComputeTimelineSemaphore;
-    u64 ComputeTimelineSemaphoreCounter;
+    umm             InstanceMemorySize;
+    VkDeviceMemory  InstanceMemory;
+    VkBuffer        InstanceBuffer;
+
+    umm             DrawMemorySize;
+    VkDeviceMemory  DrawMemory;
+    VkBuffer        DrawBuffer;
 
     //
     // Pipelines, pipeline layouts and associated descriptor set layouts

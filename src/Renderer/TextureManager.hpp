@@ -17,7 +17,6 @@ struct texture_manager
     umm TextureTableOffset;
     void* DescriptorMapping;
     
-
     // TODO(boti): Move this to the renderer
     VkSampler PackedSamplers[packed_sampler::MaxSamplerCount];
 
