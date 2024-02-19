@@ -54,6 +54,47 @@ static format RenderTargetFormatTable[RTFormat_Count]
     [RTFormat_Swapchain]    = Format_Undefined, // NOTE(boti): Actually filled at runtime
 };
 
+enum frame_stage_type : u32
+{
+    FrameStage_Upload,
+    FrameStage_Skinning,
+    FrameStage_Prepass,
+    FrameStage_SSAO,
+    FrameStage_LightBinning,
+    FrameStage_CascadedShadow,
+    FrameStage_Shadows,
+    FrameStage_Shading,
+    FrameStage_Bloom,
+    FrameStage_BlitAndGUI,
+    FrameStage_Readback,
+
+    FrameStage_Count,
+};
+
+struct frame_stage
+{
+    static constexpr u32 MaxBarrierCountPerType = 512;
+    u32 BeginGlobalMemoryBarrierCount;
+    u32 BeginBufferMemoryBarrierCount;
+    u32 BeginImageMemoryBarrierCount;
+    u32 EndGlobalMemoryBarrierCount;
+    u32 EndBufferMemoryBarrierCount;
+    u32 EndImageMemoryBarrierCount;
+
+    VkMemoryBarrier2        BeginGlobalMemoryBarriers[MaxBarrierCountPerType];
+    VkBufferMemoryBarrier2  BeginBufferMemoryBarriers[MaxBarrierCountPerType];
+    VkImageMemoryBarrier2   BeginImageMemoryBarriers[MaxBarrierCountPerType];
+    VkMemoryBarrier2        EndGlobalMemoryBarriers[MaxBarrierCountPerType];
+    VkBufferMemoryBarrier2  EndBufferMemoryBarriers[MaxBarrierCountPerType];
+    VkImageMemoryBarrier2   EndImageMemoryBarriers[MaxBarrierCountPerType];
+};
+
+internal void BeginFrameStage(VkCommandBuffer CmdBuffer, frame_stage* Stage, const char* Name);
+internal void EndFrameStage(VkCommandBuffer CmdBuffer, frame_stage* Stage);
+
+internal b32 PushBeginBarrier(frame_stage* Stage, const VkImageMemoryBarrier2* Barrier);
+internal b32 PushBeginBarrier(frame_stage* Stage, const VkBufferMemoryBarrier2* Barrier);
+
 struct draw_list
 {
     u32 DrawGroupDrawCounts[DrawGroup_Count];
