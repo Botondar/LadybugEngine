@@ -1175,11 +1175,6 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         };
 
         Renderer->SwapchainImageCount = 2;
-        // HACK(boti):
-        for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
-        {
-            Renderer->Frames[FrameIndex].Backend = Renderer->BackendFrames + FrameIndex;
-        }
         Result = ResizeRenderTargets(Renderer, false);
         ReturnOnFailure();
     }
@@ -1237,7 +1232,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->CmdPools[FrameIndex]);
             ReturnOnFailure();
         
-            for (u32 BufferIndex = 0; BufferIndex < backend_render_frame::MaxCmdBufferCount; BufferIndex++)
+            for (u32 BufferIndex = 0; BufferIndex < Renderer->MaxCmdBufferCountPerFrame; BufferIndex++)
             {
                 VkCommandBufferAllocateInfo BufferInfo = 
                 {
@@ -1711,24 +1706,24 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
 
             VkSwapchainCreateInfoKHR CreateInfo = 
             {
-                .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-                .pNext = nullptr,
-                .flags = 0/*|VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR*/,
-                .surface = Renderer->Surface,
-                .minImageCount = Renderer->SwapchainImageCount,
-                .imageFormat = Renderer->SurfaceFormat.format,
-                .imageColorSpace = Renderer->SurfaceFormat.colorSpace,
-                .imageExtent = SurfaceCaps.currentExtent,
-                .imageArrayLayers = 1,
-                .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-                .queueFamilyIndexCount = 1,
-                .pQueueFamilyIndices = &VK.GraphicsQueueIdx,
-                .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
-                .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-                .presentMode = PresentMode,
-                .clipped = VK_FALSE,
-                .oldSwapchain = Renderer->Swapchain,
+                .sType                  = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+                .pNext                  = nullptr,
+                .flags                  = 0/*|VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR*/,
+                .surface                = Renderer->Surface,
+                .minImageCount          = Renderer->SwapchainImageCount,
+                .imageFormat            = Renderer->SurfaceFormat.format,
+                .imageColorSpace        = Renderer->SurfaceFormat.colorSpace,
+                .imageExtent            = SurfaceCaps.currentExtent,
+                .imageArrayLayers       = 1,
+                .imageUsage             = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                .imageSharingMode       = VK_SHARING_MODE_EXCLUSIVE,
+                .queueFamilyIndexCount  = 1,
+                .pQueueFamilyIndices    = &VK.GraphicsQueueIdx,
+                .preTransform           = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+                .compositeAlpha         = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+                .presentMode            = PresentMode,
+                .clipped                = VK_FALSE,
+                .oldSwapchain           = Renderer->Swapchain,
             };
             Result = vkCreateSwapchainKHR(VK.Device, &CreateInfo, nullptr, &Renderer->Swapchain);
             if (Result == VK_SUCCESS)
@@ -1880,26 +1875,11 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
     Frame->Arena = Arena;
 
     Frame->ReloadShaders = false;
-
-    Frame->Backend->SwapchainImageIndex = INVALID_INDEX_U32;
     Frame->FrameID = FrameID;
-
-    Frame->Backend->ImageAcquiredFence = Renderer->ImageAcquiredFences[FrameID];
-    Frame->Backend->ImageAcquiredSemaphore = Renderer->ImageAcquiredSemaphores[FrameID];
-
-    Frame->Backend->CmdPool = Renderer->CmdPools[FrameID];
-    Frame->Backend->CmdBufferAt = 0;
-    for (u32 Index = 0; Index < Frame->Backend->MaxCmdBufferCount; Index++)
-    {
-        Frame->Backend->CmdBuffers[Index] = Renderer->CmdBuffers[FrameID][Index];
-    }
-    Frame->Backend->ComputeCmdPool = Renderer->ComputeCmdPools[FrameID];
-    Frame->Backend->ComputeCmdBuffer = Renderer->ComputeCmdBuffers[FrameID];
 
     // Reset buffers
     {
         Frame->StagingBufferAt = 0;
-        Frame->Backend->StagingBuffer = Renderer->StagingBuffers[FrameID];
         Frame->TransferOpCount = 0;
 
         Frame->MaxLightCount = R_MaxLightCount;
@@ -1930,20 +1910,15 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         Frame->DrawWidget3DCmdCount = 0;
         Frame->DrawWidget3DCmds = PushArray(Arena, 0, draw_widget3d_cmd, Frame->MaxDrawWidget3DCmdCount);
 
-        Frame->Backend->UniformBuffer = Renderer->PerFrameUniformBuffers[FrameID];
         Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
-
-        Frame->Backend->Vertex2DBuffer = Renderer->PerFrameVertex2DBuffers[FrameID];
 
         Frame->Vertex2DCount = 0;
         Frame->Vertex2DArray = (vertex_2d*)Renderer->PerFrameVertex2DMappings[FrameID];
 
         Frame->ParticleCount = 0;
-        Frame->Backend->ParticleBuffer = Renderer->PerFrameParticleBuffers[FrameID];
         Frame->Particles = (render_particle*)Renderer->PerFrameParticleBufferMappings[FrameID];
 
         Frame->JointCount = 0;
-        Frame->Backend->JointBuffer = Renderer->PerFrameJointBuffers[FrameID];
         Frame->JointMapping = (m4*)Renderer->PerFrameJointBufferMappings[FrameID];
         Frame->JointBufferAlignment = TruncateU64ToU32(VK.ConstantBufferAlignment) / sizeof(m4);
 
@@ -1964,12 +1939,12 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         .flags = 0,
         .semaphoreCount = 1,
         .pSemaphores = &Renderer->TimelineSemaphore,
-        .pValues = &Frame->Backend->FrameFinishedCounter,
+        .pValues = &Renderer->FrameFinishedCounters[FrameID],
     };
     vkWaitSemaphores(VK.Device, &WaitInfo, U64_MAX);
 
-    vkResetCommandPool(VK.Device, Frame->Backend->CmdPool, 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
-    vkResetCommandPool(VK.Device, Frame->Backend->ComputeCmdPool, 0);
+    vkResetCommandPool(VK.Device, Renderer->CmdPools[FrameID], 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
+    vkResetCommandPool(VK.Device, Renderer->ComputeCmdPools[FrameID], 0);
 
     ProcessTextureDeletionEntries(&Renderer->TextureDeletionQueue, FrameID);
 
@@ -2036,11 +2011,12 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
 
     // NOTE(boti): This is currently also the initial transfer and skinning cmd buffer
-    VkCommandBuffer PrepassCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
-    VkCommandBuffer RenderCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
+    u32 CmdBufferAt = 0;
+    VkCommandBuffer PrepassCmd = Renderer->CmdBuffers[Frame->FrameID][CmdBufferAt++];
+    VkCommandBuffer RenderCmd = Renderer->CmdBuffers[Frame->FrameID][CmdBufferAt++];
     // NOTE(boti): Light binning, SSAO
-    VkCommandBuffer PreLightCmd = Frame->Backend->ComputeCmdBuffer;
-    VkCommandBuffer ShadowCmd = Frame->Backend->CmdBuffers[Frame->Backend->CmdBufferAt++];
+    VkCommandBuffer PreLightCmd = Renderer->ComputeCmdBuffers[Frame->FrameID];
+    VkCommandBuffer ShadowCmd = Renderer->CmdBuffers[Frame->FrameID][CmdBufferAt++];
 
     f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
 
@@ -2126,9 +2102,10 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
 
     // Acquire image
+    u32 SwapchainImageIndex = U32_MAX;
     {
-        vkWaitForFences(VK.Device, 1, &Frame->Backend->ImageAcquiredFence, VK_TRUE, UINT64_MAX);
-        vkResetFences(VK.Device, 1, &Frame->Backend->ImageAcquiredFence);
+        vkWaitForFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID], VK_TRUE, UINT64_MAX);
+        vkResetFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID]);
 
         if (Frame->RenderWidth != Renderer->SurfaceExtent.width ||
             Frame->RenderHeight != Renderer->SurfaceExtent.height)
@@ -2139,14 +2116,14 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         for (;;)
         {
             VkResult ImageAcquireResult = vkAcquireNextImageKHR(VK.Device, Renderer->Swapchain, 0, 
-                                                                Frame->Backend->ImageAcquiredSemaphore, 
-                                                                Frame->Backend->ImageAcquiredFence, 
-                                                                &Frame->Backend->SwapchainImageIndex);
+                                                                Renderer->ImageAcquiredSemaphores[Frame->FrameID], 
+                                                                Renderer->ImageAcquiredFences[Frame->FrameID], 
+                                                                &SwapchainImageIndex);
             if (ImageAcquireResult == VK_SUCCESS || 
                 ImageAcquireResult == VK_TIMEOUT ||
                 ImageAcquireResult == VK_NOT_READY)
             {
-                Assert(Frame->Backend->SwapchainImageIndex != INVALID_INDEX_U32);
+                Assert(SwapchainImageIndex != INVALID_INDEX_U32);
                 break;
             }
             else if (ImageAcquireResult == VK_SUBOPTIMAL_KHR ||
@@ -2162,8 +2139,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 return;
             }
         }
-        Frame->Backend->SwapchainImage = Renderer->SwapchainImages[Frame->Backend->SwapchainImageIndex];
-        Frame->Backend->SwapchainImageView = Renderer->SwapchainImageViews[Frame->Backend->SwapchainImageIndex];
     }
 
     frustum* ShadowFrustums = PushArray(Frame->Arena, 0, frustum, R_MaxShadowCount);
@@ -2342,7 +2317,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                 .dstOffset = DescriptorOffset,
                                 .size = DescriptorSize,
                             };
-                            vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
+                            vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
 
                             Frame->StagingBufferAt += DescriptorSize;
 
@@ -2389,7 +2364,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         .pImageMemoryBarriers = &BeginBarrier,
                     };
                     vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
-                    vkCmdCopyBufferToImage(PrepassCmd, Frame->Backend->StagingBuffer, Texture->ImageHandle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    vkCmdCopyBufferToImage(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Texture->ImageHandle, 
+                                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                            CopyCount, Copies);
 
                     VkImageMemoryBarrier2 EndBarrier = 
@@ -2474,7 +2450,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         .dstOffset = VertexByteOffset,
                         .size = VertexByteCount,
                     };
-                    vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, VertexBuffer, 1, &Copy);
+                    vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], VertexBuffer, 1, &Copy);
 
                     Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
                     Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
@@ -2500,7 +2476,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         .dstOffset = IndexByteOffset,
                         .size = IndexByteCount,
                     };
-                    vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, IndexBuffer, 1, &Copy);
+                    vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], IndexBuffer, 1, &Copy);
 
                     Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
                     Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
@@ -2660,11 +2636,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
         if (InstanceCopy.size)
         {
-            vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->InstanceBuffer, 1, &InstanceCopy);
+            vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->InstanceBuffer, 1, &InstanceCopy);
         }
         if (DrawCopy.size)
         {
-            vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->DrawBuffer, 1, &DrawCopy);
+            vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->DrawBuffer, 1, &DrawCopy);
         }
 
         VkBufferMemoryBarrier2 EndBarrier = 
@@ -2769,7 +2745,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         };
         if (LightBufferCopy.size > 0)
         {
-            vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->LightBuffer, 1, &LightBufferCopy);
+            vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->LightBuffer, 1, &LightBufferCopy);
         }
 
         VkBufferMemoryBarrier2 EndBarrier = 
@@ -2914,7 +2890,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             };
             vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
 
-            vkCmdCopyBuffer(PrepassCmd, Frame->Backend->StagingBuffer, Renderer->DrawBuffer, 1, &Copy);
+            vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->DrawBuffer, 1, &Copy);
 
             VkBufferMemoryBarrier2 EndBarrier
             {
@@ -4464,7 +4440,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->Backend->SwapchainImage,
+            .image = Renderer->SwapchainImages[SwapchainImageIndex],
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -4483,7 +4459,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .imageView = Frame->Backend->SwapchainImageView,
+            .imageView = Renderer->SwapchainImageViews[SwapchainImageIndex],
             .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .resolveMode = VK_RESOLVE_MODE_NONE,
             .resolveImageView = VK_NULL_HANDLE,
@@ -4496,7 +4472,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .imageView = Frame->Renderer->DepthBuffer->View,
+            .imageView = Renderer->DepthBuffer->View,
             .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             .resolveMode = VK_RESOLVE_MODE_NONE,
             .resolveImageView = VK_NULL_HANDLE,
@@ -4556,7 +4532,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "2D GUI");
         {
             VkDeviceSize ZeroOffset = 0;
-            vkCmdBindVertexBuffers(RenderCmd, 0, 1, &Frame->Backend->Vertex2DBuffer, &ZeroOffset);
+            vkCmdBindVertexBuffers(RenderCmd, 0, 1, &Renderer->PerFrameVertex2DBuffers[Frame->FrameID], &ZeroOffset);
 
             pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Pipeline);
@@ -4590,7 +4566,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Frame->Backend->SwapchainImage,
+            .image = Renderer->SwapchainImages[SwapchainImageIndex],
             .subresourceRange = 
             {
 
@@ -4622,7 +4598,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     // Submit + Present
     {
         u64 RenderCounter = ++Renderer->TimelineSemaphoreCounter;
-        Frame->Backend->FrameFinishedCounter  = RenderCounter;
+        Renderer->FrameFinishedCounters[Frame->FrameID] = RenderCounter;
         VkCommandBufferSubmitInfo RenderCmdBuffers[] = 
         {
             {
@@ -4651,7 +4627,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .pNext = nullptr,
-                .semaphore = Frame->Backend->ImageAcquiredSemaphore,
+                .semaphore = Renderer->ImageAcquiredSemaphores[Frame->FrameID],
                 .value = 0,
                 .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
             },
@@ -4687,8 +4663,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .waitSemaphoreCount = 0,
             .pWaitSemaphores = nullptr,
             .swapchainCount = 1,
-            .pSwapchains = &Frame->Renderer->Swapchain,
-            .pImageIndices = &Frame->Backend->SwapchainImageIndex,
+            .pSwapchains = &Renderer->Swapchain,
+            .pImageIndices = &SwapchainImageIndex,
             .pResults = nullptr,
         };
         vkQueuePresentKHR(VK.GraphicsQueue, &PresentInfo);

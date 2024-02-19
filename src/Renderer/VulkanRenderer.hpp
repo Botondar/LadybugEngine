@@ -114,32 +114,6 @@ struct pipeline_with_layout
     VkPipelineLayout Layout;
 };
 
-struct backend_render_frame
-{
-    VkCommandPool CmdPool;
-    static constexpr u32 MaxCmdBufferCount = 16;
-    u32 CmdBufferAt;
-    VkCommandBuffer CmdBuffers[MaxCmdBufferCount];
-
-    VkCommandPool ComputeCmdPool;
-    VkCommandBuffer ComputeCmdBuffer;
-
-    VkFence ImageAcquiredFence;
-    VkSemaphore ImageAcquiredSemaphore;
-
-    u64 FrameFinishedCounter;
-
-    u32 SwapchainImageIndex;
-    VkImage SwapchainImage;
-    VkImageView SwapchainImageView;
-
-    VkBuffer StagingBuffer;
-    VkBuffer UniformBuffer;
-    VkBuffer ParticleBuffer;
-    VkBuffer JointBuffer;
-    VkBuffer Vertex2DBuffer;
-};
-
 struct texture_deletion_entry
 {
     VkImage ImageHandle;
@@ -204,23 +178,26 @@ struct renderer
         u64 ResizeCount;
     } Debug;
 
+    texture_deletion_queue TextureDeletionQueue;
+
     //
     // Per frame stuff
     // 
-    texture_deletion_queue TextureDeletionQueue;
-
     VkCommandPool CmdPools[2];
-    VkCommandBuffer CmdBuffers[2][backend_render_frame::MaxCmdBufferCount];
+    static constexpr u32 MaxCmdBufferCountPerFrame = 16;
+    VkCommandBuffer CmdBuffers[2][MaxCmdBufferCountPerFrame];
 
-    VkCommandPool ComputeCmdPools[2];
+    VkCommandPool   ComputeCmdPools[2];
     VkCommandBuffer ComputeCmdBuffers[2];
 
-    VkSemaphore ImageAcquiredSemaphores[R_MaxFramesInFlight];
-    VkFence ImageAcquiredFences[R_MaxFramesInFlight];
-    VkSemaphore TimelineSemaphore;
-    u64 TimelineSemaphoreCounter;
-    VkSemaphore ComputeTimelineSemaphore;
-    u64 ComputeTimelineSemaphoreCounter;
+    VkSemaphore     ImageAcquiredSemaphores[R_MaxFramesInFlight];
+    VkFence         ImageAcquiredFences[R_MaxFramesInFlight];
+    VkSemaphore     TimelineSemaphore;
+    u64             TimelineSemaphoreCounter;
+    VkSemaphore     ComputeTimelineSemaphore;
+    u64             ComputeTimelineSemaphoreCounter;
+
+    u64             FrameFinishedCounters[R_MaxFramesInFlight];
 
     // NOTE(boti): These are all allocated from BAR memory
     VkBuffer    PerFrameUniformBuffers[R_MaxFramesInFlight];
@@ -234,14 +211,14 @@ struct renderer
     VkBuffer    PerFrameResourceDescriptorBuffers[R_MaxFramesInFlight];
     void*       PerFrameResourceDescriptorMappings[R_MaxFramesInFlight];
 
-    VkDeviceMemory StagingMemory;
-    void* StagingMemoryMapping;
-    VkBuffer StagingBuffers[R_MaxFramesInFlight];
+    VkDeviceMemory  StagingMemory;
+    void*           StagingMemoryMapping;
+    VkBuffer        StagingBuffers[R_MaxFramesInFlight];
 
-    VkDeviceMemory MipMaskReadbackMemory;
-    void* MipMaskReadbackMapping;
-    VkBuffer MipMaskReadbackBuffers[R_MaxFramesInFlight];
-    void* MipMaskReadbackMappings[R_MaxFramesInFlight];
+    VkDeviceMemory  MipMaskReadbackMemory;
+    void*           MipMaskReadbackMapping;
+    VkBuffer        MipMaskReadbackBuffers[R_MaxFramesInFlight];
+    void*           MipMaskReadbackMappings[R_MaxFramesInFlight];
 
     //
     // Persistent
@@ -288,7 +265,6 @@ struct renderer
 
     u64 CurrentFrameID;
     render_frame Frames[R_MaxFramesInFlight];
-    backend_render_frame BackendFrames[R_MaxFramesInFlight];
 };
 
 internal void 

@@ -754,7 +754,6 @@ struct geometry_buffer_allocation
 };
 
 struct renderer;
-struct backend_render_frame;
 
 struct render_stat_entry
 {
@@ -807,7 +806,6 @@ struct transfer_op
 struct render_frame
 {
     renderer* Renderer;
-    backend_render_frame* Backend;
     memory_arena* Arena; // NOTE(boti): filled by the game
 
     // NOTE(boti): Texture upload requests _from_ the renderer _to_ the game
