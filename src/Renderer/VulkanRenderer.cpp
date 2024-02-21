@@ -759,9 +759,9 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         }
     }
 
-    Renderer->MipMaskMemorySize = R_MaxTextureCount * sizeof(u32);
+    Renderer->MipFeedbackMemorySize = R_MaxTextureCount * sizeof(u32);
     Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
-                                   Renderer->MipMaskMemorySize, &Renderer->MipMaskBuffer, &Renderer->MipMaskMemory);
+                                   Renderer->MipFeedbackMemorySize, &Renderer->MipFeedbackBuffer, &Renderer->MipFeedbackMemory);
     ReturnOnFailure();
 
     Renderer->SkinningMemorySize = R_SkinningBufferSize;
@@ -1109,7 +1109,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 .Binding = Binding_Static_MipFeedbackBuffer,
                 .BaseIndex = 0,
                 .Count = 1,
-                .Buffers = { { Renderer->MipMaskBuffer, 0, Renderer->MipMaskMemorySize } },
+                .Buffers = { { Renderer->MipFeedbackBuffer, 0, Renderer->MipFeedbackMemorySize } },
             },
             {
                 .Type = Descriptor_SampledImage,
@@ -1411,19 +1411,19 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                     .allocationSize = R_MaxFramesInFlight * BufferInfo.size,
                     .memoryTypeIndex = MemoryType,
                 };
-                Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->MipMaskReadbackMemory);
+                Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->MipReadbackMemory);
                 ReturnOnFailure();
 
-                Result = vkMapMemory(VK.Device, Renderer->MipMaskReadbackMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->MipMaskReadbackMapping);
+                Result = vkMapMemory(VK.Device, Renderer->MipReadbackMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->MipReadbackMapping);
                 for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
                 {
-                    Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->MipMaskReadbackBuffers[FrameIndex]);
+                    Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->MipReadbackBuffers[FrameIndex]);
                     ReturnOnFailure();
 
                     umm Offset = FrameIndex * BufferInfo.size;
-                    Result = vkBindBufferMemory(VK.Device, Renderer->MipMaskReadbackBuffers[FrameIndex], Renderer->MipMaskReadbackMemory, Offset);
+                    Result = vkBindBufferMemory(VK.Device, Renderer->MipReadbackBuffers[FrameIndex], Renderer->MipReadbackMemory, Offset);
                     ReturnOnFailure();
-                    Renderer->MipMaskReadbackMappings[FrameIndex] = OffsetPtr(Renderer->MipMaskReadbackMapping, Offset);
+                    Renderer->MipReadbackMappings[FrameIndex] = OffsetPtr(Renderer->MipReadbackMapping, Offset);
                 }
 
             }
@@ -1956,11 +1956,11 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
     // Mip readback
     {
         texture_manager* Manager = &Renderer->TextureManager;
-        u32 RealRequestCount = 0;
-        u32* RealRequests = PushArray(Frame->Arena, 0, u32, Manager->TextureCount);
-        u32* RealRequestMasks = PushArray(Frame->Arena, 0, u32, Manager->TextureCount);
+        u32 RequestCount = 0;
+        u32* RequestTextureIndexes = PushArray(Frame->Arena, 0, u32, Manager->TextureCount);
+        u32* RequestMasks = PushArray(Frame->Arena, 0, u32, Manager->TextureCount);
 
-        u32* MipMasks = (u32*)Renderer->MipMaskReadbackMappings[FrameID];
+        u32* MipFeedbacks = (u32*)Renderer->MipReadbackMappings[FrameID];
         for (u32 TextureIndex = 0; TextureIndex < R_MaxTextureCount; TextureIndex++)
         {
             if (TextureIndex >= Manager->TextureCount)
@@ -1968,25 +1968,25 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
                 break;
             }
 
-            u32 MipMask = MipMasks[TextureIndex];
+            u32 MipFeedback = MipFeedbacks[TextureIndex];
             u32 CurrentMipMask = Manager->Textures[TextureIndex].MipResidencyMask;
             // NOTE(boti): Only request mips that are not present
             // TODO(boti): Pad the request with the low resolution mips if they're not present
-            MipMask &= ~CurrentMipMask;
-            if (MipMask)
+            MipFeedback &= ~CurrentMipMask;
+            if (MipFeedback)
             {
-                u32 RequestIndex = RealRequestCount++;
-                RealRequests[RequestIndex] = TextureIndex;
-                RealRequestMasks[RequestIndex] = MipMask;
+                u32 RequestIndex = RequestCount++;
+                RequestTextureIndexes[RequestIndex] = TextureIndex;
+                RequestMasks[RequestIndex] = MipFeedback;
             }
         }
 
-        Frame->TextureRequestCount = RealRequestCount;
-        Frame->TextureRequests = PushArray(Frame->Arena, 0, texture_request, RealRequestCount);
-        for (u32 RequestIndex = 0; RequestIndex < RealRequestCount; RequestIndex++)
+        Frame->TextureRequestCount = RequestCount;
+        Frame->TextureRequests = PushArray(Frame->Arena, 0, texture_request, RequestCount);
+        for (u32 RequestIndex = 0; RequestIndex < RequestCount; RequestIndex++)
         {
-            u32 TextureIndex = RealRequests[RequestIndex];
-            u32 MipMask = RealRequestMasks[RequestIndex];
+            u32 TextureIndex = RequestTextureIndexes[RequestIndex];
+            u32 MipMask = RequestMasks[RequestIndex];
 
             Frame->TextureRequests[RequestIndex] = { { TextureIndex }, MipMask };
         }
@@ -3802,7 +3802,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     vkBeginCommandBuffer(RenderCmd, &CmdBufferBegin);
     BindSystemDescriptors(RenderCmd);
 
-    vkCmdFillBuffer(RenderCmd, Renderer->MipMaskBuffer, 0, VK_WHOLE_SIZE, 0);
+    vkCmdFillBuffer(RenderCmd, Renderer->MipFeedbackBuffer, 0, VK_WHOLE_SIZE, 0);
 
     vkCmdSetViewport(RenderCmd, 0, 1, &FrameViewport);
     vkCmdSetScissor(RenderCmd, 0, 1, &FrameScissor);
@@ -3821,7 +3821,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_SHADER_WRITE_BIT_KHR,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = Renderer->MipMaskBuffer,
+            .buffer = Renderer->MipFeedbackBuffer,
             .offset = 0,
             .size = VK_WHOLE_SIZE,
         };
@@ -4022,7 +4022,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Renderer->MipMaskBuffer,
+                .buffer = Renderer->MipFeedbackBuffer,
                 .offset = 0,
                 .size = VK_WHOLE_SIZE,
             },
@@ -4032,9 +4032,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         {
             .srcOffset = 0,
             .dstOffset = 0,
-            .size = Renderer->MipMaskMemorySize,
+            .size = Renderer->MipFeedbackMemorySize,
         };
-        vkCmdCopyBuffer(RenderCmd, Renderer->MipMaskBuffer, Renderer->MipMaskReadbackBuffers[Frame->FrameID], 1, &Copy);
+        vkCmdCopyBuffer(RenderCmd, Renderer->MipFeedbackBuffer, Renderer->MipReadbackBuffers[Frame->FrameID], 1, &Copy);
     }
 
     //

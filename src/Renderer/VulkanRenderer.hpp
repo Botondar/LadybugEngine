@@ -217,10 +217,10 @@ struct renderer
     void*           StagingMemoryMapping;
     VkBuffer        StagingBuffers[R_MaxFramesInFlight];
 
-    VkDeviceMemory  MipMaskReadbackMemory;
-    void*           MipMaskReadbackMapping;
-    VkBuffer        MipMaskReadbackBuffers[R_MaxFramesInFlight];
-    void*           MipMaskReadbackMappings[R_MaxFramesInFlight];
+    VkDeviceMemory  MipReadbackMemory;
+    void*           MipReadbackMapping;
+    VkBuffer        MipReadbackBuffers[R_MaxFramesInFlight];
+    void*           MipReadbackMappings[R_MaxFramesInFlight];
 
     //
     // Persistent
@@ -230,9 +230,9 @@ struct renderer
     VkBuffer        StaticResourceDescriptorBuffer;
     void*           StaticResourceDescriptorMapping;
 
-    umm             MipMaskMemorySize;
-    VkDeviceMemory  MipMaskMemory;
-    VkBuffer        MipMaskBuffer;
+    umm             MipFeedbackMemorySize;
+    VkDeviceMemory  MipFeedbackMemory;
+    VkBuffer        MipFeedbackBuffer;
 
     umm             SkinningMemorySize;
     VkDeviceMemory  SkinningMemory;
