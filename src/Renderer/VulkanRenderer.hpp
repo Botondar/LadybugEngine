@@ -21,6 +21,8 @@ enum gpu_memory_arena_flag_bits : gpu_memory_arena_flags
 internal gpu_memory_arena 
 CreateGPUArena(umm Size, u32 MemoryTypeIndex, gpu_memory_arena_flags Flags);
 
+internal void ResetGPUArena(gpu_memory_arena* Arena);
+
 internal b32 
 PushImage(gpu_memory_arena* Arena, VkImage Image);
 
@@ -231,10 +233,6 @@ struct renderer
     umm             MipMaskMemorySize;
     VkDeviceMemory  MipMaskMemory;
     VkBuffer        MipMaskBuffer;
-
-    umm             DesiredMipMemorySize;
-    VkDeviceMemory  DesiredMipMemory;
-    VkBuffer        DesiredMipBuffer;
 
     umm             SkinningMemorySize;
     VkDeviceMemory  SkinningMemory;

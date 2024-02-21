@@ -138,6 +138,11 @@ CreateGPUArena(umm Size, u32 MemoryTypeIndex, gpu_memory_arena_flags Flags)
     return(Result);
 }
 
+internal void ResetGPUArena(gpu_memory_arena* Arena)
+{
+    Arena->MemoryAt = 0;
+}
+
 internal b32 
 PushImage(gpu_memory_arena* Arena, VkImage Image)
 {
@@ -4714,7 +4719,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         };
 
         AddEntry("BAR", Renderer->BARMemory.MemoryAt, Renderer->BARMemory.Size);
-        AddEntry("RenderTarget", Renderer->RenderTargetHeap.Offset, Renderer->RenderTargetHeap.MemorySize);
+        AddGPUArenaEntry("RenderTarget", &Renderer->RenderTargetHeap.Arena);
         AddEntry("VertexBuffer", 
                  Renderer->GeometryBuffer.VertexMemory.CountInUse * Renderer->GeometryBuffer.VertexMemory.Stride, 
                  Renderer->GeometryBuffer.VertexMemory.MaxCount * Renderer->GeometryBuffer.VertexMemory.Stride);

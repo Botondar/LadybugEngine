@@ -1,4 +1,17 @@
-internal bool 
+internal bool IsDepthFormat(VkFormat Format)
+{
+    bool Result = 
+        Format == VK_FORMAT_D16_UNORM ||
+        Format == VK_FORMAT_X8_D24_UNORM_PACK32 ||
+        Format == VK_FORMAT_D32_SFLOAT ||
+        Format == VK_FORMAT_S8_UINT ||
+        Format == VK_FORMAT_D16_UNORM_S8_UINT ||
+        Format == VK_FORMAT_D24_UNORM_S8_UINT ||
+        Format == VK_FORMAT_D32_SFLOAT_S8_UINT;
+    return(Result);
+}
+
+internal bool
 CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize)
 {
     bool Result = false;
@@ -61,40 +74,20 @@ CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize)
         },
     };
 
-    // Create dummy images and query their memory type requirements
     u32 MemoryTypeCandidates = VK.GPUMemTypes;
     for (u32 i = 0; i < CountOf(ImageInfos); i++)
     {
-        VkImage Image = VK_NULL_HANDLE;
-        if (vkCreateImage(VK.Device, ImageInfos + i, nullptr, &Image) != VK_SUCCESS)
-        {
-            return false;
-        }
-        
-        VkMemoryRequirements MemoryRequirements = {};
-        vkGetImageMemoryRequirements(VK.Device, Image, &MemoryRequirements);
+        VkImageAspectFlagBits Aspect = IsDepthFormat(ImageInfos[i].format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+        VkMemoryRequirements MemoryRequirements = GetImageMemoryRequirements(VK.Device, ImageInfos + i, Aspect);
         MemoryTypeCandidates &= MemoryRequirements.memoryTypeBits;
-        vkDestroyImage(VK.Device, Image, nullptr);
     }
 
     u32 MemoryType = 0;
     if (BitScanForward(&MemoryType, MemoryTypeCandidates))
     {
-        
-        VkMemoryAllocateInfo AllocInfo = 
+        Heap->Arena = CreateGPUArena(MemorySize, MemoryType, GpuMemoryFlag_None);
+        if (Heap->Arena.Memory)
         {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .allocationSize = MemorySize,
-            .memoryTypeIndex = MemoryType,
-        };
-
-        if (vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Heap->Memory) == VK_SUCCESS)
-        {
-            Heap->MemoryType = MemoryType;
-            Heap->MemorySize = MemorySize;
-            Heap->Offset = 0;
-
             Result = true;
         }
     }
@@ -132,9 +125,8 @@ ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height)
 {
     bool Result = true;
 
-    // TODO(boti): Add support for stencil formats
+    ResetGPUArena(&Heap->Arena);
 
-    Heap->Offset = 0;
     u32 MaxMipCount = GetMaxMipCount(Width, Height);
     for (u32 RenderTargetIndex = 0; RenderTargetIndex < Heap->RenderTargetCount; RenderTargetIndex++)
     {
@@ -149,18 +141,6 @@ ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height)
         vkDestroyImage(VK.Device, RT->Image, nullptr);
 
         RT->MipCount = Min(MaxMipCount, RT->MaxMipCount);
-
-        bool IsDepthFormat = false;
-        if (RT->Format == VK_FORMAT_D16_UNORM ||
-            RT->Format == VK_FORMAT_X8_D24_UNORM_PACK32 ||
-            RT->Format == VK_FORMAT_D32_SFLOAT ||
-            RT->Format == VK_FORMAT_S8_UINT ||
-            RT->Format == VK_FORMAT_D16_UNORM_S8_UINT ||
-            RT->Format == VK_FORMAT_D24_UNORM_S8_UINT ||
-            RT->Format == VK_FORMAT_D32_SFLOAT_S8_UINT)
-        {
-            IsDepthFormat = true;
-        }
 
         VkImageCreateInfo ImageInfo = 
         {
@@ -183,87 +163,67 @@ ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height)
 
         if (vkCreateImage(VK.Device, &ImageInfo, nullptr, &RT->Image) == VK_SUCCESS)
         {
-            VkMemoryRequirements MemoryRequirements = {};
-            vkGetImageMemoryRequirements(VK.Device, RT->Image, &MemoryRequirements);
-
-            if ((MemoryRequirements.memoryTypeBits & (1u << Heap->MemoryType)) != 0)
+            if (PushImage(&Heap->Arena, RT->Image))
             {
-                u64 Offset = Align(Heap->Offset, MemoryRequirements.alignment);
-                if (Offset + MemoryRequirements.size <= Heap->MemorySize)
+                VkImageAspectFlags AspectFlags = IsDepthFormat(RT->Format) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+                for (u32 Mip = 0; Mip < RT->MipCount; Mip++)
                 {
-                    if (vkBindImageMemory(VK.Device, RT->Image, Heap->Memory, Offset) == VK_SUCCESS)
+                    VkImageViewCreateInfo ViewInfo = 
                     {
-                        Heap->Offset = Offset + MemoryRequirements.size;
-
-                        VkImageAspectFlags AspectFlags = IsDepthFormat ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT ;
-                        for (u32 Mip = 0; Mip < RT->MipCount; Mip++)
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                        .pNext = nullptr,
+                        .flags = 0,
+                        .image = RT->Image,
+                        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                        .format = RT->Format,
+                        .components = {},
+                        .subresourceRange = 
                         {
-                            VkImageViewCreateInfo ViewInfo = 
-                            {
-                                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                                .pNext = nullptr,
-                                .flags = 0,
-                                .image = RT->Image,
-                                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                                .format = RT->Format,
-                                .components = {},
-                                .subresourceRange = 
-                                {
-                                    .aspectMask = AspectFlags,
-                                    .baseMipLevel = Mip,
-                                    .levelCount = 1,
-                                    .baseArrayLayer = 0,
-                                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                                },
-                            };
+                            .aspectMask = AspectFlags,
+                            .baseMipLevel = Mip,
+                            .levelCount = 1,
+                            .baseArrayLayer = 0,
+                            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                        },
+                    };
 
-                            if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, RT->MipViews + Mip) != VK_SUCCESS)
-                            {
-                                Result = false;
-                            }
-                        }
-
-                        VkImageViewCreateInfo ViewInfo = 
-                        {
-                            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                            .pNext = nullptr,
-                            .flags = 0,
-                            .image = RT->Image,
-                            .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                            .format = RT->Format,
-                            .components = {},
-                            .subresourceRange = 
-                            {
-                                .aspectMask = AspectFlags,
-                                .baseMipLevel = 0,
-                                .levelCount = VK_REMAINING_MIP_LEVELS,
-                                .baseArrayLayer = 0,
-                                .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                            },
-                        };
-
-                        if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, &RT->View) == VK_SUCCESS)
-                        {
-                            VkDebugUtilsObjectNameInfoEXT NameInfo = 
-                            {
-                                .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-                                .pNext = nullptr,
-                                .objectType = VK_OBJECT_TYPE_IMAGE,
-                                .objectHandle = (u64)RT->Image,
-                                .pObjectName = RT->Name,
-
-                            };
-                            vkSetDebugUtilsObjectNameEXT(VK.Device, &NameInfo);
-                        }
-                        else
-                        {
-                            Result = false;
-                        }
-                    }
-                    else
+                    if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, RT->MipViews + Mip) != VK_SUCCESS)
                     {
                         Result = false;
                     }
+                }
+
+                VkImageViewCreateInfo ViewInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .image = RT->Image,
+                    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                    .format = RT->Format,
+                    .components = {},
+                    .subresourceRange = 
+                    {
+                        .aspectMask = AspectFlags,
+                        .baseMipLevel = 0,
+                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                };
+
+                if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, &RT->View) == VK_SUCCESS)
+                {
+                    VkDebugUtilsObjectNameInfoEXT NameInfo = 
+                    {
+                        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+                        .pNext = nullptr,
+                        .objectType = VK_OBJECT_TYPE_IMAGE,
+                        .objectHandle = (u64)RT->Image,
+                        .pObjectName = RT->Name,
+
+                    };
+                    vkSetDebugUtilsObjectNameEXT(VK.Device, &NameInfo);
                 }
                 else
                 {
@@ -272,7 +232,7 @@ ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height)
             }
             else
             {
-                Result = false;
+                Result = true;
             }
         }
         else

@@ -15,11 +15,7 @@ struct render_target
 
 struct render_target_heap
 {
-    u64 MemorySize;
-    VkDeviceMemory Memory;
-    u32 MemoryType;
-
-    u64 Offset;
+    gpu_memory_arena Arena;
 
     static constexpr u32 MaxRenderTargetCount = 256;
     u32 RenderTargetCount;
