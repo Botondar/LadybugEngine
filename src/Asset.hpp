@@ -138,6 +138,9 @@ struct material
     u32 AlbedoID;
     u32 NormalID;
     u32 MetallicRoughnessID;
+    material_sampler_id AlbedoSamplerID;
+    material_sampler_id NormalSamplerID;
+    material_sampler_id MetallicRoughnessSamplerID;
     transparency_mode Transparency;
     rgba8 Albedo;
     rgba8 MetallicRoughness;

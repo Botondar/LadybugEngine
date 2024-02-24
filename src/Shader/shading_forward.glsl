@@ -81,6 +81,7 @@ SetBinding(Static, CascadedShadow) uniform texture2DArray CascadedShadow;
 SetBinding(Static, PointShadows) uniform textureCube PointShadows[];
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
+SetBinding(Sampler, MaterialSamplers) uniform sampler MatSamplers[R_MaterialSamplerCount];
 SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
 layout(location = 0) out vec4 Out0;
@@ -102,11 +103,11 @@ void main()
 
         v4 BaseColor = UnpackRGBA8(Instance.Material.DiffuseColor);
         v4 BaseMetallicRoughness = UnpackRGBA8(Instance.Material.BaseMaterial);
-        v4 Albedo = BaseColor * texture(sampler2D(Textures[Instance.Material.DiffuseID], Samplers[Sampler_Default]), TexCoord);
-        v4 MetallicRoughness = texture(sampler2D(Textures[Instance.Material.MetallicRoughnessID], Samplers[Sampler_Default]), TexCoord);
+        v4 Albedo = BaseColor * texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord);
+        v4 MetallicRoughness = texture(sampler2D(Textures[Instance.Material.MetallicRoughnessID], MatSamplers[Instance.Material.MetallicRoughnessSamplerID]), TexCoord);
         f32 Roughness = MetallicRoughness.g * BaseMetallicRoughness.g;
         f32 Metallic = MetallicRoughness.b * BaseMetallicRoughness.b;
-        v3 N = UnpackSurfaceNormal01(texture(sampler2D(Textures[Instance.Material.NormalID], Samplers[Sampler_Default]), TexCoord).xy);
+        v3 N = UnpackSurfaceNormal01(texture(sampler2D(Textures[Instance.Material.NormalID], MatSamplers[Instance.Material.NormalSamplerID]), TexCoord).xy);
         N = normalize(TriT) * N.x + normalize(TriB) * N.y + normalize(TriN) * N.z;
 
         // Desired mip level feedback

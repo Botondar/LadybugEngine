@@ -319,9 +319,9 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
             World->TerrainMaterialID = Assets->MaterialCount++;
             material* TerrainMaterial = Assets->Materials + World->TerrainMaterialID;
-            TerrainMaterial->AlbedoID = Assets->DefaultDiffuseID;
-            TerrainMaterial->NormalID = Assets->DefaultNormalID;
-            TerrainMaterial->MetallicRoughnessID = Assets->DefaultMetallicRoughnessID;
+            TerrainMaterial->AlbedoID = Assets->DefaultTextures[TextureType_Diffuse];
+            TerrainMaterial->NormalID = Assets->DefaultTextures[TextureType_Normal];
+            TerrainMaterial->MetallicRoughnessID = Assets->DefaultTextures[TextureType_Material];
             TerrainMaterial->Transparency = Transparency_Opaque;
             TerrainMaterial->Albedo = PackRGBA8(0x10, 0x10, 0x10);
             TerrainMaterial->MetallicRoughness = PackRGBA8(0xFF, 0xFF, 0x00);
@@ -377,6 +377,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                          0.0f, 1.0f, 0.0f, 0.0f,
                          0.0f, 0.0f, 0.0f, 1.0f);
         // Sponza scene
+        if (1)
         {
             m4 Transform = YUpToZUp;
             DEBUGLoadTestScene(Scratch, Assets, World, Frame,
@@ -446,7 +447,6 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                                "data/Scenes/Fox/Fox.gltf", Transform);
         }
 #endif
-
         World->IsLoaded = true;
     }
 
@@ -592,18 +592,21 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 mesh* Mesh = Assets->Meshes + Piece->MeshID;
 
                 material* Material = Assets->Materials + Mesh->MaterialID;
-                texture* AlbedoTexture = Assets->Textures + Material->AlbedoID;
-                texture* NormalTexture = Assets->Textures + Material->NormalID;
-                texture* MetallicRoughnessTexture = Assets->Textures + Material->MetallicRoughnessID;
+                texture* AlbedoTexture              = Assets->Textures + Material->AlbedoID;
+                texture* NormalTexture              = Assets->Textures + Material->NormalID;
+                texture* MetallicRoughnessTexture   = Assets->Textures + Material->MetallicRoughnessID;
                 
                 renderer_material RenderMaterial = 
                 {
-                    .Emissive = Material->Emission,
-                    .DiffuseColor = Material->Albedo,
-                    .BaseMaterial = Material->MetallicRoughness,
-                    .DiffuseID = AlbedoTexture->RendererID,
-                    .NormalID = NormalTexture->RendererID,
-                    .MetallicRoughnessID = MetallicRoughnessTexture->RendererID,
+                    .Emissive                   = Material->Emission,
+                    .DiffuseColor               = Material->Albedo,
+                    .BaseMaterial               = Material->MetallicRoughness,
+                    .DiffuseID                  = AlbedoTexture->RendererID,
+                    .NormalID                   = NormalTexture->RendererID,
+                    .MetallicRoughnessID        = MetallicRoughnessTexture->RendererID,
+                    .DiffuseSamplerID           = Material->AlbedoSamplerID,
+                    .NormalSamplerID            = Material->NormalSamplerID,
+                    .MetallicRoughnessSamplerID = Material->MetallicRoughnessSamplerID
                 };
                 if (DrawSkinned)
                 {
@@ -770,7 +773,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     }
 
     // Ad-hoc lights
-    if (1)
+    if (0)
     {
         particle_cmd* Cmd = nullptr;
         if ((Frame->ParticleDrawCmdCount < Frame->MaxParticleDrawCmdCount) && 

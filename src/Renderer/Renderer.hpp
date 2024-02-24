@@ -11,6 +11,12 @@ struct renderer_texture_id
     u32 Value;
 };
 
+
+struct material_sampler_id
+{
+    u32 Value;
+};
+
 union rgba8
 {
     u32 Color;
@@ -244,38 +250,6 @@ struct sampler_state
 };
 
 constexpr tex_anisotropy MaterialSamplerAnisotropy = Anisotropy_16;
-
-struct material_sampler_id
-{
-    u32 Value;
-};
-
-constexpr material_sampler_id 
-GetMaterialSamplerID(tex_wrap WrapU, tex_wrap WrapV, tex_wrap WrapW)
-{
-    Assert((WrapU < Wrap_Count) && (WrapV < Wrap_Count) && (WrapW < Wrap_Count));
-    material_sampler_id Result = { (u32)WrapU | ((u32)WrapV << 2) | ((u32)WrapW << 4)};
-    return(Result);
-}
-
-inline b32 
-GetWrapFromMaterialSampler(material_sampler_id ID, tex_wrap* WrapU, tex_wrap* WrapV, tex_wrap* WrapW)
-{
-    b32 Result = true;
-    if (ID.Value < R_MaterialSamplerCount)
-    {
-        constexpr u32 Mask = Wrap_Count - 1;
-        constexpr u32 Shift = 2;
-        *WrapU = (tex_wrap)((ID.Value >> (0*Shift)) & Mask);
-        *WrapV = (tex_wrap)((ID.Value >> (1*Shift)) & Mask);
-        *WrapW = (tex_wrap)((ID.Value >> (2*Shift)) & Mask);
-    }
-    else
-    {
-        Result = false;
-    }
-    return(Result);
-}
 
 // TODO(boti): This is binary compatible with Vulkan for now,
 // but with mutable descriptor types it could be collapsed down to the D3D12 model?
@@ -573,6 +547,33 @@ inline b32 AreTextureInfosSameFormat(texture_info A, texture_info B)
         (A.MipCount == B.MipCount) &&
         (A.ArrayCount == B.ArrayCount) &&
         (A.Format == B.Format);
+    return(Result);
+}
+
+constexpr material_sampler_id 
+GetMaterialSamplerID(tex_wrap WrapU, tex_wrap WrapV, tex_wrap WrapW)
+{
+    Assert((WrapU < Wrap_Count) && (WrapV < Wrap_Count) && (WrapW < Wrap_Count));
+    material_sampler_id Result = { (u32)WrapU | ((u32)WrapV << 2) | ((u32)WrapW << 4)};
+    return(Result);
+}
+
+inline b32 
+GetWrapFromMaterialSampler(material_sampler_id ID, tex_wrap* WrapU, tex_wrap* WrapV, tex_wrap* WrapW)
+{
+    b32 Result = true;
+    if (ID.Value < R_MaterialSamplerCount)
+    {
+        constexpr u32 Mask = Wrap_Count - 1;
+        constexpr u32 Shift = 2;
+        *WrapU = (tex_wrap)((ID.Value >> (0*Shift)) & Mask);
+        *WrapV = (tex_wrap)((ID.Value >> (1*Shift)) & Mask);
+        *WrapW = (tex_wrap)((ID.Value >> (2*Shift)) & Mask);
+    }
+    else
+    {
+        Result = false;
+    }
     return(Result);
 }
 

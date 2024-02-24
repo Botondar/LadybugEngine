@@ -39,6 +39,7 @@ struct v4u8
 
 #   define rgba8               u32
 #   define renderer_texture_id u32
+#   define material_sampler_id u32
 
 #endif
 
@@ -279,6 +280,10 @@ struct renderer_material
     renderer_texture_id DiffuseID;
     renderer_texture_id NormalID;
     renderer_texture_id MetallicRoughnessID;
+    // TODO(boti): These sampler IDs could just be packed into a single u32
+    material_sampler_id DiffuseSamplerID;
+    material_sampler_id NormalSamplerID;
+    material_sampler_id MetallicRoughnessSamplerID;
 };
 
 struct instance_data

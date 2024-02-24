@@ -37,7 +37,7 @@ void main()
 
 #elif defined(FS)
 
-SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
+SetBinding(Sampler, MaterialSamplers) uniform sampler MatSamplers[R_MaterialSamplerCount];
 SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
 layout(location = 0) out v2u VisibilityOut;
@@ -57,7 +57,7 @@ void main()
     instance_data Instance = Instances[InstanceIndex];
     VisibilityOut = v2u(InstanceIndex, gl_PrimitiveID);
     StructureOut = StructureEncode(ViewP.z);
-    vec4 Albedo = texture(sampler2D(Textures[Instance.Material.DiffuseID], Samplers[Sampler_Default]), TexCoord);
+    vec4 Albedo = texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord);
     if (Albedo.a < R_AlphaTestThreshold)
     {
         discard;

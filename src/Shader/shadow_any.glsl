@@ -39,14 +39,14 @@ void main()
 
 #elif defined(FS)
 
-SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
+SetBinding(Sampler, MaterialSamplers) uniform sampler MatSamplers[R_MaterialSamplerCount];
 SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
 void main()
 {
 #if 1
     instance_data Instance = Instances[InstanceIndex];
-    if (texture(sampler2D(Textures[Instance.Material.DiffuseID], Samplers[Sampler_Default]), TexCoord).a < R_AlphaTestThreshold)
+    if (texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord).a < R_AlphaTestThreshold)
     {
         discard;
     }

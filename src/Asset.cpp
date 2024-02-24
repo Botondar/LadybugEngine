@@ -607,6 +607,9 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             Material->AlbedoID = Assets->DefaultTextures[TextureType_Diffuse];
             Material->NormalID = Assets->DefaultTextures[TextureType_Normal];
             Material->MetallicRoughnessID = Assets->DefaultTextures[TextureType_Material];
+            Material->AlbedoSamplerID = { 0 };
+            Material->NormalSamplerID = { 0 };
+            Material->MetallicRoughnessSamplerID = { 0 };
             switch (SrcMaterial->AlphaMode)
             {
                 case GLTF_ALPHA_MODE_OPAQUE:    Material->Transparency = Transparency_Opaque; break;
@@ -617,10 +620,32 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             Material->Emission = SrcMaterial->EmissiveFactor;
             Material->Albedo = PackRGBA(SrcMaterial->BaseColorFactor);
             Material->MetallicRoughness = PackRGBA(v4{ 1.0f, SrcMaterial->RoughnessFactor, SrcMaterial->MetallicFactor, 1.0f });
-            
+
+            auto ConvertGLTFSampler = [](gltf_sampler* Sampler) -> material_sampler_id
+            {
+                auto ConvertGLTFWrap = [](gltf_wrap Wrap) -> tex_wrap
+                {
+                    tex_wrap Result = Wrap_Repeat;
+                    switch (Wrap)
+                    {
+                        case GLTF_WRAP_REPEAT:          Result = Wrap_Repeat; break;
+                        case GLTF_WRAP_CLAMP_TO_EDGE:   Result = Wrap_ClampToEdge; break;
+                        case GLTF_WRAP_MIRRORED_REPEAT: Result = Wrap_RepeatMirror; break;
+                        InvalidDefaultCase;
+                    }
+                    return(Result);
+                };
+
+                material_sampler_id Result = GetMaterialSamplerID(ConvertGLTFWrap(Sampler->WrapU), ConvertGLTFWrap(Sampler->WrapV), Wrap_Repeat);
+                return(Result);
+            };
 
             if (SrcMaterial->BaseColorTexture.TextureIndex != U32_MAX)
             {
+                gltf_texture* GLTFTexture = GLTF.Textures + SrcMaterial->BaseColorTexture.TextureIndex;
+                gltf_sampler* Sampler = GLTF.Samplers + GLTFTexture->SamplerIndex;
+                Material->AlbedoSamplerID = ConvertGLTFSampler(Sampler);
+
                 u32* Texture = TextureTable + SrcMaterial->BaseColorTexture.TextureIndex;
                 if (!*Texture)
                 {
@@ -630,6 +655,10 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             }
             if (SrcMaterial->NormalTexture.TextureIndex != U32_MAX)
             {
+                gltf_texture* GLTFTexture = GLTF.Textures + SrcMaterial->NormalTexture.TextureIndex;
+                gltf_sampler* Sampler = GLTF.Samplers + GLTFTexture->SamplerIndex;
+                Material->NormalSamplerID = ConvertGLTFSampler(Sampler);
+
                 u32* Texture = TextureTable + SrcMaterial->NormalTexture.TextureIndex;
                 if (!*Texture)
                 {
@@ -639,6 +668,10 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             }
             if (SrcMaterial->MetallicRoughnessTexture.TextureIndex != U32_MAX)
             {
+                gltf_texture* GLTFTexture = GLTF.Textures + SrcMaterial->MetallicRoughnessTexture.TextureIndex;
+                gltf_sampler* Sampler = GLTF.Samplers + GLTFTexture->SamplerIndex;
+                Material->MetallicRoughnessSamplerID = ConvertGLTFSampler(Sampler);
+
                 u32* Texture = TextureTable + SrcMaterial->MetallicRoughnessTexture.TextureIndex;
                 if (!*Texture)
                 {
