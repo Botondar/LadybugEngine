@@ -116,27 +116,49 @@ struct pipeline_with_layout
     VkPipelineLayout Layout;
 };
 
-struct texture_deletion_entry
+enum vulkan_handle_type : u32
 {
-    VkImage ImageHandle;
-    VkImageView ViewHandle;
+    VulkanHandle_Buffer = 0,
+    VulkanHandle_Image,
+    VulkanHandle_ImageView,
 };
 
-struct texture_deletion_queue
+struct deletion_entry
+{
+    vulkan_handle_type Type;
+    union
+    {
+        VkBuffer BufferHandle;
+        VkImage ImageHandle;
+        VkImageView ImageViewHandle;
+        void* Handle;
+    };
+};
+
+struct gpu_deletion_queue
 {
     static constexpr u32 MaxEntryCount = 4096;
     u32 EntryWriteAt;
     u32 EntryReadAt;
     u32 FrameEntryWriteAt[R_MaxFramesInFlight];
 
-    texture_deletion_entry Entries[MaxEntryCount];
+    deletion_entry Entries[MaxEntryCount];
 };
 
 internal b32 
-AddTextureDeletionEntry(texture_deletion_queue* Queue, u32 FrameID, VkImage Image, VkImageView View);
+PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, vulkan_handle_type Type, void* Handle);
+
+internal b32 
+PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkBuffer Buffer);
+
+internal b32 
+PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImage Image);
+
+internal b32 
+PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImageView ImageView);
 
 internal void 
-ProcessTextureDeletionEntries(texture_deletion_queue* Queue, u32 FrameID);
+ProcessDeletionEntries(gpu_deletion_queue* Queue, u32 FrameID);
 
 struct renderer
 {
@@ -180,7 +202,7 @@ struct renderer
         u64 ResizeCount;
     } Debug;
 
-    texture_deletion_queue TextureDeletionQueue;
+    gpu_deletion_queue DeletionQueue;
 
     //
     // Per frame stuff

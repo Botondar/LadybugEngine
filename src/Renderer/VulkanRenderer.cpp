@@ -644,14 +644,15 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
 }
 
 internal b32 
-AddTextureDeletionEntry(texture_deletion_queue* Queue, u32 FrameID, VkImage Image, VkImageView View)
+PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, vulkan_handle_type Type, void* Handle)
 {
     b32 Result = false;
     if (Queue->EntryWriteAt - Queue->EntryReadAt < Queue->MaxEntryCount)
     {
         u32 Index = (Queue->EntryWriteAt++) % Queue->MaxEntryCount;
-        Queue->Entries[Index] = { Image, View };
+        Queue->Entries[Index] = { .Type = Type, .Handle = Handle };
         Queue->FrameEntryWriteAt[FrameID] = Queue->EntryWriteAt;
+        Result = true;
     }
     else
     {
@@ -660,14 +661,47 @@ AddTextureDeletionEntry(texture_deletion_queue* Queue, u32 FrameID, VkImage Imag
     return(Result);
 }
 
+internal b32 
+PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkBuffer Buffer)
+{
+    return PushDeletionEntry(Queue, FrameID, VulkanHandle_Buffer, Buffer);
+}
+
+internal b32 
+PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImage Image)
+{
+    return PushDeletionEntry(Queue, FrameID, VulkanHandle_Image, Image);
+}
+
+internal b32 
+PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImageView ImageView)
+{
+    return PushDeletionEntry(Queue, FrameID, VulkanHandle_ImageView, ImageView);
+}
+
 internal void 
-ProcessTextureDeletionEntries(texture_deletion_queue* Queue, u32 FrameID)
+ProcessDeletionEntries(gpu_deletion_queue* Queue, u32 FrameID)
 {
     for (; Queue->EntryReadAt < Queue->FrameEntryWriteAt[FrameID]; Queue->EntryReadAt++)
     {
         u32 Index = Queue->EntryReadAt % Queue->MaxEntryCount;
-        vkDestroyImage(VK.Device, Queue->Entries[Index].ImageHandle, nullptr);
-        vkDestroyImageView(VK.Device, Queue->Entries[Index].ViewHandle, nullptr);
+        deletion_entry* Entry = Queue->Entries + Index;
+        switch (Entry->Type)
+        {
+            case VulkanHandle_Buffer:
+            {
+                vkDestroyBuffer(VK.Device, Entry->BufferHandle, nullptr);
+            } break;
+            case VulkanHandle_Image:
+            {
+                vkDestroyImage(VK.Device, Entry->ImageHandle, nullptr);
+            } break;
+            case VulkanHandle_ImageView:
+            {
+                vkDestroyImageView(VK.Device, Entry->ImageViewHandle, nullptr);
+            } break;
+            InvalidDefaultCase;
+        }
     }
     Queue->FrameEntryWriteAt[FrameID] = Queue->EntryWriteAt;
 }
@@ -1951,7 +1985,7 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
     vkResetCommandPool(VK.Device, Renderer->CmdPools[FrameID], 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
     vkResetCommandPool(VK.Device, Renderer->ComputeCmdPools[FrameID], 0);
 
-    ProcessTextureDeletionEntries(&Renderer->TextureDeletionQueue, FrameID);
+    ProcessDeletionEntries(&Renderer->DeletionQueue, FrameID);
 
     // Mip readback
     {
@@ -2287,8 +2321,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 }
                 else
                 {
-                    AddTextureDeletionEntry(&Renderer->TextureDeletionQueue, Frame->FrameID, Texture->ImageHandle, Texture->ViewHandle);
+                    PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, Texture->ImageHandle);
                     Texture->ImageHandle = VK_NULL_HANDLE;
+                    PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, Texture->ViewHandle);
                     Texture->ViewHandle = VK_NULL_HANDLE;
                     IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
                 }
