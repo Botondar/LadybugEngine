@@ -276,6 +276,8 @@ inline f32 Ceil(f32 x) { return ceilf(x); }
 inline f32 Round(f32 x) { return roundf(x); }
 
 inline f32 Sqrt(f32 x) { return sqrtf(x); }
+inline f32 Exp2(f32 x) { return exp2f(x); }
+inline f32 Log2(f32 x) { return log2f(x); }
 
 inline f32 Sin(f32 x) { return sinf(x); }
 inline f32 Cos(f32 x) { return cosf(x); }

@@ -479,10 +479,16 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
         constexpr f32 MoveSpeed = 1.0f;
         f32 SpeedMul = IO->Keys[SC_LeftShift].bIsDown ? 3.5f : 2.0f;
-        Camera->P += (Right * MoveDirection.X + Forward * MoveDirection.Z) * SpeedMul * MoveSpeed * dt;
+        Camera->dPTarget = (Right * MoveDirection.X + Forward * MoveDirection.Z) * SpeedMul * MoveSpeed;
+        if (IO->Keys[SC_Space].bIsDown) Camera->dPTarget.Z += SpeedMul * MoveSpeed;
+        if (IO->Keys[SC_LeftControl].bIsDown) Camera->dPTarget.Z -= SpeedMul * MoveSpeed;
 
-        if (IO->Keys[SC_Space].bIsDown) { Camera->P.Z += SpeedMul * MoveSpeed * dt; }
-        if (IO->Keys[SC_LeftControl].bIsDown) { Camera->P.Z -= SpeedMul * MoveSpeed * dt; }
+        f32 PrecisionAfterT = 1.0f / 128.0f;
+        f32 T = 0.200f;
+        f32 Lambda = -T / Log2(PrecisionAfterT);
+
+        Camera->dP = Lerp(Camera->dP, Camera->dPTarget, 1.0f - Exp2(-dt / Lambda));
+        Camera->P += Camera->dP * dt;;
 
         Frame->CameraTransform = GetTransform(Camera);
         Frame->CameraFocalLength = 1.0f / Tan(0.5f * Camera->FieldOfView);

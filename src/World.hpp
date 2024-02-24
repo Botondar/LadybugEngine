@@ -85,6 +85,8 @@ struct particle_system
 struct camera
 {
     v3 P;
+    v3 dP;
+    v3 dPTarget;
     f32 Yaw;
     f32 Pitch;
     f32 NearZ;
