@@ -1971,11 +1971,11 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         Frame->SkinnedMeshVertexCount = 0;
     }
 
-    Frame->RenderWidth = Renderer->SurfaceExtent.width;
-    Frame->RenderHeight = Renderer->SurfaceExtent.height;
+    Frame->RenderExtent.X = Renderer->SurfaceExtent.width;
+    Frame->RenderExtent.Y = Renderer->SurfaceExtent.height;
     
     Frame->Uniforms = {};
-    Frame->Uniforms.ScreenSize = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
+    Frame->Uniforms.ScreenSize = { (f32)Frame->RenderExtent.X, (f32)Frame->RenderExtent.Y };
 
     VkSemaphoreWaitInfo WaitInfo = 
     {
@@ -2063,7 +2063,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     VkCommandBuffer PreLightCmd = Renderer->ComputeCmdBuffers[Frame->FrameID];
     VkCommandBuffer ShadowCmd = Renderer->CmdBuffers[Frame->FrameID][CmdBufferAt++];
 
-    f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
+    f32 AspectRatio = (f32)Frame->RenderExtent.X / (f32)Frame->RenderExtent.Y;
 
     Frame->Uniforms.Ambience                    = 0.25f * v3{ 1.0f, 1.0f, 1.0f }; // TODO(boti): Expose this in the API
     Frame->Uniforms.Exposure                    = Frame->Config.Exposure;
@@ -2152,8 +2152,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkWaitForFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID], VK_TRUE, UINT64_MAX);
         vkResetFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID]);
 
-        if (Frame->RenderWidth != Renderer->SurfaceExtent.width ||
-            Frame->RenderHeight != Renderer->SurfaceExtent.height)
+        if (Frame->RenderExtent.X != Renderer->SurfaceExtent.width ||
+            Frame->RenderExtent.Y != Renderer->SurfaceExtent.height)
         {
             ResizeRenderTargets(Renderer, false);
         }
@@ -2175,8 +2175,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 ImageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR)
             {
                 ResizeRenderTargets(Renderer, true);
-                Frame->RenderWidth = Renderer->SurfaceExtent.width;
-                Frame->RenderHeight = Renderer->SurfaceExtent.height;
+                Frame->RenderExtent.X = Renderer->SurfaceExtent.width;
+                Frame->RenderExtent.Y = Renderer->SurfaceExtent.height;
             }
             else
             {
@@ -2706,11 +2706,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
     }
 
-    u32 TileCountX = CeilDiv(Frame->RenderWidth, R_TileSizeX);
-    u32 TileCountY = CeilDiv(Frame->RenderHeight, R_TileSizeY);
+    u32 TileCountX = CeilDiv(Frame->RenderExtent.X, R_TileSizeX);
+    u32 TileCountY = CeilDiv(Frame->RenderExtent.Y, R_TileSizeY);
     Frame->Uniforms.TileCount = { TileCountX, TileCountY };
     {
-        f32 s = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
+        f32 s = (f32)Frame->RenderExtent.X / (f32)Frame->RenderExtent.Y;
         frustum CameraFrustum = Frame->CameraFrustum;
 
         u32 LightBufferOffset = Frame->StagingBufferAt;
@@ -3049,15 +3049,15 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     {
         .x = 0.0f,
         .y = 0.0f,
-        .width = (f32)Frame->RenderWidth,
-        .height = (f32)Frame->RenderHeight,
+        .width = (f32)Frame->RenderExtent.X,
+        .height = (f32)Frame->RenderExtent.Y,
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     };
     VkRect2D FrameScissor = 
     {
         .offset = { 0, 0 },
-        .extent = { Frame->RenderWidth, Frame->RenderHeight },
+        .extent = { Frame->RenderExtent.X, Frame->RenderExtent.Y },
     };
 
     //
@@ -3234,7 +3234,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .renderArea = { .offset = { 0, 0 }, .extent = { Frame->RenderWidth, Frame->RenderHeight } },
+            .renderArea = { .offset = { 0, 0 }, .extent = { Frame->RenderExtent.X, Frame->RenderExtent.Y } },
             .layerCount = 1,
             .viewMask = 0,
             .colorAttachmentCount = CountOf(ColorAttachments),
@@ -3375,8 +3375,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_SSAO];
             vkCmdBindPipeline(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
             
-            u32 DispatchX = CeilDiv(Frame->RenderWidth, SSAO_GroupSizeX);
-            u32 DispatchY = CeilDiv(Frame->RenderHeight, SSAO_GroupSizeY);
+            u32 DispatchX = CeilDiv(Frame->RenderExtent.X, SSAO_GroupSizeX);
+            u32 DispatchY = CeilDiv(Frame->RenderExtent.Y, SSAO_GroupSizeY);
             vkCmdDispatch(PreLightCmd, DispatchX, DispatchY, 1);
         }
 
@@ -3442,8 +3442,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_SSAOBlur];
             vkCmdBindPipeline(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
 
-            u32 BlurDispatchX = CeilDiv(Frame->RenderWidth, SSAOBlur_GroupSizeX);
-            u32 BlurDispatchY = CeilDiv(Frame->RenderHeight, SSAOBlur_GroupSizeY);
+            u32 BlurDispatchX = CeilDiv(Frame->RenderExtent.X, SSAOBlur_GroupSizeX);
+            u32 BlurDispatchY = CeilDiv(Frame->RenderExtent.Y, SSAOBlur_GroupSizeY);
             vkCmdDispatch(PreLightCmd, BlurDispatchX, BlurDispatchY, 1);
         }
 
@@ -3931,7 +3931,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .renderArea = { { 0, 0 }, { Frame->RenderWidth, Frame->RenderHeight } },
+        .renderArea = { { 0, 0 }, { Frame->RenderExtent.X, Frame->RenderExtent.Y } },
         .layerCount = 1,
         .viewMask = 0,
         .colorAttachmentCount = CountOf(ShadingColorAttachments),
@@ -3967,8 +3967,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         {
             case ShadingMode_Visibility:
             {
-                u32 DispatchX = CeilDiv(Frame->RenderWidth, ShadingVisibility_GroupSizeX);
-                u32 DispatchY = CeilDiv(Frame->RenderHeight, ShadingVisibility_GroupSizeY);
+                u32 DispatchX = CeilDiv(Frame->RenderExtent.X, ShadingVisibility_GroupSizeX);
+                u32 DispatchY = CeilDiv(Frame->RenderExtent.Y, ShadingVisibility_GroupSizeY);
                 vkCmdDispatch(RenderCmd, DispatchX, DispatchY, 1);
 
                 VkImageMemoryBarrier2 EndBarriers[] = 
@@ -4083,8 +4083,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     //
     BeginFrameStage(RenderCmd, &FrameStages[FrameStage_Bloom], "Bloom");
     {
-        u32 Width = Frame->RenderWidth;
-        u32 Height = Frame->RenderHeight;
+        u32 Width = Frame->RenderExtent.X;
+        u32 Height = Frame->RenderExtent.Y;
 
         pipeline_with_layout DownsamplePipeline = Renderer->Pipelines[Pipeline_BloomDownsample];
         pipeline_with_layout UpsamplePipeline = Renderer->Pipelines[Pipeline_BloomUpsample];
@@ -4284,8 +4284,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .dstOffset = { 0, 0, 0 },
                 .extent = 
                 {
-                    .width = Max(Frame->RenderWidth >> MipIndex, 1u),
-                    .height = Max(Frame->RenderHeight >> MipIndex, 1u),
+                    .width = Max(Frame->RenderExtent.X >> MipIndex, 1u),
+                    .height = Max(Frame->RenderExtent.Y >> MipIndex, 1u),
                     .depth = 1,
                 },
             };
@@ -4399,8 +4399,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             u32 Mip = BloomMipCount - Index - 1;
             vkCmdPushConstants(RenderCmd, UpsamplePipeline.Layout, VK_SHADER_STAGE_ALL,
                                0, sizeof(Mip), &Mip);
-            Width = Max(Frame->RenderWidth >> Mip, 1u);
-            Height = Max(Frame->RenderHeight >> Mip, 1u);
+            Width = Max(Frame->RenderExtent.X >> Mip, 1u);
+            Height = Max(Frame->RenderExtent.Y >> Mip, 1u);
 
             u32 DispatchX = CeilDiv(Width, BloomUpsample_GroupSizeX);
             u32 DispatchY = CeilDiv(Height, BloomUpsample_GroupSizeY);
@@ -4532,7 +4532,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
             .pNext = nullptr,
             .flags = 0,
-            .renderArea = { { 0, 0 }, { Frame->RenderWidth, Frame->RenderHeight } },
+            .renderArea = { { 0, 0 }, { Frame->RenderExtent.X, Frame->RenderExtent.Y } },
             .layerCount = 1,
             .viewMask = 0,
             .colorAttachmentCount = 1,
@@ -4583,8 +4583,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Pipeline);
 
-            m4 OrthoTransform = M4(2.0f / Frame->RenderWidth, 0.0f, 0.0f, -1.0f,
-                                   0.0f, 2.0f / Frame->RenderHeight, 0.0f, -1.0f,
+            m4 OrthoTransform = M4(2.0f / Frame->RenderExtent.X, 0.0f, 0.0f, -1.0f,
+                                   0.0f, 2.0f / Frame->RenderExtent.Y, 0.0f, -1.0f,
                                    0.0f, 0.0f, 1.0f, 0.0f,
                                    0.0f, 0.0f, 0.0f, 1.0f);
             vkCmdPushConstants(RenderCmd, UIPipeline.Layout, VK_SHADER_STAGE_ALL, 

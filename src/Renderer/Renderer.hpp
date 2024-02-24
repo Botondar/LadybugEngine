@@ -827,8 +827,7 @@ struct render_frame
     b32 ReloadShaders;
 
     u32 FrameID;
-    u32 RenderWidth;
-    u32 RenderHeight;
+    v2u RenderExtent;
 
     renderer_texture_id ImmediateTextureID;
     renderer_texture_id ParticleTextureID; // TODO(boti): Move this to the particle command?

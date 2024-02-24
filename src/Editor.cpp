@@ -96,10 +96,10 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         Context.CurrentFlow = Flow_Vertical;
         Context.IsRightAligned = true;
 
-        Context.CurrentP = { (f32)Frame->RenderWidth, 0.0f };
+        Context.CurrentP = { (f32)Frame->RenderExtent.X, 0.0f };
         TextGUI(&Context, 24.0f, "%.2fms", 1000.0f * IO->dt);
         TextGUI(&Context, 20.0f, "%s", Platform.GetDeviceName(Frame->Renderer));
-        TextGUI(&Context, 20.0f, "Rendering@%ux%u", Frame->RenderWidth, Frame->RenderHeight);
+        TextGUI(&Context, 20.0f, "Rendering@%ux%u", Frame->RenderExtent.X, Frame->RenderExtent.Y);
     }
 
     if (!Editor->IsEnabled) 
@@ -227,7 +227,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
 
     // TODO(boti): This shouldn't be done this way, 
     // all of this is calculated by the world update
-    f32 AspectRatio = (f32)Frame->RenderWidth / (f32)Frame->RenderHeight;
+    f32 AspectRatio = (f32)Frame->RenderExtent.X / (f32)Frame->RenderExtent.Y;
     f32 g = 1.0f / Tan(0.5f * World->Camera.FieldOfView);
     // Construct a ray the intersects the pixel where the cursor's at
     m4 CameraTransform = GetTransform(&World->Camera);
@@ -235,8 +235,8 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
     ray Ray;
     {
         v2 P = IO->Mouse.P;
-        P.X /= (f32)Frame->RenderWidth;
-        P.Y /= (f32)Frame->RenderHeight;
+        P.X /= (f32)Frame->RenderExtent.X;
+        P.Y /= (f32)Frame->RenderExtent.Y;
         P.X = 2.0f * P.X - 1.0f;
         P.Y = 2.0f * P.Y - 1.0f;
         P.X *= AspectRatio;
@@ -334,7 +334,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
 
             u32 PlaybackID = ++Context.LastElementID;
             
-            v2 ScreenExtent = { (f32)Frame->RenderWidth, (f32)Frame->RenderHeight };
+            v2 ScreenExtent = { (f32)Frame->RenderExtent.X, (f32)Frame->RenderExtent.Y };
             f32 OutlineSize = 1.0f;
             f32 MinX = 0.1f * ScreenExtent.X;
             f32 MaxX = 0.9f * ScreenExtent.X;
