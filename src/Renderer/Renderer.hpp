@@ -243,30 +243,39 @@ struct sampler_state
     b32 EnableUnnormalizedCoordinates;
 };
 
-// NOTE(boti): Packed samplers are only used by materials, which means:
-//  - Anisotropy is always 16x
-//  - Comparison is always disabled
-//  - Min/Max LOD is always [0, GlobalMax]
-//  - Border is always white
-//  - Coords are always normalized
-union packed_sampler
-{
-    static constexpr u32 BitsUsed = 9;
-    static constexpr u32 MaxSamplerCount = (1u << (BitsUsed + 1));
+constexpr tex_anisotropy MaterialSamplerAnisotropy = Anisotropy_16;
 
+struct material_sampler_id
+{
     u32 Value;
-    struct
-    {
-        tex_filter MagFilter : 1;
-        tex_filter MinFilter : 1;
-        tex_filter MipFilter : 1;
-        tex_wrap WrapU : 2;
-        tex_wrap WrapV : 2;
-        tex_wrap WrapW : 2;
-    };
 };
 
-inline sampler_state UnpackSampler(packed_sampler Sampler);
+constexpr material_sampler_id 
+GetMaterialSamplerID(tex_wrap WrapU, tex_wrap WrapV, tex_wrap WrapW)
+{
+    Assert((WrapU < Wrap_Count) && (WrapV < Wrap_Count) && (WrapW < Wrap_Count));
+    material_sampler_id Result = { (u32)WrapU | ((u32)WrapV << 2) | ((u32)WrapW << 4)};
+    return(Result);
+}
+
+inline b32 
+GetWrapFromMaterialSampler(material_sampler_id ID, tex_wrap* WrapU, tex_wrap* WrapV, tex_wrap* WrapW)
+{
+    b32 Result = true;
+    if (ID.Value < R_MaterialSamplerCount)
+    {
+        constexpr u32 Mask = Wrap_Count - 1;
+        constexpr u32 Shift = 2;
+        *WrapU = (tex_wrap)((ID.Value >> (0*Shift)) & Mask);
+        *WrapV = (tex_wrap)((ID.Value >> (1*Shift)) & Mask);
+        *WrapW = (tex_wrap)((ID.Value >> (2*Shift)) & Mask);
+    }
+    else
+    {
+        Result = false;
+    }
+    return(Result);
+}
 
 // TODO(boti): This is binary compatible with Vulkan for now,
 // but with mutable descriptor types it could be collapsed down to the D3D12 model?
@@ -1041,27 +1050,6 @@ static format_byterate FormatByterateTable[Format_Count] =
 //
 // Implementation
 //
-
-inline sampler_state UnpackSampler(packed_sampler Sampler)
-{
-    sampler_state Result =
-    {
-        .MagFilter = Sampler.MagFilter,
-        .MinFilter = Sampler.MinFilter,
-        .MipFilter = Sampler.MipFilter,
-        .WrapU = Sampler.WrapU,
-        .WrapV = Sampler.WrapV,
-        .WrapW = Sampler.WrapW,
-        .Anisotropy = Anisotropy_16,
-        .EnableComparison = false,
-        .Comparison = Compare_Always,
-        .MinLOD = 0.0f,
-        .MaxLOD = GlobalMaxLOD,
-        .Border = Border_White,
-        .EnableUnnormalizedCoordinates = false,
-    };
-    return(Result);
-}
 
 inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A /*= 0xFF*/)
 {

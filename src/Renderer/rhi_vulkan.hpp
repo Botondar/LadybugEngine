@@ -40,6 +40,8 @@ extern VkBlendOp            BlendOpTable[BlendOp_Count];
 extern VkBlendFactor        BlendFactorTable[Blend_Count];
 extern VkCompareOp          CompareOpTable[Compare_Count];
 extern VkDescriptorType     DescriptorTypeTable[Descriptor_Count];
+extern f32                  AnisotropyTable[Anisotropy_Count];
+
 
 internal VkShaderStageFlags ShaderStagesToVulkan(shader_stages Stages);
 internal VkSamplerCreateInfo SamplerStateToVulkanSamplerInfo(sampler_state Sampler);

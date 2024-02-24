@@ -56,6 +56,9 @@ struct v4u8
 #define R_MaxShadowCount        64
 #define R_MaxMipCount           16
 
+// NOTE(boti): Material samplers are really just 
+#define R_MaterialSamplerCount  64
+
 #define Attrib_Position         0
 #define Attrib_Normal           1
 #define Attrib_TangentSign      2
@@ -104,8 +107,9 @@ struct v4u8
 
 // Sampler set bindings
 #define Binding_Sampler_NamedSamplers               0
+#define Binding_Sampler_MaterialSamplers            1
 
-#define Binding_Sampler_Count                       1
+#define Binding_Sampler_Count                       2
 
 // Bindless bindings
 #define Binding_Bindless_Textures                   0

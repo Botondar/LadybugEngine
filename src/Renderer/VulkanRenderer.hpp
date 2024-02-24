@@ -282,6 +282,7 @@ struct renderer
     pipeline_with_layout Pipelines[Pipeline_Count];
     VkDescriptorSetLayout SetLayouts[Set_Count];
     VkSampler Samplers[Sampler_Count];
+    VkSampler MaterialSamplers[R_MaterialSamplerCount];
 
     u64 CurrentFrameID;
     render_frame Frames[R_MaxFramesInFlight];

@@ -301,7 +301,7 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
                 .pPushConstantRanges = &PushConstantRange,
             };
             Result = vkCreatePipelineLayout(VK.Device, &PipelineLayoutInfo, nullptr, &Pipeline->Layout);
-            Assert(Result == VK_SUCCESS);
+            Verify(Result == VK_SUCCESS);
             if (Result != VK_SUCCESS) return(Result);
         }
         else
@@ -330,7 +330,7 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
                 };
                 VkShaderModule Module = VK_NULL_HANDLE;
                 Result = vkCreateShaderModule(VK.Device, &ModuleInfo, nullptr, &Module);
-                Assert(Result == VK_SUCCESS);
+                Verify(Result == VK_SUCCESS);
                 if (Result != VK_SUCCESS) return(Result);
 
                 VkComputePipelineCreateInfo PipelineInfo = 
@@ -353,7 +353,7 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
                     .basePipelineIndex = 0,
                 };
                 Result = vkCreateComputePipelines(VK.Device, VK_NULL_HANDLE, 1, &PipelineInfo, nullptr, &Pipeline->Pipeline);
-                Assert(Result == VK_SUCCESS);
+                Verify(Result == VK_SUCCESS);
                 vkDestroyShaderModule(VK.Device, Module, nullptr);
                 if (Result != VK_SUCCESS) return(Result);
             }
@@ -623,7 +623,7 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
             };
     
             Result = vkCreateGraphicsPipelines(VK.Device, nullptr, 1, &PipelineCreateInfo, nullptr, &Pipeline->Pipeline);
-            Assert(Result == VK_SUCCESS);
+            Verify(Result == VK_SUCCESS);
             if (Result != VK_SUCCESS) return(Result);
 
             for (u32 StageIndex = 0; StageIndex < StageCount; StageIndex++)
@@ -728,7 +728,43 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         {
             VkSamplerCreateInfo Info = SamplerStateToVulkanSamplerInfo(SamplerInfos[Index]);
             Result = vkCreateSampler(VK.Device, &Info, nullptr, &Renderer->Samplers[Index]);
-            Assert(Result == VK_SUCCESS);
+            Verify(Result == VK_SUCCESS);
+        }
+
+        for (u32 Index = 0; Index < R_MaterialSamplerCount; Index++)
+        {
+            material_sampler_id ID = { Index };
+            tex_wrap WrapU, WrapV, WrapW;
+            if (GetWrapFromMaterialSampler(ID, &WrapU, &WrapV, &WrapW))
+            {
+                VkSamplerCreateInfo Info = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .magFilter = VK_FILTER_LINEAR,
+                    .minFilter = VK_FILTER_LINEAR,
+                    .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                    .addressModeU = WrapTable[WrapU],
+                    .addressModeV = WrapTable[WrapV],
+                    .addressModeW = WrapTable[WrapW],
+                    .mipLodBias = 0.0f,
+                    .anisotropyEnable = VK_TRUE,
+                    .maxAnisotropy = AnisotropyTable[MaterialSamplerAnisotropy],
+                    .compareEnable = VK_FALSE,
+                    .compareOp = VK_COMPARE_OP_ALWAYS,
+                    .minLod = 0.0f,
+                    .maxLod = GlobalMaxLOD,
+                    .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+                    .unnormalizedCoordinates = VK_FALSE,
+                };
+                Result = vkCreateSampler(VK.Device, &Info, nullptr, Renderer->MaterialSamplers + Index);
+                Verify(Result == VK_SUCCESS);
+            }
+            else
+            {
+                InvalidCodePath;
+            }
         }
     }
 
@@ -780,7 +816,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             }
 
             Result = vkCreateDescriptorSetLayout(VK.Device, &CreateInfo, nullptr, &Renderer->SetLayouts[Index]);
-            Assert(Result == VK_SUCCESS);
+            Verify(Result == VK_SUCCESS);
         }
     }
 
@@ -1067,9 +1103,10 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
 
     // Sampler descriptor upload
     {
-        umm DescriptorSize = VK.DescriptorBufferProps.samplerDescriptorSize;
-        VkDeviceSize Offset = 0;
-        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Renderer->SetLayouts[Set_Sampler], Binding_Sampler_NamedSamplers, &Offset);
+        const umm DescriptorSize = VK.DescriptorBufferProps.samplerDescriptorSize;
+
+        VkDeviceSize NamedSamplersOffset = 0;
+        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Renderer->SetLayouts[Set_Sampler], Binding_Sampler_NamedSamplers, &NamedSamplersOffset);
         for (u32 SamplerIndex = 0; SamplerIndex < Sampler_Count; SamplerIndex++)
         {
             VkDescriptorGetInfoEXT DescriptorInfo = 
@@ -1081,7 +1118,22 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             };
 
             vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, 
-                               OffsetPtr(Renderer->SamplerDescriptorMapping, Offset + SamplerIndex*DescriptorSize));
+                               OffsetPtr(Renderer->SamplerDescriptorMapping, NamedSamplersOffset + SamplerIndex*DescriptorSize));
+        }
+
+        VkDeviceSize MaterialSamplersOffset = 0;
+        vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, Renderer->SetLayouts[Set_Sampler], Binding_Sampler_MaterialSamplers, &MaterialSamplersOffset);
+        for (u32 MaterialSamplerIndex = 0; MaterialSamplerIndex < R_MaterialSamplerCount; MaterialSamplerIndex++)
+        {
+            VkDescriptorGetInfoEXT DescriptorInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                .pNext = nullptr,
+                .type = VK_DESCRIPTOR_TYPE_SAMPLER,
+                .data = { .pSampler = &Renderer->MaterialSamplers[MaterialSamplerIndex] },
+            };
+            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize,
+                               OffsetPtr(Renderer->SamplerDescriptorMapping, MaterialSamplersOffset + MaterialSamplerIndex*DescriptorSize));
         }
     }
 
@@ -1320,52 +1372,6 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         Result = VK_ERROR_INITIALIZATION_FAILED;
         ReturnOnFailure();
     }
-
-    // TODO(boti): Packed samplers should be folded into the sampler descriptor set
-    #if 0
-    for (u32 PackedSamplerID = 0; PackedSamplerID < packed_sampler::MaxSamplerCount; PackedSamplerID++)
-    {
-        packed_sampler PackedSampler = { .Value = PackedSamplerID };
-        VkSamplerCreateInfo SamplerInfo = SamplerStateToVulkanSamplerInfo(UnpackSampler(PackedSampler));
-        Result = vkCreateSampler(VK.Device, &SamplerInfo, nullptr, Renderer->TextureManager.PackedSamplers + PackedSamplerID);
-        ReturnOnFailure();
-    }
-
-    {
-        VkDescriptorSetAllocateInfo AllocInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .descriptorPool = Renderer->TextureManager.DescriptorPool,
-            .descriptorSetCount = 1,
-            .pSetLayouts = &Renderer->SetLayouts[SetLayout_PackedSamplers],
-        };
-        Result = vkAllocateDescriptorSets(VK.Device, &AllocInfo, &Renderer->TextureManager.PackedSamplerDescriptorSet);
-        ReturnOnFailure();
-
-        for (u32 SamplerID = 0; SamplerID < packed_sampler::MaxSamplerCount; SamplerID++)
-        {
-            VkDescriptorImageInfo Info = 
-            {
-                .sampler = Renderer->TextureManager.PackedSamplers[SamplerID],
-                .imageView = VK_NULL_HANDLE,
-                .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            };
-            VkWriteDescriptorSet Write = 
-            {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .pNext = nullptr,
-                .dstSet = Renderer->TextureManager.PackedSamplerDescriptorSet,
-                .dstBinding = 0,
-                .dstArrayElement = SamplerID,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-                .pImageInfo = &Info,
-            };
-            vkUpdateDescriptorSets(VK.Device, 1, &Write, 0, nullptr);
-        }
-    }
-    #endif
 
     // Per frame
     {

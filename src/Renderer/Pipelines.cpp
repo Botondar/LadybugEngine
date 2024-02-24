@@ -391,6 +391,12 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .DescriptorCount = Sampler_Count,
                 .Stages = ShaderStage_All,
             },
+            {
+                .Binding = Binding_Sampler_MaterialSamplers,
+                .Type = Descriptor_Sampler,
+                .DescriptorCount = R_MaterialSamplerCount,
+                .Stages = ShaderStage_All,
+            },
         },
     },
 

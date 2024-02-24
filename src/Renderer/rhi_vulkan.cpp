@@ -206,6 +206,8 @@ VkDescriptorType DescriptorTypeTable[Descriptor_Count] =
     [Descriptor_InlineUniformBlock]     = VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK,
 };
 
+f32 AnisotropyTable[Anisotropy_Count] = { 1.0f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f };
+
 internal VkShaderStageFlags ShaderStagesToVulkan(flags32 Stages)
 {
     VkShaderStageFlags Result = 0;
@@ -231,7 +233,6 @@ internal VkShaderStageFlags ShaderStagesToVulkan(flags32 Stages)
 
 internal VkSamplerCreateInfo SamplerStateToVulkanSamplerInfo(sampler_state Sampler)
 {
-    f32 AnisotropyTable[Anisotropy_Count] = { 1.0f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f };
     VkSamplerCreateInfo Info = 
     {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,

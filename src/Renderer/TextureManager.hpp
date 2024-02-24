@@ -39,7 +39,8 @@ Mip exclusive (requires sparse binding/residency):
 */
 #endif
 
-constexpr umm TexturePageSize = KiB(64);
+constexpr umm TexturePageSize       = KiB(64);
+constexpr umm SmallTexturePageSize  = KiB(4);
 
 struct renderer_texture
 {
@@ -72,9 +73,6 @@ struct texture_manager
     VkDeviceAddress     DescriptorAddress;
     void*               DescriptorMapping;
     umm                 TextureTableOffset;
-
-    // TODO(boti): Move this to the renderer
-    VkSampler PackedSamplers[packed_sampler::MaxSamplerCount];
 
     u32                 TextureCount;
     renderer_texture    Textures[R_MaxTextureCount];
