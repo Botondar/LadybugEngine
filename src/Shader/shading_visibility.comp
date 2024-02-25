@@ -293,7 +293,19 @@ void main()
         //
         // Atmosphere
         //
-        Lo += AtmosphereIntensity * CalculateAtmosphere(v2(TexelID), P, PerFrame, CascadedShadow, Samplers[Sampler_Shadow]) * PerFrame.SunL;
+        {
+            f32 Atmosphere = CalculateAtmosphere(
+                v2(TexelID), 
+                P, 
+                PerFrame.SunV,
+                PerFrame.CascadeViewProjections[0] * PerFrame.CameraTransform,
+                PerFrame.CascadeScales,
+                PerFrame.CascadeOffsets,
+                PerFrame.CascadeMaxDistances,
+                CascadedShadow,
+                Samplers[Sampler_Shadow]);
+            Lo += AtmosphereIntensity * Atmosphere * PerFrame.SunL;
+        }
     }
 
     imageStore(HDRTarget[0], TexelID, v4(Lo, 1.0));

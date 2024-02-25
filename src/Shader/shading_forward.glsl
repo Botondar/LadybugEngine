@@ -152,7 +152,17 @@ void main()
     }
 
 #if 1
-    Lo += AtmosphereIntensity * CalculateAtmosphere(gl_FragCoord.xy, P, PerFrame, CascadedShadow, Samplers[Sampler_Shadow]) * PerFrame.SunL;
+    f32 Atmosphere = CalculateAtmosphere(
+        gl_FragCoord.xy, 
+        P, 
+        PerFrame.SunV,
+        PerFrame.CascadeViewProjections[0] * PerFrame.CameraTransform,
+        PerFrame.CascadeScales,
+        PerFrame.CascadeOffsets,
+        PerFrame.CascadeMaxDistances,
+        CascadedShadow,
+        Samplers[Sampler_Shadow]);
+    Lo += AtmosphereIntensity * Atmosphere * PerFrame.SunL;
 #else
     {
         uint StepCount = 64;

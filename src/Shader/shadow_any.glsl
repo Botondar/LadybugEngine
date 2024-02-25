@@ -34,7 +34,8 @@ void main()
     InstanceIndex = gl_InstanceIndex;
     uint ShadowIndex = Index / 6;
     uint LayerIndex = Index % 6;
-    gl_Position = PerFrame.PointShadows[ShadowIndex].ViewProjections[LayerIndex] * (Instance.Transform * vec4(aP, 1.0));
+    m4 ViewProjection = PerFrame.PointShadows[ShadowIndex].ViewProjections[LayerIndex];
+    gl_Position = ViewProjection * v4(TransformPoint(Instance.Transform, aP), 1.0);
 }
 
 #elif defined(FS)

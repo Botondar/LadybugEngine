@@ -482,7 +482,16 @@ float PhaseCS(in float g, in float g2, in float CosTheta)
     return(Phase);
 }
 
-float CalculateAtmosphere(v2 ScreenP, v3 P, per_frame PerFrame, texture2DArray Cascades, sampler Sampler)
+float CalculateAtmosphere(
+    v2 ScreenP,
+    v3 P,
+    v3 SunV,
+    m4 CameraToShadow,
+    v3 CascadeScales[3],
+    v3 CascadeOffsets[3],
+    f32 CascadeMaxDistances[4],
+    texture2DArray Cascades,
+    sampler Sampler)
 {
     const int StepCount = 32;
     const float StepDistribution = 0.25;
@@ -492,7 +501,7 @@ float CalculateAtmosphere(v2 ScreenP, v3 P, per_frame PerFrame, texture2DArray C
     v3 V = normalize(P);
     v3 EndP = MaxDistance * V;
 
-    float CosTheta = dot(V, PerFrame.SunV);
+    float CosTheta = dot(V, SunV);
 
     const float g = 0.35;
     const float g2 = g*g;
@@ -509,7 +518,6 @@ float CalculateAtmosphere(v2 ScreenP, v3 P, per_frame PerFrame, texture2DArray C
     float Weight = StepDistribution;
     float dW = 2.0 * (1.0 - StepDistribution) / float(StepCount);
 
-    mat4 CameraToShadow = PerFrame.CascadeViewProjections[0] * PerFrame.CameraTransform;
     for (int i = 0; i < StepCount; i++)
     {
         float t = (i + Delta) / float(StepCount);
@@ -520,7 +528,7 @@ float CalculateAtmosphere(v2 ScreenP, v3 P, per_frame PerFrame, texture2DArray C
             break;
         }
 
-        while ((CascadeIndex < 3) && (CurrentP.z > PerFrame.CascadeMaxDistances[CascadeIndex]))
+        while ((CascadeIndex < 3) && (CurrentP.z > CascadeMaxDistances[CascadeIndex]))
         {
             CascadeIndex++;
         }
@@ -530,7 +538,7 @@ float CalculateAtmosphere(v2 ScreenP, v3 P, per_frame PerFrame, texture2DArray C
         if (CascadeIndex > 0)
         {
             // FIXME
-            ShadowCoord.xyw = PerFrame.CascadeScales[CascadeIndex - 1] * ShadowCoord.xyw + PerFrame.CascadeOffsets[CascadeIndex - 1];
+            ShadowCoord.xyw = CascadeScales[CascadeIndex - 1] * ShadowCoord.xyw + CascadeOffsets[CascadeIndex - 1];
         }
         float Shadow = texture(sampler2DArrayShadow(Cascades, Sampler), ShadowCoord);
 

@@ -32,7 +32,8 @@ void main()
     instance_data Instance = Instances[gl_InstanceIndex];
     TexCoord = aTexCoord;
     InstanceIndex = gl_InstanceIndex;
-    gl_Position = PerFrame.CascadeViewProjections[CascadeIndex] * (Instance.Transform * vec4(aP, 1.0));
+    m4 ViewProjection = PerFrame.CascadeViewProjections[CascadeIndex];
+    gl_Position = ViewProjection * v4(TransformPoint(Instance.Transform, aP), 1.0);
 }
 
 #elif defined(FS)
