@@ -484,7 +484,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         if (IO->Keys[SC_LeftControl].bIsDown) Camera->dPTarget.Z -= SpeedMul * MoveSpeed;
 
         f32 PrecisionAfterT = 1.0f / 128.0f;
-        f32 T = 0.200f;
+        f32 T = 0.150f;
         f32 Lambda = -T / Log2(PrecisionAfterT);
 
         Camera->dP = Lerp(Camera->dP, Camera->dPTarget, 1.0f - Exp2(-dt / Lambda));
