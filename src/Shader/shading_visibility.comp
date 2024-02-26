@@ -225,7 +225,7 @@ void main()
         TriN        = TransformDirection(PerFrame.ViewTransform, normalize(TriN * inverse(mat3(Instance.Transform))));
         v3 TriT     = Interpolate(Barycentrics, Vertex0.T.xyz, Vertex1.T.xyz, Vertex2.T.xyz);
         TriT        = TransformDirection(PerFrame.ViewTransform, normalize(TransformDirection(Instance.Transform, TriT)));
-        v3 TriB     = normalize(cross(TriT, TriN)) * Vertex0.T.w;
+        v3 TriB     = normalize(cross(TriN, TriT)) * Vertex0.T.w;
 
         //
         // Material and normal fetch

@@ -41,7 +41,7 @@ void main()
     P = TransformPoint(PerFrame.ViewTransform, WorldP);
     TriN = normalize(mat3(PerFrame.ViewTransform) * (aN * inverse(mat3(Instance.Transform))));
     TriT = normalize((mat3(PerFrame.ViewTransform) * (mat3(Instance.Transform) * aT.xyz)));
-    TriB = normalize(cross(TriT, TriN)) * aT.w;
+    TriB = normalize(cross(TriN, TriT)) * aT.w;
 
     // NOTE(boti): This works because orthographic projection is an affine transform
     ShadowP = TransformPoint(PerFrame.CascadeViewProjections[0], WorldP);
