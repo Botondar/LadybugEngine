@@ -14,6 +14,85 @@ internal b32 IsTextureSpecial(renderer_texture_id ID)
     return(Result);
 }
 
+// TODO(boti): rewrite cache usage with bit ops
+
+internal umm 
+FindFreePageRange(texture_cache* Cache, umm PageCount)
+{
+    umm Result = U64_MAX;
+
+    umm FoundPageCount = 0;
+    umm CandidatePage = 0;
+    for (umm PageIndex = 0; PageIndex < Cache->PageCount; PageIndex++)
+    {
+        umm PageGroupIndex = PageIndex / 64;
+        umm InGroupIndex = PageIndex % 64;
+        u64 Mask = 1 << InGroupIndex;
+        if ((Cache->PageUsage[PageGroupIndex] & Mask) == 0)
+        {
+            FoundPageCount++;
+            if (FoundPageCount == PageCount)
+            {
+                Result = CandidatePage;
+                break;
+            }
+        }
+        else
+        {
+            FoundPageCount = 0;
+            CandidatePage = PageIndex + 1;
+        }
+    }
+    return(Result);
+}
+
+internal void
+MarkPagesAsUsed(texture_cache* Cache, umm FirstPage, umm PageCount)
+{
+    Cache->UsedPageCount += PageCount;
+    umm PageGroupIndex = FirstPage / 64;
+    umm InGroupIndex = FirstPage % 64;
+    for (umm PageIndex = 0; PageIndex < PageCount; PageIndex++)
+    {
+        Assert((Cache->PageUsage[PageGroupIndex] & (1 << InGroupIndex)) == 0);
+        Cache->PageUsage[PageGroupIndex] |= (1 << InGroupIndex);
+        if (++InGroupIndex == 64)
+        {
+            InGroupIndex = 0;
+            PageGroupIndex++;
+        }
+    }
+}
+
+internal b32
+AllocateImage(texture_cache* Cache, VkDeviceMemory Memory, VkImage Image, umm* OutPageIndex, umm* OutPageCount)
+{
+    b32 Result = false;
+
+    VkMemoryRequirements MemoryRequirements;
+    vkGetImageMemoryRequirements(VK.Device, Image, &MemoryRequirements);
+    Assert(MemoryRequirements.alignment <= TexturePageSize);
+    
+    umm PageCount = CeilDiv(MemoryRequirements.size, TexturePageSize);
+    umm PageIndex = FindFreePageRange(Cache, PageCount);
+    if (PageIndex != U64_MAX)
+    {
+        if (vkBindImageMemory(VK.Device, Image, Memory, PageIndex * TexturePageSize) == VK_SUCCESS)
+        {
+            MarkPagesAsUsed(Cache, PageIndex, PageCount);
+            if (OutPageIndex) *OutPageIndex = PageIndex;
+            if (OutPageCount) *OutPageCount = PageCount;
+            Result = true;
+        }
+        else
+        {
+            UnhandledError("Failed to bind image memory");
+        }
+    }
+
+    return(Result);
+}
+
 internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena, u64 MemorySize, u32 MemoryTypes, VkDescriptorSetLayout* SetLayouts)
 {
     VkResult Result = VK_SUCCESS;
@@ -55,8 +134,10 @@ internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena
         Manager->CacheArena         = CreateGPUArena(MemorySize, MemoryTypeIndex, GpuMemoryFlag_None);
 
         Manager->Cache.PageCount = CeilDiv(MemorySize, TexturePageSize);
-        Manager->Cache.UsageBitfieldCount = CeilDiv(Manager->Cache.PageCount, 64);
-        Manager->Cache.UsageBitfields = PushArray(Arena, MemPush_Clear, u64, Manager->Cache.UsageBitfieldCount);
+        umm PageUsageCount = CeilDiv(Manager->Cache.PageCount, 64);
+        Manager->Cache.PageUsage = PushArray(Arena, MemPush_Clear, u64, PageUsageCount);
+
+        Manager->Cache.UsedPageCount = 0;
 
         if (Manager->DescriptorArena.Memory && Manager->PersistentArena.Memory && Manager->CacheArena.Memory)
         {
@@ -216,11 +297,22 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
             .pQueueFamilyIndices = nullptr,
             .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         };
-        VkResult ErrorCode = vkCreateImage(VK.Device, &ImageInfo, nullptr, &Texture->ImageHandle);
+        VkImage Image = VK_NULL_HANDLE;
+        VkResult ErrorCode = vkCreateImage(VK.Device, &ImageInfo, nullptr, &Image);
         if (ErrorCode == VK_SUCCESS)
         {
-            gpu_memory_arena* Arena = (Texture->Flags & TextureFlag_PersistentMemory) ? &Manager->PersistentArena : &Manager->CacheArena;
-            b32 PushResult = PushImage(Arena, Texture->ImageHandle);
+            umm PageIndex = 0;
+            umm PageCount = 0;
+            b32 PushResult = false;
+            if (Texture->Flags & TextureFlag_PersistentMemory)
+            {
+                PushResult = PushImage(&Manager->PersistentArena, Image);
+            }
+            else
+            {
+                PushResult = AllocateImage(&Manager->Cache, Manager->CacheArena.Memory, Image, &PageIndex, &PageCount);
+            }
+            
             if (PushResult)
             {
                 auto SwizzleToVulkan = [](texture_swizzle_type Swizzle) -> VkComponentSwizzle
@@ -245,7 +337,7 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
                     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                     .pNext = nullptr,
                     .flags = 0,
-                    .image = Texture->ImageHandle,
+                    .image = Image,
                     .viewType = (Info.ArrayCount == 1) ? VK_IMAGE_VIEW_TYPE_2D : VK_IMAGE_VIEW_TYPE_2D_ARRAY,
                     .format = FormatTable[Info.Format],
                     .components = 
@@ -265,8 +357,13 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
                     },
                 };
                 
-                if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, &Texture->ViewHandle) == VK_SUCCESS)
+                VkImageView View = VK_NULL_HANDLE;
+                if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, &View) == VK_SUCCESS)
                 {
+                    Texture->ImageHandle = Image;
+                    Texture->ViewHandle = View;
+                    Texture->PageIndex = PageIndex;
+                    Texture->PageCount = PageCount;
                     Result = true;
                 }
                 else
@@ -276,7 +373,7 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
             }
             else
             {
-                UnhandledError("Failed to push image");
+                //UnhandledError("Failed to push image");
             }
         }
         else

@@ -49,14 +49,31 @@ struct renderer_texture
     texture_info    Info;
     texture_flags   Flags;
     u32             MipResidencyMask;
+
+    umm             PageIndex;
+    umm             PageCount;
 };
 
 struct texture_cache
 {
+    umm SmallPageCount;
+    u64* SmallPageUsage;
+
     umm PageCount;
-    umm UsageBitfieldCount;
-    u64* UsageBitfields;
+    u64* PageUsage;
+
+    umm UsedPageCount;
 };
+
+internal umm 
+FindFreePageRange(texture_cache* Cache, umm PageCount);
+
+internal void 
+MarkPagesAsUsed(texture_cache* Cache, umm FirstPage, umm PageCount);
+
+// TODO(boti): The device memory should be a part of the cache in the future
+internal b32
+AllocateImage(texture_cache* Cache, VkDeviceMemory Memory, VkImage Image);
 
 struct texture_manager
 {
@@ -65,6 +82,7 @@ struct texture_manager
     VkDescriptorSetLayout DescriptorSetLayout;
 
     gpu_memory_arena    PersistentArena;
+    // TODO(boti): Remove the cache arena and move the memory object to the cache
     gpu_memory_arena    CacheArena;
     texture_cache       Cache;
 

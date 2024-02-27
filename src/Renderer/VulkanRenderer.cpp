@@ -168,7 +168,7 @@ PushImage(gpu_memory_arena* Arena, VkImage Image)
     }
     else
     {
-        UnhandledError("GPU arena full");
+        //UnhandledError("GPU arena full");
     }
 
     return(Result);
@@ -2327,11 +2327,14 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 }
                 else
                 {
-                    PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, Texture->ImageHandle);
-                    Texture->ImageHandle = VK_NULL_HANDLE;
-                    PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, Texture->ViewHandle);
-                    Texture->ViewHandle = VK_NULL_HANDLE;
+                    VkImage OldImageHandle = Texture->ImageHandle;
+                    VkImageView OldViewHandle = Texture->ViewHandle;
                     IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
+                    if (IsAllocated)
+                    {
+                        PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, OldImageHandle);
+                        PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, OldViewHandle);
+                    }
                 }
 
                 if (IsAllocated)
@@ -4716,6 +4719,64 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkQueuePresentKHR(VK.GraphicsQueue, &PresentInfo);
     }
 
+    // Verify texture allocation integrity
+#if 0
+    {
+        texture_manager* Manager = &Renderer->TextureManager;
+        v2u* IndexCountPairs = PushArray(Frame->Arena, 0, v2u, Manager->TextureCount);
+
+        for (u32 Index = 0; Index < Manager->TextureCount; Index++)
+        {
+            IndexCountPairs[Index].X = TruncateU64ToU32(Manager->Textures[Index].PageIndex);
+            IndexCountPairs[Index].Y = TruncateU64ToU32(Manager->Textures[Index].PageCount);
+        }
+
+        v2u* Src = IndexCountPairs;
+        v2u* Dst = PushArray(Frame->Arena, 0, v2u, Manager->TextureCount);
+        for (u32 BucketIndex = 0; BucketIndex < 4; BucketIndex++)
+        {
+            u32 BucketOffsets[256] = {};
+            for (u32 It = 0; It < Manager->TextureCount; It++)
+            {
+                u32 Key = (Src[It].X >> (BucketIndex * 8)) & 0xFF;
+                BucketOffsets[Key]++;
+            }
+
+            u32 TotalCount = 0;
+            for (u32 It = 0; It < 256; It++)
+            {
+                u32 CurrentCount = BucketOffsets[It];
+                BucketOffsets[It] = TotalCount;
+                TotalCount += CurrentCount;
+            }
+
+            for (u32 It = 0; It < Manager->TextureCount; It++)
+            {
+                u32 Key = (Src[It].X >> (BucketIndex * 8)) & 0xFF;
+                u32 DstIt = BucketOffsets[Key]++;
+
+                Dst[DstIt] = Src[It];
+            }
+
+            {
+                v2u* Tmp = Src;
+                Src = Dst;
+                Dst = Tmp;
+            }
+        }
+
+        for (u32 It = 1; It < Manager->TextureCount; It++)
+        {
+            Assert(IndexCountPairs[It - 1].X <= IndexCountPairs[It].X);
+            u32 PrevEnd = IndexCountPairs[It - 1].X + IndexCountPairs[It - 1].Y;
+            if (IndexCountPairs[It].Y > 0)
+            {
+                Assert(PrevEnd <= IndexCountPairs[It].X);
+            }
+        }
+    }
+#endif
+
     // Collect stats
     {
         render_stats* Stats = &Frame->Stats;
@@ -4767,7 +4828,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         AddEntry("IndexBuffer", 
                  Renderer->GeometryBuffer.IndexMemory.CountInUse * Renderer->GeometryBuffer.IndexMemory.Stride, 
                  Renderer->GeometryBuffer.IndexMemory.MaxCount * Renderer->GeometryBuffer.IndexMemory.Stride);
-        AddGPUArenaEntry("TextureCache", &Renderer->TextureManager.CacheArena);
+        AddEntry("TextureCache", Renderer->TextureManager.Cache.UsedPageCount * TexturePageSize, Renderer->TextureManager.CacheArena.Size);
         AddGPUArenaEntry("TexturePersist", &Renderer->TextureManager.PersistentArena);
         AddGPUArenaEntry("Shadow", &Renderer->ShadowArena);
         AddEntry("Staging", Frame->StagingBufferAt, Frame->StagingBufferSize);
