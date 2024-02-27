@@ -27,7 +27,7 @@ FindFreePageRange(texture_cache* Cache, umm PageCount)
     {
         umm PageGroupIndex = PageIndex / 64;
         umm InGroupIndex = PageIndex % 64;
-        u64 Mask = 1 << InGroupIndex;
+        u64 Mask = 1llu << InGroupIndex;
         if ((Cache->PageUsage[PageGroupIndex] & Mask) == 0)
         {
             FoundPageCount++;
@@ -54,8 +54,26 @@ MarkPagesAsUsed(texture_cache* Cache, umm FirstPage, umm PageCount)
     umm InGroupIndex = FirstPage % 64;
     for (umm PageIndex = 0; PageIndex < PageCount; PageIndex++)
     {
-        Assert((Cache->PageUsage[PageGroupIndex] & (1 << InGroupIndex)) == 0);
-        Cache->PageUsage[PageGroupIndex] |= (1 << InGroupIndex);
+        Assert((Cache->PageUsage[PageGroupIndex] & (1llu << InGroupIndex)) == 0);
+        Cache->PageUsage[PageGroupIndex] |= (1llu << InGroupIndex);
+        if (++InGroupIndex == 64)
+        {
+            InGroupIndex = 0;
+            PageGroupIndex++;
+        }
+    }
+}
+
+internal void
+MarkPagesAsFree(texture_cache* Cache, umm FirstPage, umm PageCount)
+{
+    Cache->UsedPageCount -= PageCount;
+    umm PageGroupIndex = FirstPage / 64;
+    umm InGroupIndex = FirstPage % 64;
+    for (umm PageIndex = 0; PageIndex < PageCount; PageIndex++)
+    {
+        Assert((Cache->PageUsage[PageGroupIndex] & (1llu << InGroupIndex)) != 0);
+        Cache->PageUsage[PageGroupIndex] &= ~(1llu << InGroupIndex);
         if (++InGroupIndex == 64)
         {
             InGroupIndex = 0;
@@ -360,6 +378,7 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
                 VkImageView View = VK_NULL_HANDLE;
                 if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, &View) == VK_SUCCESS)
                 {
+                    MarkPagesAsFree(&Manager->Cache, Texture->PageIndex, Texture->PageCount);
                     Texture->ImageHandle = Image;
                     Texture->ViewHandle = View;
                     Texture->PageIndex = PageIndex;

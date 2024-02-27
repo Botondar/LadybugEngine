@@ -2327,6 +2327,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 }
                 else
                 {
+                    // TODO(boti): Move the deletion entry push to the texture manager
                     VkImage OldImageHandle = Texture->ImageHandle;
                     VkImageView OldViewHandle = Texture->ViewHandle;
                     IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);

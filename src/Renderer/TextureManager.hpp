@@ -71,6 +71,9 @@ FindFreePageRange(texture_cache* Cache, umm PageCount);
 internal void 
 MarkPagesAsUsed(texture_cache* Cache, umm FirstPage, umm PageCount);
 
+internal void
+MarkPagesAsFree(texture_cache* Cache, umm FirstPage, umm PageCount);
+
 // TODO(boti): The device memory should be a part of the cache in the future
 internal b32
 AllocateImage(texture_cache* Cache, VkDeviceMemory Memory, VkImage Image);
