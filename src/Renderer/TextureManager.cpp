@@ -83,7 +83,7 @@ MarkPagesAsFree(texture_cache* Cache, umm FirstPage, umm PageCount)
 }
 
 internal b32
-AllocateImage(texture_cache* Cache, VkDeviceMemory Memory, VkImage Image, umm* OutPageIndex, umm* OutPageCount)
+AllocateImage(texture_cache* Cache, VkImage Image, umm* OutPageIndex, umm* OutPageCount)
 {
     b32 Result = false;
 
@@ -95,7 +95,7 @@ AllocateImage(texture_cache* Cache, VkDeviceMemory Memory, VkImage Image, umm* O
     umm PageIndex = FindFreePageRange(Cache, PageCount);
     if (PageIndex != U64_MAX)
     {
-        if (vkBindImageMemory(VK.Device, Image, Memory, PageIndex * TexturePageSize) == VK_SUCCESS)
+        if (vkBindImageMemory(VK.Device, Image, Cache->Memory, PageIndex * TexturePageSize) == VK_SUCCESS)
         {
             MarkPagesAsUsed(Cache, PageIndex, PageCount);
             if (OutPageIndex) *OutPageIndex = PageIndex;
@@ -114,6 +114,8 @@ AllocateImage(texture_cache* Cache, VkDeviceMemory Memory, VkImage Image, umm* O
 internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena, u64 MemorySize, u32 MemoryTypes, VkDescriptorSetLayout* SetLayouts)
 {
     VkResult Result = VK_SUCCESS;
+
+    MemorySize = Align(MemorySize, TexturePageSize);
 
     {
         VkImageCreateInfo DummyImageInfo = 
@@ -149,15 +151,33 @@ internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena
         Manager->DescriptorArena    = CreateGPUArena(DescriptorBufferSize, DescriptorMemoryTypeIndex, GpuMemoryFlag_Mapped);
 
         Manager->PersistentArena    = CreateGPUArena(MiB(32), MemoryTypeIndex, GpuMemoryFlag_None);
-        Manager->CacheArena         = CreateGPUArena(MemorySize, MemoryTypeIndex, GpuMemoryFlag_None);
-
+        {
+            VkMemoryAllocateInfo AllocInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .allocationSize = MemorySize,
+                .memoryTypeIndex = MemoryTypeIndex,
+            };
+            Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Manager->Cache.Memory);
+            if (Result == VK_SUCCESS)
+            {
+                Manager->Cache.MemorySize = MemorySize;
+                Manager->Cache.MemoryTypeIndex = MemoryTypeIndex;
+            }
+            else
+            {
+                UnhandledError("Failed to create texture cache");
+            }
+            
+        }
         Manager->Cache.PageCount = CeilDiv(MemorySize, TexturePageSize);
         umm PageUsageCount = CeilDiv(Manager->Cache.PageCount, 64);
         Manager->Cache.PageUsage = PushArray(Arena, MemPush_Clear, u64, PageUsageCount);
 
         Manager->Cache.UsedPageCount = 0;
 
-        if (Manager->DescriptorArena.Memory && Manager->PersistentArena.Memory && Manager->CacheArena.Memory)
+        if (Manager->DescriptorArena.Memory && Manager->PersistentArena.Memory && Manager->Cache.Memory)
         {
             if (PushBuffer(&Manager->DescriptorArena, DescriptorBufferSize,
                            VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
@@ -173,7 +193,7 @@ internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena
         }
         else
         {
-            UnhandledError("No suitable memory type for textures");
+            UnhandledError("Failed to allocate texture memory");
             Result = VK_ERROR_UNKNOWN;
         }
     }
@@ -328,7 +348,7 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
             }
             else
             {
-                PushResult = AllocateImage(&Manager->Cache, Manager->CacheArena.Memory, Image, &PageIndex, &PageCount);
+                PushResult = AllocateImage(&Manager->Cache, Image, &PageIndex, &PageCount);
             }
             
             if (PushResult)

@@ -4829,7 +4829,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         AddEntry("IndexBuffer", 
                  Renderer->GeometryBuffer.IndexMemory.CountInUse * Renderer->GeometryBuffer.IndexMemory.Stride, 
                  Renderer->GeometryBuffer.IndexMemory.MaxCount * Renderer->GeometryBuffer.IndexMemory.Stride);
-        AddEntry("TextureCache", Renderer->TextureManager.Cache.UsedPageCount * TexturePageSize, Renderer->TextureManager.CacheArena.Size);
+        AddEntry("TextureCache", Renderer->TextureManager.Cache.UsedPageCount * TexturePageSize, Renderer->TextureManager.Cache.MemorySize);
         AddGPUArenaEntry("TexturePersist", &Renderer->TextureManager.PersistentArena);
         AddGPUArenaEntry("Shadow", &Renderer->ShadowArena);
         AddEntry("Staging", Frame->StagingBufferAt, Frame->StagingBufferSize);
