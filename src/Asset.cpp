@@ -109,7 +109,7 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
                 }
             }
 
-            Entry->Info.MipCount = GetMaxMipCountGreaterThanOne(Entry->Info.Width, Entry->Info.Height);
+            Entry->Info.MipCount = GetMaxMipCount(Entry->Info.Width, Entry->Info.Height);
             format_byterate ByteRate = FormatByterateTable[Entry->Info.Format];
             u64 TotalMipChainSize = GetMipChainSize(Entry->Info.Width, Entry->Info.Height, Entry->Info.MipCount, 1, ByteRate);
             umm MipChainBegin = GetNextEntryOffset(Queue, TotalMipChainSize, Queue->RingBufferWriteAt);
