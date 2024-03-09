@@ -45,6 +45,9 @@ extern f32                  AnisotropyTable[Anisotropy_Count];
 
 internal VkShaderStageFlags ShaderStagesToVulkan(shader_stages Stages);
 internal VkSamplerCreateInfo SamplerStateToVulkanSamplerInfo(sampler_state Sampler);
+internal VkImageCreateInfo TextureInfoToVulkan(texture_info Info);
+internal VkComponentSwizzle SwizzleComponentToVulkan(texture_swizzle_type Swizzle);
+internal VkComponentMapping SwizzleToVulkan(texture_swizzle Swizzle);
 
 //
 // Utility

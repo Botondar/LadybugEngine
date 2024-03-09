@@ -362,7 +362,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 World->AdHocLights[LightIndex] = 
                 {
                     .P = 
-                    { 
+                    {
                         RandBetween(R, Bounds.Min.X, Bounds.Max.X),
                         RandBetween(R, Bounds.Min.Y, Bounds.Max.Y),
                         RandBetween(R, Bounds.Min.Z, Bounds.Max.Z),
@@ -438,6 +438,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         }
 
         // Animated fox
+        if (1)
         {
             m4 Transform = YUpToZUp * M4(1e-2f, 0.0f, 0.0f, 0.0f,
                                          0.0f, 1e-2f, 0.0f, 0.0f,
@@ -499,7 +500,11 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     // Sun update
     {
         World->SunL = 2.0f * v3{ 10.0f, 7.0f, 5.0f };
+        #if 0
+        World->SunV = Normalize(v3{ +4.25f, -1.0f, 8.0f });
+        #else
         World->SunV = Normalize(v3{ +4.25f, -0.5f, 10.0f });
+        #endif
         Frame->SunL = World->SunL;
         Frame->SunV = World->SunV;
     }

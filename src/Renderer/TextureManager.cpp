@@ -262,8 +262,9 @@ AllocateTexture(texture_manager* Manager, texture_flags Flags, const texture_inf
         Assert(Texture->ImageHandle == VK_NULL_HANDLE);
         Assert(Texture->ViewHandle == VK_NULL_HANDLE);
 
-        Texture->Info = {};
+        Texture->PlaceholderID;
         Texture->Flags = Flags;
+        Texture->Info = {};
         if (Info)
         {
             Texture->Info = *Info;
@@ -329,7 +330,7 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
             .arrayLayers = Info.ArrayCount,
             .samples = VK_SAMPLE_COUNT_1_BIT,
             .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+            .usage = VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
             .queueFamilyIndexCount = 0,
             .pQueueFamilyIndices = nullptr,
@@ -353,23 +354,6 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
             
             if (PushResult)
             {
-                auto SwizzleToVulkan = [](texture_swizzle_type Swizzle) -> VkComponentSwizzle
-                {
-                    VkComponentSwizzle Result = VK_COMPONENT_SWIZZLE_IDENTITY;
-                    switch (Swizzle)
-                    {
-                        case Swizzle_Identity: Result = VK_COMPONENT_SWIZZLE_IDENTITY; break;
-                        case Swizzle_Zero: Result = VK_COMPONENT_SWIZZLE_ZERO; break;
-                        case Swizzle_One: Result = VK_COMPONENT_SWIZZLE_ONE; break;
-                        case Swizzle_R: Result = VK_COMPONENT_SWIZZLE_R; break;
-                        case Swizzle_G: Result = VK_COMPONENT_SWIZZLE_G; break;
-                        case Swizzle_B: Result = VK_COMPONENT_SWIZZLE_B; break;
-                        case Swizzle_A: Result = VK_COMPONENT_SWIZZLE_A; break;
-                        InvalidDefaultCase;
-                    }
-                    return(Result);
-                };
-
                 VkImageViewCreateInfo ViewInfo = 
                 {
                     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -378,13 +362,7 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
                     .image = Image,
                     .viewType = (Info.ArrayCount == 1) ? VK_IMAGE_VIEW_TYPE_2D : VK_IMAGE_VIEW_TYPE_2D_ARRAY,
                     .format = FormatTable[Info.Format],
-                    .components = 
-                    {
-                        SwizzleToVulkan(Info.Swizzle.R),
-                        SwizzleToVulkan(Info.Swizzle.G),
-                        SwizzleToVulkan(Info.Swizzle.B),
-                        SwizzleToVulkan(Info.Swizzle.A),
-                    },
+                    .components = SwizzleToVulkan(Info.Swizzle),
                     .subresourceRange = 
                     {
                         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,

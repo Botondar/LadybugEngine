@@ -1,3 +1,13 @@
+/*
+ * TODO list:
+ * - Cleanup subresource handling
+ * - Make texture_info always store the info about entire image, not the currently present mip level
+ * - Make the texture cache only discard images when more space is needed (Thresholding?)
+ * - Unify shadow rendering
+ * - Shader variants and draw group for alpha tested rendering
+ * - Add mip feedback to alpha-tested prepass and shadow passes
+ */
+
 #include "Renderer/Renderer.hpp"
 #include "Renderer/Pipelines.hpp"
 #include "Renderer/rhi_vulkan.hpp"
@@ -34,6 +44,50 @@ PushBuffer(gpu_memory_arena* Arena,
            void** Mapping = nullptr);
 
 extern m3 GlobalCubeFaceBases[Layer_Count];
+
+enum vulkan_handle_type : u32
+{
+    VulkanHandle_Buffer = 0,
+    VulkanHandle_Image,
+    VulkanHandle_ImageView,
+};
+
+struct deletion_entry
+{
+    vulkan_handle_type Type;
+    union
+    {
+        VkBuffer BufferHandle;
+        VkImage ImageHandle;
+        VkImageView ImageViewHandle;
+        void* Handle;
+    };
+};
+
+struct gpu_deletion_queue
+{
+    static constexpr u32 MaxEntryCount = 4096;
+    u32 EntryWriteAt;
+    u32 EntryReadAt;
+    u32 FrameEntryWriteAt[R_MaxFramesInFlight];
+
+    deletion_entry Entries[MaxEntryCount];
+};
+
+internal b32 
+PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, vulkan_handle_type Type, void* Handle);
+
+internal b32 
+PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkBuffer Buffer);
+
+internal b32 
+PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImage Image);
+
+internal b32 
+PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImageView ImageView);
+
+internal void 
+ProcessDeletionEntries(gpu_deletion_queue* Queue, u32 FrameID);
 
 #include "Renderer/RenderDevice.hpp"
 #include "Renderer/RenderTarget.hpp"
@@ -115,50 +169,6 @@ struct pipeline_with_layout
     VkPipeline Pipeline;
     VkPipelineLayout Layout;
 };
-
-enum vulkan_handle_type : u32
-{
-    VulkanHandle_Buffer = 0,
-    VulkanHandle_Image,
-    VulkanHandle_ImageView,
-};
-
-struct deletion_entry
-{
-    vulkan_handle_type Type;
-    union
-    {
-        VkBuffer BufferHandle;
-        VkImage ImageHandle;
-        VkImageView ImageViewHandle;
-        void* Handle;
-    };
-};
-
-struct gpu_deletion_queue
-{
-    static constexpr u32 MaxEntryCount = 4096;
-    u32 EntryWriteAt;
-    u32 EntryReadAt;
-    u32 FrameEntryWriteAt[R_MaxFramesInFlight];
-
-    deletion_entry Entries[MaxEntryCount];
-};
-
-internal b32 
-PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, vulkan_handle_type Type, void* Handle);
-
-internal b32 
-PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkBuffer Buffer);
-
-internal b32 
-PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImage Image);
-
-internal b32 
-PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImageView ImageView);
-
-internal void 
-ProcessDeletionEntries(gpu_deletion_queue* Queue, u32 FrameID);
 
 struct renderer
 {

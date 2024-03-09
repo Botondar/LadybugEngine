@@ -664,6 +664,7 @@ struct render_config
 enum draw_group : u32
 {
     DrawGroup_Opaque = 0,
+    DrawGroup_AlphaTest,
     DrawGroup_Skinned,
 
     DrawGroup_Count,
@@ -813,6 +814,13 @@ struct transfer_op
     };
 };
 
+struct staging_buffer
+{
+    umm     Size;
+    umm     At;
+    void*   Base;
+};
+
 struct render_frame
 {
     renderer* Renderer;
@@ -861,9 +869,7 @@ struct render_frame
         m4 InverseProjectionTransform;
     };
 
-    umm StagingBufferSize;
-    umm StagingBufferAt;
-    void* StagingBufferBase;
+    staging_buffer StagingBuffer;
 
     // Limits
     static constexpr u32 MaxTransferOpCount         = (1u << 15);
@@ -942,6 +948,9 @@ typedef Signature_EndRenderFrame(end_render_frame);
 //
 // Frame rendering
 //
+inline void* 
+Transfer(staging_buffer* StagingBuffer, umm Size, umm Alignment);
+
 inline b32 
 TransferTexture(render_frame* Frame, renderer_texture_id ID, 
                 texture_info Info, texture_subresource_range Range,
@@ -1147,6 +1156,7 @@ inline u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, 
 {
     u64 Result = 0;
 
+    MipCount = Min(GetMaxMipCount(Width, Height), MipCount);
     for (u32 Mip = 0; Mip < MipCount; Mip++)
     {
         u32 CurrentWidth = Max(Width >> Mip, 1u);
@@ -1247,8 +1257,8 @@ TransferTexture(render_frame* Frame, renderer_texture_id ID,
     {
         format_byterate ByteRate = FormatByterateTable[Info.Format];
         umm TotalSize = GetMipChainSize(Info.Width, Info.Height, Info.MipCount, Info.ArrayCount, ByteRate);
-        umm EffectiveOffset = Align(Frame->StagingBufferAt, 64);
-        if (EffectiveOffset + TotalSize <= Frame->StagingBufferSize)
+        umm EffectiveOffset = Align(Frame->StagingBuffer.At, 64);
+        if (EffectiveOffset + TotalSize <= Frame->StagingBuffer.Size)
         {
             transfer_op* Op = Frame->TransferOps + Frame->TransferOpCount++;
             Op->Type = TransferOp_Texture;
@@ -1256,8 +1266,8 @@ TransferTexture(render_frame* Frame, renderer_texture_id ID,
             Op->Texture.TargetID = ID;
             Op->Texture.Info = Info;
             Op->Texture.SubresourceRange = Range;
-            memcpy(OffsetPtr(Frame->StagingBufferBase, EffectiveOffset), Data, TotalSize);
-            Frame->StagingBufferAt = EffectiveOffset + TotalSize;
+            memcpy(OffsetPtr(Frame->StagingBuffer.Base, EffectiveOffset), Data, TotalSize);
+            Frame->StagingBuffer.At = EffectiveOffset + TotalSize;
         }
         else
         {
@@ -1283,15 +1293,15 @@ inline b32 TransferGeometry(render_frame* Frame, geometry_buffer_allocation Allo
         umm VertexSize = (umm)Allocation.VertexBlock->Count * sizeof(vertex);
         umm IndexSize = (umm)Allocation.IndexBlock->Count * sizeof(vert_index);
         umm TotalSize = VertexSize + IndexSize;
-        if (Frame->StagingBufferAt + TotalSize < Frame->StagingBufferSize)
+        if (Frame->StagingBuffer.At + TotalSize < Frame->StagingBuffer.Size)
         {
             transfer_op* Op = Frame->TransferOps + Frame->TransferOpCount++;
             Op->Type = TransferOp_Geometry;
-            Op->SourceOffset = Frame->StagingBufferAt;
+            Op->SourceOffset = Frame->StagingBuffer.At;
             Op->Geometry.Dest = Allocation;
-            memcpy(OffsetPtr(Frame->StagingBufferBase, Frame->StagingBufferAt), VertexData, VertexSize);
-            memcpy(OffsetPtr(Frame->StagingBufferBase, Frame->StagingBufferAt + VertexSize), IndexData, IndexSize);
-            Frame->StagingBufferAt += TotalSize;
+            memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At), VertexData, VertexSize);
+            memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At + VertexSize), IndexData, IndexSize);
+            Frame->StagingBuffer.At += TotalSize;
         }
         else
         {

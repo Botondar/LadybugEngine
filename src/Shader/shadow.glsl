@@ -38,6 +38,12 @@ void main()
 
 #elif defined(FS)
 
+SetBindingLayout(Static, MipFeedbackBuffer, scalar)
+coherent buffer MipFeedbackBuffer
+{
+    uint MipFeedbacks[];
+};
+
 SetBinding(Sampler, MaterialSamplers) uniform sampler MatSamplers[R_MaterialSamplerCount];
 SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
@@ -45,7 +51,10 @@ void main()
 {
 #if 1
     instance_data Instance = Instances[InstanceIndex];
-    if (texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord).a < R_AlphaTestThreshold)
+    v4 Albedo = texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord);
+    //uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdyFine(TexCoord));
+    //atomicOr(MipFeedbacks[Instance.Material.DiffuseID], MipBucket);
+    if (Albedo.a < R_AlphaTestThreshold)
     {
         discard;
     }

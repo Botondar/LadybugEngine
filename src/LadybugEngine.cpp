@@ -142,7 +142,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                 umm Begin = GetNextEntryOffset(Queue, TotalSize, Queue->RingBufferReadAt);
 
                 Entry->Texture->Info = Entry->Info;
-                Entry->Texture->Memory = PushSize_(&GameState->Assets->TextureCache, 0, TotalSize, 0);
+                Entry->Texture->Memory = PushSize_(&Assets->TextureCache, 0, TotalSize, 0);
                 Assert(Entry->Texture->Memory);
                 memcpy(Entry->Texture->Memory, Queue->RingBufferMemory + (Begin % Queue->RingBufferSize), TotalSize);
 
@@ -198,12 +198,14 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                             if (Subresource.BaseArray != 0 || Subresource.ArrayCount != U32_MAX) UnimplementedCodePath;
                             umm Offset = GetPackedTexture2DMipOffset(&Texture->Info, Subresource.BaseMip);
 
+                            u32 EffectiveWidth = Max(Texture->Info.Width >> Subresource.BaseMip, 1u);
+                            u32 EffectiveHeight = Max(Texture->Info.Height >> Subresource.BaseMip, 1u);
                             texture_info CopyInfo = 
                             {
-                                .Width = Max(Texture->Info.Width >> Subresource.BaseMip, 1u),
-                                .Height = Max(Texture->Info.Height >> Subresource.BaseMip, 1u),
+                                .Width = EffectiveWidth,
+                                .Height = EffectiveHeight,
                                 .Depth = 1,
-                                .MipCount = Subresource.MipCount,
+                                .MipCount =  Min(GetMaxMipCount(EffectiveWidth, EffectiveHeight), Subresource.MipCount),
                                 .ArrayCount = 1,
                                 .Format = Texture->Info.Format,
                                 .Swizzle = Texture->Info.Swizzle,

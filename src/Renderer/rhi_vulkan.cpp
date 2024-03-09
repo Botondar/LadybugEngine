@@ -257,6 +257,59 @@ internal VkSamplerCreateInfo SamplerStateToVulkanSamplerInfo(sampler_state Sampl
     return(Info);
 }
 
+internal VkImageCreateInfo TextureInfoToVulkan(texture_info Info)
+{
+    Assert(Info.Depth == 1);
+    VkImageCreateInfo Result = 
+    {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = FormatTable[Info.Format],
+        .extent = { Info.Width, Info.Height, Info.Depth },
+        .mipLevels = Info.MipCount,
+        .arrayLayers = Info.ArrayCount,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = nullptr,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    };
+    return(Result);
+}
+
+internal VkComponentSwizzle SwizzleComponentToVulkan(texture_swizzle_type Swizzle)
+{
+    VkComponentSwizzle Result = VK_COMPONENT_SWIZZLE_IDENTITY;
+    switch (Swizzle)
+    {
+        case Swizzle_Identity:  Result = VK_COMPONENT_SWIZZLE_IDENTITY; break;
+        case Swizzle_Zero:      Result = VK_COMPONENT_SWIZZLE_ZERO; break;
+        case Swizzle_One:       Result = VK_COMPONENT_SWIZZLE_ONE; break;
+        case Swizzle_R:         Result = VK_COMPONENT_SWIZZLE_R; break;
+        case Swizzle_G:         Result = VK_COMPONENT_SWIZZLE_G; break;
+        case Swizzle_B:         Result = VK_COMPONENT_SWIZZLE_B; break;
+        case Swizzle_A:         Result = VK_COMPONENT_SWIZZLE_A; break;
+        InvalidDefaultCase;
+    }
+    return(Result);
+}
+
+internal VkComponentMapping SwizzleToVulkan(texture_swizzle Swizzle)
+{
+    VkComponentMapping Result = 
+    {
+        SwizzleComponentToVulkan(Swizzle.R),
+        SwizzleComponentToVulkan(Swizzle.G),
+        SwizzleComponentToVulkan(Swizzle.B),
+        SwizzleComponentToVulkan(Swizzle.A),
+    };
+    return(Result);
+}
+
 internal void UpdateDescriptorBuffer(u32 WriteCount, const descriptor_write* Writes, 
                                      VkDescriptorSetLayout Layout, void* Buffer)
 {

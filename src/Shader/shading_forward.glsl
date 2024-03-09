@@ -36,7 +36,7 @@ layout(location = Attrib_Color)         in vec4 aColor;
 void main()
 {
     instance_data Instance = Instances[gl_InstanceIndex];
-    precise vec3 WorldP = TransformPoint(Instance.Transform, aP);
+    precise v3 WorldP = TransformPoint(Instance.Transform, aP);
     TexCoord = aTexCoord;
     P = TransformPoint(PerFrame.ViewTransform, WorldP);
     TriN = normalize(mat3(PerFrame.ViewTransform) * (aN * inverse(mat3(Instance.Transform))));
@@ -69,7 +69,7 @@ readonly buffer TileBuffer
 };
 
 SetBindingLayout(Static, MipFeedbackBuffer, scalar)
-buffer MipFeedbackBuffer
+coherent buffer MipFeedbackBuffer
 {
     uint MipFeedbacks[];
 };
@@ -221,6 +221,7 @@ void main()
     }
 #endif
 
+    Lo = NanTo0(Lo);
     Out0 = vec4(Lo, 1.0);
 }
 

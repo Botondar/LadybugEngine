@@ -22,6 +22,11 @@
 // Common
 //
 
+// NOTE(boti): Casting to uint here to make this work with both u32 and s32
+#define AsF32(U32) uintBitsToFloat(uint(U32))
+#define AsU32(F32) floatBitsToUint(F32)
+#define AsS32(F32) floatBitsToInt(F32)
+
 f32 Ratio0(f32 A, f32 B)
 {
     f32 Result = 0.0;
@@ -88,11 +93,23 @@ v3 SetLuminance(in v3 Color, f32 TargetLuminance)
 
 uint GetMipBucketFromDerivatives(v2 dXdUV, v2 dYdUV)
 {
-    // TODO(boti): Figure out whether we actually want to feedback the desired _resolution_, or the desired mip level to the CPU
-    f32 InverseMipBucketLog = 0.5 * log2(max(dot(dXdUV, dXdUV), dot(dYdUV, dYdUV)));
-    f32 ResolutionIndependentMip = clamp(ceil(-InverseMipBucketLog), 0.0, 31.0);
-    uint MipBucket = 1u << uint(ResolutionIndependentMip);
-    return(MipBucket);
+    uint Result;
+
+    // TODO(boti): We should probably just switch to generating the entire mip-chain
+    // (instead of skipping the 1x1), and get rid of this special case
+    f32 Slope = max(dot(dXdUV, dXdUV), dot(dYdUV, dYdUV));
+    if (Slope != 0.0)
+    {
+        f32 InverseMipBucketLog = 0.5 * log2(Slope);
+        f32 ResolutionIndependentMip = clamp(ceil(-InverseMipBucketLog), 1.0, 31.0);
+        Result = 1u << uint(ResolutionIndependentMip);
+    }
+    else
+    {
+        Result = 2;
+    }
+
+    return(Result);
 }
 
 v3 ApplyFog(in v3 Li, v3 Ambience, f32 Density, f32 Distance)
@@ -103,6 +120,15 @@ v3 ApplyFog(in v3 Li, v3 Ambience, f32 Density, f32 Distance)
     return(Lo);
 }
 
+v3 NanTo0(v3 V)
+{
+    v3 Result;
+    Result.x = isnan(V.x) ? 0.0 : V.x;
+    Result.y = isnan(V.y) ? 0.0 : V.y;
+    Result.z = isnan(V.z) ? 0.0 : V.z;
+    return(Result);
+}
+
 //
 // Random
 //
@@ -111,6 +137,12 @@ uint HashPCG(uint In)
     uint State = In * 747796405u + 2891336453u;
     uint Word = ((State >> ((State >> 28u) + 4u)) ^ State) * 277803737u;
     uint Result = (Word >> 22u) ^ Word;
+    return(Result);
+}
+
+f32 U32ToF32Norm(uint U32)
+{
+    f32 Result = AsF32(0x3F800000 | (U32 & 0xFFFFFFu)) - 1.0;
     return(Result);
 }
 
@@ -202,7 +234,12 @@ vec3 GetCascadeBlends(in float Nd[4], in float Fd[4], in f32 Z)
     return Result;
 }
 
-float SampleShadowPoisson(texture2DArray Texture, sampler Sampler, v4 P, float Scale, uint TapCount)
+float SampleShadowPoisson(
+    texture2DArray Texture, 
+    sampler Sampler, 
+    v4 P, 
+    float Scale,
+    uint TapCount)
 {
     float Result = 0.0;
 
@@ -276,7 +313,8 @@ float SampleShadowPoisson(texture2DArray Texture, sampler Sampler, v4 P, float S
 
     for (uint Tap = 0; Tap < TapCount; Tap++)
     {
-        Result += texture(sampler2DArrayShadow(Texture, Sampler), P + v4(Scale * Offsets[Tap], 0.0, 0.0));
+        v2 Offset = Scale * Offsets[Tap];
+        Result += texture(sampler2DArrayShadow(Texture, Sampler), P + v4(Offset, 0.0, 0.0));
     }
 
     Result *= 1.0 / float(TapCount);

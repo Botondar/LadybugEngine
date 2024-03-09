@@ -44,14 +44,19 @@ constexpr umm SmallTexturePageSize  = KiB(4);
 
 struct renderer_texture
 {
-    VkImage         ImageHandle;
-    VkImageView     ViewHandle;
-    texture_info    Info;
-    texture_flags   Flags;
-    u32             MipResidencyMask;
+    VkImage             ImageHandle;
+    VkImageView         ViewHandle;
+    texture_flags       Flags;
+    renderer_texture_id PlaceholderID;
+    texture_info        Info;
 
-    umm             PageIndex;
-    umm             PageCount;
+    u32 MipResidencyMask;
+    u32 LastMipAccess;
+
+    umm PageIndex;
+    umm PageCount;
+    u32 PrevLRU;
+    u32 NextLRU;
 };
 
 struct texture_cache
@@ -60,6 +65,9 @@ struct texture_cache
     umm MemorySize;
     u32 MemoryTypeIndex;
     umm UsedPageCount;
+
+    umm SmallPageOffset;
+    umm PageOffset;
 
     umm SmallPageCount;
     u64* SmallPageUsage;
@@ -71,13 +79,12 @@ struct texture_cache
 internal umm 
 FindFreePageRange(texture_cache* Cache, umm PageCount);
 
-internal void 
+internal void
 MarkPagesAsUsed(texture_cache* Cache, umm FirstPage, umm PageCount);
 
 internal void
 MarkPagesAsFree(texture_cache* Cache, umm FirstPage, umm PageCount);
 
-// TODO(boti): The device memory should be a part of the cache in the future
 internal b32
 AllocateImage(texture_cache* Cache, VkImage Image);
 
@@ -95,6 +102,8 @@ struct texture_manager
     VkDeviceAddress     DescriptorAddress;
     void*               DescriptorMapping;
     umm                 TextureTableOffset;
+
+    u32                 FirstLRU;
 
     u32                 TextureCount;
     renderer_texture    Textures[R_MaxTextureCount];

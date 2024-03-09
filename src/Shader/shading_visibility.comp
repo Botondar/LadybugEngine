@@ -64,7 +64,7 @@ readonly buffer TileBuffer
 };
 
 SetBindingLayout(Static, MipFeedbackBuffer, scalar)
-buffer MipFeedbackBuffer
+coherent buffer MipFeedbackBuffer
 {
     uint MipFeedbacks[];
 };
@@ -139,7 +139,7 @@ void main()
         TileIndex = TileID.x + TileID.y * PerFrame.TileCount.x;
         //TileIndex = subgroupBroadcast(TileIndex, 0);
     }
-    
+
     v2u InstanceTriangleID = texelFetch(VisibilityImage, TexelID, 0).rg;
 
     v2 TexelOffset = v2(0.5);
