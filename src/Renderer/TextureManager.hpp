@@ -55,8 +55,6 @@ struct renderer_texture
 
     umm PageIndex;
     umm PageCount;
-    u32 PrevLRU;
-    u32 NextLRU;
 };
 
 struct texture_cache
@@ -102,8 +100,6 @@ struct texture_manager
     VkDeviceAddress     DescriptorAddress;
     void*               DescriptorMapping;
     umm                 TextureTableOffset;
-
-    u32                 FirstLRU;
 
     u32                 TextureCount;
     renderer_texture    Textures[R_MaxTextureCount];

@@ -2206,7 +2206,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         f32 L = GetLuminance(Light->E);
         f32 R = Sqrt(Max((L / R_LuminanceThreshold), 0.0f));
-        // TODO(boti): Get the far plane from the luminance and the light threshold
         f32 n = 0.05f;
         f32 f = R + 1e-6f;
         f32 r = 1.0f / (f - n);
@@ -2259,8 +2258,12 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     };
     vkBeginCommandBuffer(PrepassCmd, &CmdBufferBegin);
 
-    // TODO(boti): Build an actual LRU and only discard mips when we can't fit new ones anymore
+    //
     // Discard unused mip levels
+    //
+    // TODO(boti): Build an actual LRU and only discard mips when we can't fit new ones anymore
+    umm PageUsageLimit = Renderer->TextureManager.Cache.PageCount - (Renderer->TextureManager.Cache.PageCount / 8);
+    if (Renderer->TextureManager.Cache.UsedPageCount > PageUsageLimit)
     {
         texture_manager* Manager = &Renderer->TextureManager;
         for (u32 TextureIndex = 0; TextureIndex < Manager->TextureCount; TextureIndex++)
@@ -2271,7 +2274,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 constexpr u32 AlwaysKeptMips = 0xFF;
                 u32 LastMipAccess = SetBitsBelowHighInclusive(Texture->LastMipAccess);
 
-                u32 UsedMips = Texture->MipResidencyMask & LastMipAccess;
+                u32 UsedMips = Texture->MipResidencyMask & (LastMipAccess | AlwaysKeptMips);
                 u32 DiscardMips = (~UsedMips) & Texture->MipResidencyMask;
                 if (DiscardMips)
                 {
