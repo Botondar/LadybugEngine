@@ -3357,22 +3357,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .Count = 1,
                 .Buffers = { { Renderer->PerFrameUniformBuffers[Frame->FrameID], 0, KiB(64) } },
             },
-#if 0
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_PerFrame_JointBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->PerFrameJointBuffers[Frame->FrameID], 0, Frame->MaxJointCount * sizeof(m4) } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_PerFrame_ParticleBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->PerFrameParticleBuffers[Frame->FrameID], 0, Frame->MaxParticleCount * sizeof(render_particle) } },
-            },
-#endif
             {
                 .Type = Descriptor_SampledImage,
                 .Binding = Binding_PerFrame_ParticleTexture,

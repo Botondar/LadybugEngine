@@ -882,8 +882,7 @@ struct render_frame
 
     // Limits
     static constexpr u32 MaxTransferOpCount         = (1u << 15);
-    static constexpr u32 MaxParticleCount           = (1u << 18);
-    //static constexpr u32 MaxJointCount              = (1u << 17);
+
     u32 MaxLightCount;
     u32 MaxShadowCount;
     u32 MaxDrawCmdCount;
@@ -891,9 +890,7 @@ struct render_frame
     u32 MaxSkinningCmdCount;
     u32 MaxParticleDrawCmdCount;
     u32 MaxDrawWidget3DCmdCount;
-#if 0
-    u32 MaxVertex2DCount;
-#endif
+
     // TODO(boti): There's no need to have the skinned vertex count in the frontend, the backend
     // can just keep track of everything when executing the skinning cmds
     u32 MaxSkinnedVertexCount;
@@ -925,10 +922,6 @@ struct render_frame
     umm BARBufferAt;
     void* BARBufferBase;
 
-#if 0
-    u32 JointCount;
-    m4* JointMapping;
-#endif
 
     u32 SkinningCmdCount;
     skinning_cmd* SkinningCmds;
@@ -936,18 +929,8 @@ struct render_frame
     u32 ParticleDrawCmdCount;
     particle_cmd* ParticleDrawCmds;
 
-#if 0
-    u32 ParticleCount;
-    render_particle* Particles;
-#endif
-
     u32 DrawWidget3DCmdCount;
     draw_widget3d_cmd* DrawWidget3DCmds;
-
-#if 0
-    u32 Vertex2DCount;
-    vertex_2d* Vertex2DArray;
-#endif
 
     // TODO(boti): Remove these from the API (should be backend only)
     void* UniformData; // GPU-backed frame_uniform_data
