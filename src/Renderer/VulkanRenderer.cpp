@@ -1486,6 +1486,46 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             }
         }
 
+        // Per frame uniform data
+        {
+            constexpr u64 BufferSize = KiB(64);
+            for (u32 i = 0; i < R_MaxFramesInFlight; i++)
+            {
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                                            Renderer->PerFrameUniformBuffers + i,
+                                            Renderer->PerFrameUniformBufferMappings + i);
+                if (!PushResult)
+                {
+                    return(0);
+                }
+            }
+        }
+
+#if 1
+        // Per frame buffer
+        {
+            for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
+            {
+                VkBufferUsageFlags Usage = 
+                    VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|
+                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|
+                    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|
+                    VK_BUFFER_USAGE_INDEX_BUFFER_BIT|
+                    VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, Renderer->PerFrameBufferSize, Usage,
+                                            Renderer->PerFrameBuffers + FrameIndex,
+                                            Renderer->PerFrameBufferMappings + FrameIndex);
+                if (PushResult)
+                {
+                    Renderer->PerFrameBufferAddresses[FrameIndex] = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameBuffers[FrameIndex]);
+                }
+                else
+                {
+                    return(0);
+                }
+            }
+        }
+#else
         // Vertex stack
         {
             umm Size = MiB(2);
@@ -1531,21 +1571,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 }
             }
         }
-
-        // Per frame uniform data
-        {
-            constexpr u64 BufferSize = KiB(64);
-            for (u32 i = 0; i < R_MaxFramesInFlight; i++)
-            {
-                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSize,  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                                            Renderer->PerFrameUniformBuffers + i,
-                                            Renderer->PerFrameUniformBufferMappings + i);
-                if (!PushResult)
-                {
-                    return(0);
-                }
-            }
-        }
+#endif
     }
 
     // Create system pipeline layout
@@ -1958,6 +1984,15 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
 
         Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
 
+#if 1
+        Frame->BARBufferSize = Renderer->PerFrameBufferSize;
+        Frame->BARBufferAt = 0;
+        Frame->BARBufferBase = Renderer->PerFrameBufferMappings[FrameID];
+
+        Frame->BatchCount = 0;
+        Frame->Batches = PushArray(Arena, 0, draw_batch, Frame->MaxBatchCount);
+        Frame->LastBatch = nullptr;
+#else
         Frame->Vertex2DCount = 0;
         Frame->Vertex2DArray = (vertex_2d*)Renderer->PerFrameVertex2DMappings[FrameID];
 
@@ -1967,6 +2002,7 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         Frame->JointCount = 0;
         Frame->JointMapping = (m4*)Renderer->PerFrameJointBufferMappings[FrameID];
         Frame->JointBufferAlignment = TruncateU64ToU32(VK.ConstantBufferAlignment) / sizeof(m4);
+#endif
 
         Frame->MaxSkinnedVertexCount = TruncateU64ToU32(R_SkinningBufferSize / sizeof(vertex));
         Frame->SkinnedMeshVertexCount = 0;
@@ -3321,6 +3357,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .Count = 1,
                 .Buffers = { { Renderer->PerFrameUniformBuffers[Frame->FrameID], 0, KiB(64) } },
             },
+#if 0
             {
                 .Type = Descriptor_StorageBuffer,
                 .Binding = Binding_PerFrame_JointBuffer,
@@ -3335,6 +3372,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .Count = 1,
                 .Buffers = { { Renderer->PerFrameParticleBuffers[Frame->FrameID], 0, Frame->MaxParticleCount * sizeof(render_particle) } },
             },
+#endif
             {
                 .Type = Descriptor_SampledImage,
                 .Binding = Binding_PerFrame_ParticleTexture,
@@ -3424,16 +3462,20 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         for (u32 SkinningCmdIndex = 0; SkinningCmdIndex < Frame->SkinningCmdCount; SkinningCmdIndex++)
         {
             skinning_cmd* Cmd = Frame->SkinningCmds + SkinningCmdIndex;
-            u32 PushConstants[4] = 
+            struct
             {
-                Cmd->SrcVertexOffset,
-                Cmd->DstVertexOffset,
-                Cmd->VertexCount,
-                (u32)(Cmd->PoseOffset / sizeof(m4)),
-            };
+                VkDeviceAddress Joints;
+                u32 SrcOffset;
+                u32 DstOffset;
+                u32 Count;
+            } Push;
+            Push.Joints = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Cmd->PoseOffset;
+            Push.SrcOffset = Cmd->SrcVertexOffset;
+            Push.DstOffset = Cmd->DstVertexOffset;
+            Push.Count = Cmd->VertexCount;
+            
             vkCmdPushConstants(PrepassCmd, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
-                               0, sizeof(PushConstants), PushConstants);
-
+                               0, sizeof(Push), &Push);
             vkCmdDispatch(PrepassCmd, CeilDiv(Cmd->VertexCount, Skin_GroupSizeX), 1, 1);
         }
 
@@ -4391,11 +4433,16 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
         {
             particle_cmd* Cmd = Frame->ParticleDrawCmds + CmdIndex;
-            u32 VertexCount = 6 * Cmd->ParticleCount;
-            u32 FirstVertex = 6 * Cmd->FirstParticle;
-            vkCmdPushConstants(RenderCmd, ParticlePipeline.Layout, VK_SHADER_STAGE_ALL, 
-                               0, sizeof(Cmd->Mode), &Cmd->Mode);
-            vkCmdDraw(RenderCmd, VertexCount, 1, FirstVertex, 0);
+
+            struct
+            {
+                VkDeviceAddress ParticleAddress;
+                billboard_mode Mode;
+            } Push;
+            Push.ParticleAddress = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Cmd->BufferOffset,
+            Push.Mode = Cmd->Mode,
+            vkCmdPushConstants(RenderCmd, ParticlePipeline.Layout, VK_SHADER_STAGE_ALL, 0, sizeof(Push), &Push);
+            vkCmdDraw(RenderCmd, 6 * Cmd->ParticleCount, 1, 0, 0);
         }
     }
     vkCmdEndDebugUtilsLabelEXT(RenderCmd);
@@ -4942,20 +4989,22 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         // 2D UI render
         vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "2D GUI");
         {
-            VkDeviceSize ZeroOffset = 0;
-            vkCmdBindVertexBuffers(RenderCmd, 0, 1, &Renderer->PerFrameVertex2DBuffers[Frame->FrameID], &ZeroOffset);
-
             pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
             vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Pipeline);
+            for (u32 BatchIndex = 0; BatchIndex < Frame->BatchCount; BatchIndex++)
+            {
+                draw_batch* Batch = Frame->Batches + BatchIndex;
 
-            m4 OrthoTransform = M4(2.0f / Frame->RenderExtent.X, 0.0f, 0.0f, -1.0f,
-                                   0.0f, 2.0f / Frame->RenderExtent.Y, 0.0f, -1.0f,
-                                   0.0f, 0.0f, 1.0f, 0.0f,
-                                   0.0f, 0.0f, 0.0f, 1.0f);
-            vkCmdPushConstants(RenderCmd, UIPipeline.Layout, VK_SHADER_STAGE_ALL, 
-                               0, sizeof(OrthoTransform), &OrthoTransform);
+                vkCmdBindVertexBuffers(RenderCmd, 0, 1, &Renderer->PerFrameBuffers[Frame->FrameID], &Batch->BufferOffset);
 
-            vkCmdDraw(RenderCmd, Frame->Vertex2DCount, 1, 0, 0);
+                m4 OrthoTransform = M4(2.0f / Frame->RenderExtent.X, 0.0f, 0.0f, -1.0f,
+                                       0.0f, 2.0f / Frame->RenderExtent.Y, 0.0f, -1.0f,
+                                       0.0f, 0.0f, 1.0f, 0.0f,
+                                       0.0f, 0.0f, 0.0f, 1.0f);
+                vkCmdPushConstants(RenderCmd, UIPipeline.Layout, VK_SHADER_STAGE_ALL, 
+                                   0, sizeof(OrthoTransform), &OrthoTransform);
+                vkCmdDraw(RenderCmd, Batch->VertexCount, 1, 0, 0);
+            }
         }
         vkCmdEndDebugUtilsLabelEXT(RenderCmd);
         vkCmdEndRendering(RenderCmd);

@@ -55,6 +55,7 @@ constexpr u64 R_SkinningBufferSize          = MiB(128);
 //
 // Limits
 //
+constexpr u32 R_MaxJointCount                       = 256u;
 constexpr u32 MaxVertexBindingCount                 = 16;
 constexpr u32 MaxVertexAttribCount                  = 32;
 constexpr u32 MaxColorAttachmentCount               = 8;
@@ -702,9 +703,17 @@ struct render_particle
 
 struct particle_cmd
 {
-    u32 FirstParticle;
+    umm BufferOffset;
+    u32 MaxParticleCount;
     u32 ParticleCount;
     billboard_mode Mode;
+};
+
+struct draw_batch
+{
+    umm BufferOffset;
+    umm ByteCount; // NOTE(boti): Total allocated bytes in batch
+    u32 VertexCount;
 };
 
 // NOTE(boti): binary-compatible with Vulkan/D3D12
@@ -764,25 +773,6 @@ struct geometry_buffer_allocation
     geometry_buffer_block* IndexBlock;
 };
 
-struct renderer;
-
-struct render_stat_entry
-{
-    const char* Name;
-    umm UsedSize;
-    umm AllocationSize;
-};
-
-struct render_stats
-{
-    umm TotalMemoryUsed;
-    umm TotalMemoryAllocated;
-
-    static constexpr u32 MaxEntryCount = 1024u;
-    u32 EntryCount;
-    render_stat_entry Entries[MaxEntryCount];
-};
-
 enum transfer_op_type : u32
 {
     TransferOp_Undefined = 0,
@@ -820,6 +810,25 @@ struct staging_buffer
     umm     At;
     void*   Base;
 };
+
+struct render_stat_entry
+{
+    const char* Name;
+    umm UsedSize;
+    umm AllocationSize;
+};
+
+struct render_stats
+{
+    umm TotalMemoryUsed;
+    umm TotalMemoryAllocated;
+
+    static constexpr u32 MaxEntryCount = 1024u;
+    u32 EntryCount;
+    render_stat_entry Entries[MaxEntryCount];
+};
+
+struct renderer;
 
 struct render_frame
 {
@@ -874,7 +883,7 @@ struct render_frame
     // Limits
     static constexpr u32 MaxTransferOpCount         = (1u << 15);
     static constexpr u32 MaxParticleCount           = (1u << 18);
-    static constexpr u32 MaxJointCount              = (1u << 17);
+    //static constexpr u32 MaxJointCount              = (1u << 17);
     u32 MaxLightCount;
     u32 MaxShadowCount;
     u32 MaxDrawCmdCount;
@@ -882,7 +891,9 @@ struct render_frame
     u32 MaxSkinningCmdCount;
     u32 MaxParticleDrawCmdCount;
     u32 MaxDrawWidget3DCmdCount;
+#if 0
     u32 MaxVertex2DCount;
+#endif
     // TODO(boti): There's no need to have the skinned vertex count in the frontend, the backend
     // can just keep track of everything when executing the skinning cmds
     u32 MaxSkinnedVertexCount;
@@ -892,6 +903,11 @@ struct render_frame
 
     u32 TransferOpCount;
     transfer_op TransferOps[MaxTransferOpCount];
+
+    static constexpr u32 MaxBatchCount = 2048;
+    u32 BatchCount;
+    draw_batch* Batches;
+    draw_batch* LastBatch;
 
     u32 LightCount;
     light* Lights;
@@ -905,8 +921,14 @@ struct render_frame
     u32 SkinnedDrawCmdCount;
     draw_cmd* SkinnedDrawCmds;
 
+    umm BARBufferSize;
+    umm BARBufferAt;
+    void* BARBufferBase;
+
+#if 0
     u32 JointCount;
     m4* JointMapping;
+#endif
 
     u32 SkinningCmdCount;
     skinning_cmd* SkinningCmds;
@@ -914,14 +936,18 @@ struct render_frame
     u32 ParticleDrawCmdCount;
     particle_cmd* ParticleDrawCmds;
 
+#if 0
     u32 ParticleCount;
     render_particle* Particles;
+#endif
 
     u32 DrawWidget3DCmdCount;
     draw_widget3d_cmd* DrawWidget3DCmds;
 
+#if 0
     u32 Vertex2DCount;
     vertex_2d* Vertex2DArray;
+#endif
 
     // TODO(boti): Remove these from the API (should be backend only)
     void* UniformData; // GPU-backed frame_uniform_data
@@ -980,6 +1006,12 @@ DrawWidget3D(render_frame* Frame,
 inline b32 AddLight(render_frame* Frame, v3 P, v3 E, light_flags Flags);
 
 inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* VertexArray);
+
+inline particle_cmd*
+MakeParticleBatch(render_frame* Frame, u32 MaxParticleCount);
+
+inline particle_cmd*
+PushParticle(render_frame* Frame, particle_cmd* Batch, render_particle Particle);
 
 //
 // Helpers
@@ -1357,24 +1389,24 @@ DrawSkinnedMesh(render_frame* Frame,
 {
     b32 Result = false;
 
+    umm PoseSize = JointCount * sizeof(m4);
+    umm EffectiveOffset = Align(Frame->BARBufferAt, sizeof(m4));
     if ((Frame->SkinningCmdCount < Frame->MaxSkinningCmdCount) &&
         (Frame->SkinnedDrawCmdCount < Frame->MaxSkinnedDrawCmdCount) &&
         (Frame->SkinnedMeshVertexCount + Allocation.VertexBlock->Count <= Frame->MaxSkinnedVertexCount) &&
-        (Frame->JointCount + JointCount <= Frame->MaxJointCount))
+        (EffectiveOffset + PoseSize <= Frame->BARBufferSize))
     {
         u32 DstVertexOffset = Frame->SkinnedMeshVertexCount;
         Frame->SkinnedMeshVertexCount += Allocation.VertexBlock->Count;
+        Frame->BARBufferAt = EffectiveOffset + PoseSize;
 
-        memcpy(Frame->JointMapping + Frame->JointCount, Pose, JointCount * sizeof(m4));
-        u32 JointBufferOffset = Frame->JointCount * sizeof(m4);
-        Frame->JointCount = Align(Frame->JointCount + JointCount, Frame->JointBufferAlignment);
-
+        memcpy(OffsetPtr(Frame->BARBufferBase, EffectiveOffset), Pose, JointCount * sizeof(m4));
         Frame->SkinningCmds[Frame->SkinningCmdCount++] =
         {
             .SrcVertexOffset = Allocation.VertexBlock->Offset,
             .DstVertexOffset = DstVertexOffset,
             .VertexCount = Allocation.VertexBlock->Count,
-            .PoseOffset = JointBufferOffset,
+            .PoseOffset = (u32)EffectiveOffset, // TODO(boti)
         };
 
         Frame->SkinnedDrawCmds[Frame->SkinnedDrawCmdCount++] = 
@@ -1455,12 +1487,106 @@ inline b32 AddLight(render_frame* Frame, v3 P, v3 E, light_flags Flags)
 inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* VertexArray)
 {
     b32 Result = false;
-    if (Frame->Vertex2DCount + VertexCount <= Frame->MaxVertex2DCount)
+
+    constexpr umm MinBatchByteCount = KiB(16);
+
+    umm TotalByteCount = VertexCount * sizeof(vertex_2d);
+    draw_batch* LastBatch = Frame->LastBatch;
+    umm InBatchOffset = LastBatch ? LastBatch->VertexCount*sizeof(vertex_2d) : 0;
+
+    // NOTE(boti): Append to last batch if there's enough space in it
+    if (LastBatch && ((InBatchOffset + TotalByteCount) <= LastBatch->ByteCount))
     {
-        u32 VertexOffset = Frame->Vertex2DCount;
-        memcpy(Frame->Vertex2DArray + VertexOffset, VertexArray, VertexCount * sizeof(vertex_2d));
-        Frame->Vertex2DCount += VertexCount;
+        memcpy(OffsetPtr(Frame->BARBufferBase, LastBatch->BufferOffset + InBatchOffset), VertexArray, TotalByteCount);
+        LastBatch->VertexCount += VertexCount;
         Result = true;
+    }
+    else
+    {
+        umm BatchByteCount = Align(TotalByteCount, MinBatchByteCount);
+
+        // NOTE(boti): Stretch the last batch if it's at the end of the BAR buffer, and append to it
+        if (LastBatch && (Frame->BARBufferAt == LastBatch->BufferOffset + LastBatch->ByteCount))
+        {
+            if (Frame->BARBufferAt + BatchByteCount <= Frame->BARBufferSize)
+            {
+                LastBatch->ByteCount += BatchByteCount;
+                Frame->BARBufferAt += BatchByteCount;
+                LastBatch->VertexCount += VertexCount;
+                memcpy(OffsetPtr(Frame->BARBufferBase, LastBatch->BufferOffset + InBatchOffset), VertexArray, TotalByteCount);
+                Result = true;
+            }
+        }
+        else
+        {
+            umm EffectiveOffset = Align(Frame->BARBufferAt, 4);
+            if (((EffectiveOffset + BatchByteCount) <= Frame->BARBufferSize) && (Frame->BatchCount < Frame->MaxBatchCount))
+            {
+                draw_batch* Batch = &Frame->Batches[Frame->BatchCount++];
+                Batch->BufferOffset = EffectiveOffset;
+                Batch->ByteCount = BatchByteCount;
+                Batch->VertexCount = VertexCount;
+                Frame->LastBatch = Batch;
+                Frame->BARBufferAt = EffectiveOffset + BatchByteCount;
+                memcpy(OffsetPtr(Frame->BARBufferBase, EffectiveOffset), VertexArray, TotalByteCount);
+                Result = true;
+            }
+        }
+    }
+
+    return(Result);
+}
+
+inline particle_cmd* 
+MakeParticleBatch(render_frame* Frame, u32 MinParticleCount)
+{
+    particle_cmd* Result = nullptr;
+
+    constexpr umm MinBatchByteCount = KiB(16);
+
+    umm ByteCount = Align(Max(MinBatchByteCount, MinParticleCount * sizeof(render_particle)), MinBatchByteCount);
+    u32 MaxParticleCount = TruncateU64ToU32(ByteCount / sizeof(render_particle));
+
+    umm EffectiveOffset = Align(Frame->BARBufferAt, 16);
+    if (EffectiveOffset + ByteCount <= Frame->BARBufferSize && 
+        Frame->ParticleDrawCmdCount <= Frame->MaxParticleDrawCmdCount)
+    {
+        Frame->BARBufferAt = EffectiveOffset + ByteCount;
+        Result = Frame->ParticleDrawCmds + Frame->ParticleDrawCmdCount++;
+        Result->BufferOffset = EffectiveOffset;
+        Result->MaxParticleCount = MaxParticleCount;
+        Result->ParticleCount = 0;
+        Result->Mode = Billboard_ViewAligned;
+    }
+
+    return(Result);
+}
+
+inline particle_cmd*
+PushParticle(render_frame* Frame, particle_cmd* Batch, render_particle Particle)
+{
+    particle_cmd* Result = Batch;
+
+    if (Batch)
+    {
+        if (Batch->ParticleCount < Batch->MaxParticleCount)
+        {
+            memcpy(OffsetPtr(Frame->BARBufferBase, Batch->BufferOffset + Batch->ParticleCount * sizeof(Particle)), &Particle, sizeof(Particle));
+            Batch->ParticleCount++;
+        }
+        else
+        {
+            if (Frame->ParticleDrawCmdCount < Frame->MaxParticleDrawCmdCount)
+            {
+                Result = MakeParticleBatch(Frame, 1);
+                if (Result)
+                {
+                    Result->Mode = Batch->Mode;
+                    memcpy(OffsetPtr(Frame->BARBufferBase, Result->BufferOffset + Result->ParticleCount * sizeof(Particle)), &Particle, sizeof(Particle));
+                    Result->ParticleCount++;
+                }
+            }
+        }
     }
 
     return(Result);

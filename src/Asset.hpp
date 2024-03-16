@@ -29,22 +29,21 @@ inline trs_transform M4ToTRS(m4 M);
 // NOTE(boti): Skin joints must not precede their parents in the array
 struct skin
 {
-    static constexpr u32 MaxJointCount = 256;
     u32 JointCount;
-    m4 InverseBindMatrices[MaxJointCount];
+    m4 InverseBindMatrices[R_MaxJointCount];
     // NOTE(boti): The bind-pose transforms are all parent-relative and not global
-    trs_transform BindPose[MaxJointCount];
-    u32 JointParents[MaxJointCount];
+    trs_transform BindPose[R_MaxJointCount];
+    u32 JointParents[R_MaxJointCount];
 };
 
 struct animation_key_frame
 {
-    trs_transform JointTransforms[skin::MaxJointCount];
+    trs_transform JointTransforms[R_MaxJointCount];
 };
 
 struct joint_mask
 {
-    u64 Bits[skin::MaxJointCount / 64];
+    u64 Bits[R_MaxJointCount / 64];
 };
 
 inline b32 JointMaskIndexFromJointIndex(u32 JointIndex, u32* ArrayIndex, u32* BitIndex);
@@ -373,7 +372,7 @@ inline trs_transform M4ToTRS(m4 M)
 inline b32 JointMaskIndexFromJointIndex(u32 JointIndex, u32* ArrayIndex, u32* BitIndex)
 {
     b32 Result = false;
-    if (JointIndex < skin::MaxJointCount)
+    if (JointIndex < R_MaxJointCount)
     {
         *ArrayIndex = JointIndex / 64;
         *BitIndex = JointIndex % 64;

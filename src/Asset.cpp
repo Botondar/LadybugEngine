@@ -319,7 +319,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         NullAnimation->KeyFrameTimestamps = PushArray(&Assets->Arena, 0, f32, 1);
         NullAnimation->KeyFrameTimestamps[0] = 0.0f;
         NullAnimation->KeyFrames = PushArray(&Assets->Arena, 0, animation_key_frame, 1);
-        for (u32 JointIndex = 0; JointIndex < skin::MaxJointCount; JointIndex++)
+        for (u32 JointIndex = 0; JointIndex < R_MaxJointCount; JointIndex++)
         {
             NullAnimation->KeyFrames[0].JointTransforms[JointIndex] = 
             {
@@ -993,7 +993,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         if (Assets->SkinCount < Assets->MaxSkinCount)
         {
             skin* SkinAsset = Assets->Skins + Assets->SkinCount++;
-            if (Skin->JointCount <= skin::MaxJointCount)
+            if (Skin->JointCount <= R_MaxJointCount)
             {
                 SkinAsset->JointCount = Skin->JointCount;
                 u32 InverseBindMatrixStride = View->Stride ? View->Stride : sizeof(m4);

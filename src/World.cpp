@@ -500,7 +500,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     // Sun update
     {
         World->SunL = 2.0f * v3{ 10.0f, 7.0f, 5.0f };
-        #if 0
+        #if 1
         World->SunV = Normalize(v3{ +4.25f, -1.0f, 8.0f });
         #else
         World->SunV = Normalize(v3{ +4.25f, -0.5f, 10.0f });
@@ -519,7 +519,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         {
             b32 DrawSkinned = false;
             u32 JointCount = 0;
-            m4 Pose[skin::MaxJointCount] = {};
+            m4 Pose[R_MaxJointCount] = {};
 
             if (Entity->Flags & EntityFlag_Skin)
             {
@@ -731,12 +731,9 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             }
         }
 
-        particle_cmd* Cmd = nullptr;
-        if (Frame->ParticleDrawCmdCount < Frame->MaxParticleDrawCmdCount)
+        particle_cmd* Cmd = MakeParticleBatch(Frame, 0);
+        if (Cmd)
         {
-            Cmd = Frame->ParticleDrawCmds + Frame->ParticleDrawCmdCount++;
-            Cmd->FirstParticle = Frame->ParticleCount;
-            Cmd->ParticleCount = 0;
             Cmd->Mode = ParticleSystem->Mode;
         }
 
@@ -758,27 +755,20 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
             if (!CullParticle)
             {
-                if (Cmd)
+                v4 PColor = 
                 {
-                    if (Frame->ParticleCount < Frame->MaxParticleCount)
-                    {
-                        v4 PColor = 
-                        {
-                            Max(Particle->Color.X, 0.0f),
-                            Max(Particle->Color.Y, 0.0f),
-                            Max(Particle->Color.Z, 0.0f),
-                            1.0,
-                        };
-                        Cmd->ParticleCount++;
-                        Frame->Particles[Frame->ParticleCount++] = 
-                        {
-                            .P = Particle->P,
-                            .TextureIndex = Particle->TextureIndex,
-                            .Color = PColor,
-                            .HalfExtent = ParticleSystem->ParticleHalfExtent,
-                        };
-                    }
-                }
+                    Max(Particle->Color.X, 0.0f),
+                    Max(Particle->Color.Y, 0.0f),
+                    Max(Particle->Color.Z, 0.0f),
+                    1.0,
+                };
+                Cmd = PushParticle(Frame, Cmd, 
+                                   {
+                                       .P = Particle->P,
+                                       .TextureIndex = Particle->TextureIndex,
+                                       .Color = PColor,
+                                       .HalfExtent = ParticleSystem->ParticleHalfExtent,
+                                   });
             }
         }
     }
@@ -786,16 +776,10 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     // Ad-hoc lights
     if (0)
     {
-        particle_cmd* Cmd = nullptr;
-        if ((Frame->ParticleDrawCmdCount < Frame->MaxParticleDrawCmdCount) && 
-            (Frame->ParticleCount + World->AdHocLightCount <= Frame->MaxParticleCount))
+        particle_cmd* Cmd = MakeParticleBatch(Frame, World->AdHocLightCount);
+        if (Cmd)
         {
-            Cmd = Frame->ParticleDrawCmds + Frame->ParticleDrawCmdCount++;
-            Cmd->FirstParticle = Frame->ParticleCount;
-            Cmd->ParticleCount = World->AdHocLightCount;
             Cmd->Mode = Billboard_ViewAligned;
-
-            Frame->ParticleCount += World->AdHocLightCount;
         }
 
         b32 DoVelocityUpdate = false;
@@ -824,16 +808,13 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             Light->P.Z = Clamp(Light->P.Z, World->AdHocLightBounds.Min.Z, World->AdHocLightBounds.Max.Z);
 
             AddLight(Frame, Light->P, Light->E, LightFlag_None);
-            if (Cmd)
-            {
-                Frame->Particles[Cmd->FirstParticle + LightIndex] = 
-                {
-                    .P = Light->P,
-                    .TextureIndex = Particle_Star06,
-                    .Color = { Light->E.X, Light->E.Y, Light->E.Z, 5.0f },
-                    .HalfExtent = { 0.1f, 0.1f },
-                };
-            }
+            Cmd = PushParticle(Frame, Cmd, 
+                               {
+                                   .P = Light->P,
+                                   .TextureIndex = Particle_Star06,
+                                   .Color = { Light->E.X, Light->E.Y, Light->E.Z, 5.0f },
+                                   .HalfExtent = { 0.1f, 0.1f },
+                               });
         }
     }
 }

@@ -119,12 +119,10 @@ struct v4u8
 
 // PerFrame set bindings
 #define Binding_PerFrame_Constants                  0
-#define Binding_PerFrame_JointBuffer                1
-#define Binding_PerFrame_ParticleBuffer             2
-#define Binding_PerFrame_ParticleTexture            3
-#define Binding_PerFrame_TextureUI                  4
+#define Binding_PerFrame_ParticleTexture            1
+#define Binding_PerFrame_TextureUI                  2
 
-#define Binding_PerFrame_Count                      5
+#define Binding_PerFrame_Count                      3
 
 // Named sampler binding indices
 #define Sampler_Default                             0

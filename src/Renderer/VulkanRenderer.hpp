@@ -234,16 +234,24 @@ struct renderer
     u64             FrameFinishedCounters[R_MaxFramesInFlight];
 
     // NOTE(boti): These are all allocated from BAR memory
-    VkBuffer    PerFrameUniformBuffers[R_MaxFramesInFlight];
-    void*       PerFrameUniformBufferMappings[R_MaxFramesInFlight];
-    VkBuffer    PerFrameJointBuffers[R_MaxFramesInFlight];
-    void*       PerFrameJointBufferMappings[R_MaxFramesInFlight];
-    VkBuffer    PerFrameParticleBuffers[R_MaxFramesInFlight];
-    void*       PerFrameParticleBufferMappings[R_MaxFramesInFlight];
-    VkBuffer    PerFrameVertex2DBuffers[R_MaxFramesInFlight];
-    void*       PerFrameVertex2DMappings[R_MaxFramesInFlight];
-    VkBuffer    PerFrameResourceDescriptorBuffers[R_MaxFramesInFlight];
-    void*       PerFrameResourceDescriptorMappings[R_MaxFramesInFlight];
+    VkBuffer        PerFrameUniformBuffers[R_MaxFramesInFlight];
+    void*           PerFrameUniformBufferMappings[R_MaxFramesInFlight];
+    VkBuffer        PerFrameResourceDescriptorBuffers[R_MaxFramesInFlight];
+    void*           PerFrameResourceDescriptorMappings[R_MaxFramesInFlight];
+
+#if 1
+    static constexpr umm PerFrameBufferSize = MiB(30);
+    VkBuffer        PerFrameBuffers[R_MaxFramesInFlight];
+    void*           PerFrameBufferMappings[R_MaxFramesInFlight];
+    VkDeviceAddress PerFrameBufferAddresses[R_MaxFramesInFlight];
+#else
+    VkBuffer        PerFrameJointBuffers[R_MaxFramesInFlight];
+    void*           PerFrameJointBufferMappings[R_MaxFramesInFlight];
+    VkBuffer        PerFrameParticleBuffers[R_MaxFramesInFlight];
+    void*           PerFrameParticleBufferMappings[R_MaxFramesInFlight];
+    VkBuffer        PerFrameVertex2DBuffers[R_MaxFramesInFlight];
+    void*           PerFrameVertex2DMappings[R_MaxFramesInFlight];
+#endif
 
     VkDeviceMemory  StagingMemory;
     void*           StagingMemoryMapping;

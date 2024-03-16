@@ -17,11 +17,6 @@ interpolant(2) flat uint ParticleTexture;
 interpolant(3) v3 ViewP;
 
 #if defined(VS)
-layout(push_constant) 
-uniform PushConstants
-{
-    uint BillboardMode;
-};
 
 struct particle
 {
@@ -31,10 +26,17 @@ struct particle
     v2 HalfExtent;
 };
 
-SetBindingLayout(PerFrame, ParticleBuffer, scalar) 
-readonly buffer VertexBlock
+layout(buffer_reference, scalar)
+readonly buffer particle_buffer
 {
     particle Particles[];
+};
+
+layout(push_constant) 
+uniform PushConstants
+{
+    particle_buffer ParticleBuffer;
+    uint BillboardMode;
 };
 
 void main()
@@ -56,7 +58,7 @@ void main()
     uint LocalIndex = gl_VertexIndex % 6;
 
     v3 BaseP = BaseVertices[IndexData[LocalIndex]];
-    particle Particle = Particles[GlobalIndex];
+    particle Particle = ParticleBuffer.Particles[GlobalIndex];
 
     v3 X = PerFrame.CameraTransform[0].xyz;
     v3 Y = PerFrame.CameraTransform[1].xyz;

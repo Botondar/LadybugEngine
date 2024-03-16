@@ -427,22 +427,6 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .DescriptorCount = 1,
                 .Stages = ShaderStage_All,
             },
-            [Binding_PerFrame_JointBuffer] =
-            {
-                .Binding = Binding_PerFrame_JointBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = ShaderStage_All,
-                .Flags = 0,
-            },
-            [Binding_PerFrame_ParticleBuffer] =
-            {
-                .Binding = Binding_PerFrame_ParticleBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = ShaderStage_All,
-                .Flags = 0,
-            },
             [Binding_PerFrame_ParticleTexture] =
             {
                 .Binding = Binding_PerFrame_ParticleTexture,
