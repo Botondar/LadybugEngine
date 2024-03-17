@@ -219,12 +219,20 @@ struct renderer
     //
     // Per frame stuff
     // 
-    VkCommandPool CmdPools[2];
-    static constexpr u32 MaxCmdBufferCountPerFrame = 16;
-    VkCommandBuffer CmdBuffers[2][MaxCmdBufferCountPerFrame];
 
-    VkCommandPool   ComputeCmdPools[2];
-    VkCommandBuffer ComputeCmdBuffers[2];
+    // TODO(boti): This is mutable, per-frame state that should be part of render_frame,
+    // but it's internal use only, so I don't want to expose it in the API
+    u32 CmdBufferAt;
+    u32 SecondaryCmdBufferAt;
+
+    VkCommandPool CmdPools[R_MaxFramesInFlight];
+    static constexpr u32 MaxCmdBufferCountPerFrame = 16;
+    VkCommandBuffer CmdBuffers[R_MaxFramesInFlight][MaxCmdBufferCountPerFrame];
+    static constexpr u32 MaxSecondaryCmdBufferCountPerFrame = 32;
+    VkCommandBuffer SecondaryCmdBuffers[R_MaxFramesInFlight][MaxSecondaryCmdBufferCountPerFrame];
+
+    VkCommandPool   ComputeCmdPools[R_MaxFramesInFlight];
+    VkCommandBuffer ComputeCmdBuffers[R_MaxFramesInFlight];
 
     VkSemaphore     ImageAcquiredSemaphores[R_MaxFramesInFlight];
     VkFence         ImageAcquiredFences[R_MaxFramesInFlight];
@@ -298,6 +306,23 @@ struct renderer
     u64 CurrentFrameID;
     render_frame Frames[R_MaxFramesInFlight];
 };
+
+typedef flags32 begin_cb_flags;
+enum begin_cb_flag_bits : begin_cb_flags
+{
+    BeginCB_None = 0,
+    
+    BeginCB_Secondary = (1u << 0),
+};
+
+// NOTE(boti): Currently we're using using the pipeline info to determine whether a secondary CB
+// is inside a render pass and what that render pass is.
+// This works, because the attachments in the pipelines don't differ from the pass.
+internal VkCommandBuffer
+BeginCommandBuffer(renderer* Renderer, u32 FrameID, begin_cb_flags Flags, pipeline Pipeline);
+
+internal void
+EndCommandBuffer(VkCommandBuffer CB);
 
 internal void 
 SetupSceneRendering(render_frame* Frame, frustum* CascadeFrustums);

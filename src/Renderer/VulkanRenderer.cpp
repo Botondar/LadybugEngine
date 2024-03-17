@@ -1323,19 +1323,27 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->CmdPools[FrameIndex]);
             ReturnOnFailure();
         
-            for (u32 BufferIndex = 0; BufferIndex < Renderer->MaxCmdBufferCountPerFrame; BufferIndex++)
+            VkCommandBufferAllocateInfo PrimaryBufferInfo = 
             {
-                VkCommandBufferAllocateInfo BufferInfo = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-                    .pNext = nullptr,
-                    .commandPool = Renderer->CmdPools[FrameIndex],
-                    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                    .commandBufferCount = 1,
-                };
-                Result = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->CmdBuffers[FrameIndex][BufferIndex]);
-                ReturnOnFailure();
-            }
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .commandPool = Renderer->CmdPools[FrameIndex],
+                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandBufferCount = Renderer->MaxCmdBufferCountPerFrame,
+            };
+            Result = vkAllocateCommandBuffers(VK.Device, &PrimaryBufferInfo, Renderer->CmdBuffers[FrameIndex]);
+            ReturnOnFailure();
+
+            VkCommandBufferAllocateInfo SecondaryBufferInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .commandPool = Renderer->CmdPools[FrameIndex],
+                .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+                .commandBufferCount = Renderer->MaxSecondaryCmdBufferCountPerFrame,
+            };
+            Result = vkAllocateCommandBuffers(VK.Device, &SecondaryBufferInfo, Renderer->SecondaryCmdBuffers[FrameIndex]);
+            ReturnOnFailure();
         }
         
         // Compute command pool + buffers
@@ -1935,6 +1943,117 @@ internal b32 PushBeginBarrier(frame_stage* Stage, const VkBufferMemoryBarrier2* 
     return(Result);
 }
 
+internal VkCommandBuffer
+BeginCommandBuffer(renderer* Renderer, u32 FrameID, begin_cb_flags Flags, pipeline Pipeline)
+{
+    VkCommandBuffer CommandBuffer = VK_NULL_HANDLE;
+    if (Flags & BeginCB_Secondary)
+    {
+        Assert(Renderer->SecondaryCmdBufferAt < Renderer->MaxSecondaryCmdBufferCountPerFrame);
+        CommandBuffer = Renderer->SecondaryCmdBuffers[FrameID][Renderer->SecondaryCmdBufferAt++];
+    }
+    else
+    {
+
+        Assert(Renderer->CmdBufferAt < Renderer->MaxCmdBufferCountPerFrame);
+        CommandBuffer = Renderer->CmdBuffers[FrameID][Renderer->CmdBufferAt++];
+    }
+
+    
+    const pipeline_info* PipelineInfo = PipelineInfos + Pipeline;
+    Assert(PipelineInfo->Type == PipelineType_Graphics);
+    VkFormat ColorAttachmentFormats[MaxColorAttachmentCount];
+    for (u32 FormatIndex = 0; FormatIndex < PipelineInfo->ColorAttachmentCount; FormatIndex++)
+    {
+        ColorAttachmentFormats[FormatIndex] = FormatTable[RenderTargetFormatTable[PipelineInfo->ColorAttachments[FormatIndex]]];
+    }
+
+    VkCommandBufferInheritanceRenderingInfo RenderingInfo = 
+    {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO,
+        .pNext = nullptr,
+        .flags = 0,
+        .viewMask = 0,
+        .colorAttachmentCount = PipelineInfo->ColorAttachmentCount,
+        .pColorAttachmentFormats = ColorAttachmentFormats,
+        .depthAttachmentFormat = FormatTable[RenderTargetFormatTable[PipelineInfo->DepthAttachment]],
+        .stencilAttachmentFormat = FormatTable[RenderTargetFormatTable[PipelineInfo->StencilAttachment]],
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+    };
+
+    VkCommandBufferInheritanceInfo InheritanceInfo = 
+    {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+        .pNext = &RenderingInfo,
+        .renderPass = VK_NULL_HANDLE,
+        .subpass = 0,
+        .framebuffer = VK_NULL_HANDLE,
+        .occlusionQueryEnable = VK_FALSE,
+        .queryFlags = 0,
+        .pipelineStatistics = 0,
+    };
+
+    VkCommandBufferBeginInfo BeginInfo = 
+    {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = nullptr,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+        .pInheritanceInfo = &InheritanceInfo,
+    };
+    if (Pipeline != Pipeline_None)
+    {
+        BeginInfo.flags |= VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+    }
+    vkBeginCommandBuffer(CommandBuffer, &BeginInfo);
+
+    VkDeviceAddress StaticResourceBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->StaticResourceDescriptorBuffer);
+    VkDeviceAddress SamplerBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->SamplerDescriptorBuffer);
+    VkDeviceAddress PerFrameResourceBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameResourceDescriptorBuffers[FrameID]);
+    VkDescriptorBufferBindingInfoEXT DescriptorBufferBindings[] = 
+    {
+        {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+            .pNext = nullptr,
+            .address = StaticResourceBufferAddress,
+            .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+            .pNext = nullptr,
+            .address = SamplerBufferAddress,
+            .usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+            .pNext = nullptr,
+            .address = Renderer->TextureManager.DescriptorAddress,
+            .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
+            .pNext = nullptr,
+            .address = PerFrameResourceBufferAddress,
+            .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
+        },
+    };
+    vkCmdBindDescriptorBuffersEXT(CommandBuffer, CountOf(DescriptorBufferBindings), DescriptorBufferBindings);
+
+    u32 DescriptorBufferIndices[Set_Count] = { 0, 1, 2, 3 };
+    VkDeviceSize DescriptorBufferOffsets[Set_Count] = { 0, 0, 0, 0 };
+    vkCmdSetDescriptorBufferOffsetsEXT(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SystemPipelineLayout,
+                                       0, CountOf(DescriptorBufferBindings), DescriptorBufferIndices, DescriptorBufferOffsets);
+    vkCmdSetDescriptorBufferOffsetsEXT(CommandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->SystemPipelineLayout,
+                                       0, CountOf(DescriptorBufferBindings), DescriptorBufferIndices, DescriptorBufferOffsets);
+
+    return(CommandBuffer);
+}
+
+internal void
+EndCommandBuffer(VkCommandBuffer CB)
+{
+    vkEndCommandBuffer(CB);
+}
+
 //
 // Rendering interface implementation
 //
@@ -1954,6 +2073,10 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
 
     Frame->ReloadShaders = false;
     Frame->FrameID = FrameID;
+
+    // TODO(boti): See renderer struct
+    Renderer->CmdBufferAt = 0;
+    Renderer->SecondaryCmdBufferAt = 0;
 
     // Reset buffers
     {
@@ -2092,12 +2215,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
 
     // NOTE(boti): This is currently also the initial transfer and skinning cmd buffer
-    u32 CmdBufferAt = 0;
-    VkCommandBuffer PrepassCmd = Renderer->CmdBuffers[Frame->FrameID][CmdBufferAt++];
-    VkCommandBuffer RenderCmd = Renderer->CmdBuffers[Frame->FrameID][CmdBufferAt++];
+    VkCommandBuffer PrepassCmd = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_None, Pipeline_None);
+    VkCommandBuffer RenderCmd = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_None, Pipeline_None);
     // NOTE(boti): Light binning, SSAO
-    VkCommandBuffer PreLightCmd = Renderer->ComputeCmdBuffers[Frame->FrameID];
-    VkCommandBuffer ShadowCmd = Renderer->CmdBuffers[Frame->FrameID][CmdBufferAt++];
+    VkCommandBuffer PreLightCmd = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_None, Pipeline_None);
+    VkCommandBuffer ShadowCmd = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_None, Pipeline_None);
 
     f32 AspectRatio = (f32)Frame->RenderExtent.X / (f32)Frame->RenderExtent.Y;
 
@@ -2270,18 +2392,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             }
         }
     }
-
-    //
-    // Transfer
-    //
-    VkCommandBufferBeginInfo CmdBufferBegin = 
-    {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .pNext = nullptr,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-        .pInheritanceInfo = nullptr,
-    };
-    vkBeginCommandBuffer(PrepassCmd, &CmdBufferBegin);
 
     //
     // Discard unused mip levels
@@ -2599,6 +2709,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         }
     }
 
+    //
+    // Transfer
+    //
     BeginFrameStage(PrepassCmd, &FrameStages[FrameStage_Upload], "Upload");
     for (u32 TransferOpIndex = 0; TransferOpIndex < Frame->TransferOpCount; TransferOpIndex++)
     {
@@ -3038,16 +3151,72 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     draw_list* ShadowDrawLists = PushArray(Frame->Arena, MemPush_Clear, draw_list, 6 * Frame->ShadowCount);
     u32 DrawListCount = 1 + R_MaxShadowCascadeCount + 6 * Frame->ShadowCount;
 
-    u32 SkinnedVertexAt = 0;
-    u32 SkinningCommandCount = Frame->DrawGroupDrawCounts[DrawGroup_Skinned];
-    struct skinning_cmd
+    VkViewport PrimaryViewport
     {
-        VkDeviceAddress Address;
-        u32 SrcVertexOffset;
-        u32 DstVertexOffset;
-        u32 VertexCount;
+        0.0f, 0.0f,
+        (f32)Frame->RenderExtent.X, (f32)Frame->RenderExtent.Y,
+        0.0f, 1.0f,
     };
-    skinning_cmd* SkinningCommands = PushArray(Frame->Arena, 0, skinning_cmd, SkinningCommandCount);
+    VkRect2D PrimaryScissor = { { 0, 0 }, { Frame->RenderExtent.X, Frame->RenderExtent.Y } };
+
+    u32 SkinnedVertexAt = 0;
+    VkCommandBuffer SkinningCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_None);
+    vkCmdBindPipeline(SkinningCB, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->Pipelines[Pipeline_Skinning].Pipeline);
+
+    VkCommandBuffer Widget3DCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_Gizmo);
+    {
+        vkCmdBeginDebugUtilsLabelEXT(Widget3DCB, "3D GUI");
+        vkCmdSetViewport(Widget3DCB, 0, 1, &PrimaryViewport);
+        vkCmdSetScissor(Widget3DCB, 0, 1, &PrimaryScissor);
+
+        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Gizmo];
+        vkCmdBindPipeline(Widget3DCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+
+        const VkDeviceSize ZeroOffset = 0;
+        vkCmdBindVertexBuffers(Widget3DCB, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
+        vkCmdBindIndexBuffer(Widget3DCB, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
+
+        for (u32 CmdIndex = 0; CmdIndex < Frame->DrawWidget3DCmdCount; CmdIndex++)
+        {
+            draw_widget3d_cmd* Cmd = Frame->DrawWidget3DCmds + CmdIndex;
+
+            struct
+            {
+                m4 Transform;
+                rgba8 Color;
+            } Push;
+            Push.Transform = Cmd->Transform;
+            Push.Color = Cmd->Color;
+            vkCmdPushConstants(Widget3DCB, Pipeline.Layout, VK_SHADER_STAGE_ALL,
+                               0, sizeof(Push), &Push);
+            vkCmdDrawIndexed(Widget3DCB, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
+        }
+        vkCmdEndDebugUtilsLabelEXT(Widget3DCB);
+    }
+
+    VkCommandBuffer GuiCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_UI);
+    {
+        vkCmdBeginDebugUtilsLabelEXT(GuiCB, "2D GUI");
+        vkCmdSetViewport(GuiCB, 0, 1, &PrimaryViewport);
+        vkCmdSetScissor(GuiCB, 0, 1, &PrimaryScissor);
+
+        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_UI];
+        vkCmdBindPipeline(GuiCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+        m4 OrthoTransform = M4(2.0f / Frame->RenderExtent.X, 0.0f, 0.0f, -1.0f,
+                               0.0f, 2.0f / Frame->RenderExtent.Y, 0.0f, -1.0f,
+                               0.0f, 0.0f, 1.0f, 0.0f,
+                               0.0f, 0.0f, 0.0f, 1.0f);
+        vkCmdPushConstants(GuiCB, Pipeline.Layout, VK_SHADER_STAGE_ALL, 
+                           0, sizeof(OrthoTransform), &OrthoTransform);
+
+        for (u32 BatchIndex = 0; BatchIndex < Frame->BatchCount; BatchIndex++)
+        {
+            draw_batch* Batch = Frame->Batches + BatchIndex;
+            vkCmdBindVertexBuffers(GuiCB, 0, 1, &Renderer->PerFrameBuffers[Frame->FrameID], &Batch->BufferOffset);
+            vkCmdDraw(GuiCB, Batch->VertexCount, 1, 0, 0);
+        }
+        vkCmdEndDebugUtilsLabelEXT(GuiCB);
+    }
 
     {
         Frame->Uniforms.OpaqueDrawCount = Frame->DrawGroupDrawCounts[DrawGroup_Opaque];
@@ -3063,7 +3232,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         m4*                             Transforms          = PushArray(Frame->Arena, 0, m4, InstanceCount);
         VkDrawIndexedIndirectCommand*   IndirectCommands    = PushArray(Frame->Arena, 0, VkDrawIndexedIndirectCommand, InstanceCount);
 
-        skinning_cmd* SkinningCommandAt = SkinningCommands;
         for (u32 CommandIndex = 0; CommandIndex < Frame->CommandCount; CommandIndex++)
         {
             draw_command* Command = Frame->Commands + CommandIndex;
@@ -3094,13 +3262,23 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     u32 VertexCount = Command->Geometry.VertexBlock->Count;
                     if (SkinnedVertexAt + VertexCount <= R_MaxSkinnedVertexCount)
                     {
-                        *SkinningCommandAt++ = 
+                        struct skinning_constants
+                        {
+                            VkDeviceAddress Address;
+                            u32 SrcVertexOffset;
+                            u32 DstVertexOffset;
+                            u32 VertexCount;
+                        };
+                        skinning_constants Push =
                         {
                             .Address = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Command->BARBufferOffset,
                             .SrcVertexOffset = Command->Geometry.VertexBlock->Offset,
                             .DstVertexOffset = SkinnedVertexAt,
                             .VertexCount = VertexCount,
                         };
+                        vkCmdPushConstants(SkinningCB, Renderer->Pipelines[Pipeline_Skinning].Layout, VK_SHADER_STAGE_ALL,
+                                           0, sizeof(Push), &Push);
+                        vkCmdDispatch(SkinningCB, CeilDiv(VertexCount, Skin_GroupSizeX), 1, 1);
                         IndirectCommands[ID] = 
                         {
                             .indexCount = Command->Geometry.IndexBlock->Count,
@@ -3307,6 +3485,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
         }
     }
+    EndCommandBuffer(Widget3DCB);
+    EndCommandBuffer(GuiCB);
+    EndCommandBuffer(SkinningCB);
 
     {
         vkCmdFillBuffer(PrepassCmd, Renderer->MipFeedbackBuffer, 0, VK_WHOLE_SIZE, 0);
@@ -3362,50 +3543,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         UpdateDescriptorBuffer(CountOf(PerFrameWrites), PerFrameWrites, Renderer->SetLayouts[Set_PerFrame], Renderer->PerFrameResourceDescriptorMappings[Frame->FrameID]);
     }
 
-    auto BindSystemDescriptors = [=](VkCommandBuffer CmdBuffer)
-    {
-        VkDeviceAddress StaticResourceBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->StaticResourceDescriptorBuffer);
-        VkDeviceAddress SamplerBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->SamplerDescriptorBuffer);
-        VkDeviceAddress PerFrameResourceBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameResourceDescriptorBuffers[Frame->FrameID]);
-        VkDescriptorBufferBindingInfoEXT DescriptorBufferBindings[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-                .pNext = nullptr,
-                .address = StaticResourceBufferAddress,
-                .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-                .pNext = nullptr,
-                .address = SamplerBufferAddress,
-                .usage = VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-                .pNext = nullptr,
-                .address = Renderer->TextureManager.DescriptorAddress,
-                .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT,
-                .pNext = nullptr,
-                .address = PerFrameResourceBufferAddress,
-                .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT,
-            },
-        };
-        vkCmdBindDescriptorBuffersEXT(CmdBuffer, CountOf(DescriptorBufferBindings), DescriptorBufferBindings);
-
-        u32 DescriptorBufferIndices[Set_Count] = { 0, 1, 2, 3 };
-        VkDeviceSize DescriptorBufferOffsets[Set_Count] = { 0, 0, 0, 0 };
-        vkCmdSetDescriptorBufferOffsetsEXT(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->SystemPipelineLayout,
-                                           0, CountOf(DescriptorBufferBindings), DescriptorBufferIndices, DescriptorBufferOffsets);
-        vkCmdSetDescriptorBufferOffsetsEXT(CmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->SystemPipelineLayout,
-                                           0, CountOf(DescriptorBufferBindings), DescriptorBufferIndices, DescriptorBufferOffsets);
-    };
-
-    BindSystemDescriptors(PrepassCmd);
-
     VkViewport FrameViewport = 
     {
         .x = 0.0f,
@@ -3426,16 +3563,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     //
     BeginFrameStage(PrepassCmd, &FrameStages[FrameStage_Skinning], "Skinning");
     {
-        pipeline_with_layout SkinningPipeline = Renderer->Pipelines[Pipeline_Skinning];
-        vkCmdBindPipeline(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Pipeline);
-
-        for (u32 SkinningCmdIndex = 0; SkinningCmdIndex < SkinningCommandCount; SkinningCmdIndex++)
-        {
-            skinning_cmd* Cmd = SkinningCommands + SkinningCmdIndex;
-            vkCmdPushConstants(PrepassCmd, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
-                               0, sizeof(*Cmd), Cmd);
-            vkCmdDispatch(PrepassCmd, CeilDiv(Cmd->VertexCount, Skin_GroupSizeX), 1, 1);
-        }
+        vkCmdExecuteCommands(PrepassCmd, 1, &SkinningCB);
 
         VkBufferMemoryBarrier2 EndBarrier =
         {
@@ -3447,7 +3575,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT|VK_ACCESS_2_SHADER_READ_BIT,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = Frame->Renderer->SkinningBuffer,
+            .buffer = Renderer->SkinningBuffer,
             .offset = 0,
             .size = VK_WHOLE_SIZE,
         };
@@ -3476,7 +3604,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Frame->Renderer->VisibilityBuffer->Image,
+                .image = Renderer->VisibilityBuffer->Image,
                 .subresourceRange = 
                 {
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -3498,7 +3626,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Frame->Renderer->StructureBuffer->Image,
+                .image = Renderer->StructureBuffer->Image,
                 .subresourceRange = 
                 {
                     .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -3520,7 +3648,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
                 .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                 .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Frame->Renderer->DepthBuffer->Image,
+                .image = Renderer->DepthBuffer->Image,
                 .subresourceRange = 
                 {
                     .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
@@ -3544,7 +3672,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
                 .pNext = nullptr,
-                .imageView = Frame->Renderer->VisibilityBuffer->View,
+                .imageView = Renderer->VisibilityBuffer->View,
                 .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                 .resolveMode = VK_RESOLVE_MODE_NONE,
                 .resolveImageView = VK_NULL_HANDLE,
@@ -3557,7 +3685,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
                 .pNext = nullptr,
-                .imageView = Frame->Renderer->StructureBuffer->View,
+                .imageView = Renderer->StructureBuffer->View,
                 .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                 .resolveMode = VK_RESOLVE_MODE_NONE,
                 .resolveImageView = VK_NULL_HANDLE,
@@ -3572,7 +3700,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .imageView = Frame->Renderer->DepthBuffer->View,
+            .imageView = Renderer->DepthBuffer->View,
             .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             .resolveMode = VK_RESOLVE_MODE_NONE,
             .resolveImageView = VK_NULL_HANDLE,
@@ -3616,7 +3744,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK.GraphicsQueueIdx,
             .dstQueueFamilyIndex = VK.ComputeQueueIdx,
-            .image = Frame->Renderer->StructureBuffer->Image,
+            .image = Renderer->StructureBuffer->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -3654,7 +3782,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
     EndFrameStage(PrepassCmd, &FrameStages[FrameStage_Prepass]);
 
-    vkEndCommandBuffer(PrepassCmd);
+    EndCommandBuffer(PrepassCmd);
 
     u64 PrepassCounter = ++Renderer->TimelineSemaphoreCounter;
     VkCommandBufferSubmitInfo PrepassCmdBuffers[] = 
@@ -3688,9 +3816,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         .pSignalSemaphoreInfos = PrepassSignals,
     };
     vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitPrepass, nullptr);
-
-    vkBeginCommandBuffer(PreLightCmd, &CmdBufferBegin);
-    BindSystemDescriptors(PreLightCmd);
 
     //
     // SSAO
@@ -3749,7 +3874,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = Frame->Renderer->OcclusionBuffers[0]->Image,
+                    .image = Renderer->OcclusionBuffers[0]->Image,
                     .subresourceRange = 
                     {
                         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -3771,7 +3896,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     .newLayout = VK_IMAGE_LAYOUT_GENERAL,
                     .srcQueueFamilyIndex = VK.GraphicsQueueIdx,
                     .dstQueueFamilyIndex = VK.ComputeQueueIdx,
-                    .image = Frame->Renderer->OcclusionBuffers[1]->Image,
+                    .image = Renderer->OcclusionBuffers[1]->Image,
                     .subresourceRange = 
                     {
                         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -3812,7 +3937,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             .srcQueueFamilyIndex = VK.ComputeQueueIdx,
             .dstQueueFamilyIndex = VK.GraphicsQueueIdx,
-            .image = Frame->Renderer->OcclusionBuffers[1]->Image,
+            .image = Renderer->OcclusionBuffers[1]->Image,
             .subresourceRange = 
             {
                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -3853,7 +3978,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
     EndFrameStage(PreLightCmd, &FrameStages[FrameStage_LightBinning]);
 
-    vkEndCommandBuffer(PreLightCmd);
+    EndCommandBuffer(PreLightCmd);
 
     u64 PreLightCounter = ++Renderer->ComputeTimelineSemaphoreCounter;
     VkCommandBufferSubmitInfo PreLightCmdBuffers[] = 
@@ -3898,9 +4023,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         .pSignalSemaphoreInfos = PreLightSignals,
     };
     vkQueueSubmit2(VK.ComputeQueue, 1, &SubmitPreLight, nullptr);
-
-    vkBeginCommandBuffer(ShadowCmd, &CmdBufferBegin);
-    BindSystemDescriptors(ShadowCmd);
 
     //
     // Cascaded shadows
@@ -4168,7 +4290,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
     EndFrameStage(ShadowCmd, &FrameStages[FrameStage_Shadows]);
 
-    vkEndCommandBuffer(ShadowCmd);
+    EndCommandBuffer(ShadowCmd);
     
     u64 ShadowCounter = ++Renderer->TimelineSemaphoreCounter;
     VkCommandBufferSubmitInfo ShadowCmdBuffers[] = 
@@ -4214,9 +4336,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     };
     vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitShadow, nullptr);
     
-    vkBeginCommandBuffer(RenderCmd, &CmdBufferBegin);
-    BindSystemDescriptors(RenderCmd);
-
     vkCmdSetViewport(RenderCmd, 0, 1, &FrameViewport);
     vkCmdSetScissor(RenderCmd, 0, 1, &FrameScissor);
 
@@ -4901,7 +5020,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         {
             .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
             .pNext = nullptr,
-            .flags = 0,
+            .flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT,
             .renderArea = { { 0, 0 }, { Frame->RenderExtent.X, Frame->RenderExtent.Y } },
             .layerCount = 1,
             .viewMask = 0,
@@ -4921,50 +5040,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         }
         vkCmdEndDebugUtilsLabelEXT(RenderCmd);
 
-        // 3D widget render
-        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "3D GUI");
-        {
-            const VkDeviceSize ZeroOffset = 0;
-            vkCmdBindVertexBuffers(RenderCmd, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
-            vkCmdBindIndexBuffer(RenderCmd, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
+        VkCommandBuffer PostBlitCBs[] = { Widget3DCB, GuiCB };
+        vkCmdExecuteCommands(RenderCmd, CountOf(PostBlitCBs), PostBlitCBs);
 
-            pipeline_with_layout GizmoPipeline = Renderer->Pipelines[Pipeline_Gizmo];
-            vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, GizmoPipeline.Pipeline);
-
-            for (u32 CmdIndex = 0; CmdIndex < Frame->DrawWidget3DCmdCount; CmdIndex++)
-            {
-                draw_widget3d_cmd* Cmd = Frame->DrawWidget3DCmds + CmdIndex;
-
-                vkCmdPushConstants(RenderCmd, GizmoPipeline.Layout, VK_SHADER_STAGE_ALL,
-                                   0, sizeof(Cmd->Transform), &Cmd->Transform);
-                vkCmdPushConstants(RenderCmd, GizmoPipeline.Layout, VK_SHADER_STAGE_ALL,
-                                   sizeof(Cmd->Transform), sizeof(Cmd->Color), &Cmd->Color);
-                vkCmdDrawIndexed(RenderCmd, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceCount);
-            }
-        }
-        vkCmdEndDebugUtilsLabelEXT(RenderCmd);
-
-        // 2D UI render
-        vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "2D GUI");
-        {
-            pipeline_with_layout UIPipeline = Renderer->Pipelines[Pipeline_UI];
-            vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, UIPipeline.Pipeline);
-            for (u32 BatchIndex = 0; BatchIndex < Frame->BatchCount; BatchIndex++)
-            {
-                draw_batch* Batch = Frame->Batches + BatchIndex;
-
-                vkCmdBindVertexBuffers(RenderCmd, 0, 1, &Renderer->PerFrameBuffers[Frame->FrameID], &Batch->BufferOffset);
-
-                m4 OrthoTransform = M4(2.0f / Frame->RenderExtent.X, 0.0f, 0.0f, -1.0f,
-                                       0.0f, 2.0f / Frame->RenderExtent.Y, 0.0f, -1.0f,
-                                       0.0f, 0.0f, 1.0f, 0.0f,
-                                       0.0f, 0.0f, 0.0f, 1.0f);
-                vkCmdPushConstants(RenderCmd, UIPipeline.Layout, VK_SHADER_STAGE_ALL, 
-                                   0, sizeof(OrthoTransform), &OrthoTransform);
-                vkCmdDraw(RenderCmd, Batch->VertexCount, 1, 0, 0);
-            }
-        }
-        vkCmdEndDebugUtilsLabelEXT(RenderCmd);
         vkCmdEndRendering(RenderCmd);
     }
     EndFrameStage(RenderCmd, &FrameStages[FrameStage_BlitAndGUI]);
@@ -5011,7 +5089,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     };
     vkCmdPipelineBarrier2(RenderCmd, &EndDependencyInfo);
 
-    vkEndCommandBuffer(RenderCmd);
+    EndCommandBuffer(RenderCmd);
 
     // Submit + Present
     {
