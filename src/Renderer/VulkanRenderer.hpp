@@ -12,6 +12,8 @@
 #include "Renderer/Pipelines.hpp"
 #include "Renderer/rhi_vulkan.hpp"
 
+constexpr u32 R_MaxSkinnedVertexCount = 1u << 20;
+
 struct gpu_memory_arena
 {
     VkDeviceMemory Memory;

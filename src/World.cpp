@@ -517,14 +517,11 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         entity* Entity = World->Entities + EntityIndex;
         if (Entity->Flags & EntityFlag_Mesh)
         {
-            b32 DrawSkinned = false;
             u32 JointCount = 0;
             m4 Pose[R_MaxJointCount] = {};
 
             if (Entity->Flags & EntityFlag_Skin)
             {
-                DrawSkinned = true;
-
                 Assert(Entity->SkinID < Assets->SkinCount);
                 skin* Skin = Assets->Skins + Entity->SkinID;
                 JointCount = Skin->JointCount;
@@ -619,15 +616,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     .NormalSamplerID            = Material->NormalSamplerID,
                     .MetallicRoughnessSamplerID = Material->MetallicRoughnessSamplerID
                 };
-                if (DrawSkinned)
-                {
-                    DrawSkinnedMesh(Frame, Mesh->Allocation, Entity->Transform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
-                }
-                else
-                {
-                    DrawMesh(Frame, Mesh->Allocation, Entity->Transform, Mesh->BoundingBox, RenderMaterial);
-                }
-
+                DrawMesh(Frame, Mesh->Allocation, Entity->Transform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
             }
         }
 

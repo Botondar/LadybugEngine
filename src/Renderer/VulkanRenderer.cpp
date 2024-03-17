@@ -1863,6 +1863,12 @@ DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, draw_list* List)
             {
                 VertexBuffer = Frame->Renderer->SkinningBuffer;
             } break;
+            case DrawGroup_Particle:
+            case DrawGroup_Widget3D:
+            case DrawGroup_UI:
+            {
+                continue;
+            } break;
             InvalidDefaultCase;
         }
 
@@ -1954,6 +1960,13 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         Frame->StagingBuffer.At = 0;
         Frame->TransferOpCount = 0;
 
+        Frame->CommandCount = 0;
+        Frame->Commands = PushArray(Arena, 0, draw_command, Frame->MaxCommandCount);
+        for (u32 GroupIndex = 0; GroupIndex < DrawGroup_Count; GroupIndex++)
+        {
+            Frame->DrawGroupDrawCounts[GroupIndex] = 0;
+        }
+
         Frame->MaxLightCount = R_MaxLightCount;
         Frame->LightCount = 0;
         Frame->Lights = PushArray(Arena, 0, light, Frame->MaxLightCount);
@@ -1961,18 +1974,6 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         Frame->MaxShadowCount = R_MaxShadowCount;
         Frame->ShadowCount = 0;
         Frame->Shadows = PushArray(Arena, 0, u32, Frame->MaxShadowCount);
-
-        Frame->MaxDrawCmdCount = 1u << 20;
-        Frame->DrawCmdCount = 0;
-        Frame->DrawCmds = PushArray(Arena, 0, draw_cmd, Frame->MaxDrawCmdCount);
-    
-        Frame->MaxSkinnedDrawCmdCount = 1u << 20;
-        Frame->SkinnedDrawCmdCount = 0;
-        Frame->SkinnedDrawCmds = PushArray(Arena, 0, draw_cmd, Frame->MaxSkinnedDrawCmdCount);
-
-        Frame->MaxSkinningCmdCount = Frame->MaxSkinnedDrawCmdCount;
-        Frame->SkinningCmdCount = 0;
-        Frame->SkinningCmds = PushArray(Arena, 0, skinning_cmd, Frame->MaxSkinningCmdCount);
 
         Frame->MaxParticleDrawCmdCount = 8192u;
         Frame->ParticleDrawCmdCount = 0;
@@ -1984,7 +1985,6 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
 
         Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
 
-#if 1
         Frame->BARBufferSize = Renderer->PerFrameBufferSize;
         Frame->BARBufferAt = 0;
         Frame->BARBufferBase = Renderer->PerFrameBufferMappings[FrameID];
@@ -1992,17 +1992,6 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         Frame->BatchCount = 0;
         Frame->Batches = PushArray(Arena, 0, draw_batch, Frame->MaxBatchCount);
         Frame->LastBatch = nullptr;
-#else
-        Frame->Vertex2DCount = 0;
-        Frame->Vertex2DArray = (vertex_2d*)Renderer->PerFrameVertex2DMappings[FrameID];
-
-        Frame->ParticleCount = 0;
-        Frame->Particles = (render_particle*)Renderer->PerFrameParticleBufferMappings[FrameID];
-
-        Frame->JointCount = 0;
-        Frame->JointMapping = (m4*)Renderer->PerFrameJointBufferMappings[FrameID];
-        Frame->JointBufferAlignment = TruncateU64ToU32(VK.ConstantBufferAlignment) / sizeof(m4);
-#endif
 
         Frame->MaxSkinnedVertexCount = TruncateU64ToU32(R_SkinningBufferSize / sizeof(vertex));
         Frame->SkinnedMeshVertexCount = 0;
@@ -2929,148 +2918,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     };
     vkCmdPipelineBarrier2(PrepassCmd, &EndTransferStageDependency);
 
-    // Upload instance data
-    umm DrawBufferAt = 0;
-    {
-        Frame->Uniforms.OpaqueDrawCount = Frame->DrawCmdCount;
-        Frame->Uniforms.SkinnedDrawCount = Frame->SkinnedDrawCmdCount;
-
-        u32 TotalDrawCount = Frame->DrawCmdCount + Frame->SkinnedDrawCmdCount;
-
-        umm InstanceDataByteCount = (umm)TotalDrawCount * sizeof(instance_data);
-        Assert(InstanceDataByteCount <= Renderer->InstanceMemorySize);
-        Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(instance_data));
-        Assert((Frame->StagingBuffer.At + InstanceDataByteCount) <= Frame->StagingBuffer.Size);
-        umm InstanceDataCopyOffset = Frame->StagingBuffer.At;
-        Frame->StagingBuffer.At += InstanceDataByteCount;
-        instance_data* InstanceDataAt = (instance_data*)OffsetPtr(Frame->StagingBuffer.Base, InstanceDataCopyOffset);
-
-        umm DrawDataByteCount = (umm)TotalDrawCount * sizeof(VkDrawIndexedIndirectCommand);
-        Assert(DrawDataByteCount <= Renderer->DrawMemorySize);
-        Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(VkDrawIndexedIndirectCommand));
-        Assert((Frame->StagingBuffer.At + DrawDataByteCount) <= Frame->StagingBuffer.Size);
-        umm DrawDataCopyOffset = Frame->StagingBuffer.At;
-        Frame->StagingBuffer.At += DrawDataByteCount;
-        VkDrawIndexedIndirectCommand* DrawDataAt = (VkDrawIndexedIndirectCommand*)OffsetPtr(Frame->StagingBuffer.Base, DrawDataCopyOffset);
-        Frame->StagingBuffer.At += InstanceDataByteCount;
-        DrawBufferAt += DrawDataByteCount;
-
-        for (u32 It = 0; It < Frame->DrawCmdCount; It++)
-        {
-            draw_cmd* Cmd = Frame->DrawCmds + It;
-            Cmd->Base.InstanceOffset = It; // HACK(boti)
-            *DrawDataAt++ = 
-            {
-                .indexCount     = Cmd->Base.IndexCount,
-                .instanceCount  = Cmd->Base.InstanceCount,
-                .firstIndex     = Cmd->Base.IndexOffset,
-                .vertexOffset   = (s32)Cmd->Base.VertexOffset,
-                .firstInstance  = Cmd->Base.InstanceOffset,
-            };
-            *InstanceDataAt++ = 
-            {
-                .Transform = Cmd->Transform,
-                .Material = Cmd->Material,
-            };
-        }
-
-        for (u32 It = 0; It < Frame->SkinnedDrawCmdCount; It++)
-        {
-            draw_cmd* Cmd = Frame->SkinnedDrawCmds + It;
-            Cmd->Base.InstanceOffset = Frame->DrawCmdCount + It; // HACK(boti)
-            *DrawDataAt++ = 
-            {
-                .indexCount     = Cmd->Base.IndexCount,
-                .instanceCount  = Cmd->Base.InstanceCount,
-                .firstIndex     = Cmd->Base.IndexOffset,
-                .vertexOffset   = (s32)Cmd->Base.VertexOffset,
-                .firstInstance  = Cmd->Base.InstanceOffset,
-            };
-            *InstanceDataAt++ = 
-            {
-                .Transform = Cmd->Transform,
-                .Material = Cmd->Material,
-            };
-        }
-
-        VkBufferCopy InstanceCopy = 
-        {
-            .srcOffset = InstanceDataCopyOffset,
-            .dstOffset = 0,
-            .size = InstanceDataByteCount,
-        };
-        
-        VkBufferCopy DrawCopy =
-        {
-            .srcOffset = DrawDataCopyOffset,
-            .dstOffset = 0,
-            .size = TotalDrawCount * sizeof(VkDrawIndexedIndirectCommand),
-        };
-
-        VkBufferMemoryBarrier2 BeginBarriers[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                .srcAccessMask = VK_ACCESS_2_NONE,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Renderer->InstanceBuffer,
-                .offset = 0,
-                .size = VK_WHOLE_SIZE,
-            },
-            {
-                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                .srcAccessMask = VK_ACCESS_2_NONE,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Renderer->DrawBuffer,
-                .offset = 0,
-                .size = VK_WHOLE_SIZE,
-            },
-        };
-        VkDependencyInfo BeginDependency = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .pNext = nullptr,
-            .dependencyFlags = 0,
-            .bufferMemoryBarrierCount = CountOf(BeginBarriers),
-            .pBufferMemoryBarriers = BeginBarriers,
-        };
-        vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
-        if (InstanceCopy.size)
-        {
-            vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->InstanceBuffer, 1, &InstanceCopy);
-        }
-        if (DrawCopy.size)
-        {
-            vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->DrawBuffer, 1, &DrawCopy);
-        }
-
-        VkBufferMemoryBarrier2 EndBarrier = 
-        {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-            .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = Renderer->InstanceBuffer,
-            .offset = 0,
-            .size = VK_WHOLE_SIZE,
-        };
-        PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
-    }
-
     u32 TileCountX = CeilDiv(Frame->RenderExtent.X, R_TileSizeX);
     u32 TileCountY = CeilDiv(Frame->RenderExtent.Y, R_TileSizeY);
     Frame->Uniforms.TileCount = { TileCountX, TileCountY };
@@ -3180,22 +3027,183 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     SetupSceneRendering(Frame, CascadeFrustums);
 
     //
-    // Build draw lists and upload draw data
+    // Process commands
+    // - Sort draw groups
+    // - Create skinning commands
+    // - Upload instance/draw data
+    // - Build draw lists
     //
     draw_list PrimaryDrawList = {};
     draw_list CascadeDrawLists[R_MaxShadowCascadeCount] = {};
     draw_list* ShadowDrawLists = PushArray(Frame->Arena, MemPush_Clear, draw_list, 6 * Frame->ShadowCount);
     u32 DrawListCount = 1 + R_MaxShadowCascadeCount + 6 * Frame->ShadowCount;
 
+    u32 SkinnedVertexAt = 0;
+    u32 SkinningCommandCount = Frame->DrawGroupDrawCounts[DrawGroup_Skinned];
+    struct skinning_cmd
     {
+        VkDeviceAddress Address;
+        u32 SrcVertexOffset;
+        u32 DstVertexOffset;
+        u32 VertexCount;
+    };
+    skinning_cmd* SkinningCommands = PushArray(Frame->Arena, 0, skinning_cmd, SkinningCommandCount);
+
+    {
+        Frame->Uniforms.OpaqueDrawCount = Frame->DrawGroupDrawCounts[DrawGroup_Opaque];
+        Frame->Uniforms.SkinnedDrawCount = Frame->DrawGroupDrawCounts[DrawGroup_Skinned];
+        u32 DrawGroupOffsets[DrawGroup_Count] = {};
+        for (u32 GroupIndex = 1; GroupIndex < DrawGroup_Count; GroupIndex++)
+        {
+            DrawGroupOffsets[GroupIndex] = DrawGroupOffsets[GroupIndex - 1] + Frame->DrawGroupDrawCounts[GroupIndex - 1];
+        }
+        u32 InstanceCount = Frame->DrawGroupDrawCounts[DrawGroup_Opaque] + Frame->DrawGroupDrawCounts[DrawGroup_Skinned];
+        instance_data*                  Instances           = PushArray(Frame->Arena, 0, instance_data, InstanceCount);
+        mmbox*                          BoundingBoxes       = PushArray(Frame->Arena, 0, mmbox, InstanceCount);
+        m4*                             Transforms          = PushArray(Frame->Arena, 0, m4, InstanceCount);
+        VkDrawIndexedIndirectCommand*   IndirectCommands    = PushArray(Frame->Arena, 0, VkDrawIndexedIndirectCommand, InstanceCount);
+
+        skinning_cmd* SkinningCommandAt = SkinningCommands;
+        for (u32 CommandIndex = 0; CommandIndex < Frame->CommandCount; CommandIndex++)
+        {
+            draw_command* Command = Frame->Commands + CommandIndex;
+
+            u32 ID = DrawGroupOffsets[Command->Group]++;
+            BoundingBoxes[ID] = Command->BoundingBox;
+            Transforms[ID] = Command->Transform;
+            Instances[ID] = 
+            {
+                .Transform = Command->Transform,
+                .Material = Command->Material,
+            };
+            switch (Command->Group)
+            {
+                case DrawGroup_Opaque:
+                {
+                    IndirectCommands[ID] = 
+                    {
+                        .indexCount = Command->Geometry.IndexBlock->Count,
+                        .instanceCount = 1,
+                        .firstIndex = Command->Geometry.IndexBlock->Offset,
+                        .vertexOffset = (s32)Command->Geometry.VertexBlock->Offset,
+                        .firstInstance = ID,
+                    };
+                } break;
+                case DrawGroup_Skinned:
+                {
+                    u32 VertexCount = Command->Geometry.VertexBlock->Count;
+                    if (SkinnedVertexAt + VertexCount <= R_MaxSkinnedVertexCount)
+                    {
+                        *SkinningCommandAt++ = 
+                        {
+                            .Address = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Command->BARBufferOffset,
+                            .SrcVertexOffset = Command->Geometry.VertexBlock->Offset,
+                            .DstVertexOffset = SkinnedVertexAt,
+                            .VertexCount = VertexCount,
+                        };
+                        IndirectCommands[ID] = 
+                        {
+                            .indexCount = Command->Geometry.IndexBlock->Count,
+                            .instanceCount = 1,
+                            .firstIndex = Command->Geometry.IndexBlock->Offset,
+                            .vertexOffset = (s32)SkinnedVertexAt,
+                            .firstInstance = ID,
+                        };
+                        SkinnedVertexAt += VertexCount;
+                    }
+                } break;
+                default:
+                {
+                    // Ignored
+                } break;
+            }
+        }
+
+        // Upload instance data
+        Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(instance_data));
+        umm InstanceDataByteCount = InstanceCount * sizeof(instance_data);
+        if (Frame->StagingBuffer.At + InstanceDataByteCount <= Frame->StagingBuffer.Size)
+        {
+            if (InstanceDataByteCount)
+            {
+                memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At), Instances, InstanceDataByteCount);
+                VkBufferCopy Copy = 
+                {
+                    .srcOffset = Frame->StagingBuffer.At,
+                    .dstOffset = 0,
+                    .size = InstanceDataByteCount,
+                };
+                vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->InstanceBuffer, 1, &Copy);
+
+                VkBufferMemoryBarrier2 EndBarrier = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .buffer = Renderer->InstanceBuffer,
+                    .offset = 0,
+                    .size = VK_WHOLE_SIZE,
+                };
+                PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
+                Frame->StagingBuffer.At += InstanceDataByteCount;
+            }
+        }
+        else
+        {
+            UnhandledError("Out of staging memory when uploading instance data");
+        }
+
+        // Upload (global) draw data
+        Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(VkDrawIndexedIndirectCommand));
+        umm DrawDataByteCount = InstanceCount * sizeof(VkDrawIndexedIndirectCommand);
+        if (Frame->StagingBuffer.At + DrawDataByteCount <= Frame->StagingBuffer.Size)
+        {
+            if (DrawDataByteCount)
+            {
+                memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At), IndirectCommands, DrawDataByteCount);
+                VkBufferCopy Copy = 
+                {
+                    .srcOffset = Frame->StagingBuffer.At,
+                    .dstOffset = 0,
+                    .size = DrawDataByteCount,
+                };
+                vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->DrawBuffer, 1, &Copy);
+
+                VkBufferMemoryBarrier2 EndBarrier = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .buffer = Renderer->DrawBuffer,
+                    .offset = 0,
+                    .size = VK_WHOLE_SIZE,
+                };
+                PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
+                Frame->StagingBuffer.At += DrawDataByteCount;
+            }
+        }
+        else
+        {
+            UnhandledError("Out of staging memory when uploading draw data");
+        }
+
         Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(VkDrawIndexedIndirectCommand));
         Assert(Frame->StagingBuffer.At <= Frame->StagingBuffer.Size);
-        umm MaxDrawCountPerDrawList = Frame->DrawCmdCount + Frame->SkinnedDrawCmdCount;
-        umm MaxMemorySizePerDrawList = sizeof(VkDrawIndexedIndirectCommand) * MaxDrawCountPerDrawList;
+        umm MaxMemorySizePerDrawList = InstanceCount * sizeof(VkDrawIndexedIndirectCommand);
         umm CopySrcAt = Frame->StagingBuffer.At;
         umm TotalDrawCount = 0;
+        umm DrawBufferAt = InstanceCount * sizeof(VkDrawIndexedIndirectCommand);
         umm DrawCopyOffset = DrawBufferAt;
-
         for (u32 DrawListIndex = 0; DrawListIndex < DrawListCount; DrawListIndex++)
         {
             frustum* Frustum = nullptr;
@@ -3228,57 +3236,33 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             DrawList->DrawBufferOffset = DrawBufferAt;
             VkDrawIndexedIndirectCommand* DstAt = (VkDrawIndexedIndirectCommand*)OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At);
             umm TotalDrawCountPerList = 0;
-            for (u32 Group = 0; Group < DrawGroup_Count; Group++)
-            {
-                u32 CmdCount = 0;
-                draw_cmd* FirstCmd = nullptr;
-                switch (Group)
-                {
-                    case DrawGroup_Opaque: 
-                    {
-                        CmdCount = Frame->DrawCmdCount;
-                        FirstCmd = Frame->DrawCmds;
-                    } break;
-                    case DrawGroup_AlphaTest:
-                    {
-                    } break;
-                    case DrawGroup_Skinned: 
-                    {
-                        CmdCount = Frame->SkinnedDrawCmdCount;
-                        FirstCmd = Frame->SkinnedDrawCmds;
-                    } break;
-                    InvalidDefaultCase;
-                }
-                
-                for (u32 CmdIndex = 0; CmdIndex < CmdCount; CmdIndex++)
-                {
-                    draw_cmd* Cmd = FirstCmd + CmdIndex;
-                    b32 IsVisible = true;
 
-                    // NOTE(boti): We don't have correct BBox information about skinned meshes,
-                    //             so those are never culled
-                    if (Frustum && (Group != DrawGroup_Skinned))
+            u32 CurrentGroupIndex = 0;
+            for (u32 InstanceIndex = 0; InstanceIndex < InstanceCount; InstanceIndex++)
+            {
+                while (InstanceIndex >= DrawGroupOffsets[CurrentGroupIndex])
+                {
+                    CurrentGroupIndex++;
+                }
+
+                b32 IsVisible = true;
+                if (Frustum)
+                {
+                    // NOTE(boti): Only cull opaque meshes for now
+                    if (InstanceIndex < Frame->DrawGroupDrawCounts[DrawGroup_Opaque])
                     {
-                        IsVisible = IntersectFrustumBox(Frustum, Cmd->BoundingBox, Cmd->Transform);
-                    }
-            
-                    if (IsVisible)
-                    {
-                        DrawList->DrawGroupDrawCounts[Group] += 1;
-                        *DstAt++ = 
-                        {
-                            .indexCount     = Cmd->Base.IndexCount,
-                            .instanceCount  = Cmd->Base.InstanceCount,
-                            .firstIndex     = Cmd->Base.IndexOffset,
-                            .vertexOffset   = (s32)Cmd->Base.VertexOffset,
-                            .firstInstance  = Cmd->Base.InstanceOffset,
-                        };
+                        IsVisible = IntersectFrustumBox(Frustum, BoundingBoxes[InstanceIndex], Transforms[InstanceIndex]);
                     }
                 }
-                
-                TotalDrawCountPerList += DrawList->DrawGroupDrawCounts[Group];
+
+                if (IsVisible)
+                {
+                    TotalDrawCountPerList++;
+                    DrawList->DrawGroupDrawCounts[CurrentGroupIndex]++;
+                    *DstAt++ = IndirectCommands[InstanceIndex];
+                }
             }
-            
+
             TotalDrawCount += TotalDrawCountPerList;
             umm MemorySize = TotalDrawCountPerList * sizeof(VkDrawIndexedIndirectCommand);
             DrawBufferAt += MemorySize;
@@ -3344,6 +3328,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         PushBeginBarrier(&FrameStages[FrameStage_Prepass], &MipFeedbackClearBarrier);
     }
 
+    // Upload uniform data
+    memcpy(Frame->UniformData, &Frame->Uniforms, sizeof(Frame->Uniforms));
     EndFrameStage(PrepassCmd, &FrameStages[FrameStage_Upload]);
 
     // Per-frame descriptor update
@@ -3443,23 +3429,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         pipeline_with_layout SkinningPipeline = Renderer->Pipelines[Pipeline_Skinning];
         vkCmdBindPipeline(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, SkinningPipeline.Pipeline);
 
-        for (u32 SkinningCmdIndex = 0; SkinningCmdIndex < Frame->SkinningCmdCount; SkinningCmdIndex++)
+        for (u32 SkinningCmdIndex = 0; SkinningCmdIndex < SkinningCommandCount; SkinningCmdIndex++)
         {
-            skinning_cmd* Cmd = Frame->SkinningCmds + SkinningCmdIndex;
-            struct
-            {
-                VkDeviceAddress Joints;
-                u32 SrcOffset;
-                u32 DstOffset;
-                u32 Count;
-            } Push;
-            Push.Joints = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Cmd->PoseOffset;
-            Push.SrcOffset = Cmd->SrcVertexOffset;
-            Push.DstOffset = Cmd->DstVertexOffset;
-            Push.Count = Cmd->VertexCount;
-            
+            skinning_cmd* Cmd = SkinningCommands + SkinningCmdIndex;
             vkCmdPushConstants(PrepassCmd, SkinningPipeline.Layout, VK_SHADER_STAGE_ALL,
-                               0, sizeof(Push), &Push);
+                               0, sizeof(*Cmd), Cmd);
             vkCmdDispatch(PrepassCmd, CeilDiv(Cmd->VertexCount, Skin_GroupSizeX), 1, 1);
         }
 
@@ -5418,7 +5392,4 @@ internal void SetupSceneRendering(render_frame* Frame, frustum* CascadeFrustums)
             }
         }
     }
-
-    // Upload uniform data
-    memcpy(Frame->UniformData, &Frame->Uniforms, sizeof(Frame->Uniforms));
 }

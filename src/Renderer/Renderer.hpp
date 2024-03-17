@@ -662,15 +662,6 @@ struct render_config
     static constexpr f32 DefaultBloomStrength = 0.04f;
 };
 
-enum draw_group : u32
-{
-    DrawGroup_Opaque = 0,
-    DrawGroup_AlphaTest,
-    DrawGroup_Skinned,
-
-    DrawGroup_Count,
-};
-
 typedef u32 vert_index;
 
 struct vertex_skin8
@@ -712,7 +703,7 @@ struct particle_cmd
 struct draw_batch
 {
     umm BufferOffset;
-    umm ByteCount; // NOTE(boti): Total allocated bytes in batch
+    umm ByteCount;
     u32 VertexCount;
 };
 
@@ -735,27 +726,23 @@ struct draw_indirect_index_cmd
     u32 InstanceOffset;
 };
 
-struct draw_cmd
-{
-    draw_indirect_index_cmd Base;
-    m4 Transform;
-    mmbox BoundingBox;
-    renderer_material Material;
-};
-
-struct skinning_cmd
-{
-    u32 SrcVertexOffset;
-    u32 DstVertexOffset;
-    u32 VertexCount;
-    u32 PoseOffset;
-};
-
 struct draw_widget3d_cmd
 {
     draw_indirect_index_cmd Base;
     m4 Transform;
     rgba8 Color;
+};
+
+enum draw_group : u32
+{
+    DrawGroup_Opaque = 0,
+    DrawGroup_AlphaTest,
+    DrawGroup_Skinned,
+    DrawGroup_Particle,
+    DrawGroup_Widget3D,
+    DrawGroup_UI,
+
+    DrawGroup_Count,
 };
 
 struct geometry_buffer_block
@@ -771,6 +758,40 @@ struct geometry_buffer_allocation
 {
     geometry_buffer_block* VertexBlock;
     geometry_buffer_block* IndexBlock;
+};
+
+enum cmd_type : u32
+{
+    Cmd_End = 0,
+    
+    Cmd_Draw,
+};
+
+struct draw_command
+{
+    draw_group Group;
+    mmbox BoundingBox;
+    renderer_material Material;
+    m4 Transform;
+
+    umm BARBufferOffset;
+    union
+    {
+        geometry_buffer_allocation Geometry;
+        struct
+        {
+            umm BufferOffset;
+            u32 MaxParticleCount;
+            u32 ParticleCount;
+            billboard_mode Mode;
+        } Particle;
+        struct
+        {
+            umm BufferOffset;
+            umm ByteCount; // NOTE(boti): Total allocated bytes in batch
+            u32 VertexCount;
+        } UI;
+    };
 };
 
 enum transfer_op_type : u32
@@ -881,7 +902,8 @@ struct render_frame
     staging_buffer StagingBuffer;
 
     // Limits
-    static constexpr u32 MaxTransferOpCount         = (1u << 15);
+    static constexpr u32 MaxTransferOpCount     = (1u << 15);
+    static constexpr u32 MaxCommandCount    = (1u << 17);
 
     u32 MaxLightCount;
     u32 MaxShadowCount;
@@ -890,6 +912,10 @@ struct render_frame
     u32 MaxSkinningCmdCount;
     u32 MaxParticleDrawCmdCount;
     u32 MaxDrawWidget3DCmdCount;
+
+    u32             CommandCount;
+    draw_command*   Commands;
+    u32             DrawGroupDrawCounts[DrawGroup_Count];
 
     // TODO(boti): There's no need to have the skinned vertex count in the frontend, the backend
     // can just keep track of everything when executing the skinning cmds
@@ -912,19 +938,9 @@ struct render_frame
     u32 ShadowCount;
     u32* Shadows;
 
-    u32 DrawCmdCount;
-    draw_cmd* DrawCmds;
-    
-    u32 SkinnedDrawCmdCount;
-    draw_cmd* SkinnedDrawCmds;
-
     umm BARBufferSize;
     umm BARBufferAt;
     void* BARBufferBase;
-
-
-    u32 SkinningCmdCount;
-    skinning_cmd* SkinningCmds;
 
     u32 ParticleDrawCmdCount;
     particle_cmd* ParticleDrawCmds;
@@ -972,17 +988,10 @@ DrawMesh(render_frame* Frame,
          geometry_buffer_allocation Allocation, 
          m4 Transform,
          mmbox BoundingBox,
-         renderer_material Material);
+         renderer_material Material,
+         u32 JointCount, m4* Pose);
 
-inline b32 
-DrawSkinnedMesh(render_frame* Frame,
-                geometry_buffer_allocation Allocation,
-                m4 Transform,
-                mmbox BoundingBox,
-                renderer_material Material,
-                u32 JointCount, m4* Pose);
-
-inline b32 
+inline b32
 DrawWidget3D(render_frame* Frame,
              geometry_buffer_allocation Allocation,
              m4 Transform, rgba8 Color);
@@ -1338,77 +1347,47 @@ DrawMesh(render_frame* Frame,
          geometry_buffer_allocation Allocation,
          m4 Transform,
          mmbox BoundingBox,
-         renderer_material Material)
+         renderer_material Material,
+         u32 JointCount, m4* Pose)
 {
-    b32 Result = false;
-    if (Frame->DrawCmdCount < Frame->MaxDrawCmdCount)
+    b32 Result = true;
+    if (Frame->CommandCount < Frame->MaxCommandCount)
     {
-        Frame->DrawCmds[Frame->DrawCmdCount++] = 
+        draw_group Group = JointCount ? DrawGroup_Skinned : DrawGroup_Opaque;
+        Frame->DrawGroupDrawCounts[Group]++;
+        umm BARBufferOffset = Frame->BARBufferAt;
+        if (Group == DrawGroup_Skinned)
         {
-            .Base = 
+            BARBufferOffset = Align(Frame->BARBufferAt, sizeof(m4));
+            umm PoseByteCount = JointCount * sizeof(m4);
+            if (BARBufferOffset + PoseByteCount <= Frame->BARBufferSize)
             {
-                .IndexCount = Allocation.IndexBlock->Count,
-                .InstanceCount = 1,
-                .IndexOffset = Allocation.IndexBlock->Offset,
-                .VertexOffset = Allocation.VertexBlock->Offset,
-                .InstanceOffset = 0,
-            },
-            .Transform = Transform,
+                memcpy(OffsetPtr(Frame->BARBufferBase, BARBufferOffset), Pose, PoseByteCount);
+                Frame->BARBufferAt = BARBufferOffset + PoseByteCount;
+            }
+            else
+            {
+                // TODO(boti): logging
+                // NOTE(boti): Fall back to opaque rendering if there's not enough memory to store the pose
+                Group = DrawGroup_Opaque;
+                BARBufferOffset = Frame->BARBufferAt;
+            }
+        }
+
+        Frame->Commands[Frame->CommandCount++] =
+        {
+            .Group = Group,
             .BoundingBox = BoundingBox,
             .Material = Material,
-        };
-        Result = true;
-    }
-    return(Result);
-}
-
-inline b32 
-DrawSkinnedMesh(render_frame* Frame,
-                geometry_buffer_allocation Allocation,
-                m4 Transform,
-                mmbox BoundingBox,
-                renderer_material Material,
-                u32 JointCount, m4* Pose)
-{
-    b32 Result = false;
-
-    umm PoseSize = JointCount * sizeof(m4);
-    umm EffectiveOffset = Align(Frame->BARBufferAt, sizeof(m4));
-    if ((Frame->SkinningCmdCount < Frame->MaxSkinningCmdCount) &&
-        (Frame->SkinnedDrawCmdCount < Frame->MaxSkinnedDrawCmdCount) &&
-        (Frame->SkinnedMeshVertexCount + Allocation.VertexBlock->Count <= Frame->MaxSkinnedVertexCount) &&
-        (EffectiveOffset + PoseSize <= Frame->BARBufferSize))
-    {
-        u32 DstVertexOffset = Frame->SkinnedMeshVertexCount;
-        Frame->SkinnedMeshVertexCount += Allocation.VertexBlock->Count;
-        Frame->BARBufferAt = EffectiveOffset + PoseSize;
-
-        memcpy(OffsetPtr(Frame->BARBufferBase, EffectiveOffset), Pose, JointCount * sizeof(m4));
-        Frame->SkinningCmds[Frame->SkinningCmdCount++] =
-        {
-            .SrcVertexOffset = Allocation.VertexBlock->Offset,
-            .DstVertexOffset = DstVertexOffset,
-            .VertexCount = Allocation.VertexBlock->Count,
-            .PoseOffset = (u32)EffectiveOffset, // TODO(boti)
-        };
-
-        Frame->SkinnedDrawCmds[Frame->SkinnedDrawCmdCount++] = 
-        {
-            .Base = 
-            {
-                .IndexCount = Allocation.IndexBlock->Count,
-                .InstanceCount = 1,
-                .IndexOffset = Allocation.IndexBlock->Offset,
-                .VertexOffset = DstVertexOffset,
-                .InstanceOffset = 0,
-            },
             .Transform = Transform,
-            .BoundingBox = BoundingBox,
-            .Material = Material,
+            .BARBufferOffset = BARBufferOffset,
+            .Geometry = Allocation,
         };
-        Result = true;
     }
-
+    else
+    {
+        Result = false;
+    }
     return(Result);
 }
 
