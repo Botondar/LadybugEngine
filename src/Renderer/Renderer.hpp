@@ -707,32 +707,6 @@ struct draw_batch
     u32 VertexCount;
 };
 
-// NOTE(boti): binary-compatible with Vulkan/D3D12
-struct draw_indirect_cmd
-{
-    u32 VertexCount;
-    u32 InstanceCount;
-    u32 VertexOffset;
-    u32 InstanceOffset;
-};
-
-// NOTE(boti): binary-compatible with Vulkan/D3D12
-struct draw_indirect_index_cmd
-{
-    u32 IndexCount;
-    u32 InstanceCount;
-    u32 IndexOffset;
-    u32 VertexOffset;
-    u32 InstanceOffset;
-};
-
-struct draw_widget3d_cmd
-{
-    draw_indirect_index_cmd Base;
-    m4 Transform;
-    rgba8 Color;
-};
-
 enum draw_group : u32
 {
     DrawGroup_Opaque = 0,
@@ -792,6 +766,13 @@ struct draw_command
             u32 VertexCount;
         } UI;
     };
+};
+
+struct draw_widget3d_cmd
+{
+    geometry_buffer_allocation Geometry;
+    m4 Transform;
+    rgba8 Color;
 };
 
 enum transfer_op_type : u32
@@ -1396,23 +1377,19 @@ DrawWidget3D(render_frame* Frame,
              geometry_buffer_allocation Allocation,
              m4 Transform, rgba8 Color)
 {
-    b32 Result = false;
+    b32 Result = true;
     if (Frame->DrawWidget3DCmdCount < Frame->MaxDrawWidget3DCmdCount)
     {
         Frame->DrawWidget3DCmds[Frame->DrawWidget3DCmdCount++] = 
         {
-            .Base = 
-            {
-                .IndexCount = Allocation.IndexBlock->Count,
-                .InstanceCount = 1,
-                .IndexOffset = Allocation.IndexBlock->Offset,
-                .VertexOffset = Allocation.VertexBlock->Offset,
-                .InstanceOffset = 0,
-            },
+            .Geometry = Allocation,
             .Transform = Transform,
             .Color = Color,
         };
-        Result = true;
+    }
+    else
+    {
+        Result = false;
     }
     return(Result);
 }

@@ -3163,6 +3163,31 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     VkCommandBuffer SkinningCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_None);
     vkCmdBindPipeline(SkinningCB, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->Pipelines[Pipeline_Skinning].Pipeline);
 
+    VkCommandBuffer ParticleCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_Quad);
+    {
+        vkCmdBeginDebugUtilsLabelEXT(ParticleCB, "Particles");
+        vkCmdSetViewport(ParticleCB, 0, 1, &PrimaryViewport);
+        vkCmdSetScissor(ParticleCB, 0, 1, &PrimaryScissor);
+
+        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Quad];
+        vkCmdBindPipeline(ParticleCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+
+        for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
+        {
+            particle_cmd* Cmd = Frame->ParticleDrawCmds + CmdIndex;
+            struct
+            {
+                VkDeviceAddress ParticleAddress;
+                billboard_mode Mode;
+            } Push;
+            Push.ParticleAddress = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Cmd->BufferOffset,
+            Push.Mode = Cmd->Mode,
+            vkCmdPushConstants(ParticleCB, Pipeline.Layout, VK_SHADER_STAGE_ALL, 0, sizeof(Push), &Push);
+            vkCmdDraw(ParticleCB, 6 * Cmd->ParticleCount, 1, 0, 0);
+        }
+
+        vkCmdEndDebugUtilsLabelEXT(ParticleCB);
+    }
     VkCommandBuffer Widget3DCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_Gizmo);
     {
         vkCmdBeginDebugUtilsLabelEXT(Widget3DCB, "3D GUI");
@@ -3189,7 +3214,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             Push.Color = Cmd->Color;
             vkCmdPushConstants(Widget3DCB, Pipeline.Layout, VK_SHADER_STAGE_ALL,
                                0, sizeof(Push), &Push);
-            vkCmdDrawIndexed(Widget3DCB, Cmd->Base.IndexCount, Cmd->Base.InstanceCount, Cmd->Base.IndexOffset, Cmd->Base.VertexOffset, Cmd->Base.InstanceOffset);
+            vkCmdDrawIndexed(Widget3DCB, Cmd->Geometry.IndexBlock->Count, 1, Cmd->Geometry.IndexBlock->Offset, Cmd->Geometry.VertexBlock->Offset, 0);
         }
         vkCmdEndDebugUtilsLabelEXT(Widget3DCB);
     }
@@ -3485,6 +3510,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
         }
     }
+    EndCommandBuffer(ParticleCB);
     EndCommandBuffer(Widget3DCB);
     EndCommandBuffer(GuiCB);
     EndCommandBuffer(SkinningCB);
@@ -4405,7 +4431,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     {
         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
         .pNext = nullptr,
-        .flags = 0,
+        .flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT,
         .renderArea = { { 0, 0 }, { Frame->RenderExtent.X, Frame->RenderExtent.Y } },
         .layerCount = 1,
         .viewMask = 0,
@@ -4501,28 +4527,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
     vkCmdEndDebugUtilsLabelEXT(RenderCmd);
 
-    // Particles
-    vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Particles");
-    {
-        pipeline_with_layout ParticlePipeline = Renderer->Pipelines[Pipeline_Quad];
-        vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ParticlePipeline.Pipeline);
-
-        for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
-        {
-            particle_cmd* Cmd = Frame->ParticleDrawCmds + CmdIndex;
-
-            struct
-            {
-                VkDeviceAddress ParticleAddress;
-                billboard_mode Mode;
-            } Push;
-            Push.ParticleAddress = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Cmd->BufferOffset,
-            Push.Mode = Cmd->Mode,
-            vkCmdPushConstants(RenderCmd, ParticlePipeline.Layout, VK_SHADER_STAGE_ALL, 0, sizeof(Push), &Push);
-            vkCmdDraw(RenderCmd, 6 * Cmd->ParticleCount, 1, 0, 0);
-        }
-    }
-    vkCmdEndDebugUtilsLabelEXT(RenderCmd);
+    vkCmdExecuteCommands(RenderCmd, 1, &ParticleCB);
 
     vkCmdEndRendering(RenderCmd);
 
