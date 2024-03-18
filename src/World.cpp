@@ -720,10 +720,10 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             }
         }
 
-        particle_cmd* Cmd = MakeParticleBatch(Frame, 0);
+        render_command* Cmd = MakeParticleBatch(Frame, 0);
         if (Cmd)
         {
-            Cmd->Mode = ParticleSystem->Mode;
+            Cmd->ParticleBatch.Mode = ParticleSystem->Mode;
         }
 
         for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
@@ -765,10 +765,10 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     // Ad-hoc lights
     if (0)
     {
-        particle_cmd* Cmd = MakeParticleBatch(Frame, World->AdHocLightCount);
+        render_command* Cmd = MakeParticleBatch(Frame, World->AdHocLightCount);
         if (Cmd)
         {
-            Cmd->Mode = Billboard_ViewAligned;
+            Cmd->ParticleBatch.Mode = Billboard_ViewAligned;
         }
 
         b32 DoVelocityUpdate = false;

@@ -1871,12 +1871,6 @@ DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, draw_list* List)
             {
                 VertexBuffer = Frame->Renderer->SkinningBuffer;
             } break;
-            case DrawGroup_Particle:
-            case DrawGroup_Widget3D:
-            case DrawGroup_UI:
-            {
-                continue;
-            } break;
             InvalidDefaultCase;
         }
 
@@ -2084,11 +2078,12 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         Frame->TransferOpCount = 0;
 
         Frame->CommandCount = 0;
-        Frame->Commands = PushArray(Arena, 0, draw_command, Frame->MaxCommandCount);
+        Frame->Commands = PushArray(Arena, 0, render_command, Frame->MaxCommandCount);
         for (u32 GroupIndex = 0; GroupIndex < DrawGroup_Count; GroupIndex++)
         {
             Frame->DrawGroupDrawCounts[GroupIndex] = 0;
         }
+        Frame->LastBatch2D = nullptr;
 
         Frame->MaxLightCount = R_MaxLightCount;
         Frame->LightCount = 0;
@@ -2097,27 +2092,12 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         Frame->MaxShadowCount = R_MaxShadowCount;
         Frame->ShadowCount = 0;
         Frame->Shadows = PushArray(Arena, 0, u32, Frame->MaxShadowCount);
-
-        Frame->MaxParticleDrawCmdCount = 8192u;
-        Frame->ParticleDrawCmdCount = 0;
-        Frame->ParticleDrawCmds = PushArray(Arena, 0, particle_cmd, Frame->MaxParticleDrawCmdCount);
-
-        Frame->MaxDrawWidget3DCmdCount = 1u << 16;
-        Frame->DrawWidget3DCmdCount = 0;
-        Frame->DrawWidget3DCmds = PushArray(Arena, 0, draw_widget3d_cmd, Frame->MaxDrawWidget3DCmdCount);
-
+        
         Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
 
         Frame->BARBufferSize = Renderer->PerFrameBufferSize;
         Frame->BARBufferAt = 0;
         Frame->BARBufferBase = Renderer->PerFrameBufferMappings[FrameID];
-
-        Frame->BatchCount = 0;
-        Frame->Batches = PushArray(Arena, 0, draw_batch, Frame->MaxBatchCount);
-        Frame->LastBatch = nullptr;
-
-        Frame->MaxSkinnedVertexCount = TruncateU64ToU32(R_SkinningBufferSize / sizeof(vertex));
-        Frame->SkinnedMeshVertexCount = 0;
     }
 
     Frame->RenderExtent.X = Renderer->SurfaceExtent.width;
@@ -3141,10 +3121,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     //
     // Process commands
-    // - Sort draw groups
-    // - Create skinning commands
-    // - Upload instance/draw data
-    // - Build draw lists
     //
     draw_list PrimaryDrawList = {};
     draw_list CascadeDrawLists[R_MaxShadowCascadeCount] = {};
@@ -3164,59 +3140,23 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     vkCmdBindPipeline(SkinningCB, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->Pipelines[Pipeline_Skinning].Pipeline);
 
     VkCommandBuffer ParticleCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_Quad);
-    {
-        vkCmdBeginDebugUtilsLabelEXT(ParticleCB, "Particles");
-        vkCmdSetViewport(ParticleCB, 0, 1, &PrimaryViewport);
-        vkCmdSetScissor(ParticleCB, 0, 1, &PrimaryScissor);
+    vkCmdBeginDebugUtilsLabelEXT(ParticleCB, "Particles");
+    vkCmdSetViewport(ParticleCB, 0, 1, &PrimaryViewport);
+    vkCmdSetScissor(ParticleCB, 0, 1, &PrimaryScissor);
+    vkCmdBindPipeline(ParticleCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->Pipelines[Pipeline_Quad].Pipeline);
 
-        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Quad];
-        vkCmdBindPipeline(ParticleCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-
-        for (u32 CmdIndex = 0; CmdIndex < Frame->ParticleDrawCmdCount; CmdIndex++)
-        {
-            particle_cmd* Cmd = Frame->ParticleDrawCmds + CmdIndex;
-            struct
-            {
-                VkDeviceAddress ParticleAddress;
-                billboard_mode Mode;
-            } Push;
-            Push.ParticleAddress = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Cmd->BufferOffset,
-            Push.Mode = Cmd->Mode,
-            vkCmdPushConstants(ParticleCB, Pipeline.Layout, VK_SHADER_STAGE_ALL, 0, sizeof(Push), &Push);
-            vkCmdDraw(ParticleCB, 6 * Cmd->ParticleCount, 1, 0, 0);
-        }
-
-        vkCmdEndDebugUtilsLabelEXT(ParticleCB);
-    }
+        
     VkCommandBuffer Widget3DCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_Gizmo);
     {
         vkCmdBeginDebugUtilsLabelEXT(Widget3DCB, "3D GUI");
         vkCmdSetViewport(Widget3DCB, 0, 1, &PrimaryViewport);
         vkCmdSetScissor(Widget3DCB, 0, 1, &PrimaryScissor);
 
-        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Gizmo];
-        vkCmdBindPipeline(Widget3DCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+        vkCmdBindPipeline(Widget3DCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->Pipelines[Pipeline_Gizmo].Pipeline);
 
         const VkDeviceSize ZeroOffset = 0;
         vkCmdBindVertexBuffers(Widget3DCB, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
         vkCmdBindIndexBuffer(Widget3DCB, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
-
-        for (u32 CmdIndex = 0; CmdIndex < Frame->DrawWidget3DCmdCount; CmdIndex++)
-        {
-            draw_widget3d_cmd* Cmd = Frame->DrawWidget3DCmds + CmdIndex;
-
-            struct
-            {
-                m4 Transform;
-                rgba8 Color;
-            } Push;
-            Push.Transform = Cmd->Transform;
-            Push.Color = Cmd->Color;
-            vkCmdPushConstants(Widget3DCB, Pipeline.Layout, VK_SHADER_STAGE_ALL,
-                               0, sizeof(Push), &Push);
-            vkCmdDrawIndexed(Widget3DCB, Cmd->Geometry.IndexBlock->Count, 1, Cmd->Geometry.IndexBlock->Offset, Cmd->Geometry.VertexBlock->Offset, 0);
-        }
-        vkCmdEndDebugUtilsLabelEXT(Widget3DCB);
     }
 
     VkCommandBuffer GuiCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_UI);
@@ -3225,22 +3165,13 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdSetViewport(GuiCB, 0, 1, &PrimaryViewport);
         vkCmdSetScissor(GuiCB, 0, 1, &PrimaryScissor);
 
-        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_UI];
-        vkCmdBindPipeline(GuiCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
+        vkCmdBindPipeline(GuiCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->Pipelines[Pipeline_UI].Pipeline);
         m4 OrthoTransform = M4(2.0f / Frame->RenderExtent.X, 0.0f, 0.0f, -1.0f,
                                0.0f, 2.0f / Frame->RenderExtent.Y, 0.0f, -1.0f,
                                0.0f, 0.0f, 1.0f, 0.0f,
                                0.0f, 0.0f, 0.0f, 1.0f);
-        vkCmdPushConstants(GuiCB, Pipeline.Layout, VK_SHADER_STAGE_ALL, 
+        vkCmdPushConstants(GuiCB, Renderer->Pipelines[Pipeline_UI].Layout, VK_SHADER_STAGE_ALL, 
                            0, sizeof(OrthoTransform), &OrthoTransform);
-
-        for (u32 BatchIndex = 0; BatchIndex < Frame->BatchCount; BatchIndex++)
-        {
-            draw_batch* Batch = Frame->Batches + BatchIndex;
-            vkCmdBindVertexBuffers(GuiCB, 0, 1, &Renderer->PerFrameBuffers[Frame->FrameID], &Batch->BufferOffset);
-            vkCmdDraw(GuiCB, Batch->VertexCount, 1, 0, 0);
-        }
-        vkCmdEndDebugUtilsLabelEXT(GuiCB);
     }
 
     {
@@ -3259,66 +3190,105 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         for (u32 CommandIndex = 0; CommandIndex < Frame->CommandCount; CommandIndex++)
         {
-            draw_command* Command = Frame->Commands + CommandIndex;
-
-            u32 ID = DrawGroupOffsets[Command->Group]++;
-            BoundingBoxes[ID] = Command->BoundingBox;
-            Transforms[ID] = Command->Transform;
-            Instances[ID] = 
+            render_command* Command = Frame->Commands + CommandIndex;
+            switch (Command->Type)
             {
-                .Transform = Command->Transform,
-                .Material = Command->Material,
-            };
-            switch (Command->Group)
-            {
-                case DrawGroup_Opaque:
+                case RenderCommand_Draw:
                 {
-                    IndirectCommands[ID] = 
+                    draw_command* Draw = &Command->Draw;
+                    u32 ID = DrawGroupOffsets[Draw->Group]++;
+                    BoundingBoxes[ID] = Draw->BoundingBox;
+                    Transforms[ID] = Draw->Transform;
+                    Instances[ID] = 
                     {
-                        .indexCount = Command->Geometry.IndexBlock->Count,
-                        .instanceCount = 1,
-                        .firstIndex = Command->Geometry.IndexBlock->Offset,
-                        .vertexOffset = (s32)Command->Geometry.VertexBlock->Offset,
-                        .firstInstance = ID,
+                        .Transform = Draw->Transform,
+                        .Material = Draw->Material,
                     };
-                } break;
-                case DrawGroup_Skinned:
-                {
-                    u32 VertexCount = Command->Geometry.VertexBlock->Count;
-                    if (SkinnedVertexAt + VertexCount <= R_MaxSkinnedVertexCount)
+                    switch (Draw->Group)
                     {
-                        struct skinning_constants
+                        case DrawGroup_Opaque:
                         {
-                            VkDeviceAddress Address;
-                            u32 SrcVertexOffset;
-                            u32 DstVertexOffset;
-                            u32 VertexCount;
-                        };
-                        skinning_constants Push =
+                            IndirectCommands[ID] = 
+                            {
+                                .indexCount = Draw->Geometry.IndexBlock->Count,
+                                .instanceCount = 1,
+                                .firstIndex = Draw->Geometry.IndexBlock->Offset,
+                                .vertexOffset = (s32)Draw->Geometry.VertexBlock->Offset,
+                                .firstInstance = ID,
+                            };
+                        } break;
+                        case DrawGroup_Skinned:
                         {
-                            .Address = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Command->BARBufferOffset,
-                            .SrcVertexOffset = Command->Geometry.VertexBlock->Offset,
-                            .DstVertexOffset = SkinnedVertexAt,
-                            .VertexCount = VertexCount,
-                        };
-                        vkCmdPushConstants(SkinningCB, Renderer->Pipelines[Pipeline_Skinning].Layout, VK_SHADER_STAGE_ALL,
-                                           0, sizeof(Push), &Push);
-                        vkCmdDispatch(SkinningCB, CeilDiv(VertexCount, Skin_GroupSizeX), 1, 1);
-                        IndirectCommands[ID] = 
+                            u32 VertexCount = Draw->Geometry.VertexBlock->Count;
+                            if (SkinnedVertexAt + VertexCount <= R_MaxSkinnedVertexCount)
+                            {
+                                struct skinning_constants
+                                {
+                                    VkDeviceAddress Address;
+                                    u32 SrcVertexOffset;
+                                    u32 DstVertexOffset;
+                                    u32 VertexCount;
+                                };
+                                skinning_constants Push =
+                                {
+                                    .Address = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Command->BARBufferAt,
+                                    .SrcVertexOffset = Draw->Geometry.VertexBlock->Offset,
+                                    .DstVertexOffset = SkinnedVertexAt,
+                                    .VertexCount = VertexCount,
+                                };
+                                vkCmdPushConstants(SkinningCB, Renderer->Pipelines[Pipeline_Skinning].Layout, VK_SHADER_STAGE_ALL,
+                                                   0, sizeof(Push), &Push);
+                                vkCmdDispatch(SkinningCB, CeilDiv(VertexCount, Skin_GroupSizeX), 1, 1);
+                                IndirectCommands[ID] = 
+                                {
+                                    .indexCount = Draw->Geometry.IndexBlock->Count,
+                                    .instanceCount = 1,
+                                    .firstIndex = Draw->Geometry.IndexBlock->Offset,
+                                    .vertexOffset = (s32)SkinnedVertexAt,
+                                    .firstInstance = ID,
+                                };
+                                SkinnedVertexAt += VertexCount;
+                            }
+                        } break;
+                        default:
                         {
-                            .indexCount = Command->Geometry.IndexBlock->Count,
-                            .instanceCount = 1,
-                            .firstIndex = Command->Geometry.IndexBlock->Offset,
-                            .vertexOffset = (s32)SkinnedVertexAt,
-                            .firstInstance = ID,
-                        };
-                        SkinnedVertexAt += VertexCount;
+                            // Ignored
+                        } break;
                     }
                 } break;
-                default:
+                case RenderCommand_ParticleBatch:
                 {
-                    // Ignored
+                    struct
+                    {
+                        VkDeviceAddress ParticleAddress;
+                        billboard_mode Mode;
+                    } Push;
+                    Push.ParticleAddress = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Command->BARBufferAt,
+                    Push.Mode = Command->ParticleBatch.Mode,
+                    vkCmdPushConstants(ParticleCB, Renderer->Pipelines[Pipeline_Quad].Layout, VK_SHADER_STAGE_ALL, 
+                                       0, sizeof(Push), &Push);
+                    vkCmdDraw(ParticleCB, 6 * Command->ParticleBatch.Count, 1, 0, 0);
                 } break;
+                case RenderCommand_Widget3D:
+                {
+                    struct
+                    {
+                        m4 Transform;
+                        rgba8 Color;
+                    } Push;
+                    Push.Transform = Command->Widget3D.Transform;
+                    Push.Color = Command->Widget3D.Color;
+                    vkCmdPushConstants(Widget3DCB, Renderer->Pipelines[Pipeline_Gizmo].Layout, VK_SHADER_STAGE_ALL,
+                                       0, sizeof(Push), &Push);
+                    geometry_buffer_allocation* Geometry = &Command->Widget3D.Geometry;
+                    vkCmdDrawIndexed(Widget3DCB, Geometry->IndexBlock->Count, 1, Geometry->IndexBlock->Offset, Geometry->VertexBlock->Offset, 0);
+                } break;
+                case RenderCommand_Batch2D:
+                {
+                    vkCmdBindVertexBuffers(GuiCB, 0, 1, &Renderer->PerFrameBuffers[Frame->FrameID], &Command->BARBufferAt);
+                    vkCmdDraw(GuiCB, Command->Batch2D.VertexCount, 1, 0, 0);
+                } break;
+                InvalidDefaultCase;
             }
         }
 
@@ -3510,8 +3480,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
         }
     }
+    vkCmdEndDebugUtilsLabelEXT(ParticleCB);
     EndCommandBuffer(ParticleCB);
+    vkCmdEndDebugUtilsLabelEXT(Widget3DCB);
     EndCommandBuffer(Widget3DCB);
+    vkCmdEndDebugUtilsLabelEXT(GuiCB);
     EndCommandBuffer(GuiCB);
     EndCommandBuffer(SkinningCB);
 

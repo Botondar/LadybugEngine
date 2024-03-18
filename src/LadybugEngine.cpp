@@ -74,8 +74,6 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         GameState->RenderConfig.BloomStrength           = render_config::DefaultBloomStrength;
     }
 
-    ResetArena(&GameState->TransientArena);
-
     if (GameIO->bIsMinimized)
     {
         return;
@@ -88,6 +86,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
     if (!RenderFrame)
     {
+        ResetArena(&GameState->TransientArena);
         RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputExtent);
     }
     RenderFrame->ImmediateTextureID = GameState->Assets->Textures[GameState->Assets->DefaultFontTextureID].RendererID;

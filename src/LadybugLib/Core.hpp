@@ -528,16 +528,11 @@ PushSize_(memory_arena* Arena, memory_push_flags Flags, umm Size, umm Alignment)
     void* Result = nullptr;
     if (Size)
     {
-        if ((Arena->Size - Arena->Used) >= Size)
+        umm EffectiveAt = Alignment ? Align(Arena->Used, Alignment) : Arena->Used;
+        if (EffectiveAt + Size <= Arena->Size)
         {
-            Result = OffsetPtr(Arena->Base, Arena->Used);
-            Arena->Used += Size;
-            if (Alignment)
-            {
-                void* ResultAligned = AlignPtr(Result, Alignment);
-                Arena->Used += (umm)((u8*)ResultAligned - (u8*)Result);
-                Result = ResultAligned;
-            }
+            Result = OffsetPtr(Arena->Base, EffectiveAt);
+            Arena->Used = EffectiveAt + Size;
         
             if (Flags & MemPush_Clear)
             {
