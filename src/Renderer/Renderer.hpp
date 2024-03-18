@@ -883,10 +883,6 @@ struct render_frame
 
     u32 MaxLightCount;
     u32 MaxShadowCount;
-    u32 MaxDrawCmdCount;
-    u32 MaxSkinningCmdCount;
-    u32 MaxParticleDrawCmdCount;
-    u32 MaxDrawWidget3DCmdCount;
 
     u32             CommandCount;
     render_command* Commands;
