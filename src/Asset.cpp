@@ -618,6 +618,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
             }
             Material->Emission = SrcMaterial->EmissiveFactor;
+            Material->AlphaThreshold = SrcMaterial->AlphaCutoff;
             Material->Albedo = PackRGBA(SrcMaterial->BaseColorFactor);
             Material->MetallicRoughness = PackRGBA(v4{ 1.0f, SrcMaterial->RoughnessFactor, SrcMaterial->MetallicFactor, 1.0f });
 

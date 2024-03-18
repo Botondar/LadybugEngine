@@ -607,6 +607,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 renderer_material RenderMaterial = 
                 {
                     .Emissive                   = Material->Emission,
+                    .AlphaThreshold             = Material->AlphaThreshold,
                     .DiffuseColor               = Material->Albedo,
                     .BaseMaterial               = Material->MetallicRoughness,
                     .DiffuseID                  = AlbedoTexture->RendererID,

@@ -273,6 +273,7 @@ StaticAssert(sizeof(per_frame) <= KiB(64));
 struct renderer_material
 {
     v3 Emissive;
+    f32 AlphaThreshold;
     rgba8 DiffuseColor;
     rgba8 BaseMaterial;
     renderer_texture_id DiffuseID;

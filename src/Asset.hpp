@@ -144,6 +144,7 @@ struct material
     rgba8 Albedo;
     rgba8 MetallicRoughness;
     v3 Emission;
+    f32 AlphaThreshold;
 };
 
 //

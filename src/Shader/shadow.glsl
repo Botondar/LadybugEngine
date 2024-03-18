@@ -54,7 +54,7 @@ void main()
     v4 Albedo = texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord);
     //uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdyFine(TexCoord));
     //atomicOr(MipFeedbacks[Instance.Material.DiffuseID], MipBucket);
-    if (Albedo.a < R_AlphaTestThreshold)
+    if (Albedo.a < Instance.Material.AlphaThreshold)
     {
         discard;
     }

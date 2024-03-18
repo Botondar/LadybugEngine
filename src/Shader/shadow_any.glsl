@@ -47,7 +47,7 @@ void main()
 {
 #if 1
     instance_data Instance = Instances[InstanceIndex];
-    if (texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord).a < R_AlphaTestThreshold)
+    if (texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord).a < Instance.Material.AlphaThreshold)
     {
         discard;
     }

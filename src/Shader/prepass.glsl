@@ -58,7 +58,7 @@ void main()
     VisibilityOut = v2u(InstanceIndex, gl_PrimitiveID);
     StructureOut = StructureEncode(ViewP.z);
     vec4 Albedo = texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord);
-    if (Albedo.a < R_AlphaTestThreshold)
+    if (Albedo.a < Instance.Material.AlphaThreshold)
     {
         discard;
     }
