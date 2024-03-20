@@ -456,6 +456,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "shading_forward",
         .Type = PipelineType_Graphics,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -491,6 +492,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "prepass",
         .Type = PipelineType_Graphics,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -526,6 +528,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "shadow",
         .Type = PipelineType_Graphics,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -561,6 +564,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "shadow",
         .Type = PipelineType_Graphics,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -596,6 +600,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "gizmo",
         .Type = PipelineType_Graphics,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -631,6 +636,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "sky",
         .Type = PipelineType_Graphics,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -675,6 +681,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "ui",
         .Type = PipelineType_Graphics,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -746,6 +753,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "blit",
         .Type = PipelineType_Graphics,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -783,6 +791,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "bloom_downsample",
         .Type = PipelineType_Compute,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -794,6 +803,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "bloom_upsample",
         .Type = PipelineType_Compute,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -805,6 +815,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "ssao",
         .Type = PipelineType_Compute,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -815,6 +826,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "ssao_blur",
         .Type = PipelineType_Compute,
+        .ParentID = Pipeline_None,
         .Layout =
         {
             .DescriptorSetCount = 0,
@@ -826,6 +838,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "quad",
         .Type = PipelineType_Graphics,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -875,6 +888,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "skin",
         .Type = PipelineType_Compute,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -886,6 +900,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "light_bin",
         .Type = PipelineType_Compute,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
@@ -896,10 +911,32 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "shading_visibility",
         .Type = PipelineType_Compute,
+        .ParentID = Pipeline_None,
         .Layout = 
         {
             .DescriptorSetCount = 0,
             .DescriptorSets = {},
         },
+    },
+
+    [Pipeline_Prepass_AlphaTest] =
+    {
+        .Name = "prepass_alphatest",
+        .Type = PipelineType_Graphics,
+        .ParentID = Pipeline_Prepass,
+    },
+
+    [Pipeline_Shadow_AlphaTest] = 
+    {
+        .Name = "shadow_alphatest",
+        .Type = PipelineType_Graphics,
+        .ParentID = Pipeline_Shadow,
+    },
+
+    [Pipeline_ShadowCascade_AlphaTest] = 
+    {
+        .Name = "shadow_alphatest",
+        .Type = PipelineType_Graphics,
+        .ParentID = Pipeline_ShadowCascade,
     },
 };

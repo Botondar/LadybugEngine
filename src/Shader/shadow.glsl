@@ -1,5 +1,3 @@
-#version 460 core
-
 #include "common.glsli"
 
 SetBindingLayout(PerFrame, Constants, scalar)
@@ -21,7 +19,10 @@ uniform PushConstants
 };
 
 interpolant(0) vec2 TexCoord;
+
+#if ShaderVariant_AlphaTest
 interpolant(1) flat uint InstanceIndex;
+#endif
 
 #if defined(VS)
 
@@ -31,13 +32,17 @@ layout(location = Attrib_TexCoord) in vec2 aTexCoord;
 void main()
 {
     instance_data Instance = Instances[gl_InstanceIndex];
+    gl_Position = ViewProjection * v4(TransformPoint(Instance.Transform, aP), 1.0);
+#if ShaderVariant_AlphaTest
     TexCoord = aTexCoord;
     InstanceIndex = gl_InstanceIndex;
-    gl_Position = ViewProjection * v4(TransformPoint(Instance.Transform, aP), 1.0);
+#endif
+    
 }
 
 #elif defined(FS)
 
+#if ShaderVariant_AlphaTest
 SetBindingLayout(Static, MipFeedbackBuffer, scalar)
 coherent buffer MipFeedbackBuffer
 {
@@ -49,16 +54,24 @@ SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
 void main()
 {
-#if 1
     instance_data Instance = Instances[InstanceIndex];
     v4 Albedo = texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord);
-    //uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdyFine(TexCoord));
-    //atomicOr(MipFeedbacks[Instance.Material.DiffuseID], MipBucket);
+    uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdyFine(TexCoord));
+    atomicOr(MipFeedbacks[Instance.Material.DiffuseID], MipBucket);
     if (Albedo.a < Instance.Material.AlphaThreshold)
     {
         discard;
     }
-#endif
 }
+
+#else
+
+layout(early_fragment_tests) in;
+
+void main()
+{
+}
+
+#endif
 
 #endif

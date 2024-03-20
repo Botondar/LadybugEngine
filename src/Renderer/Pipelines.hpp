@@ -21,6 +21,10 @@ enum pipeline : u32
     Pipeline_LightBinning,
     Pipeline_ShadingVisibility,
 
+    Pipeline_Prepass_AlphaTest,
+    Pipeline_Shadow_AlphaTest,
+    Pipeline_ShadowCascade_AlphaTest,
+
     Pipeline_Count,
 };
 

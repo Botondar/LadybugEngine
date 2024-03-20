@@ -1,5 +1,3 @@
-#version 460 core
-
 #include "common.glsli"
 
 #define Billboard_ViewAligned 0

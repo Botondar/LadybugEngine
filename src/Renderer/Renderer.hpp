@@ -459,6 +459,11 @@ struct pipeline_info
     const char* Name;
     pipeline_type Type;
 
+    // NOTE(boti): ParentIDs are currently used to inherit everything from the parent pipeline, 
+    // _except_ the shader
+    // TODO(boti): Have a flags field for which entries are valid in the descendant?
+    u32 ParentID;
+
     pipeline_layout_info Layout;
 
     //

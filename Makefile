@@ -5,7 +5,7 @@ SRC = src
 
 COMMON = -nologo -std:c++20 -Zi -EHsc -MT -arch:AVX2
 FLOAT_ENV = -fp:except- -fp:strict
-OPTIMIZATION = -Od -Oi
+OPTIMIZATION = -O2 -Oi
 VULKAN_INCLUDE = -I$(VULKAN_SDK)/Include/
 INCLUDES = -I$(SRC)
 DEFINES = -DDEVELOPER=1 -DWIN32_LEAN_AND_MEAN -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX
@@ -16,7 +16,7 @@ WARNINGS = $(WARNINGS_MSVC) $(WARNINGS_CLANG)
 CXX_FLAGS = $(COMMON) $(FLOAT_ENV) $(INCLUDES) $(DEFINES) $(WARNINGS)
 LINK_FLAGS = -INCREMENTAL:NO
 
-SHADER_FLAGS = -g -O --target-env=vulkan1.3 -fhlsl-offsets
+SHADER_FLAGS = -g -O --target-env=vulkan1.3 -std=460core -fhlsl-offsets
 
 LIBS = kernel32.lib user32.lib gdi32.lib Shell32.lib advapi32.lib
 
@@ -40,7 +40,9 @@ SHADERS = \
     build/blit.vs build/blit.fs \
     build/shading_forward.vs build/shading_forward.fs \
     build/prepass.vs build/prepass.fs \
+    build/prepass_alphatest.vs build/prepass_alphatest.fs \
     build/shadow.vs build/shadow.fs \
+    build/shadow_alphatest.vs build/shadow_alphatest.fs \
     build/sky.vs build/sky.fs \
     build/ui.vs build/ui.fs \
     build/gizmo.vs build/gizmo.fs \

@@ -1,5 +1,3 @@
-#version 460 core
-
 #include "common.glsli"
 
 SetBindingLayout(PerFrame, Constants, scalar)
@@ -14,9 +12,11 @@ readonly buffer InstanceBuffer
     instance_data Instances[];
 };
 
-interpolant(0) vec2 TexCoord;
-interpolant(1) vec3 ViewP;
-interpolant(2) flat uint InstanceIndex;
+interpolant(0) vec3 ViewP;
+interpolant(1) flat uint InstanceIndex;
+#if ShaderVariant_AlphaTest
+interpolant(2) vec2 TexCoord;
+#endif
 
 #if defined(VS)
 
@@ -30,15 +30,22 @@ void main()
     instance_data Instance = Instances[gl_InstanceIndex];
     precise v3 WorldP  = TransformPoint(Instance.Transform, aP);
     ViewP = TransformPoint(PerFrame.ViewTransform, WorldP);
-    TexCoord = aTexCoord;
-    InstanceIndex = gl_InstanceIndex;
     gl_Position = PerFrame.ViewProjectionTransform * vec4(WorldP, 1.0);
+    InstanceIndex = gl_InstanceIndex;
+
+#if ShaderVariant_AlphaTest
+    TexCoord = aTexCoord;
+#endif
 }
 
 #elif defined(FS)
 
+#if ShaderVariant_AlphaTest
 SetBinding(Sampler, MaterialSamplers) uniform sampler MatSamplers[R_MaterialSamplerCount];
 SetBinding(Bindless, Textures) uniform texture2D Textures[];
+#else
+layout(early_fragment_tests) in;
+#endif
 
 layout(location = 0) out v2u VisibilityOut;
 layout(location = 1) out vec4 StructureOut;
@@ -57,11 +64,13 @@ void main()
     instance_data Instance = Instances[InstanceIndex];
     VisibilityOut = v2u(InstanceIndex, gl_PrimitiveID);
     StructureOut = StructureEncode(ViewP.z);
+#if ShaderVariant_AlphaTest
     vec4 Albedo = texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord);
     if (Albedo.a < Instance.Material.AlphaThreshold)
     {
         discard;
     }
+#endif
 }
 
 #endif

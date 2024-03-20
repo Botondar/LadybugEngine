@@ -1,5 +1,3 @@
-#version 460
-
 #include "common.glsli"
 
 interpolant(0) vec2 TexCoord;

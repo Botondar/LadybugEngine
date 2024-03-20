@@ -1,5 +1,3 @@
-#version 460
-
 #include "common.glsli"
 
 SetBindingLayout(PerFrame, Constants, scalar)

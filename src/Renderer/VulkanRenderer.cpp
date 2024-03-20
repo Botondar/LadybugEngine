@@ -309,10 +309,18 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
             Pipeline->Layout = Renderer->SystemPipelineLayout;
         }
 
+        // NOTE(boti): The shader names is always used in the current pipeline
         u64 NameSize = PathSize;
         CopyZStringToBuffer(Name, Info->Name, &NameSize);
         char* Extension = Path + (MaxPathSize - NameSize);
-    
+        
+        if (Info->ParentID != Pipeline_None)
+        {
+            const pipeline_info* ParentInfo = PipelineInfos + Info->ParentID;
+            Assert(ParentInfo->Type == Info->Type);
+            Info = ParentInfo;
+        }
+
         if (Info->Type == PipelineType_Compute)
         {
             u64 Size = NameSize;
@@ -1852,7 +1860,7 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
 #undef ReturnOnFailure
 
 internal void 
-DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, draw_list* List)
+DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, pipeline* Pipelines, draw_list* List)
 {
     vkCmdBindIndexBuffer(CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, 0, VK_INDEX_TYPE_UINT32);
 
@@ -1874,6 +1882,7 @@ DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, draw_list* List)
             InvalidDefaultCase;
         }
 
+        vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Frame->Renderer->Pipelines[Pipelines[Group]].Pipeline);
         VkDeviceSize ZeroOffset = 0;
         vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &VertexBuffer, &ZeroOffset);
         vkCmdDrawIndexedIndirect(CmdBuffer, Frame->Renderer->DrawBuffer, List->DrawBufferOffset + CurrentOffset, List->DrawGroupDrawCounts[Group], sizeof(VkDrawIndexedIndirectCommand));
@@ -3738,9 +3747,13 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         vkCmdBeginRendering(PrepassCmd, &RenderingInfo);
 
-        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_Prepass];
-        vkCmdBindPipeline(PrepassCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline.Pipeline);
-        DrawList(Frame, PrepassCmd, &PrimaryDrawList);
+        pipeline Pipelines[DrawGroup_Count] = 
+        {
+            [DrawGroup_Opaque]      = Pipeline_Prepass,
+            [DrawGroup_AlphaTest]   = Pipeline_Prepass_AlphaTest,
+            [DrawGroup_Skinned]     = Pipeline_Prepass,
+        };
+        DrawList(Frame, PrepassCmd, Pipelines, &PrimaryDrawList);
 
         vkCmdEndRendering(PrepassCmd);
 
@@ -4068,9 +4081,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     BeginFrameStage(ShadowCmd, &FrameStages[FrameStage_CascadedShadow], "CSM");
     {
-        pipeline_with_layout ShadowPipeline = Renderer->Pipelines[Pipeline_ShadowCascade];
-        vkCmdBindPipeline(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Pipeline);
-
         VkViewport ShadowViewport = 
         {
             .x = 0.0f,
@@ -4120,10 +4130,17 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             vkCmdBeginRendering(ShadowCmd, &RenderingInfo);
 
             m4 ViewProjection = Frame->Uniforms.CascadeViewProjections[CascadeIndex];
-            vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout,
+            vkCmdPushConstants(ShadowCmd, Renderer->SystemPipelineLayout,
                                VK_SHADER_STAGE_ALL,
                                0, sizeof(ViewProjection), &ViewProjection);
-            DrawList(Frame, ShadowCmd, CascadeDrawLists + CascadeIndex);
+
+            pipeline Pipelines[DrawGroup_Count] = 
+            {
+                [DrawGroup_Opaque]      = Pipeline_ShadowCascade,
+                [DrawGroup_AlphaTest]   = Pipeline_ShadowCascade_AlphaTest,
+                [DrawGroup_Skinned]     = Pipeline_ShadowCascade,
+            };
+            DrawList(Frame, ShadowCmd, Pipelines, CascadeDrawLists + CascadeIndex);
 
             vkCmdEndRendering(ShadowCmd);
 
@@ -4197,9 +4214,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     BeginFrameStage(ShadowCmd, &FrameStages[FrameStage_Shadows], "Shadows");
     {
-        pipeline_with_layout ShadowPipeline = Renderer->Pipelines[Pipeline_Shadow];
-        vkCmdBindPipeline(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Pipeline);
-
         VkViewport ShadowViewport = 
         {
             .x = 0.0f,
@@ -4264,11 +4278,17 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 vkCmdBeginRendering(ShadowCmd, &ShadowRendering);
 
                 m4 ViewProjection = Frame->Uniforms.PointShadows[ShadowIndex].ViewProjections[LayerIndex];
-                vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout, VK_SHADER_STAGE_ALL,
+                vkCmdPushConstants(ShadowCmd, Renderer->SystemPipelineLayout, VK_SHADER_STAGE_ALL,
                                    0, sizeof(ViewProjection), &ViewProjection);
 
+                pipeline Pipelines[DrawGroup_Count] = 
+                {
+                    [DrawGroup_Opaque]      = Pipeline_Shadow,
+                    [DrawGroup_AlphaTest]   = Pipeline_Shadow_AlphaTest,
+                    [DrawGroup_Skinned]     = Pipeline_Shadow,
+                };
                 u32 Index = 6*ShadowIndex + LayerIndex;
-                DrawList(Frame, ShadowCmd, ShadowDrawLists + Index);
+                DrawList(Frame, ShadowCmd, Pipelines, ShadowDrawLists + Index);
 
                 vkCmdEndRendering(ShadowCmd);
             }
@@ -4499,7 +4519,13 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             case ShadingMode_Forward:
             {
                 vkCmdBeginRendering(RenderCmd, &ShadingRenderingInfo);
-                DrawList(Frame, RenderCmd, &PrimaryDrawList);
+                pipeline Pipelines[DrawGroup_Count] = 
+                {
+                    [DrawGroup_Opaque]      = Pipeline_ShadingForward,
+                    [DrawGroup_AlphaTest]   = Pipeline_ShadingForward,
+                    [DrawGroup_Skinned]     = Pipeline_ShadingForward,
+                };
+                DrawList(Frame, RenderCmd, Pipelines, &PrimaryDrawList);
             } break;
             InvalidDefaultCase;
         }
