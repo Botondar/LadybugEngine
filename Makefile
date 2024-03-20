@@ -5,7 +5,7 @@ SRC = src
 
 COMMON = -nologo -std:c++20 -Zi -EHsc -MT -arch:AVX2
 FLOAT_ENV = -fp:except- -fp:strict
-OPTIMIZATION = -O2 -Oi
+OPTIMIZATION = -Od -Oi
 VULKAN_INCLUDE = -I$(VULKAN_SDK)/Include/
 INCLUDES = -I$(SRC)
 DEFINES = -DDEVELOPER=1 -DWIN32_LEAN_AND_MEAN -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX
@@ -34,6 +34,8 @@ RENDERER_EXPORT = \
     -EXPORT:BeginRenderFrame \
     -EXPORT:EndRenderFrame
 
+TOOLS = "$(OUT)/lbmeta.exe"
+
 SHADERS = \
     build/blit.vs build/blit.fs \
     build/shading_forward.vs build/shading_forward.fs \
@@ -50,13 +52,16 @@ SHADERS = \
     build/light_bin.cs \
     build/shading_visibility.cs
 
-all: "$(OUT)/" "$(OUT)/Win_LadybugEngine.exe" "$(OUT)/game.dll" "$(OUT)/vulkan_renderer.dll" $(SHADERS)
+all: "$(OUT)/" "$(OUT)/Win_LadybugEngine.exe" "$(OUT)/game.dll" "$(OUT)/vulkan_renderer.dll" $(SHADERS) $(TOOLS)
 
 clean: 
     @del /q $(OUT)\*.*
 
 "$(OUT)/":
 	@if not exist $@ mkdir $@
+
+"$(OUT)/lbmeta.exe": "$(OUT)/" $(SRC_LBLIB) "tools/lbmeta/*"
+    @clang-cl -Wno-c99-designator -std:c++20 -Zi -I"src/" -D_CRT_SECURE_NO_WARNINGS "tools/lbmeta/lbmeta.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/"
 
 "$(OUT)/vulkan_renderer.dll": "$(OUT)/" $(SRC_LBLIB) $(SRC_RENDERER)
     @clang-cl $(CXX_FLAGS) $(VULKAN_INCLUDE) "src/Renderer/VulkanRenderer.cpp" -Fo"$(OUT)/" -Fd"$(OUT)/" vulkan-1.lib -link -DLL -OUT:$@ $(LINK_FLAGS) $(RENDERER_EXPORT) -LIBPATH:$(VULKAN_SDK)/Lib/
