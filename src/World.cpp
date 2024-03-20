@@ -617,7 +617,8 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     .NormalSamplerID            = Material->NormalSamplerID,
                     .MetallicRoughnessSamplerID = Material->MetallicRoughnessSamplerID
                 };
-                DrawMesh(Frame, Mesh->Allocation, Entity->Transform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
+                draw_group Group = (Material->Transparency == Transparency_AlphaTest) ? DrawGroup_AlphaTest : DrawGroup_Opaque;
+                DrawMesh(Frame, Group, Mesh->Allocation, Entity->Transform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
             }
         }
 

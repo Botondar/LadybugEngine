@@ -718,15 +718,6 @@ struct draw_batch_2d
     u32 VertexCount;
 };
 
-enum draw_group : u32
-{
-    DrawGroup_Opaque = 0,
-    DrawGroup_AlphaTest,
-    DrawGroup_Skinned,
-
-    DrawGroup_Count,
-};
-
 struct draw_command
 {
     draw_group Group;
@@ -940,6 +931,7 @@ inline b32 TransferGeometry(render_frame* Frame, geometry_buffer_allocation Allo
 
 inline b32 
 DrawMesh(render_frame* Frame,
+         draw_group Group,
          geometry_buffer_allocation Allocation, 
          m4 Transform,
          mmbox BoundingBox,
@@ -1324,6 +1316,7 @@ PushCommand_(render_frame* Frame, render_command_type Type, umm BARAlignment, um
 
 inline b32 
 DrawMesh(render_frame* Frame,
+         draw_group Group,
          geometry_buffer_allocation Allocation,
          m4 Transform,
          mmbox BoundingBox,
@@ -1334,12 +1327,15 @@ DrawMesh(render_frame* Frame,
 
     b32 IsSkinned = JointCount != 0;
     umm PoseByteCount = JointCount * sizeof(m4);
+
     render_command* Command = PushCommand_(Frame, RenderCommand_Draw, IsSkinned ? sizeof(m4) : 0, PoseByteCount);
     if (Command)
     {
-        Command->Draw.Group = IsSkinned ? DrawGroup_Skinned : DrawGroup_Opaque;
-        if (Command->Draw.Group == DrawGroup_Skinned)
+        Command->Draw.Group = Group;
+        if (IsSkinned)
         {
+            // TODO(boti): Skinned should probably be a flag/subgroup on the command, not a DrawGroup itself
+            Command->Draw.Group = DrawGroup_Skinned;
             memcpy(OffsetPtr(Frame->BARBufferBase, Command->BARBufferAt), Pose, PoseByteCount);
         }
 

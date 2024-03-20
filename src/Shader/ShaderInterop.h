@@ -178,6 +178,13 @@ struct v4u8
 #define LightFlag_ShadowCaster  0x01u
 #define LightFlag_Volumetric    0x02u
 
+#define draw_group u32
+#define DrawGroup_Opaque            0
+#define DrawGroup_AlphaTest         1
+#define DrawGroup_Skinned           2
+
+#define DrawGroup_Count             3
+
 #define debug_view_mode u32
 #define DebugView_None              0
 #define DebugView_LightOccupancy    1
@@ -246,8 +253,8 @@ struct per_frame
     v2 ScreenSize;
     v2u TileCount;
 
-    u32 OpaqueDrawCount;
-    u32 SkinnedDrawCount;
+    u32 DrawGroupCounts[DrawGroup_Count];
+    u32 DrawGroupOffsets[DrawGroup_Count];
 
     u32 LightCount;
 

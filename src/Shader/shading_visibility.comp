@@ -161,7 +161,7 @@ void main()
         uint Index1 = IndexData[IndexIndex + 1];
         uint Index2 = IndexData[IndexIndex + 2];
 
-        buffer_type BufferType = (InstanceTriangleID.x >= PerFrame.OpaqueDrawCount) ? BufferType_Skinned : 0;
+        buffer_type BufferType = (InstanceTriangleID.x >= PerFrame.DrawGroupOffsets[DrawGroup_Skinned]) ? BufferType_Skinned : 0;
         unpacked_vertex Vertex0 = UnpackVertex(Draw.VertexOffset + Index0, BufferType);
         unpacked_vertex Vertex1 = UnpackVertex(Draw.VertexOffset + Index1, BufferType);
         unpacked_vertex Vertex2 = UnpackVertex(Draw.VertexOffset + Index2, BufferType);

@@ -3175,14 +3175,20 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
 
     {
-        Frame->Uniforms.OpaqueDrawCount = Frame->DrawGroupDrawCounts[DrawGroup_Opaque];
-        Frame->Uniforms.SkinnedDrawCount = Frame->DrawGroupDrawCounts[DrawGroup_Skinned];
+        memcpy(Frame->Uniforms.DrawGroupCounts, Frame->DrawGroupDrawCounts, sizeof(Frame->DrawGroupDrawCounts));
+        memset(Frame->Uniforms.DrawGroupOffsets, 0, sizeof(Frame->Uniforms.DrawGroupOffsets));
         u32 DrawGroupOffsets[DrawGroup_Count] = {};
         for (u32 GroupIndex = 1; GroupIndex < DrawGroup_Count; GroupIndex++)
         {
-            DrawGroupOffsets[GroupIndex] = DrawGroupOffsets[GroupIndex - 1] + Frame->DrawGroupDrawCounts[GroupIndex - 1];
+            u32 Offset = DrawGroupOffsets[GroupIndex - 1] + Frame->DrawGroupDrawCounts[GroupIndex - 1];
+            DrawGroupOffsets[GroupIndex] = Offset;
+            Frame->Uniforms.DrawGroupOffsets[GroupIndex] = Offset;
         }
-        u32 InstanceCount = Frame->DrawGroupDrawCounts[DrawGroup_Opaque] + Frame->DrawGroupDrawCounts[DrawGroup_Skinned];
+        u32 InstanceCount = 0;
+        for (u32 GroupIndex = 0; GroupIndex < DrawGroup_Count; GroupIndex++)
+        {
+            InstanceCount += Frame->DrawGroupDrawCounts[GroupIndex];
+        }
         instance_data*                  Instances           = PushArray(Frame->Arena, 0, instance_data, InstanceCount);
         mmbox*                          BoundingBoxes       = PushArray(Frame->Arena, 0, mmbox, InstanceCount);
         m4*                             Transforms          = PushArray(Frame->Arena, 0, m4, InstanceCount);
@@ -3207,6 +3213,17 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     switch (Draw->Group)
                     {
                         case DrawGroup_Opaque:
+                        {
+                            IndirectCommands[ID] = 
+                            {
+                                .indexCount = Draw->Geometry.IndexBlock->Count,
+                                .instanceCount = 1,
+                                .firstIndex = Draw->Geometry.IndexBlock->Offset,
+                                .vertexOffset = (s32)Draw->Geometry.VertexBlock->Offset,
+                                .firstInstance = ID,
+                            };
+                        } break;
+                        case DrawGroup_AlphaTest:
                         {
                             IndirectCommands[ID] = 
                             {
@@ -3250,10 +3267,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                 SkinnedVertexAt += VertexCount;
                             }
                         } break;
-                        default:
-                        {
-                            // Ignored
-                        } break;
+                        InvalidDefaultCase;
                     }
                 } break;
                 case RenderCommand_ParticleBatch:
@@ -3421,8 +3435,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 b32 IsVisible = true;
                 if (Frustum)
                 {
-                    // NOTE(boti): Only cull opaque meshes for now
-                    if (InstanceIndex < Frame->DrawGroupDrawCounts[DrawGroup_Opaque])
+                    if (InstanceIndex < DrawGroupOffsets[DrawGroup_Skinned])
                     {
                         IsVisible = IntersectFrustumBox(Frustum, BoundingBoxes[InstanceIndex], Transforms[InstanceIndex]);
                     }
