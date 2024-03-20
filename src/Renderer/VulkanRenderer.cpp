@@ -2382,6 +2382,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         }
     }
 
+    VkCommandBuffer UploadCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_None);
+
     //
     // Discard unused mip levels
     //
@@ -2441,7 +2443,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                     .dstOffset = DescriptorOffset,
                                     .size = DescriptorSize,
                                 };
-                                vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
+                                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
                                 
                                 Frame->StagingBuffer.At += DescriptorSize;
                                 
@@ -2567,7 +2569,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                         .pImageMemoryBarriers = BeginBarriers,
                                     };
 
-                                    vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
+                                    vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
 
                                     constexpr u32 MaxCopyCount = 32;
                                     VkImageCopy CopyRegions[MaxCopyCount];
@@ -2601,7 +2603,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                         };
                                     }
                                     
-                                    vkCmdCopyImage(PrepassCmd, 
+                                    vkCmdCopyImage(UploadCB, 
                                                    Texture->ImageHandle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                                    ImageHandle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                                    Info.MipCount, CopyRegions);
@@ -2656,7 +2658,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                             .dstOffset = DescriptorOffset,
                                             .size = DescriptorSize,
                                         };
-                                        vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
+                                        vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
                                         Frame->StagingBuffer.At += DescriptorSize;
                                 
                                         MarkPagesAsFree(&Manager->Cache, Texture->PageIndex, Texture->PageCount);
@@ -2698,10 +2700,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         }
     }
 
-    //
-    // Transfer
-    //
-    BeginFrameStage(PrepassCmd, &FrameStages[FrameStage_Upload], "Upload");
     for (u32 TransferOpIndex = 0; TransferOpIndex < Frame->TransferOpCount; TransferOpIndex++)
     {
         transfer_op* Op = Frame->TransferOps + TransferOpIndex;
@@ -2820,7 +2818,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                 .dstOffset = DescriptorOffset,
                                 .size = DescriptorSize,
                             };
-                            vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
+                            vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
 
                             Frame->StagingBuffer.At += DescriptorSize;
 
@@ -2866,8 +2864,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         .imageMemoryBarrierCount = 1,
                         .pImageMemoryBarriers = &BeginBarrier,
                     };
-                    vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
-                    vkCmdCopyBufferToImage(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Texture->ImageHandle, 
+                    vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
+                    vkCmdCopyBufferToImage(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Texture->ImageHandle, 
                                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                            CopyCount, Copies);
 
@@ -2944,7 +2942,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     Barrier.srcAccessMask = VK_ACCESS_2_NONE;
                     Barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
                     Barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                    vkCmdPipelineBarrier2(PrepassCmd, &Dependency);
+                    vkCmdPipelineBarrier2(UploadCB, &Dependency);
 
                     VkBufferCopy Copy = 
                     {
@@ -2952,7 +2950,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         .dstOffset = VertexByteOffset,
                         .size = VertexByteCount,
                     };
-                    vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], VertexBuffer, 1, &Copy);
+                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], VertexBuffer, 1, &Copy);
 
                     Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
                     Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
@@ -2971,14 +2969,14 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     Barrier.srcAccessMask = VK_ACCESS_2_NONE;
                     Barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
                     Barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                    vkCmdPipelineBarrier2(PrepassCmd, &Dependency);
+                    vkCmdPipelineBarrier2(UploadCB, &Dependency);
                     VkBufferCopy Copy = 
                     {
                         .srcOffset = Op->SourceOffset + VertexByteCount,
                         .dstOffset = IndexByteOffset,
                         .size = IndexByteCount,
                     };
-                    vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], IndexBuffer, 1, &Copy);
+                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], IndexBuffer, 1, &Copy);
 
                     Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
                     Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
@@ -3018,7 +3016,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         .bufferMemoryBarrierCount = CountOf(EndTransferStageBufferMemoryBarriers),
         .pBufferMemoryBarriers = EndTransferStageBufferMemoryBarriers,
     };
-    vkCmdPipelineBarrier2(PrepassCmd, &EndTransferStageDependency);
+    vkCmdPipelineBarrier2(UploadCB, &EndTransferStageDependency);
 
     u32 TileCountX = CeilDiv(Frame->RenderExtent.X, R_TileSizeX);
     u32 TileCountY = CeilDiv(Frame->RenderExtent.Y, R_TileSizeY);
@@ -3095,7 +3093,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .bufferMemoryBarrierCount = CountOf(BeginBarriers),
             .pBufferMemoryBarriers = BeginBarriers,
         };
-        vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
+        vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
 
         VkBufferCopy LightBufferCopy = 
         {
@@ -3105,7 +3103,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         };
         if (LightBufferCopy.size > 0)
         {
-            vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->LightBuffer, 1, &LightBufferCopy);
+            vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->LightBuffer, 1, &LightBufferCopy);
         }
 
         VkBufferMemoryBarrier2 EndBarrier = 
@@ -3319,7 +3317,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     .dstOffset = 0,
                     .size = InstanceDataByteCount,
                 };
-                vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->InstanceBuffer, 1, &Copy);
+                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->InstanceBuffer, 1, &Copy);
 
                 VkBufferMemoryBarrier2 EndBarrier = 
                 {
@@ -3358,7 +3356,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     .dstOffset = 0,
                     .size = DrawDataByteCount,
                 };
-                vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->DrawBuffer, 1, &Copy);
+                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->DrawBuffer, 1, &Copy);
 
                 VkBufferMemoryBarrier2 EndBarrier = 
                 {
@@ -3471,9 +3469,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .bufferMemoryBarrierCount = 0,
                 .pBufferMemoryBarriers = nullptr,
             };
-            vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
+            vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
 
-            vkCmdCopyBuffer(PrepassCmd, Renderer->StagingBuffers[Frame->FrameID], Renderer->DrawBuffer, 1, &Copy);
+            vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->DrawBuffer, 1, &Copy);
 
             VkBufferMemoryBarrier2 EndBarrier
             {
@@ -3501,7 +3499,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     EndCommandBuffer(SkinningCB);
 
     {
-        vkCmdFillBuffer(PrepassCmd, Renderer->MipFeedbackBuffer, 0, VK_WHOLE_SIZE, 0);
+        vkCmdFillBuffer(UploadCB, Renderer->MipFeedbackBuffer, 0, VK_WHOLE_SIZE, 0);
 
         VkBufferMemoryBarrier2 MipFeedbackClearBarrier = 
         {
@@ -3520,9 +3518,10 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         PushBeginBarrier(&FrameStages[FrameStage_Prepass], &MipFeedbackClearBarrier);
     }
 
+    EndCommandBuffer(UploadCB);
+
     // Upload uniform data
     memcpy(Frame->UniformData, &Frame->Uniforms, sizeof(Frame->Uniforms));
-    EndFrameStage(PrepassCmd, &FrameStages[FrameStage_Upload]);
 
     // Per-frame descriptor update
     {
@@ -3553,6 +3552,15 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         static_assert(CountOf(PerFrameWrites) == Binding_PerFrame_Count);
         UpdateDescriptorBuffer(CountOf(PerFrameWrites), PerFrameWrites, Renderer->SetLayouts[Set_PerFrame], Renderer->PerFrameResourceDescriptorMappings[Frame->FrameID]);
     }
+
+    //
+    // Upload
+    //
+    BeginFrameStage(PrepassCmd, &FrameStages[FrameStage_Upload], "Upload");
+    {
+        vkCmdExecuteCommands(PrepassCmd, 1, &UploadCB);
+    }
+    EndFrameStage(PrepassCmd, &FrameStages[FrameStage_Upload]);
 
     VkViewport FrameViewport = 
     {
