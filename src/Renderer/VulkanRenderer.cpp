@@ -3222,16 +3222,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     switch (Draw->Group)
                     {
                         case DrawGroup_Opaque:
-                        {
-                            IndirectCommands[ID] = 
-                            {
-                                .indexCount = Draw->Geometry.IndexBlock->Count,
-                                .instanceCount = 1,
-                                .firstIndex = Draw->Geometry.IndexBlock->Offset,
-                                .vertexOffset = (s32)Draw->Geometry.VertexBlock->Offset,
-                                .firstInstance = ID,
-                            };
-                        } break;
                         case DrawGroup_AlphaTest:
                         {
                             IndirectCommands[ID] = 
