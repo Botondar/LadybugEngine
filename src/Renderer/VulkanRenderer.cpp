@@ -4068,7 +4068,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     BeginFrameStage(ShadowCmd, &FrameStages[FrameStage_CascadedShadow], "CSM");
     {
-        pipeline_with_layout ShadowPipeline = Renderer->Pipelines[Pipeline_Shadow];
+        pipeline_with_layout ShadowPipeline = Renderer->Pipelines[Pipeline_ShadowCascade];
         vkCmdBindPipeline(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Pipeline);
 
         VkViewport ShadowViewport = 
@@ -4119,9 +4119,10 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             
             vkCmdBeginRendering(ShadowCmd, &RenderingInfo);
 
+            m4 ViewProjection = Frame->Uniforms.CascadeViewProjections[CascadeIndex];
             vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout,
                                VK_SHADER_STAGE_ALL,
-                               0, sizeof(u32), &CascadeIndex);
+                               0, sizeof(ViewProjection), &ViewProjection);
             DrawList(Frame, ShadowCmd, CascadeDrawLists + CascadeIndex);
 
             vkCmdEndRendering(ShadowCmd);
@@ -4196,7 +4197,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     BeginFrameStage(ShadowCmd, &FrameStages[FrameStage_Shadows], "Shadows");
     {
-        pipeline_with_layout ShadowPipeline = Renderer->Pipelines[Pipeline_ShadowAny];
+        pipeline_with_layout ShadowPipeline = Renderer->Pipelines[Pipeline_Shadow];
         vkCmdBindPipeline(ShadowCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ShadowPipeline.Pipeline);
 
         VkViewport ShadowViewport = 
@@ -4233,7 +4234,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 };
                 vkCmdPipelineBarrier(ShadowCmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 
                                      1, &Barrier, 0, nullptr, 0, nullptr);
-    
 
                 VkRenderingAttachmentInfo DepthAttachment = 
                 {
@@ -4263,9 +4263,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 };
                 vkCmdBeginRendering(ShadowCmd, &ShadowRendering);
 
-                u32 Index = 6*ShadowIndex + LayerIndex;
+                m4 ViewProjection = Frame->Uniforms.PointShadows[ShadowIndex].ViewProjections[LayerIndex];
                 vkCmdPushConstants(ShadowCmd, ShadowPipeline.Layout, VK_SHADER_STAGE_ALL,
-                                   0, sizeof(Index), &Index);
+                                   0, sizeof(ViewProjection), &ViewProjection);
+
+                u32 Index = 6*ShadowIndex + LayerIndex;
                 DrawList(Frame, ShadowCmd, ShadowDrawLists + Index);
 
                 vkCmdEndRendering(ShadowCmd);

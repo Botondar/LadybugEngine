@@ -14,9 +14,10 @@ buffer InstanceBuffer
     instance_data Instances[];
 };
 
-layout(push_constant) uniform PushConstants
+layout(push_constant) 
+uniform PushConstants
 {
-    uint CascadeIndex;
+    m4 ViewProjection;
 };
 
 interpolant(0) vec2 TexCoord;
@@ -32,7 +33,6 @@ void main()
     instance_data Instance = Instances[gl_InstanceIndex];
     TexCoord = aTexCoord;
     InstanceIndex = gl_InstanceIndex;
-    m4 ViewProjection = PerFrame.CascadeViewProjections[CascadeIndex];
     gl_Position = ViewProjection * v4(TransformPoint(Instance.Transform, aP), 1.0);
 }
 

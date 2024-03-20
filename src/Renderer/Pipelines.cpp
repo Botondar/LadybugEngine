@@ -522,7 +522,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .StencilAttachment = RTFormat_Undefined,
     },
 
-    [Pipeline_Shadow] = 
+    [Pipeline_ShadowCascade] = 
     {
         .Name = "shadow",
         .Type = PipelineType_Graphics,
@@ -557,9 +557,9 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .StencilAttachment = RTFormat_Undefined,
     },
 
-    [Pipeline_ShadowAny] =
+    [Pipeline_Shadow] =
     {
-        .Name = "shadow_any",
+        .Name = "shadow",
         .Type = PipelineType_Graphics,
         .Layout = 
         {

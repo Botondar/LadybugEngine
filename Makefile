@@ -43,7 +43,6 @@ SHADERS = \
     build/shadow.vs build/shadow.fs \
     build/sky.vs build/sky.fs \
     build/ui.vs build/ui.fs \
-    build/shadow_any.vs build/shadow_any.fs \
     build/gizmo.vs build/gizmo.fs \
     build/bloom_downsample.cs build/bloom_upsample.cs \
     build/ssao.cs build/ssao_blur.cs \
