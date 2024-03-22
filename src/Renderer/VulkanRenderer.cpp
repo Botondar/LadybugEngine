@@ -1867,6 +1867,12 @@ DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, pipeline* Pipelines, dr
     umm CurrentOffset = 0;
     for (u32 Group = 0; Group < DrawGroup_Count; Group++)
     {
+        u32 DrawCount = List->DrawGroupDrawCounts[Group];
+        if (DrawCount == 0)
+        {
+            continue;
+        }
+
         VkBuffer VertexBuffer = VK_NULL_HANDLE;
         switch (Group)
         {
@@ -1885,8 +1891,8 @@ DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, pipeline* Pipelines, dr
         vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Frame->Renderer->Pipelines[Pipelines[Group]].Pipeline);
         VkDeviceSize ZeroOffset = 0;
         vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &VertexBuffer, &ZeroOffset);
-        vkCmdDrawIndexedIndirect(CmdBuffer, Frame->Renderer->DrawBuffer, List->DrawBufferOffset + CurrentOffset, List->DrawGroupDrawCounts[Group], sizeof(VkDrawIndexedIndirectCommand));
-        CurrentOffset += List->DrawGroupDrawCounts[Group] * sizeof(VkDrawIndexedIndirectCommand);
+        vkCmdDrawIndexedIndirect(CmdBuffer, Frame->Renderer->DrawBuffer, List->DrawBufferOffset + CurrentOffset, DrawCount, sizeof(VkDrawIndexedIndirectCommand));
+        CurrentOffset += DrawCount * sizeof(VkDrawIndexedIndirectCommand);
     }
 }
 
@@ -2097,13 +2103,8 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         }
         Frame->LastBatch2D = nullptr;
 
-        Frame->MaxLightCount = R_MaxLightCount;
         Frame->LightCount = 0;
-        Frame->Lights = PushArray(Arena, 0, light, Frame->MaxLightCount);
-
-        Frame->MaxShadowCount = R_MaxShadowCount;
         Frame->ShadowCount = 0;
-        Frame->Shadows = PushArray(Arena, 0, u32, Frame->MaxShadowCount);
         
         Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
     }
@@ -2328,55 +2329,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 UnhandledError("vkAcquireNextImage error");
                 return;
-            }
-        }
-    }
-
-    frustum* ShadowFrustums = PushArray(Frame->Arena, 0, frustum, R_MaxShadowCount);
-
-    for (u32 ShadowIndex = 0; ShadowIndex < Frame->ShadowCount; ShadowIndex++)
-    {
-        light* Light = Frame->Lights + Frame->Shadows[ShadowIndex];
-        v3 P = Light->P;
-
-        f32 L = GetLuminance(Light->E);
-        f32 R = Sqrt(Max((L / R_LuminanceThreshold), 0.0f));
-        f32 n = 0.05f;
-        f32 f = R + 1e-6f;
-        f32 r = 1.0f / (f - n);
-        m4 Projection = M4(1.0f, 0.0f, 0.0f, 0.0f,
-                           0.0f, 1.0f, 0.0f, 0.0f,
-                           0.0f, 0.0f, f*r, -f*n*r,
-                           0.0f, 0.0f, 1.0f, 0.0f);
-        m4 InverseProjection = M4(1.0f, 0.0f, 0.0f, 0.0f,
-                                  0.0f, 1.0f, 0.0f, 0.0f,
-                                  0.0f, 0.0f, 0.0f, 1.0f,
-                                  0.0f, 0.0f, -1.0f / (f*n*r), 1.0f / n);
-        point_shadow_data* Shadow = Frame->Uniforms.PointShadows + ShadowIndex;
-        Shadow->Near = n;
-        Shadow->Far = f;
-
-        for (u32 LayerIndex = 0; LayerIndex < Layer_Count; LayerIndex++)
-        {
-            m3 M = GlobalCubeFaceBases[LayerIndex];
-            m4 InverseView = M4(M.X.X, M.Y.X, M.Z.X, P.X,
-                                M.X.Y, M.Y.Y, M.Z.Y, P.Y,
-                                M.X.Z, M.Y.Z, M.Z.Z, P.Z,
-                                0.0f, 0.0f, 0.0f ,1.0f);
-            m4 View = M4(M.X.X, M.X.Y, M.X.Z, -Dot(M.X, P),
-                         M.Y.X, M.Y.Y, M.Y.Z, -Dot(M.Y, P),
-                         M.Z.X, M.Z.Y, M.Z.Z, -Dot(M.Z, P),
-                         0.0f, 0.0f, 0.0f, 1.0f);
-            m4 ViewProjection = Projection * View;
-            Shadow->ViewProjections[LayerIndex] = ViewProjection;
-
-            m4 InverseViewProjection = InverseView * InverseProjection;
-
-            frustum ClipSpaceFrustum = GetClipSpaceFrustum();
-            frustum* Frustum = &ShadowFrustums[6 * ShadowIndex + LayerIndex];
-            for (u32 PlaneIndex = 0; PlaneIndex < 6; PlaneIndex++)
-            {
-                Frustum->Planes[PlaneIndex] = ClipSpaceFrustum.Planes[PlaneIndex] * Projection * View;
             }
         }
     }
@@ -2702,107 +2654,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     u32 TileCountX = CeilDiv(Frame->RenderExtent.X, R_TileSizeX);
     u32 TileCountY = CeilDiv(Frame->RenderExtent.Y, R_TileSizeY);
     Frame->Uniforms.TileCount = { TileCountX, TileCountY };
-    {
-        f32 s = (f32)Frame->RenderExtent.X / (f32)Frame->RenderExtent.Y;
-        frustum CameraFrustum = Frame->CameraFrustum;
-
-        u32 LightBufferOffset = Frame->StagingBuffer.At;
-        light* LightBuffer = nullptr;
-        if (Frame->StagingBuffer.At + Frame->LightCount * sizeof(light) < Frame->StagingBuffer.Size)
-        {
-            LightBuffer = (light*)OffsetPtr(Frame->StagingBuffer.Base, LightBufferOffset);
-            Frame->StagingBuffer.At += Frame->LightCount * sizeof(light);
-        }
-        else
-        {
-            UnimplementedCodePath;
-        }
-
-        u32 ShadowAt = 0;
-        for (u32 LightIndex = 0; LightIndex < Frame->LightCount; LightIndex++)
-        {
-            light* Light = Frame->Lights + LightIndex;
-
-            u32 ShadowIndex = 0xFFFFFFFFu;
-            if ((ShadowAt < Frame->ShadowCount) && (Frame->Shadows[ShadowAt] == LightIndex))
-            {
-                ShadowIndex = ShadowAt++;
-            }
-
-            f32 L = GetLuminance(Light->E);
-            f32 R = Sqrt(Max((L / R_LuminanceThreshold), 0.0f));
-            if (IntersectFrustumSphere(&CameraFrustum, Light->P, R))
-            {
-                v3 P = TransformPoint(Frame->Uniforms.ViewTransform, Light->P);
-                u32 DstIndex = Frame->Uniforms.LightCount++;
-                LightBuffer[DstIndex] = 
-                {
-                    .P = P,
-                    .ShadowIndex = ShadowIndex,
-                    .E = Light->E,
-                    .Flags = Light->Flags,
-                };
-
-                if (Frame->Uniforms.LightCount == R_MaxLightCount)
-                {
-                    break;
-                }
-            }
-        }
-
-        VkBufferMemoryBarrier2 BeginBarriers[] = 
-        {
-            {
-                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-                .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Renderer->LightBuffer,
-                .offset = 0,
-                .size = VK_WHOLE_SIZE,
-            },
-        };
-        VkDependencyInfo BeginDependency = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .pNext = nullptr,
-            .dependencyFlags = 0,
-            .bufferMemoryBarrierCount = CountOf(BeginBarriers),
-            .pBufferMemoryBarriers = BeginBarriers,
-        };
-        vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
-
-        VkBufferCopy LightBufferCopy = 
-        {
-            .srcOffset = LightBufferOffset,
-            .dstOffset = 0,
-            .size = Frame->Uniforms.LightCount * sizeof(light),
-        };
-        if (LightBufferCopy.size > 0)
-        {
-            vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->LightBuffer, 1, &LightBufferCopy);
-        }
-
-        VkBufferMemoryBarrier2 EndBarrier = 
-        {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-            .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = Renderer->LightBuffer,
-            .offset = 0,
-            .size = VK_WHOLE_SIZE,
-        };
-        PushBeginBarrier(&FrameStages[FrameStage_LightBinning], &EndBarrier);
-    }
 
     frustum CascadeFrustums[R_MaxShadowCascadeCount];
     SetupSceneRendering(Frame, CascadeFrustums);
@@ -2812,8 +2663,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     //
     draw_list PrimaryDrawList = {};
     draw_list CascadeDrawLists[R_MaxShadowCascadeCount] = {};
-    draw_list* ShadowDrawLists = PushArray(Frame->Arena, MemPush_Clear, draw_list, 6 * Frame->ShadowCount);
-    u32 DrawListCount = 1 + R_MaxShadowCascadeCount + 6 * Frame->ShadowCount;
+    draw_list* ShadowDrawLists = PushArray(Frame->Arena, MemPush_Clear, draw_list, 6 * R_MaxShadowCount);
+    u32 DrawListCount = 1 + R_MaxShadowCascadeCount;
+
+    u32 ShadowCount = 0;
+    frustum* ShadowFrustums = PushArray(Frame->Arena, 0, frustum, R_MaxShadowCount);
 
     VkViewport PrimaryViewport
     {
@@ -2881,6 +2735,23 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         mmbox*                          BoundingBoxes       = PushArray(Frame->Arena, 0, mmbox, InstanceCount);
         m4*                             Transforms          = PushArray(Frame->Arena, 0, m4, InstanceCount);
         VkDrawIndexedIndirectCommand*   IndirectCommands    = PushArray(Frame->Arena, 0, VkDrawIndexedIndirectCommand, InstanceCount);
+
+        umm LightDataOffset = 0;
+        u32 LightDataAt = 0;
+        light* LightData = nullptr;
+        {
+            LightDataOffset = Align(Frame->StagingBuffer.At, alignof(light));
+            umm LightDataSize = Frame->LightCount * sizeof(light);
+            if (LightDataOffset + LightDataSize <= Frame->StagingBuffer.Size)
+            {
+                LightData = (light*)OffsetPtr(Frame->StagingBuffer.Base, LightDataOffset);
+                Frame->StagingBuffer.At = LightDataOffset + LightDataSize;
+            }
+            else
+            {
+                UnhandledError("Not enough memory in staging buffer for light data");
+            }
+        }
 
         for (u32 CommandIndex = 0; CommandIndex < Frame->CommandCount; CommandIndex++)
         {
@@ -3175,6 +3046,73 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         InvalidDefaultCase;
                     }
                 } break;
+
+                case RenderCommand_Light:
+                {
+                    light* Light = &Command->Light;
+
+                    f32 L = GetLuminance(Light->E);
+                    f32 R = Sqrt(Max(L / R_LuminanceThreshold, 0.0f));
+
+                    if (LightDataAt <= R_MaxLightCount && 
+                        IntersectFrustumSphere(&Frame->CameraFrustum, Light->P, R))
+                    {
+                        Frame->Uniforms.LightCount++;
+                        u32 ShadowIndex = 0xFFFFFFFFu;
+                        if ((Light->Flags & LightFlag_ShadowCaster) && ShadowCount <= R_MaxShadowCount)
+                        {
+                            ShadowIndex = ShadowCount++;
+                            point_shadow_data* Shadow = Frame->Uniforms.PointShadows + ShadowIndex;
+
+                            f32 n = 0.05f;
+                            f32 f = R + 1e-6f;
+                            f32 r = 1.0f / (f - n);
+                            m4 Projection = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                                               0.0f, 1.0f, 0.0f, 0.0f,
+                                               0.0f, 0.0f, f*r, -f*n*r,
+                                               0.0f, 0.0f, 1.0f, 0.0f);
+                            m4 InverseProjection = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                                                      0.0f, 1.0f, 0.0f, 0.0f,
+                                                      0.0f, 0.0f, 0.0f, 1.0f,
+                                                      0.0f, 0.0f, -1.0f / (f*n*r), 1.0f / n);
+                            Shadow->Near = n;
+                            Shadow->Far = f;
+                            DrawListCount += 6;
+                            for (u32 LayerIndex = 0; LayerIndex < CubeLayer_Count; LayerIndex++)
+                            {
+                                m3 M = GlobalCubeFaceBases[LayerIndex];
+                                m4 InverseView = M4(M.X.X, M.Y.X, M.Z.X, Light->P.X,
+                                                    M.X.Y, M.Y.Y, M.Z.Y, Light->P.Y,
+                                                    M.X.Z, M.Y.Z, M.Z.Z, Light->P.Z,
+                                                    0.0f, 0.0f, 0.0f ,1.0f);
+                                m4 View = M4(M.X.X, M.X.Y, M.X.Z, -Dot(M.X, Light->P),
+                                             M.Y.X, M.Y.Y, M.Y.Z, -Dot(M.Y, Light->P),
+                                             M.Z.X, M.Z.Y, M.Z.Z, -Dot(M.Z, Light->P),
+                                             0.0f, 0.0f, 0.0f, 1.0f);
+                                m4 ViewProjection = Projection * View;
+                                Shadow->ViewProjections[LayerIndex] = ViewProjection;
+
+                                frustum ClipSpaceFrustum = GetClipSpaceFrustum();
+                                frustum* Frustum = &ShadowFrustums[6 * ShadowIndex + LayerIndex];
+                                for (u32 PlaneIndex = 0; PlaneIndex < CountOf(Frustum->Planes); PlaneIndex++)
+                                {
+                                    // TODO(boti): Try mul w/ ViewProjection after porting
+                                    Frustum->Planes[PlaneIndex] = ClipSpaceFrustum.Planes[PlaneIndex] * Projection * View;
+                                }
+                            }
+                        }
+
+                        v3 P = TransformPoint(Frame->Uniforms.ViewTransform, Light->P);
+                        LightData[LightDataAt++] =
+                        {
+                            .P = P,
+                            .ShadowIndex = ShadowIndex,
+                            .E = Light->E,
+                            .Flags = Light->Flags,
+                        };
+                    }
+                } break;
+
                 case RenderCommand_Draw:
                 {
                     draw_command* Draw = &Command->Draw;
@@ -3271,6 +3209,62 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 } break;
                 InvalidDefaultCase;
             }
+        }
+
+        // Upload lights
+        {
+            VkBufferMemoryBarrier2 BeginBarriers[] = 
+            {
+                {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+                    .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .buffer = Renderer->LightBuffer,
+                    .offset = 0,
+                    .size = VK_WHOLE_SIZE,
+                },
+            };
+            VkDependencyInfo BeginDependency = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext = nullptr,
+                .dependencyFlags = 0,
+                .bufferMemoryBarrierCount = CountOf(BeginBarriers),
+                .pBufferMemoryBarriers = BeginBarriers,
+            };
+            vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
+
+            VkBufferCopy LightBufferCopy = 
+            {
+                .srcOffset = LightDataOffset,
+                .dstOffset = 0,
+                .size = Frame->Uniforms.LightCount * sizeof(light),
+            };
+            if (LightBufferCopy.size > 0)
+            {
+                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->LightBuffer, 1, &LightBufferCopy);
+            }
+
+            VkBufferMemoryBarrier2 EndBarrier = 
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = Renderer->LightBuffer,
+                .offset = 0,
+                .size = VK_WHOLE_SIZE,
+            };
+            PushBeginBarrier(&FrameStages[FrameStage_LightBinning], &EndBarrier);
         }
 
         // Upload instance data
@@ -4180,7 +4174,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     //
     // Point shadows
     //
-    for (u32 ShadowIndex = 0; ShadowIndex < Frame->ShadowCount; ShadowIndex++)
+    for (u32 ShadowIndex = 0; ShadowIndex < ShadowCount; ShadowIndex++)
     {
         point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;
         VkImageMemoryBarrier2 Barrier = 
@@ -4227,13 +4221,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         vkCmdSetViewport(ShadowCmd, 0, 1, &ShadowViewport);
         vkCmdSetScissor(ShadowCmd, 0, 1, &ShadowScissor);
-        for (u32 ShadowIndex = 0; ShadowIndex < Frame->ShadowCount; ShadowIndex++)
+        for (u32 ShadowIndex = 0; ShadowIndex < ShadowCount; ShadowIndex++)
         {
-            u32 LightIndex = Frame->Shadows[ShadowIndex];
-            light* Light = Frame->Lights + LightIndex;
             point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;
 
-            for (u32 LayerIndex = 0; LayerIndex < Layer_Count; LayerIndex++)
+            for (u32 LayerIndex = 0; LayerIndex < CubeLayer_Count; LayerIndex++)
             {
                 VkMemoryBarrier Barrier = 
                 {
@@ -4290,7 +4282,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             }
         }
 
-        for (u32 ShadowIndex = 0; ShadowIndex < Frame->ShadowCount; ShadowIndex++)
+        for (u32 ShadowIndex = 0; ShadowIndex < ShadowCount; ShadowIndex++)
         {
             point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;
             VkImageMemoryBarrier2 Barrier =

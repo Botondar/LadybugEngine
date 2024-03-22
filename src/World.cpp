@@ -383,6 +383,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             DEBUGLoadTestScene(Scratch, Assets, World, Frame,
                                "data/Scenes/Sponza/Sponza.gltf", Transform);
 
+#if 1
             const light LightSources[] = 
             {
                 // "Fire" lights on top of the metal hangers
@@ -435,6 +436,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     }
                 }
             }
+#endif
         }
 
         // Animated fox
@@ -765,7 +767,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     }
 
     // Ad-hoc lights
-    if (0)
+    if (1)
     {
         render_command* Cmd = MakeParticleBatch(Frame, World->AdHocLightCount);
         if (Cmd)

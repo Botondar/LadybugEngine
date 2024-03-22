@@ -140,7 +140,7 @@ struct game_world
     f32 AdHocLightUpdateRate;
     f32 AdHocLightCounter;
     mmbox AdHocLightBounds;
-    static constexpr u32 AdHocLightCount = 256u;
+    static constexpr u32 AdHocLightCount = 64u;
     v3 AdHocLightdPs[AdHocLightCount];
     light AdHocLights[AdHocLightCount];
 };

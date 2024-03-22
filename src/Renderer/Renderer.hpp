@@ -485,14 +485,14 @@ struct pipeline_info
 
 enum cube_layer : u32
 {
-    Layer_PositiveX = 0,
-    Layer_NegativeX,
-    Layer_PositiveY,
-    Layer_NegativeY,
-    Layer_PositiveZ,
-    Layer_NegativeZ,
+    CubeLayer_PositiveX = 0,
+    CubeLayer_NegativeX,
+    CubeLayer_PositiveY,
+    CubeLayer_NegativeY,
+    CubeLayer_PositiveZ,
+    CubeLayer_NegativeZ,
 
-    Layer_Count,
+    CubeLayer_Count,
 };
 
 enum texture_swizzle_type : u8
@@ -774,6 +774,7 @@ enum render_command_type : u32
     RenderCommand_NOP = 0,
 
     RenderCommand_Transfer,
+    RenderCommand_Light,
     RenderCommand_Draw,
     RenderCommand_ParticleBatch,
     RenderCommand_Widget3D,
@@ -793,6 +794,7 @@ struct render_command
     union
     {
         transfer_op         Transfer;
+        light               Light;
         draw_command        Draw;
         particle_batch      ParticleBatch;
         draw_widget3d_cmd   Widget3D;
@@ -881,27 +883,15 @@ struct render_frame
     staging_buffer StagingBuffer;
 
     // Limits
-    static constexpr u32 MaxTransferOpCount     = (1u << 15);
     static constexpr u32 MaxCommandCount    = (1u << 17);
-
-    u32 MaxLightCount;
-    u32 MaxShadowCount;
 
     u32             CommandCount;
     render_command* Commands;
-    u32             DrawGroupDrawCounts[DrawGroup_Count];
-
     render_command* LastBatch2D;
-#if 0
-    u32 TransferOpCount;
-    transfer_op TransferOps[MaxTransferOpCount];
-#endif
 
-    u32 LightCount;
-    light* Lights;
-
-    u32 ShadowCount;
-    u32* Shadows;
+    u32             DrawGroupDrawCounts[DrawGroup_Count];
+    u32             LightCount;
+    u32             ShadowCount;
 
     // TODO(boti): Remove these from the API (should be backend only)
     void* UniformData; // GPU-backed frame_uniform_data
@@ -1375,28 +1365,20 @@ DrawWidget3D(render_frame* Frame,
 inline b32 AddLight(render_frame* Frame, v3 P, v3 E, light_flags Flags)
 {
     b32 Result = false;
-    if (Frame->LightCount < R_MaxLightCount)
+
+    render_command* Command = PushCommand_(Frame, RenderCommand_Light, 0, 0, 0, 0);
+    if (Command)
     {
-        u32 LightIndex = Frame->LightCount++;
-        u32 ShadowIndex = 0xFFFFFFFF;
-        if (Flags & LightFlag_ShadowCaster)
-        {
-            if (Frame->ShadowCount < Frame->MaxShadowCount)
-            {
-                ShadowIndex = Frame->ShadowCount++;
-                Frame->Shadows[ShadowIndex] = LightIndex;
-            }
-        }
+        Command->Light.P = P;
+        Command->Light.ShadowIndex = (Flags & LightFlag_ShadowCaster) ? Frame->ShadowCount++ : 0xFFFFFFFFu;
+        Command->Light.E = E;
+        Command->Light.Flags = Flags;
 
-        Frame->Lights[LightIndex] = 
-        {
-            .P = P,
-            .ShadowIndex = ShadowIndex,
-            .E = E,
-            .Flags = Flags,
-        };
-
-        Result = true;
+        Frame->LightCount++;
+    }
+    else
+    {
+        Result = false;
     }
     return(Result);
 }

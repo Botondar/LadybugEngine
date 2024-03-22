@@ -45,7 +45,7 @@ PushBuffer(gpu_memory_arena* Arena,
            VkBuffer* Buffer, 
            void** Mapping = nullptr);
 
-extern m3 GlobalCubeFaceBases[Layer_Count];
+extern m3 GlobalCubeFaceBases[CubeLayer_Count];
 
 enum vulkan_handle_type : u32
 {
@@ -332,7 +332,7 @@ SetupSceneRendering(render_frame* Frame, frustum* CascadeFrustums);
 //
 
 // NOTE(boti): See Vulkan spec. 16.5.4. Table 17. to find where these transforms come from
-m3 GlobalCubeFaceBases[Layer_Count]
+m3 GlobalCubeFaceBases[CubeLayer_Count]
 {
     // +X
     {
