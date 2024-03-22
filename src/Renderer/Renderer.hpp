@@ -739,33 +739,6 @@ struct draw_widget3d_cmd
     rgba8 Color;
 };
 
-enum render_command_type : u32
-{
-    RenderCommand_NOP = 0,
-
-    RenderCommand_Draw,
-    RenderCommand_ParticleBatch,
-    RenderCommand_Widget3D,
-    RenderCommand_Batch2D,
-
-    RenderCommand_Count,
-};
-
-struct render_command
-{
-    render_command_type Type;
-    umm BARBufferAt;
-    umm BARBufferSize;
-
-    union
-    {
-        draw_command        Draw;
-        particle_batch      ParticleBatch;
-        draw_widget3d_cmd   Widget3D;
-        draw_batch_2d       Batch2D;
-    };
-};
-
 enum transfer_op_type : u32
 {
     TransferOp_Undefined = 0,
@@ -789,11 +762,41 @@ struct transfer_geometry
 struct transfer_op
 {
     transfer_op_type Type;
-    umm SourceOffset;
     union
     {
         transfer_texture Texture;
         transfer_geometry Geometry;
+    };
+};
+
+enum render_command_type : u32
+{
+    RenderCommand_NOP = 0,
+
+    RenderCommand_Transfer,
+    RenderCommand_Draw,
+    RenderCommand_ParticleBatch,
+    RenderCommand_Widget3D,
+    RenderCommand_Batch2D,
+
+    RenderCommand_Count,
+};
+
+struct render_command
+{
+    render_command_type Type;
+    umm BARBufferAt;
+    umm BARBufferSize;
+    umm StagingBufferAt;
+    umm StagingBufferSize;
+
+    union
+    {
+        transfer_op         Transfer;
+        draw_command        Draw;
+        particle_batch      ParticleBatch;
+        draw_widget3d_cmd   Widget3D;
+        draw_batch_2d       Batch2D;
     };
 };
 
@@ -871,6 +874,10 @@ struct render_frame
         m4 InverseProjectionTransform;
     };
 
+    umm BARBufferSize;
+    umm BARBufferAt;
+    void* BARBufferBase;
+
     staging_buffer StagingBuffer;
 
     // Limits
@@ -885,19 +892,16 @@ struct render_frame
     u32             DrawGroupDrawCounts[DrawGroup_Count];
 
     render_command* LastBatch2D;
-
+#if 0
     u32 TransferOpCount;
     transfer_op TransferOps[MaxTransferOpCount];
+#endif
 
     u32 LightCount;
     light* Lights;
 
     u32 ShadowCount;
     u32* Shadows;
-
-    umm BARBufferSize;
-    umm BARBufferAt;
-    void* BARBufferBase;
 
     // TODO(boti): Remove these from the API (should be backend only)
     void* UniformData; // GPU-backed frame_uniform_data
@@ -961,7 +965,9 @@ PushParticle(render_frame* Frame, render_command* Batch, render_particle Particl
 // Internal public interface
 //
 inline render_command*
-PushCommand_(render_frame* Frame, render_command_type Type, umm BARAlignment, umm BARUsage);
+PushCommand_(render_frame* Frame, render_command_type Type, 
+             umm BARAlignment, umm BARUsage,
+             umm StagingAlignment, umm StagingUsage);
 
 //
 // Helpers
@@ -1228,6 +1234,33 @@ inline texture_subresource_range SubresourceFromMipMask(u32 Mask, texture_info I
     return(Result);
 }
 
+inline render_command*
+PushCommand_(render_frame* Frame, render_command_type Type, 
+             umm BARAlignment, umm BARUsage,
+             umm StagingAlignment, umm StagingUsage)
+{
+    render_command* Command = nullptr;
+
+    umm AlignedBAR = BARAlignment ? Align(Frame->BARBufferAt, BARAlignment) : Frame->BARBufferAt;
+    umm AlignedStaging = StagingAlignment ? Align(Frame->StagingBuffer.At, StagingAlignment) : Frame->StagingBuffer.At;
+    if ((Frame->CommandCount < Frame->MaxCommandCount) && 
+        (AlignedBAR + BARUsage <= Frame->BARBufferSize) &&
+        (AlignedStaging + StagingUsage <= Frame->StagingBuffer.Size))
+    {
+        Command = Frame->Commands + Frame->CommandCount++;
+        memset(Command, 0, sizeof(*Command));
+        Command->Type = Type;
+
+        Command->BARBufferAt = AlignedBAR;
+        Command->BARBufferSize = BARUsage;
+        Frame->BARBufferAt = AlignedBAR + BARUsage;
+        Command->StagingBufferAt = AlignedStaging;
+        Command->StagingBufferSize = StagingUsage;
+        Frame->StagingBuffer.At = AlignedStaging + StagingUsage;
+    }
+    return(Command);
+}
+
 inline b32 
 TransferTexture(render_frame* Frame, renderer_texture_id ID, 
                 texture_info Info, texture_subresource_range Range,
@@ -1235,33 +1268,23 @@ TransferTexture(render_frame* Frame, renderer_texture_id ID,
 {
     b32 Result = true;
 
-    if (Frame->TransferOpCount < Frame->MaxTransferOpCount)
+    format_byterate ByteRate = FormatByterateTable[Info.Format];
+    umm TotalSize = GetMipChainSize(Info.Width, Info.Height, Info.MipCount, Info.ArrayCount, ByteRate);
+    render_command* Command = PushCommand_(Frame, RenderCommand_Transfer, 0, 0, 64, TotalSize);
+    if (Command)
     {
-        format_byterate ByteRate = FormatByterateTable[Info.Format];
-        umm TotalSize = GetMipChainSize(Info.Width, Info.Height, Info.MipCount, Info.ArrayCount, ByteRate);
-        umm EffectiveOffset = Align(Frame->StagingBuffer.At, 64);
-        if (EffectiveOffset + TotalSize <= Frame->StagingBuffer.Size)
-        {
-            transfer_op* Op = Frame->TransferOps + Frame->TransferOpCount++;
-            Op->Type = TransferOp_Texture;
-            Op->SourceOffset = EffectiveOffset;
-            Op->Texture.TargetID = ID;
-            Op->Texture.Info = Info;
-            Op->Texture.SubresourceRange = Range;
-            memcpy(OffsetPtr(Frame->StagingBuffer.Base, EffectiveOffset), Data, TotalSize);
-            Frame->StagingBuffer.At = EffectiveOffset + TotalSize;
-        }
-        else
-        {
-            Result = false;
-            UnhandledError("Out of staging memory");
-        }
+        Command->Transfer.Type = TransferOp_Texture;
+        Command->Transfer.Texture.TargetID = ID;
+        Command->Transfer.Texture.Info = Info;
+        Command->Transfer.Texture.SubresourceRange = Range;
+        memcpy(OffsetPtr(Frame->StagingBuffer.Base, Command->StagingBufferAt), Data, TotalSize);
     }
     else
     {
+        UnhandledError("Failed to transfer texture");
         Result = false;
-        UnhandledError("Out of transfer pool");
     }
+
     return(Result);
 }
 
@@ -1270,53 +1293,24 @@ inline b32 TransferGeometry(render_frame* Frame, geometry_buffer_allocation Allo
 {
     b32 Result = true;
 
-    if (Frame->TransferOpCount < Frame->MaxTransferOpCount)
+    umm VertexSize = (umm)Allocation.VertexBlock->Count * sizeof(vertex);
+    umm IndexSize = (umm)Allocation.IndexBlock->Count * sizeof(vert_index);
+    umm TotalSize = VertexSize + IndexSize;
+    render_command* Command = PushCommand_(Frame, RenderCommand_Transfer, 0, 0, 16, TotalSize);
+    if (Command)
     {
-        umm VertexSize = (umm)Allocation.VertexBlock->Count * sizeof(vertex);
-        umm IndexSize = (umm)Allocation.IndexBlock->Count * sizeof(vert_index);
-        umm TotalSize = VertexSize + IndexSize;
-        if (Frame->StagingBuffer.At + TotalSize < Frame->StagingBuffer.Size)
-        {
-            transfer_op* Op = Frame->TransferOps + Frame->TransferOpCount++;
-            Op->Type = TransferOp_Geometry;
-            Op->SourceOffset = Frame->StagingBuffer.At;
-            Op->Geometry.Dest = Allocation;
-            memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At), VertexData, VertexSize);
-            memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At + VertexSize), IndexData, IndexSize);
-            Frame->StagingBuffer.At += TotalSize;
-        }
-        else
-        {
-            Result = false;
-            UnhandledError("Out of staging memory");
-        }
+        Command->Transfer.Type = TransferOp_Geometry;
+        Command->Transfer.Geometry.Dest = Allocation;
+        memcpy(OffsetPtr(Frame->StagingBuffer.Base, Command->StagingBufferAt), VertexData, VertexSize);
+        memcpy(OffsetPtr(Frame->StagingBuffer.Base, Command->StagingBufferAt + VertexSize), IndexData, IndexSize);
     }
     else
     {
+        UnhandledError("Failed to transfer geometry");
         Result = false;
-        UnhandledError("Out of transfer pool");
     }
 
     return(Result);
-}
-
-inline render_command*
-PushCommand_(render_frame* Frame, render_command_type Type, umm BARAlignment, umm BARUsage)
-{
-    render_command* Command = nullptr;
-
-    umm AlignedBAR = BARAlignment ? Align(Frame->BARBufferAt, BARAlignment) : Frame->BARBufferAt;
-    if ((Frame->CommandCount < Frame->MaxCommandCount) && 
-        (AlignedBAR + BARUsage <= Frame->BARBufferSize))
-    {
-        Command = Frame->Commands + Frame->CommandCount++;
-        memset(Command, 0, sizeof(*Command));
-        Command->Type = Type;
-        Command->BARBufferAt = AlignedBAR;
-        Command->BARBufferSize = BARUsage;
-        Frame->BARBufferAt = AlignedBAR + BARUsage;
-    }
-    return(Command);
 }
 
 inline b32 
@@ -1333,7 +1327,7 @@ DrawMesh(render_frame* Frame,
     b32 IsSkinned = JointCount != 0;
     umm PoseByteCount = JointCount * sizeof(m4);
 
-    render_command* Command = PushCommand_(Frame, RenderCommand_Draw, IsSkinned ? sizeof(m4) : 0, PoseByteCount);
+    render_command* Command = PushCommand_(Frame, RenderCommand_Draw, IsSkinned ? sizeof(m4) : 0, PoseByteCount, 0, 0);
     if (Command)
     {
         Command->Draw.Group = Group;
@@ -1364,7 +1358,7 @@ DrawWidget3D(render_frame* Frame,
              m4 Transform, rgba8 Color)
 {
     b32 Result = true;
-    render_command* Command = PushCommand_(Frame, RenderCommand_Widget3D, 0, 0);
+    render_command* Command = PushCommand_(Frame, RenderCommand_Widget3D, 0, 0, 0, 0);
     if (Command)
     {
         Command->Widget3D.Geometry = Allocation;
@@ -1439,13 +1433,13 @@ inline b32 DrawTriangleList2D(render_frame* Frame, u32 VertexCount, vertex_2d* V
             }
             else
             {
-                Command = PushCommand_(Frame, RenderCommand_Batch2D, 16, Align(ByteCount, BatchBlockByteCount));
+                Command = PushCommand_(Frame, RenderCommand_Batch2D, 16, Align(ByteCount, BatchBlockByteCount), 0, 0);
             }
         }
     }
     else
     {
-        Command = PushCommand_(Frame, RenderCommand_Batch2D, 16, Align(ByteCount, BatchBlockByteCount));
+        Command = PushCommand_(Frame, RenderCommand_Batch2D, 16, Align(ByteCount, BatchBlockByteCount), 0, 0);
     }
 
     if (Command)
@@ -1471,7 +1465,7 @@ MakeParticleBatch(render_frame* Frame, u32 MinParticleCount)
     constexpr umm MinBatchByteCount = KiB(16);
     umm ByteCount = Align(Max(MinBatchByteCount, MinParticleCount * sizeof(render_particle)), MinBatchByteCount);
 
-    render_command* Command = PushCommand_(Frame, RenderCommand_ParticleBatch, 16, ByteCount);
+    render_command* Command = PushCommand_(Frame, RenderCommand_ParticleBatch, 16, ByteCount, 0, 0);
     return(Command);
 }
 

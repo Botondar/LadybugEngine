@@ -2084,7 +2084,10 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
     // Reset buffers
     {
         Frame->StagingBuffer.At = 0;
-        Frame->TransferOpCount = 0;
+
+        Frame->BARBufferSize = Renderer->PerFrameBufferSize;
+        Frame->BARBufferAt = 0;
+        Frame->BARBufferBase = Renderer->PerFrameBufferMappings[FrameID];
 
         Frame->CommandCount = 0;
         Frame->Commands = PushArray(Arena, 0, render_command, Frame->MaxCommandCount);
@@ -2103,10 +2106,6 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         Frame->Shadows = PushArray(Arena, 0, u32, Frame->MaxShadowCount);
         
         Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
-
-        Frame->BARBufferSize = Renderer->PerFrameBufferSize;
-        Frame->BARBufferAt = 0;
-        Frame->BARBufferBase = Renderer->PerFrameBufferMappings[FrameID];
     }
 
     Frame->RenderExtent.X = Renderer->SurfaceExtent.width;
@@ -2699,325 +2698,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             }
         }
     }
-
-    for (u32 TransferOpIndex = 0; TransferOpIndex < Frame->TransferOpCount; TransferOpIndex++)
-    {
-        transfer_op* Op = Frame->TransferOps + TransferOpIndex;
-        switch (Op->Type)
-        {
-            case TransferOp_Texture:
-            {
-                texture_info* Info = &Op->Texture.Info;
-                texture_subresource_range* Range = &Op->Texture.SubresourceRange;
-                if (Info->Depth > 1)
-                {
-                    UnimplementedCodePath;
-                }
-
-                format_byterate ByteRate = FormatByterateTable[Info->Format];
-                umm TotalSize = GetMipChainSize(Info->Width, Info->Height, Info->MipCount, Info->ArrayCount, ByteRate);
-
-                u32 CopyCount = Info->MipCount * Info->ArrayCount;
-                VkBufferImageCopy* Copies = PushArray(Frame->Arena, 0, VkBufferImageCopy, CopyCount);
-                VkBufferImageCopy* CopyAt = Copies;
-
-                umm Offset = Op->SourceOffset;
-                for (u32 ArrayIndex = 0; ArrayIndex < Info->ArrayCount; ArrayIndex++)
-                {
-                    for (u32 MipIndex = 0; MipIndex < Info->MipCount; MipIndex++)
-                    {
-                        u32 Width = Max(Info->Width >> MipIndex, 1u);
-                        u32 Height = Max(Info->Height >> MipIndex, 1u);
-
-                        u32 RowLength = 0;
-                        u32 ImageHeight = 0;
-                        u64 TexelCount;
-                        if (ByteRate.Flags & FormatFlag_BlockCompressed)
-                        {
-                            RowLength = Align(Width, 4u);
-                            ImageHeight = Align(Height, 4u);
-
-                            TexelCount = (u64)RowLength * ImageHeight;
-                        }
-                        else
-                        {
-                            TexelCount = Width * Height;
-                        }
-                        u64 MipSize = TexelCount * ByteRate.Numerator / ByteRate.Denominator;
-
-                        CopyAt->bufferOffset = Offset,
-                        CopyAt->bufferRowLength = RowLength,
-                        CopyAt->bufferImageHeight = ImageHeight,
-                        CopyAt->imageSubresource = 
-                        {
-                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .mipLevel = MipIndex,
-                            .baseArrayLayer = ArrayIndex,
-                            .layerCount = 1,
-                        },
-                        CopyAt->imageOffset = { 0, 0, 0 },
-                        CopyAt->imageExtent = { Width, Height, 1 },
-
-                        Offset += MipSize;
-                        CopyAt++;
-                    }
-                }
-
-                b32 IsAllocated = false;
-                renderer_texture* Texture = GetTexture(&Renderer->TextureManager, Op->Texture.TargetID);
-                Assert(Texture);
-                if (Texture->ImageHandle == VK_NULL_HANDLE)
-                {
-                    IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
-                }
-                else if (AreTextureInfosSameFormat(Op->Texture.Info, Texture->Info))
-                {
-                    // NOTE(boti): Nothing to do here, although in the future we might want to allocate memory here
-                    // (currently that's always already done in this case)
-                    IsAllocated = true;
-                }
-                else
-                {
-                    // TODO(boti): Move the deletion entry push to the texture manager
-                    VkImage OldImageHandle = Texture->ImageHandle;
-                    VkImageView OldViewHandle = Texture->ViewHandle;
-                    IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
-                    if (IsAllocated)
-                    {
-                        PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, OldImageHandle);
-                        PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, OldViewHandle);
-                    }
-                }
-
-                if (IsAllocated)
-                {
-                    if (!IsTextureSpecial(Op->Texture.TargetID))
-                    {
-                        umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
-                        if ((Frame->StagingBuffer.At + DescriptorSize) <= Frame->StagingBuffer.Size)
-                        {
-                            VkDescriptorImageInfo DescriptorImage = 
-                            {
-                                .sampler = VK_NULL_HANDLE,
-                                .imageView = Texture->ViewHandle,
-                                .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
-                            };
-                            VkDescriptorGetInfoEXT DescriptorInfo = 
-                            {
-                                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-                                .pNext = nullptr,
-                                .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                                .data = { .pSampledImage = &DescriptorImage },
-                            };
-                            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At));
-
-                            umm DescriptorOffset = Renderer->TextureManager.TextureTableOffset + Op->Texture.TargetID.Value*DescriptorSize; // TODO(boti): standardize this
-                            VkBufferCopy DescriptorCopy = 
-                            {
-                                .srcOffset = Frame->StagingBuffer.At,
-                                .dstOffset = DescriptorOffset,
-                                .size = DescriptorSize,
-                            };
-                            vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
-
-                            Frame->StagingBuffer.At += DescriptorSize;
-
-                            u32 MipBucket;
-                            BitScanReverse(&MipBucket, Max(Info->Width, Info->Height));
-                            u32 MipMask = (1 << (MipBucket + 1)) - 1;
-                            Texture->MipResidencyMask = MipMask;
-                            Texture->Info = Op->Texture.Info;
-                        }
-                        else
-                        {
-                            UnimplementedCodePath;
-                        }
-                    }
-
-                    VkImageMemoryBarrier2 BeginBarrier = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                        .pNext = nullptr,
-                        .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                        .srcAccessMask = VK_ACCESS_2_NONE,
-                        .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .image = Texture->ImageHandle,
-                        .subresourceRange = 
-                        {
-                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = VK_REMAINING_MIP_LEVELS,
-                            .baseArrayLayer = 0,
-                            .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                        },
-                    };
-                    VkDependencyInfo BeginDependency = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                        .pNext = nullptr,
-                        .dependencyFlags = 0,
-                        .imageMemoryBarrierCount = 1,
-                        .pImageMemoryBarriers = &BeginBarrier,
-                    };
-                    vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
-                    vkCmdCopyBufferToImage(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Texture->ImageHandle, 
-                                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                           CopyCount, Copies);
-
-                    VkImageMemoryBarrier2 EndBarrier = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                        .pNext = nullptr,
-                        .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                        .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                        .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .image = Texture->ImageHandle,
-                        .subresourceRange = 
-                        {
-                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = VK_REMAINING_MIP_LEVELS,
-                            .baseArrayLayer = 0,
-                            .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                        },
-                    };
-                    PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
-                }
-                else
-                {
-                    // TODO(boti): Logging
-                    //UnimplementedCodePath;
-                }
-            } break;
-
-            case TransferOp_Geometry:
-            {
-                umm VertexByteCount = Op->Geometry.Dest.VertexBlock->Count * sizeof(vertex);
-                umm VertexByteOffset = Op->Geometry.Dest.VertexBlock->Offset * sizeof(vertex);
-                umm IndexByteCount = Op->Geometry.Dest.IndexBlock->Count * sizeof(vert_index);
-                umm IndexByteOffset = Op->Geometry.Dest.IndexBlock->Offset * sizeof(vert_index);
-                VkBuffer VertexBuffer = Renderer->GeometryBuffer.VertexMemory.Buffer;
-                VkBuffer IndexBuffer = Renderer->GeometryBuffer.IndexMemory.Buffer;
-
-                VkBufferMemoryBarrier2 Barrier = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = 0,
-                    .srcAccessMask = 0,
-                    .dstStageMask = 0,
-                    .dstAccessMask = 0,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .buffer = VK_NULL_HANDLE,
-                    .offset = 0,
-                    .size = 0,
-                };
-                VkDependencyInfo Dependency = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .dependencyFlags = 0,
-                    .bufferMemoryBarrierCount = 1,
-                    .pBufferMemoryBarriers = &Barrier,
-                };
-
-                if (VertexByteCount)
-                {
-                    Barrier.buffer = VertexBuffer;
-                    Barrier.offset = VertexByteOffset;
-                    Barrier.size = VertexByteCount;
-
-                    Barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-                    Barrier.srcAccessMask = VK_ACCESS_2_NONE;
-                    Barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-                    Barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                    vkCmdPipelineBarrier2(UploadCB, &Dependency);
-
-                    VkBufferCopy Copy = 
-                    {
-                        .srcOffset = Op->SourceOffset,
-                        .dstOffset = VertexByteOffset,
-                        .size = VertexByteCount,
-                    };
-                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], VertexBuffer, 1, &Copy);
-
-                    Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-                    Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                    Barrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-                    Barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
-                    PushBeginBarrier(&FrameStages[FrameStage_Skinning], &Barrier);
-                }
-
-                if (IndexByteCount)
-                {
-                    Barrier.buffer = IndexBuffer;
-                    Barrier.offset = IndexByteOffset;
-                    Barrier.size = IndexByteCount;
-
-                    Barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-                    Barrier.srcAccessMask = VK_ACCESS_2_NONE;
-                    Barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-                    Barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                    vkCmdPipelineBarrier2(UploadCB, &Dependency);
-                    VkBufferCopy Copy = 
-                    {
-                        .srcOffset = Op->SourceOffset + VertexByteCount,
-                        .dstOffset = IndexByteOffset,
-                        .size = IndexByteCount,
-                    };
-                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], IndexBuffer, 1, &Copy);
-
-                    Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-                    Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                    Barrier.dstStageMask = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
-                    Barrier.dstAccessMask = VK_ACCESS_2_INDEX_READ_BIT;
-                    PushBeginBarrier(&FrameStages[FrameStage_Prepass], &Barrier);
-                }
-            } break;
-            InvalidDefaultCase;
-        }
-    }
-
     
-    VkBufferMemoryBarrier2 EndTransferStageBufferMemoryBarriers[] = 
-    {
-        // Texture descriptor buffer
-        {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-            .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_DESCRIPTOR_BUFFER_READ_BIT_EXT,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = Renderer->TextureManager.DescriptorBuffer,
-            .offset = 0,
-            .size = VK_WHOLE_SIZE,
-        },
-    };
-
-    VkDependencyInfo EndTransferStageDependency = 
-    {
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .pNext = nullptr,
-        .dependencyFlags = 0,
-        .bufferMemoryBarrierCount = CountOf(EndTransferStageBufferMemoryBarriers),
-        .pBufferMemoryBarriers = EndTransferStageBufferMemoryBarriers,
-    };
-    vkCmdPipelineBarrier2(UploadCB, &EndTransferStageDependency);
-
     u32 TileCountX = CeilDiv(Frame->RenderExtent.X, R_TileSizeX);
     u32 TileCountY = CeilDiv(Frame->RenderExtent.Y, R_TileSizeY);
     Frame->Uniforms.TileCount = { TileCountX, TileCountY };
@@ -3206,9 +2887,298 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             render_command* Command = Frame->Commands + CommandIndex;
             switch (Command->Type)
             {
+                case RenderCommand_Transfer:
+                {
+                    transfer_op* Op = &Command->Transfer;
+                    switch (Op->Type)
+                    {
+                        case TransferOp_Texture:
+                        {
+                            texture_info* Info = &Op->Texture.Info;
+                            texture_subresource_range* Range = &Op->Texture.SubresourceRange;
+                            if (Info->Depth > 1)
+                            {
+                                UnimplementedCodePath;
+                            }
+
+                            format_byterate ByteRate = FormatByterateTable[Info->Format];
+                            umm TotalSize = GetMipChainSize(Info->Width, Info->Height, Info->MipCount, Info->ArrayCount, ByteRate);
+
+                            u32 CopyCount = Info->MipCount * Info->ArrayCount;
+                            VkBufferImageCopy* Copies = PushArray(Frame->Arena, 0, VkBufferImageCopy, CopyCount);
+                            VkBufferImageCopy* CopyAt = Copies;
+
+                            umm Offset = Command->StagingBufferAt;
+                            for (u32 ArrayIndex = 0; ArrayIndex < Info->ArrayCount; ArrayIndex++)
+                            {
+                                for (u32 MipIndex = 0; MipIndex < Info->MipCount; MipIndex++)
+                                {
+                                    u32 Width = Max(Info->Width >> MipIndex, 1u);
+                                    u32 Height = Max(Info->Height >> MipIndex, 1u);
+
+                                    u32 RowLength = 0;
+                                    u32 ImageHeight = 0;
+                                    u64 TexelCount;
+                                    if (ByteRate.Flags & FormatFlag_BlockCompressed)
+                                    {
+                                        RowLength = Align(Width, 4u);
+                                        ImageHeight = Align(Height, 4u);
+
+                                        TexelCount = (u64)RowLength * ImageHeight;
+                                    }
+                                    else
+                                    {
+                                        TexelCount = Width * Height;
+                                    }
+                                    u64 MipSize = TexelCount * ByteRate.Numerator / ByteRate.Denominator;
+
+                                    CopyAt->bufferOffset = Offset,
+                                    CopyAt->bufferRowLength = RowLength,
+                                    CopyAt->bufferImageHeight = ImageHeight,
+                                    CopyAt->imageSubresource = 
+                                    {
+                                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                        .mipLevel = MipIndex,
+                                        .baseArrayLayer = ArrayIndex,
+                                        .layerCount = 1,
+                                    },
+                                    CopyAt->imageOffset = { 0, 0, 0 },
+                                    CopyAt->imageExtent = { Width, Height, 1 },
+
+                                    Offset += MipSize;
+                                    CopyAt++;
+                                }
+                            }
+
+                            b32 IsAllocated = false;
+                            renderer_texture* Texture = GetTexture(&Renderer->TextureManager, Op->Texture.TargetID);
+                            Assert(Texture);
+                            if (Texture->ImageHandle == VK_NULL_HANDLE)
+                            {
+                                IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
+                            }
+                            else if (AreTextureInfosSameFormat(Op->Texture.Info, Texture->Info))
+                            {
+                                // NOTE(boti): Nothing to do here, although in the future we might want to allocate memory here
+                                // (currently that's always already done in this case)
+                                IsAllocated = true;
+                            }
+                            else
+                            {
+                                // TODO(boti): Move the deletion entry push to the texture manager
+                                VkImage OldImageHandle = Texture->ImageHandle;
+                                VkImageView OldViewHandle = Texture->ViewHandle;
+                                IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
+                                if (IsAllocated)
+                                {
+                                    PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, OldImageHandle);
+                                    PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, OldViewHandle);
+                                }
+                            }
+
+                            if (IsAllocated)
+                            {
+                                if (!IsTextureSpecial(Op->Texture.TargetID))
+                                {
+                                    umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
+                                    if ((Frame->StagingBuffer.At + DescriptorSize) <= Frame->StagingBuffer.Size)
+                                    {
+                                        VkDescriptorImageInfo DescriptorImage = 
+                                        {
+                                            .sampler = VK_NULL_HANDLE,
+                                            .imageView = Texture->ViewHandle,
+                                            .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                                        };
+                                        VkDescriptorGetInfoEXT DescriptorInfo = 
+                                        {
+                                            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                                            .pNext = nullptr,
+                                            .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                            .data = { .pSampledImage = &DescriptorImage },
+                                        };
+                                        vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At));
+
+                                        umm DescriptorOffset = Renderer->TextureManager.TextureTableOffset + Op->Texture.TargetID.Value*DescriptorSize; // TODO(boti): standardize this
+                                        VkBufferCopy DescriptorCopy = 
+                                        {
+                                            .srcOffset = Frame->StagingBuffer.At,
+                                            .dstOffset = DescriptorOffset,
+                                            .size = DescriptorSize,
+                                        };
+                                        vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
+
+                                        Frame->StagingBuffer.At += DescriptorSize;
+
+                                        u32 MipBucket;
+                                        BitScanReverse(&MipBucket, Max(Info->Width, Info->Height));
+                                        u32 MipMask = (1 << (MipBucket + 1)) - 1;
+                                        Texture->MipResidencyMask = MipMask;
+                                        Texture->Info = Op->Texture.Info;
+                                    }
+                                    else
+                                    {
+                                        UnimplementedCodePath;
+                                    }
+                                }
+
+                                VkImageMemoryBarrier2 BeginBarrier = 
+                                {
+                                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                    .pNext = nullptr,
+                                    .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                                    .srcAccessMask = VK_ACCESS_2_NONE,
+                                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                                    .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                                    .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                    .image = Texture->ImageHandle,
+                                    .subresourceRange = 
+                                    {
+                                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                        .baseMipLevel = 0,
+                                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                                        .baseArrayLayer = 0,
+                                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                                    },
+                                };
+                                VkDependencyInfo BeginDependency = 
+                                {
+                                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                    .pNext = nullptr,
+                                    .dependencyFlags = 0,
+                                    .imageMemoryBarrierCount = 1,
+                                    .pImageMemoryBarriers = &BeginBarrier,
+                                };
+                                vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
+                                vkCmdCopyBufferToImage(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Texture->ImageHandle, 
+                                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                                       CopyCount, Copies);
+
+                                VkImageMemoryBarrier2 EndBarrier = 
+                                {
+                                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                    .pNext = nullptr,
+                                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                    .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                                    .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                                    .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                    .image = Texture->ImageHandle,
+                                    .subresourceRange = 
+                                    {
+                                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                        .baseMipLevel = 0,
+                                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                                        .baseArrayLayer = 0,
+                                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                                    },
+                                };
+                                PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
+                            }
+                            else
+                            {
+                                // TODO(boti): Logging
+                                //UnimplementedCodePath;
+                            }
+                        } break;
+
+                        case TransferOp_Geometry:
+                        {
+                            umm VertexByteCount = Op->Geometry.Dest.VertexBlock->Count * sizeof(vertex);
+                            umm VertexByteOffset = Op->Geometry.Dest.VertexBlock->Offset * sizeof(vertex);
+                            umm IndexByteCount = Op->Geometry.Dest.IndexBlock->Count * sizeof(vert_index);
+                            umm IndexByteOffset = Op->Geometry.Dest.IndexBlock->Offset * sizeof(vert_index);
+                            VkBuffer VertexBuffer = Renderer->GeometryBuffer.VertexMemory.Buffer;
+                            VkBuffer IndexBuffer = Renderer->GeometryBuffer.IndexMemory.Buffer;
+
+                            VkBufferMemoryBarrier2 Barrier = 
+                            {
+                                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                                .pNext = nullptr,
+                                .srcStageMask = 0,
+                                .srcAccessMask = 0,
+                                .dstStageMask = 0,
+                                .dstAccessMask = 0,
+                                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                .buffer = VK_NULL_HANDLE,
+                                .offset = 0,
+                                .size = 0,
+                            };
+                            VkDependencyInfo Dependency = 
+                            {
+                                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                .pNext = nullptr,
+                                .dependencyFlags = 0,
+                                .bufferMemoryBarrierCount = 1,
+                                .pBufferMemoryBarriers = &Barrier,
+                            };
+
+                            if (VertexByteCount)
+                            {
+                                Barrier.buffer = VertexBuffer;
+                                Barrier.offset = VertexByteOffset;
+                                Barrier.size = VertexByteCount;
+
+                                Barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+                                Barrier.srcAccessMask = VK_ACCESS_2_NONE;
+                                Barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                                Barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                                vkCmdPipelineBarrier2(UploadCB, &Dependency);
+
+                                VkBufferCopy Copy = 
+                                {
+                                    .srcOffset = Command->StagingBufferAt,
+                                    .dstOffset = VertexByteOffset,
+                                    .size = VertexByteCount,
+                                };
+                                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], VertexBuffer, 1, &Copy);
+
+                                Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                                Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                                Barrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+                                Barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+                                PushBeginBarrier(&FrameStages[FrameStage_Skinning], &Barrier);
+                            }
+
+                            if (IndexByteCount)
+                            {
+                                Barrier.buffer = IndexBuffer;
+                                Barrier.offset = IndexByteOffset;
+                                Barrier.size = IndexByteCount;
+
+                                Barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+                                Barrier.srcAccessMask = VK_ACCESS_2_NONE;
+                                Barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                                Barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                                vkCmdPipelineBarrier2(UploadCB, &Dependency);
+                                VkBufferCopy Copy = 
+                                {
+                                    .srcOffset = Command->StagingBufferAt + VertexByteCount,
+                                    .dstOffset = IndexByteOffset,
+                                    .size = IndexByteCount,
+                                };
+                                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], IndexBuffer, 1, &Copy);
+
+                                Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                                Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                                Barrier.dstStageMask = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
+                                Barrier.dstAccessMask = VK_ACCESS_2_INDEX_READ_BIT;
+                                PushBeginBarrier(&FrameStages[FrameStage_Prepass], &Barrier);
+                            }
+                        } break;
+                        InvalidDefaultCase;
+                    }
+                } break;
                 case RenderCommand_Draw:
                 {
                     draw_command* Draw = &Command->Draw;
+
                     u32 ID = DrawGroupOffsets[Draw->Group]++;
                     BoundingBoxes[ID] = Draw->BoundingBox;
                     Transforms[ID] = Draw->Transform;
@@ -3517,6 +3487,34 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         };
         PushBeginBarrier(&FrameStages[FrameStage_Prepass], &MipFeedbackClearBarrier);
     }
+
+    VkBufferMemoryBarrier2 EndTransferStageBufferMemoryBarriers[] = 
+    {
+        // Texture descriptor buffer
+        {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+            .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+            .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_DESCRIPTOR_BUFFER_READ_BIT_EXT,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .buffer = Renderer->TextureManager.DescriptorBuffer,
+            .offset = 0,
+            .size = VK_WHOLE_SIZE,
+        },
+    };
+
+    VkDependencyInfo EndTransferStageDependency = 
+    {
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .pNext = nullptr,
+        .dependencyFlags = 0,
+        .bufferMemoryBarrierCount = CountOf(EndTransferStageBufferMemoryBarriers),
+        .pBufferMemoryBarriers = EndTransferStageBufferMemoryBarriers,
+    };
+    vkCmdPipelineBarrier2(UploadCB, &EndTransferStageDependency);
 
     EndCommandBuffer(UploadCB);
 
