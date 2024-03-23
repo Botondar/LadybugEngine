@@ -22,6 +22,7 @@ enum pipeline : u32
     Pipeline_ShadingVisibility,
 
     Pipeline_Prepass_AlphaTest,
+    Pipeline_ShadingForward_AlphaTest,
     Pipeline_Shadow_AlphaTest,
     Pipeline_ShadowCascade_AlphaTest,
 

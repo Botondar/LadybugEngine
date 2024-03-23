@@ -454,15 +454,28 @@ enum render_target_format : u32
     RTFormat_Count,
 };
 
+typedef flags64 pipeline_properties;
+enum pipeline_property_bits : pipeline_properties
+{
+    PipelineProp_None       = 0,
+
+    PipelineProp_Cull       = (1u << 0),
+    PipelineProp_DepthClamp = (1u << 1),
+    PipelineProp_DepthBias  = (1u << 2),
+};
+
+struct pipeline_inheritance_info
+{
+    u32 ParentID;
+    pipeline_property_bits OverrideProps;
+};
+
 struct pipeline_info
 {
     const char* Name;
     pipeline_type Type;
 
-    // NOTE(boti): ParentIDs are currently used to inherit everything from the parent pipeline, 
-    // _except_ the shader
-    // TODO(boti): Have a flags field for which entries are valid in the descendant?
-    u32 ParentID;
+    pipeline_inheritance_info Inheritance;
 
     pipeline_layout_info Layout;
 

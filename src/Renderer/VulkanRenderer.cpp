@@ -309,16 +309,35 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
             Pipeline->Layout = Renderer->SystemPipelineLayout;
         }
 
-        // NOTE(boti): The shader names is always used in the current pipeline
+        // NOTE(boti): The shader name is always used from the current pipeline (not the parent)
         u64 NameSize = PathSize;
         CopyZStringToBuffer(Name, Info->Name, &NameSize);
         char* Extension = Path + (MaxPathSize - NameSize);
         
-        if (Info->ParentID != Pipeline_None)
+        pipeline_info VariantInfo = {};
+        if (Info->Inheritance.ParentID)
         {
-            const pipeline_info* ParentInfo = PipelineInfos + Info->ParentID;
+            const pipeline_info* ParentInfo = PipelineInfos + Info->Inheritance.ParentID;
             Assert(ParentInfo->Type == Info->Type);
-            Info = ParentInfo;
+            VariantInfo = *ParentInfo;
+            if (Info->Inheritance.OverrideProps & PipelineProp_Cull)
+            {
+                VariantInfo.RasterizerState.CullFlags = Info->RasterizerState.CullFlags;
+            }
+            if (Info->Inheritance.OverrideProps & PipelineProp_DepthClamp)
+            {
+                VariantInfo.RasterizerState.Flags &= ~RS_DepthClampEnable;
+                VariantInfo.RasterizerState.Flags |= (Info->RasterizerState.Flags & RS_DepthClampEnable);
+            }
+            if (Info->Inheritance.OverrideProps & PipelineProp_DepthBias)
+            {
+                VariantInfo.RasterizerState.Flags &= ~RS_DepthBiasEnable;
+                VariantInfo.RasterizerState.Flags |= (Info->RasterizerState.Flags & RS_DepthBiasEnable);
+                VariantInfo.RasterizerState.DepthBiasConstantFactor = Info->RasterizerState.DepthBiasConstantFactor;
+                VariantInfo.RasterizerState.DepthBiasSlopeFactor = Info->RasterizerState.DepthBiasSlopeFactor;
+                VariantInfo.RasterizerState.DepthBiasClamp = Info->RasterizerState.DepthBiasClamp;
+            }
+            Info = &VariantInfo;
         }
 
         if (Info->Type == PipelineType_Compute)
@@ -4510,7 +4529,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 pipeline Pipelines[DrawGroup_Count] = 
                 {
                     [DrawGroup_Opaque]      = Pipeline_ShadingForward,
-                    [DrawGroup_AlphaTest]   = Pipeline_ShadingForward,
+                    [DrawGroup_AlphaTest]   = Pipeline_ShadingForward_AlphaTest,
                     [DrawGroup_Skinned]     = Pipeline_ShadingForward,
                 };
                 DrawList(Frame, RenderCmd, Pipelines, &PrimaryDrawList);
