@@ -137,8 +137,8 @@ struct v4u8
 //
 // Shader specific
 //
-#define LightBin_GroupSizeX             32
-#define LightBin_GroupSizeY             1
+#define LightBin_GroupSizeX             R_TileSizeX
+#define LightBin_GroupSizeY             R_TileSizeY
 #define LightBin_GroupSizeZ             1
 
 #define SSAO_GroupSizeX                 8
@@ -250,7 +250,8 @@ struct per_frame
     v3 SunV;
     v3 SunL;
 
-    v2 ScreenSize;
+    v2u RenderExtent;
+    v2u OutputExtent;
     v2u TileCount;
 
     u32 DrawGroupCounts[DrawGroup_Count];

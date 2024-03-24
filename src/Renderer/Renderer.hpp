@@ -856,6 +856,7 @@ struct render_frame
 
     u32 FrameID;
     v2u RenderExtent;
+    v2u OutputExtent;
 
     renderer_texture_id ImmediateTextureID;
     renderer_texture_id ParticleTextureID; // TODO(boti): Move this to the particle command?
@@ -918,7 +919,7 @@ struct render_frame
  * Such a name can't be used as a placeholder until it has been uploaded with some data (after a frame boundary).
  */ 
 #define Signature_AllocateTexture(name)     renderer_texture_id         name(renderer* Renderer, texture_flags Flags, const texture_info* Info, renderer_texture_id Placeholder)
-#define Signature_BeginRenderFrame(name)    render_frame*               name(renderer* Renderer, memory_arena* Arena, v2u OutputExtent)
+#define Signature_BeginRenderFrame(name)    render_frame*               name(renderer* Renderer, memory_arena* Arena, v2u RenderExtent)
 #define Signature_EndRenderFrame(name)      void                        name(render_frame* Frame)
 
 typedef Signature_CreateRenderer(create_renderer);

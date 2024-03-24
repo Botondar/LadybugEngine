@@ -13,71 +13,71 @@ SetBinding(Static, OcclusionRawStorageImage) uniform writeonly restrict image2D 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 
 // Sample offset table
-const vec2 d[4] = { vec2(0.1, 0.0), vec2(0.0, 0.2), vec2(-0.3, 0.0 ), vec2(0.0, -0.4), };
+const v2 d[4] = { v2(0.1, 0.0), v2(0.0, 0.2), v2(-0.3, 0.0 ), v2(0.0, -0.4), };
 
 // NOTE(boti): SinCos 2pi*k / 16 with k=[0,16) in a random order
 // x = C, y = S
-const vec2 RotationSinCosTable[16] = 
+const v2 RotationSinCosTable[16] = 
 {
-    vec2(0.382683, 0.923880),
-    vec2(-0.923880, 0.382683),
-    vec2(0.707107, -0.707107),
-    vec2(0.000000, -1.000000),
-    vec2(1.000000, 0.000000),
-    vec2(-0.923880, -0.382683),
-    vec2(0.923880, -0.382683),
-    vec2(-0.000000, 1.000000),
-    vec2(-1.000000, -0.000000),
-    vec2(-0.382683, 0.923880),
-    vec2(-0.382683, -0.923880),
-    vec2(0.382683, -0.923880),
-    vec2(0.707107, 0.707107),
-    vec2(-0.707107, 0.707107),
-    vec2(-0.707107, -0.707107),
-    vec2(0.923880, 0.382683),
+    v2(0.382683, 0.923880),
+    v2(-0.923880, 0.382683),
+    v2(0.707107, -0.707107),
+    v2(0.000000, -1.000000),
+    v2(1.000000, 0.000000),
+    v2(-0.923880, -0.382683),
+    v2(0.923880, -0.382683),
+    v2(-0.000000, 1.000000),
+    v2(-1.000000, -0.000000),
+    v2(-0.382683, 0.923880),
+    v2(-0.382683, -0.923880),
+    v2(0.382683, -0.923880),
+    v2(0.707107, 0.707107),
+    v2(-0.707107, 0.707107),
+    v2(-0.707107, -0.707107),
+    v2(0.923880, 0.382683),
 };
 
 void main()
 {
-    ivec2 Size = imageSize(SSAOImage);
-    ivec2 P = ivec2(gl_GlobalInvocationID.xy);
+    v2s Size = imageSize(SSAOImage);
+    v2s P = v2s(gl_GlobalInvocationID.xy);
 
-    float Aspect = PerFrame.ScreenSize.x / PerFrame.ScreenSize.y;
-    float VectorScale = 2.0 * Aspect / (PerFrame.FocalLength * PerFrame.ScreenSize.x);
+    f32 Aspect = PerFrame.RenderExtent.x / PerFrame.RenderExtent.y;
+    f32 VectorScale = 2.0 * Aspect / (PerFrame.FocalLength * PerFrame.RenderExtent.x);
 
     // Accumulate occlusion per pixel
     if (P.x < Size.x && P.y < Size.y)
     {
-        vec2 SampleP = vec2(P);// / PerFrame.ScreenSize;
-        vec3 Structure = StructureDecode(texelFetch(StructureImage, P, 0));
+        v2 SampleP = v2(P);
+        v3 Structure = StructureDecode(texelFetch(StructureImage, P, 0));
 
-        float Scale = VectorScale * Structure.z;
-        vec3 N = normalize(vec3(Structure.xy, -Scale));
+        f32 Scale = VectorScale * Structure.z;
+        v3 N = normalize(v3(Structure.xy, -Scale));
         Scale = 1.0 / Scale;
 
-        ivec2 RotationIndex = P & ivec2(3, 3);
+        v2s RotationIndex = P & v2s(3, 3);
         vec2 Rotation = RotationSinCosTable[RotationIndex.x + RotationIndex.y * 4];
 
-        float Occlusion = 0.0;
-        float Weight = 0.0;
+        f32 Occlusion = 0.0;
+        f32 Weight = 0.0;
         for (uint i = 0; i < 4; i++)
         {
-            vec3 v;
+            v3 v;
             v.x = d[i].x * Rotation.x - d[i].y * Rotation.y;
             v.y = d[i].x * Rotation.y + d[i].y * Rotation.x;
 
-            vec2 Depth2 = textureLod(sampler2D(StructureImage, Samplers[Sampler_LinearUnnormalized]), SampleP + v.xy * Scale, 0).zw;
+            v2 Depth2 = textureLod(sampler2D(StructureImage, Samplers[Sampler_LinearUnnormalized]), SampleP + v.xy * Scale, 0).zw;
             v.z = Depth2.x + Depth2.y - Structure.z;
             
-            float NdotV = dot(N, v);
-            float w = clamp(1.0 - PerFrame.SSAOInverseMaxDistance * NdotV, 0.0, 1.0);
-            float c = clamp(NdotV * inversesqrt(dot(v, v)) - PerFrame.SSAOTangentTau, 0.0, 1.0);
+            f32 NdotV = dot(N, v);
+            f32 w = clamp(1.0 - PerFrame.SSAOInverseMaxDistance * NdotV, 0.0, 1.0);
+            f32 c = clamp(NdotV * inversesqrt(dot(v, v)) - PerFrame.SSAOTangentTau, 0.0, 1.0);
 
             Occlusion += w - w * sqrt(1.0 - c*c);
             Weight += w;
         }
 
-        float Result = 1.0 - Occlusion * PerFrame.SSAOIntensity / max(Weight, 0.0001);
+        f32 Result = 1.0 - Occlusion * PerFrame.SSAOIntensity / max(Weight, 0.0001);
         imageStore(SSAOImage, P, Result.xxxx);
     }
 }

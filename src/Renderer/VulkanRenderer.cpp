@@ -17,7 +17,7 @@ if (Result != VK_SUCCESS) { \
 #include "rhi_vulkan.cpp"
 
 internal VkResult 
-ResizeRenderTargets(renderer* Renderer, b32 Forced);
+ResizeRenderTargets(renderer* Renderer, u32 FrameID, b32 Forced);
 
 internal VkResult 
 CreatePipelines(renderer* Renderer);
@@ -688,24 +688,6 @@ PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, vulkan_handle_type Typ
     return(Result);
 }
 
-internal b32 
-PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkBuffer Buffer)
-{
-    return PushDeletionEntry(Queue, FrameID, VulkanHandle_Buffer, Buffer);
-}
-
-internal b32 
-PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImage Image)
-{
-    return PushDeletionEntry(Queue, FrameID, VulkanHandle_Image, Image);
-}
-
-internal b32 
-PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImageView ImageView)
-{
-    return PushDeletionEntry(Queue, FrameID, VulkanHandle_ImageView, ImageView);
-}
-
 internal void 
 ProcessDeletionEntries(gpu_deletion_queue* Queue, u32 FrameID)
 {
@@ -726,6 +708,10 @@ ProcessDeletionEntries(gpu_deletion_queue* Queue, u32 FrameID)
             case VulkanHandle_ImageView:
             {
                 vkDestroyImageView(VK.Device, Entry->ImageViewHandle, nullptr);
+            } break;
+            case VulkanHandle_Swapchain:
+            {
+                vkDestroySwapchainKHR(VK.Device, Entry->Swapchain, nullptr);
             } break;
             InvalidDefaultCase;
         }
@@ -1293,7 +1279,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         };
 
         Renderer->SwapchainImageCount = 2;
-        Result = ResizeRenderTargets(Renderer, false);
+        Result = ResizeRenderTargets(Renderer, 0, false);
         ReturnOnFailure();
     }
 
@@ -1639,7 +1625,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     return(Renderer);
 }
 
-internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
+internal VkResult ResizeRenderTargets(renderer* Renderer, u32 FrameID, b32 Forced)
 {
     VkResult Result = VK_SUCCESS;
 
@@ -1869,7 +1855,7 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
 
             if (CreateInfo.oldSwapchain)
             {
-                vkDestroySwapchainKHR(VK.Device, CreateInfo.oldSwapchain, nullptr);
+                PushDeletionEntry(&Renderer->DeletionQueue, FrameID, CreateInfo.oldSwapchain);
             }
         }
     }
@@ -2101,6 +2087,8 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
 
     Frame->ReloadShaders = false;
     Frame->FrameID = FrameID;
+    Frame->RenderExtent = RenderExtent;
+    Frame->OutputExtent = { Renderer->SurfaceExtent.width, Renderer->SurfaceExtent.height };
 
     // TODO(boti): See renderer struct
     Renderer->CmdBufferAt = 0;
@@ -2127,12 +2115,8 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         
         Frame->UniformData = Renderer->PerFrameUniformBufferMappings[FrameID];
     }
-
-    Frame->RenderExtent.X = Renderer->SurfaceExtent.width;
-    Frame->RenderExtent.Y = Renderer->SurfaceExtent.height;
     
     Frame->Uniforms = {};
-    Frame->Uniforms.ScreenSize = { (f32)Frame->RenderExtent.X, (f32)Frame->RenderExtent.Y };
 
     VkSemaphoreWaitInfo WaitInfo = 
     {
@@ -2245,6 +2229,47 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     Frame->Uniforms.LinearFogMinZ               = Frame->LinearFogMinZ;
     Frame->Uniforms.LinearFogMaxZ               = Frame->LinearFogMaxZ;
 
+    // Acquire image
+    u32 SwapchainImageIndex = U32_MAX;
+    {
+        vkWaitForFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID], VK_TRUE, UINT64_MAX);
+        vkResetFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID]);
+
+        for (;;)
+        {
+            VkResult ImageAcquireResult = vkAcquireNextImageKHR(VK.Device, Renderer->Swapchain, 0, 
+                                                                Renderer->ImageAcquiredSemaphores[Frame->FrameID], 
+                                                                Renderer->ImageAcquiredFences[Frame->FrameID], 
+                                                                &SwapchainImageIndex);
+            if (ImageAcquireResult == VK_SUCCESS || 
+                ImageAcquireResult == VK_TIMEOUT ||
+                ImageAcquireResult == VK_NOT_READY)
+            {
+                Assert(SwapchainImageIndex != U32_MAX);
+                break;
+            }
+            else if (ImageAcquireResult == VK_SUBOPTIMAL_KHR || ImageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR)
+            {
+                ResizeRenderTargets(Renderer, Frame->FrameID, true);
+                Frame->OutputExtent.X = Renderer->SurfaceExtent.width;
+                Frame->OutputExtent.Y = Renderer->SurfaceExtent.height;
+                vkResetFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID]);
+            }
+            else
+            {
+                UnhandledError("vkAcquireNextImage error");
+                return;
+            }
+        }
+    }
+
+    if (Frame->RenderExtent.X == 0 || Frame->RenderExtent.Y == 0)
+    {
+        Frame->RenderExtent = Frame->OutputExtent;
+    }
+    Frame->Uniforms.RenderExtent = Frame->RenderExtent;
+    Frame->Uniforms.OutputExtent = Frame->OutputExtent;
+
     // Calculate camera parameters
     {
         f32 n = Frame->CameraNearPlane;
@@ -2310,46 +2335,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         
         Frame->Uniforms.SunV = TransformDirection(Frame->ViewTransform, Frame->SunV);
         Frame->Uniforms.SunL = Frame->SunL;
-    }
-
-    // Acquire image
-    u32 SwapchainImageIndex = U32_MAX;
-    {
-        vkWaitForFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID], VK_TRUE, UINT64_MAX);
-        vkResetFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID]);
-
-        if (Frame->RenderExtent.X != Renderer->SurfaceExtent.width ||
-            Frame->RenderExtent.Y != Renderer->SurfaceExtent.height)
-        {
-            ResizeRenderTargets(Renderer, false);
-        }
-
-        for (;;)
-        {
-            VkResult ImageAcquireResult = vkAcquireNextImageKHR(VK.Device, Renderer->Swapchain, 0, 
-                                                                Renderer->ImageAcquiredSemaphores[Frame->FrameID], 
-                                                                Renderer->ImageAcquiredFences[Frame->FrameID], 
-                                                                &SwapchainImageIndex);
-            if (ImageAcquireResult == VK_SUCCESS || 
-                ImageAcquireResult == VK_TIMEOUT ||
-                ImageAcquireResult == VK_NOT_READY)
-            {
-                Assert(SwapchainImageIndex != INVALID_INDEX_U32);
-                break;
-            }
-            else if (ImageAcquireResult == VK_SUBOPTIMAL_KHR ||
-                ImageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR)
-            {
-                ResizeRenderTargets(Renderer, true);
-                Frame->RenderExtent.X = Renderer->SurfaceExtent.width;
-                Frame->RenderExtent.Y = Renderer->SurfaceExtent.height;
-            }
-            else
-            {
-                UnhandledError("vkAcquireNextImage error");
-                return;
-            }
-        }
     }
 
     VkCommandBuffer UploadCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_None);
@@ -3073,8 +3058,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     f32 L = GetLuminance(Light->E);
                     f32 R = Sqrt(Max(L / R_LuminanceThreshold, 0.0f));
 
-                    if (LightDataAt <= R_MaxLightCount && 
-                        IntersectFrustumSphere(&Frame->CameraFrustum, Light->P, R))
+                    if (LightDataAt <= R_MaxLightCount /*&& IntersectFrustumSphere(&Frame->CameraFrustum, Light->P, R)*/)
                     {
                         Frame->Uniforms.LightCount++;
                         u32 ShadowIndex = 0xFFFFFFFFu;
@@ -3992,7 +3976,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     {
         pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_LightBinning];
         vkCmdBindPipeline(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
-        vkCmdDispatch(PreLightCmd, CeilDiv(TileCountX, LightBin_GroupSizeX), CeilDiv(TileCountY, LightBin_GroupSizeY), 1);
+
+        v2u DispatchXY = { CeilDiv(Frame->RenderExtent.X, LightBin_GroupSizeX), CeilDiv(Frame->RenderExtent.Y, LightBin_GroupSizeY) };
+        vkCmdDispatch(PreLightCmd, DispatchXY.X, DispatchXY.Y, 1);
 
         VkBufferMemoryBarrier2 EndBarrier = 
         {

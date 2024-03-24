@@ -135,7 +135,6 @@ void main()
     {
         v2u TileID = gl_GlobalInvocationID.xy / v2u(R_TileSizeX, R_TileSizeY);
         TileIndex = TileID.x + TileID.y * PerFrame.TileCount.x;
-        //TileIndex = subgroupBroadcast(TileIndex, 0);
     }
 
     v2u InstanceTriangleID = texelFetch(VisibilityImage, TexelID, 0).rg;
@@ -144,14 +143,13 @@ void main()
     v2 Pixel = 2.0 * ((v2(TexelID) + TexelOffset) / v2(OutputExtent)) - v2(1.0);
 
     v3 Lo = v3(0.0);
-
     if (InstanceTriangleID.x != 0xFFFFFFFFu)
     {
         //
         // Instance/vertex fetch
         //
-        instance_data Instance = InstanceData[nonuniformEXT(InstanceTriangleID.x)];
-        draw_data Draw = DrawData[nonuniformEXT(InstanceTriangleID.x)];
+        instance_data Instance = InstanceData[InstanceTriangleID.x];
+        draw_data Draw = DrawData[InstanceTriangleID.x];
         
         uint IndexIndex = 3 * InstanceTriangleID.y + Draw.IndexOffset;
         

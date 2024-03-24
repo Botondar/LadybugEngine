@@ -52,6 +52,7 @@ enum vulkan_handle_type : u32
     VulkanHandle_Buffer = 0,
     VulkanHandle_Image,
     VulkanHandle_ImageView,
+    VulkanHandle_Swapchain,
 };
 
 struct deletion_entry
@@ -59,10 +60,12 @@ struct deletion_entry
     vulkan_handle_type Type;
     union
     {
+        void* Handle;
+
         VkBuffer BufferHandle;
         VkImage ImageHandle;
         VkImageView ImageViewHandle;
-        void* Handle;
+        VkSwapchainKHR Swapchain;
     };
 };
 
@@ -76,20 +79,16 @@ struct gpu_deletion_queue
     deletion_entry Entries[MaxEntryCount];
 };
 
+internal void 
+ProcessDeletionEntries(gpu_deletion_queue* Queue, u32 FrameID);
+
 internal b32 
 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, vulkan_handle_type Type, void* Handle);
 
-internal b32 
-PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkBuffer Buffer);
-
-internal b32 
-PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImage Image);
-
-internal b32 
-PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImageView ImageView);
-
-internal void 
-ProcessDeletionEntries(gpu_deletion_queue* Queue, u32 FrameID);
+inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkBuffer Buffer) { return PushDeletionEntry(Queue, FrameID, VulkanHandle_Buffer, Buffer); }
+inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImage Image) { return PushDeletionEntry(Queue, FrameID, VulkanHandle_Image, Image); }
+inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImageView ImageView) { return PushDeletionEntry(Queue, FrameID, VulkanHandle_ImageView, ImageView); }
+inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkSwapchainKHR Swapchain) { return PushDeletionEntry(Queue, FrameID, VulkanHandle_Swapchain, Swapchain); }
 
 #include "Renderer/RenderDevice.hpp"
 #include "Renderer/RenderTarget.hpp"

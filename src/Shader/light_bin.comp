@@ -29,101 +29,112 @@ bool IntersectAABBSphere(v3 P, v3 HalfExtent, v3 C, float R)
     return(Result);
 }
 
+shared float MaxDepthPerWave[8];
+shared float MinDepthPerWave[8];
+shared uint DepthMaskPerWave[8];
+
+shared uint LightBufferAt;
+
 void main()
 {
-    if (gl_GlobalInvocationID.x < PerFrame.TileCount.x)
+    uint ThreadID = gl_LocalInvocationID.x + gl_LocalInvocationID.y * gl_WorkGroupSize.x;
+    if (ThreadID == 0)
     {
-        uint TileIndex = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * PerFrame.TileCount.x;
-        uint uMinX = gl_GlobalInvocationID.x * R_TileSizeX;
-        uint uMinY = gl_GlobalInvocationID.y * R_TileSizeY;
-        uint uMaxX = uMinX + R_TileSizeX;
-        uint uMaxY = uMinY + R_TileSizeY;
+        LightBufferAt = 0;
+    }
+    if (subgroupElect())
+    {
+        MaxDepthPerWave[gl_SubgroupID] = 0.0;
+        MinDepthPerWave[gl_SubgroupID] = 1e9;
+        DepthMaskPerWave[gl_SubgroupID] = 0;
+    }
+    barrier();
+    if (gl_GlobalInvocationID.x >= PerFrame.RenderExtent.x || gl_GlobalInvocationID.y >= PerFrame.RenderExtent.y)
+    {
+        return;
+    }
 
-        mat2 ProjectZ = mat2(PerFrame.ProjectionTransform[2].zw, PerFrame.ProjectionTransform[3].zw);
+    uint TileIndex = gl_WorkGroupID.x + gl_WorkGroupID.y * gl_NumWorkGroups.x;
 
-        float Depths[R_TileSizeX*R_TileSizeY];
-        float MinDepth = 1e9;
-        float MaxDepth = 0.0;
-        float MinDepthClipSpace = 1.0;
-        float MaxDepthClipSpace = 0.0;
-        for (uint Y = 0; Y < R_TileSizeY; Y++)
+    v2 Depth2 = texelFetch(StructureImage, v2s(gl_GlobalInvocationID.xy), 0).zw;
+    float Depth = Depth2.x + Depth2.y;
+
+    float MaxDepth = subgroupMax(Depth);
+    float MinDepth = subgroupMin(Depth);
+    if (subgroupElect())
+    {
+        MaxDepthPerWave[gl_SubgroupID] = subgroupMax(Depth);
+        MinDepthPerWave[gl_SubgroupID] = subgroupMin(Depth);
+    }
+    barrier();
+
+    for (uint WaveIndex = 0; WaveIndex < gl_NumSubgroups; WaveIndex++)
+    {
+        MaxDepth = max(MaxDepth, MaxDepthPerWave[WaveIndex]);
+        MinDepth = min(MinDepth, MinDepthPerWave[WaveIndex]);
+    }
+
+    float InvDepthRange = 1.0 / (MaxDepth - MinDepth);
+    uint DepthMask = 1 << uint(floor(32.0 * clamp((Depth - MinDepth) * InvDepthRange, 0.0, 1.0)));
+    DepthMask = subgroupOr(DepthMask);
+    if (subgroupElect())
+    {
+        DepthMaskPerWave[gl_SubgroupID] = DepthMask;
+    }
+    barrier();
+
+    for (uint WaveIndex = 0; WaveIndex < gl_NumSubgroups; WaveIndex++)
+    {
+        DepthMask |= DepthMaskPerWave[WaveIndex];
+    }
+
+    v2u uMinXY = gl_WorkGroupID.xy * v2u(R_TileSizeX, R_TileSizeY);
+    v2u uMaxXY = uMinXY + v2u(R_TileSizeX, R_TileSizeY);
+
+    v2 MinXY = 2.0 * (v2(uMinXY) / v2(PerFrame.RenderExtent)) - v2(1.0);
+    v2 MaxXY = 2.0 * (v2(uMaxXY) / v2(PerFrame.RenderExtent)) - v2(1.0);
+
+    v3 MinP = v3(
+        MinDepth * PerFrame.InverseProjectionTransform[0][0] * MinXY.x,
+        MinDepth * PerFrame.InverseProjectionTransform[1][1] * MinXY.y,
+        MinDepth);
+    v3 MaxP = v3(
+        MaxDepth * PerFrame.InverseProjectionTransform[0][0] * MaxXY.x,
+        MaxDepth * PerFrame.InverseProjectionTransform[1][1] * MaxXY.y,
+        MaxDepth);
+
+    v3 BoxP = 0.5 * (MaxP + MinP);
+    v3 HalfExtent = 0.5 * (MaxP - MinP);
+
+    uint ThreadCount = gl_WorkGroupSize.x * gl_WorkGroupSize.y;
+    for (uint LightIndex = ThreadID; LightIndex < PerFrame.LightCount; LightIndex += ThreadCount)
+    {
+        v3 P = Lights[LightIndex].P.xyz;
+        float L = GetLuminance(Lights[LightIndex].E);
+        float R = sqrt(max(L / R_LuminanceThreshold, 0.0));
+        if (IntersectAABBSphere(BoxP, HalfExtent, P, R))
         {
-            for (uint X = 0; X < R_TileSizeX; X++)
+            float MaxZ = clamp(InvDepthRange * (P.z + R - MinDepth), 0.0, 1.0);
+            float MinZ = clamp(InvDepthRange * (P.z - R - MinDepth), 0.0, 1.0);
+    
+            uint MaxSlice = uint(floor(32.0 * MaxZ));
+            uint MinSlice = uint(floor(32.0 * MinZ));
+    
+            uint Mask = (0xFFFFFFFFu >> (31 - (MaxSlice - MinSlice))) << MinSlice;
+            if ((DepthMask & Mask) != 0)
             {
-                vec2 Depth2 = texelFetch(StructureImage, ivec2(uMinX + X, uMinY + Y), 0).zw;
-                float Depth = Depth2.x + Depth2.y;
-                MinDepth = min(Depth, MinDepth);
-                MaxDepth = max(Depth, MaxDepth);
-
-                vec2 ProjDepth2 = ProjectZ * vec2(Depth, 1.0);
-                float ProjDepth = ProjDepth2.x / ProjDepth2.y;
-                MinDepthClipSpace = min(ProjDepth, MinDepthClipSpace);
-                MaxDepthClipSpace = max(ProjDepth, MaxDepthClipSpace);
-
-                uint Index = X + Y*R_TileSizeX;
-                Depths[Index] = Depth;
+                uint DstIndex = atomicAdd(LightBufferAt, 1);
+                if (DstIndex < R_MaxLightCountPerTile)
+                {
+                    Tiles[TileIndex].LightIndices[DstIndex] = LightIndex;
+                }
             }
         }
+    }
 
-        float InvDepthRange = 1.0 / (MaxDepth - MinDepth);
-        float DepthOffset = MinDepth;
-        uint DepthSliceMask = 0;
-        for (uint Index = 0; Index < R_TileSizeX*R_TileSizeY; Index++)
-        {
-            float Depth = clamp(InvDepthRange * (Depths[Index] - DepthOffset), 0.0, 1.0);
-            uint DepthSlice = uint(floor(32.0 * Depth));
-            DepthSliceMask |= 1 << DepthSlice;
-        }
-
-        float MinX = 2.0 * (float(uMinX) / PerFrame.ScreenSize.x) - 1.0;
-        float MinY = 2.0 * (float(uMinY) / PerFrame.ScreenSize.y) - 1.0;
-        float MaxX = 2.0 * (float(uMaxX) / PerFrame.ScreenSize.x) - 1.0;
-        float MaxY = 2.0 * (float(uMaxY) / PerFrame.ScreenSize.y) - 1.0;
-
-        v4 P0 = PerFrame.InverseProjectionTransform * v4(MinX, MinY, MinDepthClipSpace, 1.0);
-        v4 P1 = PerFrame.InverseProjectionTransform * v4(MaxX, MaxY, MaxDepthClipSpace, 1.0);
-        P0.xyz /= P0.w;
-        P1.xyz /= P1.w;
-        v3 MinP = min(P0.xyz, P1.xyz);
-        v3 MaxP = max(P0.xyz, P1.xyz);
-
-        v3 BoxP = 0.5 * (MaxP + MinP);
-        v3 HalfExtent = 0.5 * (MaxP - MinP);
-
-        uint LightCount = 0;
-        for (uint LightIndex = 0; LightIndex < PerFrame.LightCount; LightIndex++)
-        {
-            if (LightCount == R_MaxLightCountPerTile) break;
-
-            v3 P = Lights[LightIndex].P.xyz;
-            v3 E = Lights[LightIndex].E;
-            float L = GetLuminance(E);
-            float R = sqrt(max(L / R_LuminanceThreshold, 0.0));
-
-            if (IntersectAABBSphere(BoxP, HalfExtent, P, R))
-            {
-                // NOTE(boti): Shadow casting lights also participate in volumetrics,
-                // so we don't want to depth cull those
-                if (Lights[LightIndex].ShadowIndex != 0xFFFFFFFFu)
-                {
-                    Tiles[TileIndex].LightIndices[LightCount++] = LightIndex;
-                }
-                else
-                {
-                    float MaxZ = clamp(InvDepthRange * (P.z + R - DepthOffset), 0.0, 1.0);
-                    float MinZ = clamp(InvDepthRange * (P.z - R - DepthOffset), 0.0, 1.0);
-
-                    uint MaxSlice = uint(floor(32.0 * MaxZ));
-                    uint MinSlice = uint(floor(32.0 * MinZ));
-
-                    uint Mask = (0xFFFFFFFFu >> (31 - (MaxSlice - MinSlice))) << MinSlice;
-                    if ((DepthSliceMask & Mask) != 0)
-                    {
-                        Tiles[TileIndex].LightIndices[LightCount++] = LightIndex;
-                    }
-                }
-            }
-        }
-        Tiles[TileIndex].LightCount = LightCount;
+    barrier();
+    if (ThreadID == 0)
+    {
+        Tiles[TileIndex].LightCount = min(LightBufferAt, R_MaxLightCountPerTile);
     }
 }
