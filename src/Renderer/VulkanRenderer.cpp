@@ -17,7 +17,7 @@ if (Result != VK_SUCCESS) { \
 #include "rhi_vulkan.cpp"
 
 internal VkResult 
-ResizeRenderTargets(renderer* Renderer, u32 FrameID, b32 Forced);
+ResizeRenderTargets(renderer* Renderer, b32 Forced);
 
 internal VkResult 
 CreatePipelines(renderer* Renderer);
@@ -1279,8 +1279,35 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         };
 
         Renderer->SwapchainImageCount = 2;
-        Result = ResizeRenderTargets(Renderer, 0, false);
+        Result = ResizeRenderTargets(Renderer, false);
         ReturnOnFailure();
+    }
+
+    if (CreateRenderTargetHeap(&Renderer->RenderTargetHeap, R_RenderTargetMemorySize, Renderer->SetLayouts[Set_Static], Renderer->StaticResourceDescriptorMapping))
+    {
+        constexpr VkImageUsageFlagBits DepthStencil = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        constexpr VkImageUsageFlagBits Color = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        constexpr VkImageUsageFlagBits Sampled = VK_IMAGE_USAGE_SAMPLED_BIT;
+        constexpr VkImageUsageFlagBits Storage = VK_IMAGE_USAGE_STORAGE_BIT;
+    
+        Renderer->DepthBuffer           = PushRenderTarget("Depth",         &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Depth]],      DepthStencil|Sampled,   1,
+                                                           U32_MAX, U32_MAX, U32_MAX, U32_MAX);
+        Renderer->StructureBuffer       = PushRenderTarget("Structure",     &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Structure]],  Color|Sampled,          1,
+                                                           Binding_Static_StructureImage, U32_MAX, U32_MAX, U32_MAX);
+        Renderer->HDRRenderTarget       = PushRenderTarget("HDR",           &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_HDR]],        Color|Sampled|Storage,  0,
+                                                           Binding_Static_HDRColorImage, U32_MAX, Binding_Static_HDRColorImageGeneral, Binding_Static_HDRMipStorageImages);
+        Renderer->BloomTarget           = PushRenderTarget("Bloom",         &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_HDR]],        Color|Sampled|Storage,  0,
+                                                           Binding_Static_BloomImage, U32_MAX, Binding_Static_BloomImageGeneral, Binding_Static_BloomMipStorageImages);
+        Renderer->OcclusionBuffers[0]   = PushRenderTarget("OcclusionRaw",  &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Occlusion]],  Color|Sampled|Storage,  1,
+                                                           Binding_Static_OcclusionRawImage, Binding_Static_OcclusionRawStorageImage, U32_MAX, U32_MAX);
+        Renderer->OcclusionBuffers[1]   = PushRenderTarget("Occlusion",     &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Occlusion]],  Color|Sampled|Storage,  1,
+                                                           Binding_Static_OcclusionImage, Binding_Static_OcclusionStorageImage, U32_MAX, U32_MAX);
+        Renderer->VisibilityBuffer      = PushRenderTarget("Visibility",    &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Visibility]], Color|Sampled,          1,
+                                                           Binding_Static_VisibilityImage, U32_MAX, U32_MAX, U32_MAX);
+    }
+    else
+    {
+        return(0);
     }
 
     for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
@@ -1522,7 +1549,6 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             }
         }
 
-#if 1
         // Per frame buffer
         {
             for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
@@ -1546,53 +1572,6 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 }
             }
         }
-#else
-        // Vertex stack
-        {
-            umm Size = MiB(2);
-            for (u32 i = 0; i < R_MaxFramesInFlight; i++)
-            {
-                b32 PushResult = PushBuffer(&Renderer->BARMemory, Size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
-                           Renderer->PerFrameVertex2DBuffers + i, 
-                           Renderer->PerFrameVertex2DMappings + i);
-                Renderer->Frames[i].MaxVertex2DCount = Size / sizeof(vertex_2d);
-                if (!PushResult)
-                {
-                    return(0);
-                }
-            }
-        }
-
-        // Joint buffers
-        {
-            u64 BufferSizePerFrame = render_frame::MaxJointCount * sizeof(m4);
-            for (u32 i = 0; i < R_MaxFramesInFlight; i++)
-            {
-                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSizePerFrame, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                                            Renderer->PerFrameJointBuffers + i, 
-                                            Renderer->PerFrameJointBufferMappings + i);
-                if (!PushResult)
-                {
-                    return(0);
-                }
-            }
-        }
-
-        // Particle buffers
-        {
-            u64 BufferSizePerFrame = render_frame::MaxParticleCount * sizeof(render_particle);
-            for (u32 i = 0; i < R_MaxFramesInFlight; i++)
-            {
-                b32 PushResult = PushBuffer(&Renderer->BARMemory, BufferSizePerFrame, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-                                            Renderer->PerFrameParticleBuffers + i, 
-                                            Renderer->PerFrameParticleBufferMappings + i);
-                if (!PushResult)
-                {
-                    return(0);
-                }
-            }
-        }
-#endif
     }
 
     // Create system pipeline layout
@@ -1625,7 +1604,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     return(Renderer);
 }
 
-internal VkResult ResizeRenderTargets(renderer* Renderer, u32 FrameID, b32 Forced)
+internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
 {
     VkResult Result = VK_SUCCESS;
 
@@ -1650,144 +1629,6 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, u32 FrameID, b32 Force
                     vkDestroyImageView(VK.Device, Renderer->SwapchainImageViews[i], nullptr);
                     Renderer->SwapchainImageViews[i] = VK_NULL_HANDLE;
                 }
-            }
-            else
-            {
-                if (!CreateRenderTargetHeap(&Renderer->RenderTargetHeap, R_RenderTargetMemorySize))
-                {
-                    return VK_ERROR_INITIALIZATION_FAILED;
-                }
-
-                constexpr VkImageUsageFlagBits DepthStencil = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-                constexpr VkImageUsageFlagBits Color = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-                constexpr VkImageUsageFlagBits Sampled = VK_IMAGE_USAGE_SAMPLED_BIT;
-                constexpr VkImageUsageFlagBits Storage = VK_IMAGE_USAGE_STORAGE_BIT;
-                
-                Renderer->DepthBuffer           = PushRenderTarget("Depth",         &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Depth]],      DepthStencil|Sampled,   1);
-                Renderer->StructureBuffer       = PushRenderTarget("Structure",     &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Structure]],  Color|Sampled,          1);
-                Renderer->HDRRenderTarget       = PushRenderTarget("HDR",           &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_HDR]],        Color|Sampled|Storage,  0);
-                Renderer->BloomTarget           = PushRenderTarget("Bloom",         &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_HDR]],        Color|Sampled|Storage,  0);
-                Renderer->OcclusionBuffers[0]   = PushRenderTarget("OcclusionRaw",  &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Occlusion]],  Color|Sampled|Storage,  1);
-                Renderer->OcclusionBuffers[1]   = PushRenderTarget("Occlusion",     &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Occlusion]],  Color|Sampled|Storage,  1);
-                Renderer->VisibilityBuffer      = PushRenderTarget("Visibility",    &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Visibility]], Color|Sampled,          1);
-            }
-
-            if (ResizeRenderTargets(&Renderer->RenderTargetHeap, Renderer->SurfaceExtent.width, Renderer->SurfaceExtent.height))
-            {
-                descriptor_write Writes[] = 
-                {
-                    {
-                        .Type = Descriptor_SampledImage,
-                        .Binding = Binding_Static_VisibilityImage,
-                        .BaseIndex = 0,
-                        .Count = 1,
-                        .Images = { { Renderer->VisibilityBuffer->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-                    },
-                    {
-                        .Type = Descriptor_SampledImage,
-                        .Binding = Binding_Static_OcclusionImage,
-                        .BaseIndex = 0,
-                        .Count = 1,
-                        .Images = { { Renderer->OcclusionBuffers[1]->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-                    },
-                    {
-                        .Type = Descriptor_SampledImage,
-                        .Binding = Binding_Static_StructureImage,
-                        .BaseIndex = 0,
-                        .Count = 1,
-                        .Images = { { Renderer->StructureBuffer->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-                    },
-                    {
-                        .Type = Descriptor_StorageImage,
-                        .Binding = Binding_Static_OcclusionRawStorageImage,
-                        .BaseIndex = 0,
-                        .Count = 1,
-                        .Images = { { Renderer->OcclusionBuffers[0]->View, VK_IMAGE_LAYOUT_GENERAL } },
-                    },
-                    {
-                        .Type = Descriptor_StorageImage,
-                        .Binding = Binding_Static_OcclusionStorageImage,
-                        .BaseIndex = 0,
-                        .Count = 1,
-                        .Images = { { Renderer->OcclusionBuffers[1]->View, VK_IMAGE_LAYOUT_GENERAL } },
-                    },
-                    {
-                        .Type = Descriptor_SampledImage,
-                        .Binding = Binding_Static_OcclusionRawImage,
-                        .BaseIndex = 0,
-                        .Count = 1,
-                        .Images = { { Renderer->OcclusionBuffers[0]->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-                    },
-                    {
-                        .Type = Descriptor_SampledImage,
-                        .Binding = Binding_Static_HDRColorImage,
-                        .BaseIndex = 0,
-                        .Count = 1,
-                        .Images = { { Renderer->HDRRenderTarget->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-                    },
-                    {
-                        .Type = Descriptor_SampledImage,
-                        .Binding = Binding_Static_BloomImage,
-                        .BaseIndex = 0,
-                        .Count = 1,
-                        .Images = { { Renderer->BloomTarget->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
-                    },
-                    {
-                        .Type = Descriptor_SampledImage,
-                        .Binding = Binding_Static_HDRColorImageGeneral,
-                        .BaseIndex = 0,
-                        .Count = 1,
-                        .Images = { { Renderer->HDRRenderTarget->View, VK_IMAGE_LAYOUT_GENERAL } },
-                    },
-                    {
-                        .Type = Descriptor_SampledImage,
-                        .Binding = Binding_Static_BloomImageGeneral,
-                        .BaseIndex = 0,
-                        .Count = 1,
-                        .Images = { { Renderer->BloomTarget->View, VK_IMAGE_LAYOUT_GENERAL } }
-                    },
-                    {
-                        .Type = Descriptor_StorageImage,
-                        .Binding = Binding_Static_HDRMipStorageImages,
-                        .BaseIndex = 0,
-                        .Count = Renderer->HDRRenderTarget->MipCount,
-                        .Images = {}, // NOTE(boti): Filled after this array def.
-                    },
-                    {
-                        .Type = Descriptor_StorageImage,
-                        .Binding = Binding_Static_BloomMipStorageImages,
-                        .BaseIndex = 0,
-                        .Count = Renderer->BloomTarget->MipCount,
-                        .Images = {}, // NOTE(boti): Filled after this array def.
-                    },
-                };
-
-                for (u32 WriteIndex = 0; WriteIndex < CountOf(Writes); WriteIndex++)
-                {
-                    descriptor_write* Write = Writes + WriteIndex;
-
-                    render_target* RenderTarget = nullptr;
-                    switch (Write->Binding)
-                    {
-                        case Binding_Static_HDRMipStorageImages: RenderTarget = Renderer->HDRRenderTarget; break;
-                        case Binding_Static_BloomMipStorageImages: RenderTarget = Renderer->BloomTarget; break;
-                    }
-                    if (RenderTarget)
-                    {
-                        for (u32 Mip = 0; Mip < RenderTarget->MipCount; Mip++)
-                        {
-                            Write->Images[Mip].View = RenderTarget->MipViews[Mip];
-                            Write->Images[Mip].Layout = VK_IMAGE_LAYOUT_GENERAL;
-                        }
-                    }
-                }
-
-                UpdateDescriptorBuffer(CountOf(Writes), Writes, Renderer->SetLayouts[Set_Static], Renderer->StaticResourceDescriptorMapping);
-            }
-            else
-            {
-                UnhandledError("Failed to resize render targets");
-                Result = VK_ERROR_UNKNOWN;
             }
 
             VkPresentModeKHR PresentMode = 
@@ -1852,10 +1693,14 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, u32 FrameID, b32 Force
                     }
                 }
             }
+            else
+            {
+                UnhandledError("Failed to (re)create swapchain");
+            }
 
             if (CreateInfo.oldSwapchain)
             {
-                PushDeletionEntry(&Renderer->DeletionQueue, FrameID, CreateInfo.oldSwapchain);
+                vkDestroySwapchainKHR(VK.Device, CreateInfo.oldSwapchain, nullptr);
             }
         }
     }
@@ -2195,6 +2040,66 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         CreatePipelines(Renderer, Frame->Arena);
     }
 
+    // Acquire image
+    u32 SwapchainImageIndex = U32_MAX;
+    {
+        vkWaitForFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID], VK_TRUE, UINT64_MAX);
+        vkResetFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID]);
+        ResizeRenderTargets(Renderer, false);
+
+        for (;;)
+        {
+            VkResult ImageAcquireResult = vkAcquireNextImageKHR(VK.Device, Renderer->Swapchain, 0, 
+                                                                Renderer->ImageAcquiredSemaphores[Frame->FrameID], 
+                                                                Renderer->ImageAcquiredFences[Frame->FrameID], 
+                                                                &SwapchainImageIndex);
+            if (ImageAcquireResult == VK_SUCCESS)
+            {
+                Assert(SwapchainImageIndex != U32_MAX);
+                break;
+            }
+            else if (ImageAcquireResult == VK_SUBOPTIMAL_KHR)
+            {
+                UnimplementedCodePath;
+                ResizeRenderTargets(Renderer, true);
+            }
+            else if (ImageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR)
+            {
+                Assert(SwapchainImageIndex == U32_MAX);
+                ResizeRenderTargets(Renderer, true);
+            }
+            else if (ImageAcquireResult == VK_TIMEOUT || ImageAcquireResult == VK_NOT_READY)
+            {
+                UnimplementedCodePath;
+            }
+            else
+            {
+                UnhandledError("vkAcquireNextImage error");
+                return;
+            }
+        }
+    }
+
+    Frame->OutputExtent = { Renderer->SurfaceExtent.width, Renderer->SurfaceExtent.height };
+    if (Frame->OutputExtent.X == 0 || Frame->OutputExtent.Y == 0)
+    {
+        return;
+    }
+    if (Frame->RenderExtent.X == 0 || Frame->RenderExtent.Y == 0)
+    {
+        Frame->RenderExtent = Frame->OutputExtent;
+    }
+
+    if (Frame->RenderExtent.X != Renderer->RenderTargetHeap.CurrentExtent.X ||
+        Frame->RenderExtent.Y != Renderer->RenderTargetHeap.CurrentExtent.Y)
+    {
+        vkDeviceWaitIdle(VK.Device);
+        ResizeRenderTargets(&Renderer->RenderTargetHeap, Frame->RenderExtent);
+    }
+
+    Frame->Uniforms.RenderExtent = Frame->RenderExtent;
+    Frame->Uniforms.OutputExtent = Frame->OutputExtent;
+
     frame_stage* FrameStages = PushArray(Frame->Arena, 0, frame_stage, FrameStage_Count);
     for (u32 FrameStageIndex = 0; FrameStageIndex < FrameStage_Count; FrameStageIndex++)
     {
@@ -2228,47 +2133,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     Frame->Uniforms.LinearFogDensityAtBottom    = Frame->LinearFogDensityAtBottom;
     Frame->Uniforms.LinearFogMinZ               = Frame->LinearFogMinZ;
     Frame->Uniforms.LinearFogMaxZ               = Frame->LinearFogMaxZ;
-
-    // Acquire image
-    u32 SwapchainImageIndex = U32_MAX;
-    {
-        vkWaitForFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID], VK_TRUE, UINT64_MAX);
-        vkResetFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID]);
-
-        for (;;)
-        {
-            VkResult ImageAcquireResult = vkAcquireNextImageKHR(VK.Device, Renderer->Swapchain, 0, 
-                                                                Renderer->ImageAcquiredSemaphores[Frame->FrameID], 
-                                                                Renderer->ImageAcquiredFences[Frame->FrameID], 
-                                                                &SwapchainImageIndex);
-            if (ImageAcquireResult == VK_SUCCESS || 
-                ImageAcquireResult == VK_TIMEOUT ||
-                ImageAcquireResult == VK_NOT_READY)
-            {
-                Assert(SwapchainImageIndex != U32_MAX);
-                break;
-            }
-            else if (ImageAcquireResult == VK_SUBOPTIMAL_KHR || ImageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR)
-            {
-                ResizeRenderTargets(Renderer, Frame->FrameID, true);
-                Frame->OutputExtent.X = Renderer->SurfaceExtent.width;
-                Frame->OutputExtent.Y = Renderer->SurfaceExtent.height;
-                vkResetFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID]);
-            }
-            else
-            {
-                UnhandledError("vkAcquireNextImage error");
-                return;
-            }
-        }
-    }
-
-    if (Frame->RenderExtent.X == 0 || Frame->RenderExtent.Y == 0)
-    {
-        Frame->RenderExtent = Frame->OutputExtent;
-    }
-    Frame->Uniforms.RenderExtent = Frame->RenderExtent;
-    Frame->Uniforms.OutputExtent = Frame->OutputExtent;
 
     // Calculate camera parameters
     {
@@ -2673,13 +2537,22 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     u32 ShadowCount = 0;
     frustum* ShadowFrustums = PushArray(Frame->Arena, 0, frustum, R_MaxShadowCount);
 
-    VkViewport PrimaryViewport
+    VkViewport PrimaryViewport =
     {
         0.0f, 0.0f,
         (f32)Frame->RenderExtent.X, (f32)Frame->RenderExtent.Y,
         0.0f, 1.0f,
     };
     VkRect2D PrimaryScissor = { { 0, 0 }, { Frame->RenderExtent.X, Frame->RenderExtent.Y } };
+
+    VkViewport OutputViewport =
+    {
+        0.0f, 0.0f,
+        (f32)Frame->OutputExtent.X, (f32)Frame->OutputExtent.Y,
+        0.0f, 1.0f,
+    };
+    VkRect2D OutputScissor = { { 0, 0 }, { Frame->OutputExtent.X, Frame->OutputExtent.Y } };
+
 
     u32 SkinnedVertexAt = 0;
     VkCommandBuffer SkinningCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_None);
@@ -2695,8 +2568,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     VkCommandBuffer Widget3DCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_Gizmo);
     {
         vkCmdBeginDebugUtilsLabelEXT(Widget3DCB, "3D GUI");
-        vkCmdSetViewport(Widget3DCB, 0, 1, &PrimaryViewport);
-        vkCmdSetScissor(Widget3DCB, 0, 1, &PrimaryScissor);
+        vkCmdSetViewport(Widget3DCB, 0, 1, &OutputViewport);
+        vkCmdSetScissor(Widget3DCB, 0, 1, &OutputScissor);
 
         vkCmdBindPipeline(Widget3DCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->Pipelines[Pipeline_Gizmo].Pipeline);
 
@@ -2708,8 +2581,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     VkCommandBuffer GuiCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_UI);
     {
         vkCmdBeginDebugUtilsLabelEXT(GuiCB, "2D GUI");
-        vkCmdSetViewport(GuiCB, 0, 1, &PrimaryViewport);
-        vkCmdSetScissor(GuiCB, 0, 1, &PrimaryScissor);
+        vkCmdSetViewport(GuiCB, 0, 1, &OutputViewport);
+        vkCmdSetScissor(GuiCB, 0, 1, &OutputScissor);
 
         vkCmdBindPipeline(GuiCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->Pipelines[Pipeline_UI].Pipeline);
         m4 OrthoTransform = M4(2.0f / Frame->RenderExtent.X, 0.0f, 0.0f, -1.0f,
@@ -5033,7 +4906,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
             .pNext = nullptr,
             .flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT,
-            .renderArea = { { 0, 0 }, { Frame->RenderExtent.X, Frame->RenderExtent.Y } },
+            .renderArea = { { 0, 0 }, { Frame->OutputExtent.X, Frame->OutputExtent.Y } },
             .layerCount = 1,
             .viewMask = 0,
             .colorAttachmentCount = 1,
@@ -5042,7 +4915,10 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .pStencilAttachment = nullptr,
         };
         vkCmdBeginRendering(RenderCmd, &RenderingInfo);
-        
+
+        vkCmdSetViewport(RenderCmd, 0, 1, &OutputViewport);
+        vkCmdSetScissor(RenderCmd, 0, 1, &OutputScissor);
+
         // Blit
         vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Blit");
         {

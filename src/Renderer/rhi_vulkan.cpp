@@ -333,21 +333,21 @@ internal void UpdateDescriptorBuffer(u32 WriteCount, const descriptor_write* Wri
             {
                 case Descriptor_SampledImage: DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize; goto IMAGE_CASE;
                 case Descriptor_StorageImage: DescriptorSize = VK.DescriptorBufferProps.storageImageDescriptorSize; goto IMAGE_CASE;
-                    IMAGE_CASE:
-                    {
-                        ImageInfo.sampler = VK_NULL_HANDLE,
-                        ImageInfo.imageView = Write->Images[Element].View;
-                        ImageInfo.imageLayout= Write->Images[Element].Layout;
-                        Data = &ImageInfo;
-                    } break;
+                IMAGE_CASE:
+                {
+                    ImageInfo.sampler = VK_NULL_HANDLE,
+                    ImageInfo.imageView = Write->Images[Element].View;
+                    ImageInfo.imageLayout= Write->Images[Element].Layout;
+                    Data = &ImageInfo;
+                } break;
                 case Descriptor_StorageBuffer: DescriptorSize = VK.DescriptorBufferProps.storageBufferDescriptorSize; goto BUFFER_CASE;
                 case Descriptor_UniformBuffer: DescriptorSize = VK.DescriptorBufferProps.uniformBufferDescriptorSize; goto BUFFER_CASE;
-                    BUFFER_CASE:
-                    {
-                        BufferInfo.address = GetBufferDeviceAddress(VK.Device, Write->Buffers[Element].Buffer) + Write->Buffers[Element].Offset;
-                        BufferInfo.range = Write->Buffers[Element].Range;
-                        Data = &BufferInfo;
-                    } break;
+                BUFFER_CASE:
+                {
+                    BufferInfo.address = GetBufferDeviceAddress(VK.Device, Write->Buffers[Element].Buffer) + Write->Buffers[Element].Offset;
+                    BufferInfo.range = Write->Buffers[Element].Range;
+                    Data = &BufferInfo;
+                } break;
                 InvalidDefaultCase;
             }
 

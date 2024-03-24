@@ -12,10 +12,11 @@ internal bool IsDepthFormat(VkFormat Format)
 }
 
 internal bool
-CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize)
+CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize, VkDescriptorSetLayout SetLayout, void* DescriptorBuffer)
 {
     bool Result = false;
 
+    Heap->CurrentExtent = { 0, 0 };
     VkImageCreateInfo ImageInfos[] = 
     {
         // RT LDR
@@ -88,6 +89,8 @@ CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize)
         Heap->Arena = CreateGPUArena(MemorySize, MemoryType, GpuMemoryFlag_None);
         if (Heap->Arena.Memory)
         {
+            Heap->SetLayout = SetLayout;
+            Heap->DescriptorBuffer = DescriptorBuffer;
             Result = true;
         }
     }
@@ -96,7 +99,16 @@ CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize)
 }
 
 internal render_target* 
-PushRenderTarget(const char* Name, render_target_heap* Heap, VkFormat Format, VkImageUsageFlags Usage, u32 MaxMipCount /*= 1*/)
+PushRenderTarget(
+    const char* Name, 
+    render_target_heap* Heap, 
+    VkFormat Format, 
+    VkImageUsageFlags Usage, 
+    u32 MaxMipCount, 
+    u32 Binding,
+    u32 StorageBinding,
+    u32 BindingGeneral,
+    u32 MipBinding)
 {
     render_target* Result = nullptr;
 
@@ -107,27 +119,31 @@ PushRenderTarget(const char* Name, render_target_heap* Heap, VkFormat Format, Vk
         Result = Heap->RenderTargets + Heap->RenderTargetCount++;
         *Result =
         {
-            .Name = Name,
-            .Image = VK_NULL_HANDLE,
-            .View = VK_NULL_HANDLE,
-            .MipCount = 0,
-            .MipViews = {},
-            .MaxMipCount = MaxMipCount ? MaxMipCount : R_MaxMipCount,
-            .Format = Format,
-            .Usage = Usage,
+            .Name               = Name,
+            .Image              = VK_NULL_HANDLE,
+            .View               = VK_NULL_HANDLE,
+            .MipCount           = 0,
+            .MipViews           = {},
+            .MaxMipCount        = MaxMipCount ? MaxMipCount : R_MaxMipCount,
+            .Format             = Format,
+            .Usage              = Usage,
+            .Binding            = Binding,
+            .StorageBinding     = StorageBinding,
+            .BindingGeneral     = BindingGeneral,
+            .MipBinding         = MipBinding,
         };
     }
     return Result;
 }
 
 internal bool 
-ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height)
+ResizeRenderTargets(render_target_heap* Heap, v2u Extent)
 {
     bool Result = true;
 
     ResetGPUArena(&Heap->Arena);
 
-    u32 MaxMipCount = GetMaxMipCount(Width, Height);
+    u32 MaxMipCount = GetMaxMipCount(Extent.X, Extent.Y);
     for (u32 RenderTargetIndex = 0; RenderTargetIndex < Heap->RenderTargetCount; RenderTargetIndex++)
     {
         if (!Result) break;
@@ -149,7 +165,7 @@ ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height)
             .flags = 0,
             .imageType = VK_IMAGE_TYPE_2D,
             .format = RT->Format,
-            .extent = { Width, Height, 1 },
+            .extent = { Extent.X, Extent.Y, 1 },
             .mipLevels = RT->MipCount,
             .arrayLayers = 1,
             .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -228,17 +244,89 @@ ResizeRenderTargets(render_target_heap* Heap, u32 Width, u32 Height)
                 else
                 {
                     Result = false;
+                    UnhandledError("Failed to create render target image view");
                 }
             }
             else
             {
-                Result = true;
+                Result = false;
+                UnhandledError("Failed to push render target");
             }
         }
         else
         {
             Result = false;
+            UnhandledError("Failed to create render target image");
         }
     }
+
+    if (Result)
+    {
+        constexpr u32 MaxWriteCount = 4 * Heap->MaxRenderTargetCount;
+
+        u32 WriteAt = 0;
+        descriptor_write Writes[MaxWriteCount];
+        for (u32 RenderTargetIndex = 0; RenderTargetIndex < Heap->RenderTargetCount; RenderTargetIndex++)
+        {
+            render_target* RenderTarget = Heap->RenderTargets + RenderTargetIndex;
+
+            if (RenderTarget->Binding != U32_MAX)
+            {
+                Writes[WriteAt++] =
+                {
+                    .Type = Descriptor_SampledImage,
+                    .Binding = RenderTarget->Binding,
+                    .BaseIndex = 0,
+                    .Count = 1,
+                    .Images = { { RenderTarget->View, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+                };
+            }
+
+            if (RenderTarget->StorageBinding != U32_MAX)
+            {
+                Writes[WriteAt++] = 
+                {
+                    .Type = Descriptor_StorageImage,
+                    .Binding = RenderTarget->StorageBinding,
+                    .BaseIndex = 0,
+                    .Count = 1,
+                    .Images = { { RenderTarget->View, VK_IMAGE_LAYOUT_GENERAL } },
+                };
+            }
+
+            if (RenderTarget->BindingGeneral != U32_MAX)
+            {
+                Writes[WriteAt++] = 
+                {
+                    .Type = Descriptor_SampledImage,
+                    .Binding = RenderTarget->BindingGeneral,
+                    .BaseIndex = 0,
+                    .Count = 1,
+                    .Images = { { RenderTarget->View, VK_IMAGE_LAYOUT_GENERAL } },
+                };
+            }
+
+            if (RenderTarget->MipBinding != U32_MAX)
+            {
+                u32 WriteIndex = WriteAt++;
+                Writes[WriteIndex] = 
+                {
+                    .Type = Descriptor_StorageImage,
+                    .Binding = RenderTarget->MipBinding,
+                    .BaseIndex = 0,
+                    .Count = RenderTarget->MipCount,
+                };
+
+                for (u32 Mip = 0; Mip < RenderTarget->MipCount; Mip++)
+                {
+                    Writes[WriteIndex].Images[Mip] = { RenderTarget->MipViews[Mip], VK_IMAGE_LAYOUT_GENERAL };
+                }
+            }
+        }
+
+        UpdateDescriptorBuffer(WriteAt, Writes, Heap->SetLayout, Heap->DescriptorBuffer);
+    }
+
+    Heap->CurrentExtent = Extent;
     return Result;
 }
