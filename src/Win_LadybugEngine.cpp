@@ -766,16 +766,26 @@ int CALLBACK WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLi
 
     for (;;)
     {
-        MSG Message;
-        GetMessageW(&Message, 0, 0, 0);
-        TranslateMessage(&Message);
-        DispatchMessageW(&Message);
-
-        PostThreadMessageW(MainThreadID, Message.message, Message.wParam, Message.lParam);
-
-        if (WaitForSingleObject(MainThreadHandle, 0) == WAIT_OBJECT_0)
+        HANDLE WaitHandles[] = { MainThreadHandle };
+        DWORD WaitResult = MsgWaitForMultipleObjects(CountOf(WaitHandles), WaitHandles, FALSE, INFINITE, QS_ALLINPUT);
+        if (WaitResult == WAIT_OBJECT_0)
         {
             break;
+        }
+        else if (WaitResult == WAIT_FAILED)
+        {
+            // TODO(boti): Check for errors
+            ExitProcess(-1);
+        }
+        else
+        {
+            MSG Message = {};
+            while (PeekMessageW(&Message, nullptr, 0, 0, PM_REMOVE))
+            {
+                TranslateMessage(&Message);
+                DispatchMessageW(&Message);
+                PostThreadMessageW(MainThreadID, Message.message, Message.wParam, Message.lParam);
+            }
         }
     }
     ExitProcess(0);
