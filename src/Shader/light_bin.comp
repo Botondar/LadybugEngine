@@ -96,13 +96,28 @@ void main()
 
     v3 MinP, MaxP;
     {
+#if 1
+        float MinDepth01 = PerFrame.ProjectionTransform[2][2] + PerFrame.ProjectionTransform[3][2] / MinDepth;
+        float MaxDepth01 = PerFrame.ProjectionTransform[2][2] + PerFrame.ProjectionTransform[3][2] / MaxDepth;
+
+        v4 MinP4 = PerFrame.InverseProjectionTransform * v4(MinXY, MinDepth01, 1.0);
+        v4 MaxP4 = PerFrame.InverseProjectionTransform * v4(MaxXY, MaxDepth01, 1.0);
+
+        MinP4.xyz /= MinP4.w;
+        MaxP4.xyz /= MaxP4.w;
+
+        MinP = min(MinP4.xyz, MaxP4.xyz);
+        MaxP = max(MinP4.xyz, MaxP4.xyz);
+#else
+        // TODO(boti): Figure out why this is broken
+
         // NOTE(boti): This is derived as:
         // - transforming the depth into clip-space 
         // - projecting/perspective dividing it
         // - transforming the view volume tile corner points with the inverse projection
         // - unprojecting/perspective dividing again
-        float MinMul = 1.0 / (1.0 / MinDepth + PerFrame.InverseProjectionTransform[2][3]);
-        float MaxMul = 1.0 / (1.0 / MaxDepth + PerFrame.InverseProjectionTransform[2][3]);
+        float MinMul = 1.0 / (1.0 / MinDepth + PerFrame.InverseProjectionTransform[3][2]);
+        float MaxMul = 1.0 / (1.0 / MaxDepth + PerFrame.InverseProjectionTransform[3][2]);
         MinP = v3(
             MinMul * PerFrame.InverseProjectionTransform[0][0] * MinXY.x,
             MinMul * PerFrame.InverseProjectionTransform[1][1] * MinXY.y,
@@ -111,6 +126,7 @@ void main()
             MaxMul * PerFrame.InverseProjectionTransform[0][0] * MaxXY.x,
             MaxMul * PerFrame.InverseProjectionTransform[1][1] * MaxXY.y,
             MaxMul);
+#endif
     }
 
     v3 BoxP = 0.5 * (MaxP + MinP);
