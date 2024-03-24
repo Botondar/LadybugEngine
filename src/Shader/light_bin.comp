@@ -94,14 +94,24 @@ void main()
     v2 MinXY = 2.0 * (v2(uMinXY) / v2(PerFrame.RenderExtent)) - v2(1.0);
     v2 MaxXY = 2.0 * (v2(uMaxXY) / v2(PerFrame.RenderExtent)) - v2(1.0);
 
-    v3 MinP = v3(
-        MinDepth * PerFrame.InverseProjectionTransform[0][0] * MinXY.x,
-        MinDepth * PerFrame.InverseProjectionTransform[1][1] * MinXY.y,
-        MinDepth);
-    v3 MaxP = v3(
-        MaxDepth * PerFrame.InverseProjectionTransform[0][0] * MaxXY.x,
-        MaxDepth * PerFrame.InverseProjectionTransform[1][1] * MaxXY.y,
-        MaxDepth);
+    v3 MinP, MaxP;
+    {
+        // NOTE(boti): This is derived as:
+        // - transforming the depth into clip-space 
+        // - projecting/perspective dividing it
+        // - transforming the view volume tile corner points with the inverse projection
+        // - unprojecting/perspective dividing again
+        float MinMul = 1.0 / (1.0 / MinDepth + PerFrame.InverseProjectionTransform[2][3]);
+        float MaxMul = 1.0 / (1.0 / MaxDepth + PerFrame.InverseProjectionTransform[2][3]);
+        MinP = v3(
+            MinMul * PerFrame.InverseProjectionTransform[0][0] * MinXY.x,
+            MinMul * PerFrame.InverseProjectionTransform[1][1] * MinXY.y,
+            MinMul);
+        MaxP = v3(
+            MaxMul * PerFrame.InverseProjectionTransform[0][0] * MaxXY.x,
+            MaxMul * PerFrame.InverseProjectionTransform[1][1] * MaxXY.y,
+            MaxMul);
+    }
 
     v3 BoxP = 0.5 * (MaxP + MinP);
     v3 HalfExtent = 0.5 * (MaxP - MinP);
