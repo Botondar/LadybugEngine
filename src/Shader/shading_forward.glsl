@@ -110,7 +110,7 @@ void main()
 
         // Desired mip level feedback
         {
-            uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdxFine(TexCoord));
+            uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdyFine(TexCoord));
             atomicOr(MipFeedbacks[Instance.Material.DiffuseID], MipBucket);
             atomicOr(MipFeedbacks[Instance.Material.NormalID], MipBucket);
             atomicOr(MipFeedbacks[Instance.Material.MetallicRoughnessID], MipBucket);
