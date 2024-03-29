@@ -87,7 +87,9 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     if (!RenderFrame)
     {
         ResetArena(&GameState->TransientArena);
-        RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, { 0, 0 });
+        v2u Resolution = { 0, 0 };
+        Resolution = { 1366, 768 };
+        RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, Resolution);
     }
     RenderFrame->ImmediateTextureID = GameState->Assets->Textures[GameState->Assets->DefaultFontTextureID].RendererID;
     RenderFrame->ParticleTextureID = GameState->Assets->Textures[GameState->Assets->ParticleArrayID].RendererID;

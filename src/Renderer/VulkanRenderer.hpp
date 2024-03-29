@@ -49,7 +49,9 @@ extern m3 GlobalCubeFaceBases[CubeLayer_Count];
 
 enum vulkan_handle_type : u32
 {
-    VulkanHandle_Buffer = 0,
+    VulkanHandle_Undefined = 0,
+    VulkanHandle_Memory,
+    VulkanHandle_Buffer,
     VulkanHandle_Image,
     VulkanHandle_ImageView,
     VulkanHandle_Swapchain,
@@ -60,12 +62,12 @@ struct deletion_entry
     vulkan_handle_type Type;
     union
     {
-        void* Handle;
-
-        VkBuffer BufferHandle;
-        VkImage ImageHandle;
-        VkImageView ImageViewHandle;
-        VkSwapchainKHR Swapchain;
+        void*           Handle;
+        VkDeviceMemory  Memory;
+        VkBuffer        Buffer;
+        VkImage         Image;
+        VkImageView     ImageView;
+        VkSwapchainKHR  Swapchain;
     };
 };
 
@@ -85,10 +87,16 @@ ProcessDeletionEntries(gpu_deletion_queue* Queue, u32 FrameID);
 internal b32 
 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, vulkan_handle_type Type, void* Handle);
 
-inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkBuffer Buffer) { return PushDeletionEntry(Queue, FrameID, VulkanHandle_Buffer, Buffer); }
-inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImage Image) { return PushDeletionEntry(Queue, FrameID, VulkanHandle_Image, Image); }
-inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImageView ImageView) { return PushDeletionEntry(Queue, FrameID, VulkanHandle_ImageView, ImageView); }
-inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkSwapchainKHR Swapchain) { return PushDeletionEntry(Queue, FrameID, VulkanHandle_Swapchain, Swapchain); }
+inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkDeviceMemory Memory)
+{ return PushDeletionEntry(Queue, FrameID, VulkanHandle_Memory, Memory); }
+inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkBuffer Buffer)
+{ return PushDeletionEntry(Queue, FrameID, VulkanHandle_Buffer, Buffer); }
+inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImage Image)
+{ return PushDeletionEntry(Queue, FrameID, VulkanHandle_Image, Image); }
+inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkImageView ImageView)
+{ return PushDeletionEntry(Queue, FrameID, VulkanHandle_ImageView, ImageView); }
+inline b32 PushDeletionEntry(gpu_deletion_queue* Queue, u32 FrameID, VkSwapchainKHR Swapchain)
+{ return PushDeletionEntry(Queue, FrameID, VulkanHandle_Swapchain, Swapchain); }
 
 #include "Renderer/RenderDevice.hpp"
 #include "Renderer/RenderTarget.hpp"
@@ -184,6 +192,11 @@ struct renderer
 
     VkImage         SwapchainImages[MaxSwapchainImageCount];
     VkImageView     SwapchainImageViews[MaxSwapchainImageCount];
+    // NOTE(boti): Separate depth buffer for after-blit/GUI rendering
+    // TODO(boti): We could just allocate the actual RT depth buffer at full resolution and only render to a portion of it
+    VkImage         SwapchainDepthImage;
+    VkImageView     SwapchainDepthImageView;
+    VkDeviceMemory  SwapchainDepthMemory;
 
     VkAllocationCallbacks* Allocator;
 

@@ -17,7 +17,7 @@ if (Result != VK_SUCCESS) { \
 #include "rhi_vulkan.cpp"
 
 internal VkResult 
-ResizeRenderTargets(renderer* Renderer, b32 Forced);
+ResizeSwapchain(renderer* Renderer, u32 FrameID, b32 Forced);
 
 internal VkResult 
 CreatePipelines(renderer* Renderer);
@@ -697,17 +697,21 @@ ProcessDeletionEntries(gpu_deletion_queue* Queue, u32 FrameID)
         deletion_entry* Entry = Queue->Entries + Index;
         switch (Entry->Type)
         {
+            case VulkanHandle_Memory:
+            {
+                vkFreeMemory(VK.Device, Entry->Memory, nullptr);
+            } break;
             case VulkanHandle_Buffer:
             {
-                vkDestroyBuffer(VK.Device, Entry->BufferHandle, nullptr);
+                vkDestroyBuffer(VK.Device, Entry->Buffer, nullptr);
             } break;
             case VulkanHandle_Image:
             {
-                vkDestroyImage(VK.Device, Entry->ImageHandle, nullptr);
+                vkDestroyImage(VK.Device, Entry->Image, nullptr);
             } break;
             case VulkanHandle_ImageView:
             {
-                vkDestroyImageView(VK.Device, Entry->ImageViewHandle, nullptr);
+                vkDestroyImageView(VK.Device, Entry->ImageView, nullptr);
             } break;
             case VulkanHandle_Swapchain:
             {
@@ -1279,7 +1283,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         };
 
         Renderer->SwapchainImageCount = 2;
-        Result = ResizeRenderTargets(Renderer, false);
+        Result = ResizeSwapchain(Renderer, 0, false);
         ReturnOnFailure();
     }
 
@@ -1604,7 +1608,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     return(Renderer);
 }
 
-internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
+internal VkResult ResizeSwapchain(renderer* Renderer, u32 FrameID, b32 Forced)
 {
     VkResult Result = VK_SUCCESS;
 
@@ -1622,13 +1626,18 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
             if (Renderer->Swapchain)
             {
                 Renderer->Debug.ResizeCount++;
-                vkDeviceWaitIdle(VK.Device);
 
                 for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
                 {
-                    vkDestroyImageView(VK.Device, Renderer->SwapchainImageViews[i], nullptr);
+                    PushDeletionEntry(&Renderer->DeletionQueue, FrameID, Renderer->SwapchainImageViews[i]);
                     Renderer->SwapchainImageViews[i] = VK_NULL_HANDLE;
                 }
+                PushDeletionEntry(&Renderer->DeletionQueue, FrameID, Renderer->SwapchainDepthImageView);
+                PushDeletionEntry(&Renderer->DeletionQueue, FrameID, Renderer->SwapchainDepthImage);
+
+                PushDeletionEntry(&Renderer->DeletionQueue, FrameID, Renderer->SwapchainDepthMemory);
+
+                PushDeletionEntry(&Renderer->DeletionQueue, FrameID, Renderer->Swapchain);
             }
 
             VkPresentModeKHR PresentMode = 
@@ -1691,16 +1700,88 @@ internal VkResult ResizeRenderTargets(renderer* Renderer, b32 Forced)
                             break;
                         }
                     }
+
+                    VkImageCreateInfo DepthImageInfo = 
+                    {
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                        .pNext = nullptr,
+                        .flags = 0,
+                        .imageType = VK_IMAGE_TYPE_2D,
+                        .format = FormatTable[RenderTargetFormatTable[RTFormat_Depth]],
+                        .extent = { Renderer->SurfaceExtent.width, Renderer->SurfaceExtent.height, 1 },
+                        .mipLevels = 1,
+                        .arrayLayers = 1,
+                        .samples = VK_SAMPLE_COUNT_1_BIT,
+                        .tiling = VK_IMAGE_TILING_OPTIMAL,
+                        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                        .queueFamilyIndexCount = 0,
+                        .pQueueFamilyIndices = nullptr,
+                        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                    };
+
+                    Result = vkCreateImage(VK.Device, &DepthImageInfo, nullptr, &Renderer->SwapchainDepthImage);
+                    if (Result == VK_SUCCESS)
+                    {
+                        VkMemoryRequirements MemoryRequirements = {};
+                        vkGetImageMemoryRequirements(VK.Device, Renderer->SwapchainDepthImage, &MemoryRequirements);
+                        u32 MemoryTypes = MemoryRequirements.memoryTypeBits & VK.GPUMemTypes;
+                        u32 MemoryTypeIndex;
+                        if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
+                        {
+                            VkMemoryAllocateInfo AllocInfo = 
+                            {
+                                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                                .pNext = nullptr,
+                                .allocationSize = MemoryRequirements.size,
+                                .memoryTypeIndex = MemoryTypeIndex,
+                            };
+                            Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->SwapchainDepthMemory);
+                            if (Result == VK_SUCCESS)
+                            {
+                                Result = vkBindImageMemory(VK.Device, Renderer->SwapchainDepthImage, Renderer->SwapchainDepthMemory, 0);
+                                if (Result == VK_SUCCESS)
+                                {
+                                    VkImageViewCreateInfo DepthViewInfo = 
+                                    {
+                                        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                                        .pNext = nullptr,
+                                        .flags = 0,
+                                        .image = Renderer->SwapchainDepthImage,
+                                        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                                        .format = FormatTable[RenderTargetFormatTable[RTFormat_Depth]],
+                                        .components = {},
+                                        .subresourceRange = 
+                                        {
+                                            .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                                            .baseMipLevel = 0,
+                                            .levelCount = VK_REMAINING_MIP_LEVELS,
+                                            .baseArrayLayer = 0,
+                                            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                                        },
+                                    };
+                                    Result = vkCreateImageView(VK.Device, &DepthViewInfo, nullptr, &Renderer->SwapchainDepthImageView);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            UnhandledError("No suitable memory type for swapchain depth image");
+                        }
+                    }
+                    else
+                    {
+                        UnhandledError("Failed to create swapchain depth image");
+                    }
+                }
+                else
+                {
+                    UnhandledError("Failed to get swapchain images");
                 }
             }
             else
             {
                 UnhandledError("Failed to (re)create swapchain");
-            }
-
-            if (CreateInfo.oldSwapchain)
-            {
-                vkDestroySwapchainKHR(VK.Device, CreateInfo.oldSwapchain, nullptr);
             }
         }
     }
@@ -2045,7 +2126,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     {
         vkWaitForFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID], VK_TRUE, UINT64_MAX);
         vkResetFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID]);
-        ResizeRenderTargets(Renderer, false);
+        ResizeSwapchain(Renderer, Frame->FrameID, false);
 
         for (;;)
         {
@@ -2061,12 +2142,12 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             else if (ImageAcquireResult == VK_SUBOPTIMAL_KHR)
             {
                 UnimplementedCodePath;
-                ResizeRenderTargets(Renderer, true);
+                ResizeSwapchain(Renderer, Frame->FrameID, true);
             }
             else if (ImageAcquireResult == VK_ERROR_OUT_OF_DATE_KHR)
             {
                 Assert(SwapchainImageIndex == U32_MAX);
-                ResizeRenderTargets(Renderer, true);
+                ResizeSwapchain(Renderer, Frame->FrameID, true);
             }
             else if (ImageAcquireResult == VK_TIMEOUT || ImageAcquireResult == VK_NOT_READY)
             {
@@ -2585,8 +2666,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdSetScissor(GuiCB, 0, 1, &OutputScissor);
 
         vkCmdBindPipeline(GuiCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->Pipelines[Pipeline_UI].Pipeline);
-        m4 OrthoTransform = M4(2.0f / Frame->RenderExtent.X, 0.0f, 0.0f, -1.0f,
-                               0.0f, 2.0f / Frame->RenderExtent.Y, 0.0f, -1.0f,
+        m4 OrthoTransform = M4(2.0f / Frame->OutputExtent.X, 0.0f, 0.0f, -1.0f,
+                               0.0f, 2.0f / Frame->OutputExtent.Y, 0.0f, -1.0f,
                                0.0f, 0.0f, 1.0f, 0.0f,
                                0.0f, 0.0f, 0.0f, 1.0f);
         vkCmdPushConstants(GuiCB, Renderer->Pipelines[Pipeline_UI].Layout, VK_SHADER_STAGE_ALL, 
@@ -3430,21 +3511,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
     EndFrameStage(PrepassCmd, &FrameStages[FrameStage_Upload]);
 
-    VkViewport FrameViewport = 
-    {
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = (f32)Frame->RenderExtent.X,
-        .height = (f32)Frame->RenderExtent.Y,
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-    };
-    VkRect2D FrameScissor = 
-    {
-        .offset = { 0, 0 },
-        .extent = { Frame->RenderExtent.X, Frame->RenderExtent.Y },
-    };
-
     //
     // Skinning
     //
@@ -3470,8 +3536,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
     EndFrameStage(PrepassCmd, &FrameStages[FrameStage_Skinning]);
 
-    vkCmdSetViewport(PrepassCmd, 0, 1, &FrameViewport);
-    vkCmdSetScissor(PrepassCmd, 0, 1, &FrameScissor);
+    vkCmdSetViewport(PrepassCmd, 0, 1, &PrimaryViewport);
+    vkCmdSetScissor(PrepassCmd, 0, 1, &PrimaryScissor);
 
     //
     // Prepass
@@ -4236,8 +4302,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     };
     vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitShadow, nullptr);
     
-    vkCmdSetViewport(RenderCmd, 0, 1, &FrameViewport);
-    vkCmdSetScissor(RenderCmd, 0, 1, &FrameScissor);
+    vkCmdSetViewport(RenderCmd, 0, 1, &PrimaryViewport);
+    vkCmdSetScissor(RenderCmd, 0, 1, &PrimaryScissor);
 
     //
     // Shading
@@ -4870,7 +4936,30 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .layerCount = 1,
             },
         };
+        VkImageMemoryBarrier2 SwapchainDepthBarrier = 
+        {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+            .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = Renderer->SwapchainDepthImage,
+            .subresourceRange = 
+            {
+                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+        };
         PushBeginBarrier(&FrameStages[FrameStage_BlitAndGUI], &SwapchainBarrier);
+        PushBeginBarrier(&FrameStages[FrameStage_BlitAndGUI], &SwapchainDepthBarrier);
     }
 
     BeginFrameStage(RenderCmd, &FrameStages[FrameStage_BlitAndGUI], "BlitAndGUI");
@@ -4892,7 +4981,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         {
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .pNext = nullptr,
-            .imageView = Renderer->DepthBuffer->View,
+            .imageView = Renderer->SwapchainDepthImageView,
             .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             .resolveMode = VK_RESOLVE_MODE_NONE,
             .resolveImageView = VK_NULL_HANDLE,

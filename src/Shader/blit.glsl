@@ -102,9 +102,9 @@ void main()
             Exposure = TargetLuminance / AverageLuminance;
         }
 #endif
-
-        vec3 Sample = texelFetch(HDRColorImage, v2s(gl_FragCoord.xy), 0).rgb;
-        vec3 SampleBloom = texelFetch(BloomImage, v2s(gl_FragCoord.xy), 0).rgb;
+        v2 UV = gl_FragCoord.xy / v2(PerFrame.OutputExtent);
+        vec3 Sample = textureLod(sampler2D(HDRColorImage, Samplers[Sampler_LinearEdgeClamp]), UV, 0.0).rgb;
+        vec3 SampleBloom = textureLod(sampler2D(BloomImage, Samplers[Sampler_LinearEdgeClamp]), UV, 0.0).rgb;
         Sample = mix(Sample, SampleBloom, PerFrame.BloomStrength);
 
         vec3 Exposed = Sample * Exposure;
