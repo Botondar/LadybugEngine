@@ -29,24 +29,18 @@ bool IntersectAABBSphere(v3 P, v3 HalfExtent, v3 C, float R)
     return(Result);
 }
 
-shared float MaxDepthPerWave[8];
-shared float MinDepthPerWave[8];
-shared uint DepthMaskPerWave[8];
+shared float MaxDepthPerWave[8] = {};
+shared float MinDepthPerWave[8] = {};
+shared uint DepthMaskPerWave[8] = {};
 
-shared uint LightBufferAt;
+shared uint LightBufferAt = {};
 
 void main()
 {
     uint ThreadID = gl_LocalInvocationID.x + gl_LocalInvocationID.y * gl_WorkGroupSize.x;
-    if (ThreadID == 0)
-    {
-        LightBufferAt = 0;
-    }
     if (subgroupElect())
     {
-        MaxDepthPerWave[gl_SubgroupID] = 0.0;
-        MinDepthPerWave[gl_SubgroupID] = 1e9;
-        DepthMaskPerWave[gl_SubgroupID] = 0;
+        MinDepthPerWave[gl_SubgroupID] = 1.0 / 0.0;
     }
     barrier();
     if (gl_GlobalInvocationID.x >= PerFrame.RenderExtent.x || gl_GlobalInvocationID.y >= PerFrame.RenderExtent.y)
@@ -54,7 +48,7 @@ void main()
         return;
     }
 
-    uint TileIndex = gl_WorkGroupID.x + gl_WorkGroupID.y * gl_NumWorkGroups.x;
+    uint TileIndex = gl_WorkGroupID.x + gl_WorkGroupID.y * PerFrame.TileCount.x;
 
     v2 Depth2 = texelFetch(StructureImage, v2s(gl_GlobalInvocationID.xy), 0).zw;
     float Depth = Depth2.x + Depth2.y;
@@ -96,37 +90,16 @@ void main()
 
     v3 MinP, MaxP;
     {
-#if 1
-        float MinDepth01 = PerFrame.ProjectionTransform[2][2] + PerFrame.ProjectionTransform[3][2] / MinDepth;
-        float MaxDepth01 = PerFrame.ProjectionTransform[2][2] + PerFrame.ProjectionTransform[3][2] / MaxDepth;
-
-        v4 MinP4 = PerFrame.InverseProjectionTransform * v4(MinXY, MinDepth01, 1.0);
-        v4 MaxP4 = PerFrame.InverseProjectionTransform * v4(MaxXY, MaxDepth01, 1.0);
-
-        MinP4.xyz /= MinP4.w;
-        MaxP4.xyz /= MaxP4.w;
-
-        MinP = min(MinP4.xyz, MaxP4.xyz);
-        MaxP = max(MinP4.xyz, MaxP4.xyz);
-#else
-        // TODO(boti): Figure out why this is broken
-
         // NOTE(boti): This is derived as:
         // - transforming the depth into clip-space 
         // - projecting/perspective dividing it
         // - transforming the view volume tile corner points with the inverse projection
         // - unprojecting/perspective dividing again
-        float MinMul = 1.0 / (1.0 / MinDepth + PerFrame.InverseProjectionTransform[3][2]);
-        float MaxMul = 1.0 / (1.0 / MaxDepth + PerFrame.InverseProjectionTransform[3][2]);
-        MinP = v3(
-            MinMul * PerFrame.InverseProjectionTransform[0][0] * MinXY.x,
-            MinMul * PerFrame.InverseProjectionTransform[1][1] * MinXY.y,
-            MinMul);
-        MaxP = v3(
-            MaxMul * PerFrame.InverseProjectionTransform[0][0] * MaxXY.x,
-            MaxMul * PerFrame.InverseProjectionTransform[1][1] * MaxXY.y,
-            MaxMul);
-#endif
+        v2 ScaleXY = v2(PerFrame.InverseProjectionTransform[0][0], PerFrame.InverseProjectionTransform[1][1]);
+        v3 P0 = v3(MinDepth * ScaleXY * MinXY, MinDepth);
+        v3 P1 = v3(MaxDepth * ScaleXY * MaxXY, MaxDepth);
+        MinP = min(P0, P1);
+        MaxP = max(P0, P1);
     }
 
     v3 BoxP = 0.5 * (MaxP + MinP);
