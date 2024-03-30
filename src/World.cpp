@@ -257,33 +257,33 @@ MakeParticleSystem(game_world* World, entity_id ParentID, particle_system_type T
     return(Result);
 }
 
-lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* Frame, game_io* IO, memory_arena* Scratch, b32 DrawLights)
+internal void 
+DEBUGInitializeWorld(
+    game_world* World, 
+    assets* Assets, 
+    render_frame* Frame, 
+    memory_arena* Scratch,
+    debug_scene_type Type,
+    debug_scene_flags Flags)
 {
-    // Load debug scene
-    if (!World->IsLoaded)
+    m4 YUpToZUp = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                     0.0f, 0.0f, -1.0f, 0.0f,
+                     0.0f, 1.0f, 0.0f, 0.0f,
+                     0.0f, 0.0f, 0.0f, 1.0f);
+
+    switch (Type)
     {
-        World->LightProxyScale = 1e-1f;
-        World->EffectEntropy = { 0x13370420 };
-
-        Assert(World->EntityCount == 0);
-        // Null entity
-        World->Entities[World->EntityCount++] = 
+        case DebugScene_None:
         {
-            .Flags = EntityFlag_None,
-            .Transform = M4(1.0f, 0.0f, 0.0f, 0.0f,
-                            0.0f, 1.0f, 0.0f, 0.0f,
-                            0.0f, 0.0f, 1.0f, 0.0f,
-                            0.0f, 0.0f, 0.0f, 1.0f),
-        };
-
-        World->Camera.P = { 0.0f, 0.0f, 0.0f };
-        World->Camera.FieldOfView = ToRadians(80.0f);
-        World->Camera.NearZ = 0.1f;
-        World->Camera.FarZ = 250.0f;
-        World->Camera.Yaw = 0.5f * Pi;
-
-#if 0
-        // Terrain generation
+            // Ignored
+        } break;
+        case DebugScene_Sponza:
+        {
+            m4 Transform = YUpToZUp;
+            DEBUGLoadTestScene(Scratch, Assets, World, Frame,
+                               "data/Scenes/Sponza/Sponza.gltf", Transform);
+        } break;
+        case DebugScene_Terrain:
         {
             // Height field
             {
@@ -343,113 +343,142 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             f32 ExtentX = (f32)World->HeightField.TexelCountX / (f32)World->HeightField.TexelsPerMeter;
             f32 ExtentY = (f32)World->HeightField.TexelCountY / (f32)World->HeightField.TexelsPerMeter;
             TerrainEntity->Transform = M4(1.0f, 0.0f, 0.0f, -0.5f * ExtentX,
-                                        0.0f, 1.0f, 0.0f, -0.5f * ExtentY,
-                                        0.0f, 0.0f, 1.0f, 0.0f,
-                                        0.0f, 0.0f, 0.0f, 1.0f);
+                                          0.0f, 1.0f, 0.0f, -0.5f * ExtentY,
+                                          0.0f, 0.0f, 1.0f, 0.0f,
+                                          0.0f, 0.0f, 0.0f, 1.0f);
             TerrainEntity->PieceCount = 1;
             TerrainEntity->Pieces[0].MeshID = ChunkMeshID;
-        }
-#else
-        {
-            World->AdHocLightUpdateRate = 1.0f / 15.0f;
-            World->AdHocLightCounter = World->AdHocLightUpdateRate;
+        } break;
+        InvalidDefaultCase;
+    }
+
+    if (Flags & DebugSceneFlag_SponzaAdHocLights)
+    {
+        World->AdHocLightCount = World->MaxAdHocLightCount;
+        World->AdHocLightUpdateRate = 1.0f / 15.0f;
+        World->AdHocLightCounter = World->AdHocLightUpdateRate;
             
-            World->AdHocLightBounds = { { -8.0f, -4.5f, 3.5f }, { +7.5f, -2.0f, 6.5f } };
-            mmbox Bounds = World->AdHocLightBounds;
-            entropy32* R = &World->EffectEntropy;
-            for (u32 LightIndex = 0; LightIndex < World->AdHocLightCount; LightIndex++)
-            {
-                World->AdHocLights[LightIndex] = 
-                {
-                    .P = 
-                    {
-                        RandBetween(R, Bounds.Min.X, Bounds.Max.X),
-                        RandBetween(R, Bounds.Min.Y, Bounds.Max.Y),
-                        RandBetween(R, Bounds.Min.Z, Bounds.Max.Z),
-                    },
-                    .E = SetLuminance(v3{ RandBetween(R, 0.1f, 1.0f), RandBetween(R, 0.1f, 1.0f), RandBetween(R, 0.1f, 1.0f) }, RandBetween(R, 0.1f, 0.3f)),
-                };
-            }
-        }
-
-        m4 YUpToZUp = M4(1.0f, 0.0f, 0.0f, 0.0f,
-                         0.0f, 0.0f, -1.0f, 0.0f,
-                         0.0f, 1.0f, 0.0f, 0.0f,
-                         0.0f, 0.0f, 0.0f, 1.0f);
-        // Sponza scene
-        if (1)
+        World->AdHocLightBounds = { { -8.0f, -4.5f, 3.5f }, { +7.5f, -2.0f, 6.5f } };
+        mmbox Bounds = World->AdHocLightBounds;
+        entropy32* R = &World->EffectEntropy;
+        for (u32 LightIndex = 0; LightIndex < World->AdHocLightCount; LightIndex++)
         {
-            m4 Transform = YUpToZUp;
-            DEBUGLoadTestScene(Scratch, Assets, World, Frame,
-                               "data/Scenes/Sponza/Sponza.gltf", Transform);
-
-#if 1
-            const light LightSources[] = 
+            World->AdHocLights[LightIndex] = 
             {
-                // "Fire" lights on top of the metal hangers
-                { .P = { -4.95f, -1.15f, 1.40f }, .E = SetLuminance(v3{ 2.0f, 0.8f, 0.2f }, 3.0f) },
-                { .P = { +3.90f, -1.15f, 1.40f }, .E = SetLuminance(v3{ 2.0f, 0.8f, 0.2f }, 3.0f) },
-                { .P = { -4.95f, +1.75f, 1.40f }, .E = SetLuminance(v3{ 2.0f, 0.8f, 0.2f }, 3.0f) },
-                { .P = { +3.90f, +1.75f, 1.40f }, .E = SetLuminance(v3{ 2.0f, 0.8f, 0.2f }, 3.0f) },
-
-                // "Magic" lights on top of the wells
-                { .P = { +8.95f, +3.60f, 1.30f }, .E = SetLuminance(v3{ 0.2f, 0.6f, 1.0f }, 2.5f) },
-                { .P = { +8.95f, -3.20f, 1.30f }, .E = SetLuminance(v3{ 0.6f, 0.2f, 1.0f }, 2.5f) },
-                { .P = { -9.65f, +3.60f, 1.30f }, .E = SetLuminance(v3{ 0.4f, 1.0f, 0.4f }, 2.5f) },
-                { .P = { -9.65f, -3.20f, 1.30f }, .E = SetLuminance(v3{ 1.0f, 0.1f, 0.1f }, 7.5f) },
-            };
-
-            for (u32 LightIndex = 0; LightIndex < CountOf(LightSources); LightIndex++)
-            {
-                const light* Light = LightSources + LightIndex;
-                if (World->EntityCount < World->MaxEntityCount)
+                .P = 
                 {
-                    entity_id ID = { World->EntityCount++ };
-                    World->Entities[ID.Value] = 
-                    {
-                        .Flags = EntityFlag_LightSource,
-                        .Transform = M4(1.0f, 0.0f, 0.0f, Light->P.X,
-                                        0.0f, 1.0f, 0.0f, Light->P.Y,
-                                        0.0f, 0.0f, 1.0f, Light->P.Z,
-                                        0.0f, 0.0f, 0.0f, 1.0f),
-                        .LightEmission = Light->E,
-                    };
+                    RandBetween(R, Bounds.Min.X, Bounds.Max.X),
+                    RandBetween(R, Bounds.Min.Y, Bounds.Max.Y),
+                    RandBetween(R, Bounds.Min.Z, Bounds.Max.Z),
+                },
+                .E = SetLuminance(v3{ RandBetween(R, 0.1f, 1.0f), RandBetween(R, 0.1f, 1.0f), RandBetween(R, 0.1f, 1.0f) }, RandBetween(R, 0.1f, 0.3f)),
+            };
+        }
+    }
 
-                    b32 IsMagicLight = (LightIndex >= 4);
-                    if (IsMagicLight)
+    if (Flags & DebugSceneFlag_SponzaParticles)
+    {
+        const light LightSources[] = 
+        {
+            // "Fire" lights on top of the metal hangers
+            { .P = { -4.95f, -1.15f, 1.40f }, .E = SetLuminance(v3{ 2.0f, 0.8f, 0.2f }, 3.0f) },
+            { .P = { +3.90f, -1.15f, 1.40f }, .E = SetLuminance(v3{ 2.0f, 0.8f, 0.2f }, 3.0f) },
+            { .P = { -4.95f, +1.75f, 1.40f }, .E = SetLuminance(v3{ 2.0f, 0.8f, 0.2f }, 3.0f) },
+            { .P = { +3.90f, +1.75f, 1.40f }, .E = SetLuminance(v3{ 2.0f, 0.8f, 0.2f }, 3.0f) },
+
+            // "Magic" lights on top of the wells
+            { .P = { +8.95f, +3.60f, 1.30f }, .E = SetLuminance(v3{ 0.2f, 0.6f, 1.0f }, 2.5f) },
+            { .P = { +8.95f, -3.20f, 1.30f }, .E = SetLuminance(v3{ 0.6f, 0.2f, 1.0f }, 2.5f) },
+            { .P = { -9.65f, +3.60f, 1.30f }, .E = SetLuminance(v3{ 0.4f, 1.0f, 0.4f }, 2.5f) },
+            { .P = { -9.65f, -3.20f, 1.30f }, .E = SetLuminance(v3{ 1.0f, 0.1f, 0.1f }, 7.5f) },
+        };
+
+        for (u32 LightIndex = 0; LightIndex < CountOf(LightSources); LightIndex++)
+        {
+            const light* Light = LightSources + LightIndex;
+            if (World->EntityCount < World->MaxEntityCount)
+            {
+                entity_id ID = { World->EntityCount++ };
+                World->Entities[ID.Value] = 
+                {
+                    .Flags = EntityFlag_LightSource,
+                    .Transform = M4(1.0f, 0.0f, 0.0f, Light->P.X,
+                                    0.0f, 1.0f, 0.0f, Light->P.Y,
+                                    0.0f, 0.0f, 1.0f, Light->P.Z,
+                                    0.0f, 0.0f, 0.0f, 1.0f),
+                    .LightEmission = Light->E,
+                };
+
+                b32 IsMagicLight = (LightIndex >= 4);
+                if (IsMagicLight)
+                {
+                    mmbox Bounds = 
                     {
-                        mmbox Bounds = 
-                        {
-                            .Min = { -0.3f, -0.3f, -0.25f },
-                            .Max = { +0.3f, +0.3f, +1.75f },
-                        };
-                        MakeParticleSystem(World, ID, ParticleSystem_Magic, { 0.0f, 0.0f, -0.25f}, Bounds);
-                    }
-                    else
+                        .Min = { -0.3f, -0.3f, -0.25f },
+                        .Max = { +0.3f, +0.3f, +1.75f },
+                    };
+                    MakeParticleSystem(World, ID, ParticleSystem_Magic, { 0.0f, 0.0f, -0.25f}, Bounds);
+                }
+                else
+                {
+                    mmbox Bounds = 
                     {
-                        mmbox Bounds = 
-                        {
-                            .Min = { -0.15f, -0.15f, -0.15f },
-                            .Max = { +0.15f, +0.15f, +0.50f },
-                        };
-                        MakeParticleSystem(World, ID, ParticleSystem_Fire, { 0.0f, 0.0f, -0.35f }, Bounds);
-                    }
+                        .Min = { -0.15f, -0.15f, -0.15f },
+                        .Max = { +0.15f, +0.15f, +0.50f },
+                    };
+                    MakeParticleSystem(World, ID, ParticleSystem_Fire, { 0.0f, 0.0f, -0.35f }, Bounds);
                 }
             }
-#endif
         }
+    }
 
-        // Animated fox
-        if (1)
+    if (Flags & DebugSceneFlag_AnimatedFox)
+    {
+        m4 Transform = YUpToZUp * M4(1e-2f, 0.0f, 0.0f, 0.0f,
+                                     0.0f, 1e-2f, 0.0f, 0.0f,
+                                     0.0f, 0.0f, 1e-2f, 0.0f,
+                                     0.0f, 0.0f, 0.0f, 1.0f);
+        DEBUGLoadTestScene(Scratch, Assets, World, Frame, 
+                           "data/Scenes/Fox/Fox.gltf", Transform);
+    }
+
+    if (Flags & DebugSceneFlag_TransparentDragon)
+    {
+        m4 Transform = YUpToZUp;
+        // TODO(boti): Hard-coded absolute path on my drive...
+        DEBUGLoadTestScene(Scratch, Assets, World, Frame,
+                           "F:/dev/Assets/glTF-Sample-Assets/Models/DragonAttenuation/glTF/DragonAttenuation.gltf", Transform);
+    }
+}
+
+lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* Frame, game_io* IO, memory_arena* Scratch, b32 DrawLights)
+{
+    if (!World->IsLoaded)
+    {
+        World->LightProxyScale = 1e-1f;
+        World->EffectEntropy = { 0x13370420 };
+
+        Assert(World->EntityCount == 0);
+        // Null entity
+        World->Entities[World->EntityCount++] = 
         {
-            m4 Transform = YUpToZUp * M4(1e-2f, 0.0f, 0.0f, 0.0f,
-                                         0.0f, 1e-2f, 0.0f, 0.0f,
-                                         0.0f, 0.0f, 1e-2f, 0.0f,
-                                         0.0f, 0.0f, 0.0f, 1.0f);
-            DEBUGLoadTestScene(Scratch, Assets, World, Frame, 
-                               "data/Scenes/Fox/Fox.gltf", Transform);
-        }
-#endif
+            .Flags = EntityFlag_None,
+            .Transform = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                            0.0f, 1.0f, 0.0f, 0.0f,
+                            0.0f, 0.0f, 1.0f, 0.0f,
+                            0.0f, 0.0f, 0.0f, 1.0f),
+        };
+
+        World->Camera.P = { 0.0f, 0.0f, 0.0f };
+        World->Camera.FieldOfView = ToRadians(80.0f);
+        World->Camera.NearZ = 0.1f;
+        World->Camera.FarZ = 250.0f;
+        World->Camera.Yaw = 0.5f * Pi;
+
+        // Load debug scene
+        DEBUGInitializeWorld(World, Assets, Frame, Scratch,
+                             DebugScene_Sponza, 
+                             DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights|DebugSceneFlag_TransparentDragon);
         World->IsLoaded = true;
     }
 

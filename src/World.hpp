@@ -140,9 +140,10 @@ struct game_world
     f32 AdHocLightUpdateRate;
     f32 AdHocLightCounter;
     mmbox AdHocLightBounds;
-    static constexpr u32 AdHocLightCount = 64u;
-    v3 AdHocLightdPs[AdHocLightCount];
-    light AdHocLights[AdHocLightCount];
+    static constexpr u32 MaxAdHocLightCount = 64u;
+    u32 AdHocLightCount;
+    v3 AdHocLightdPs[MaxAdHocLightCount];
+    light AdHocLights[MaxAdHocLightCount];
 };
 
 lbfn u32 
@@ -153,6 +154,32 @@ lbfn void UpdateAndRenderWorld(game_world* World, struct assets* Assets, render_
 
 internal mesh_data 
 GenerateTerrainChunk(height_field* Field, memory_arena* Arena);
+
+enum debug_scene_type
+{
+    DebugScene_None = 0,
+    DebugScene_Sponza,
+    DebugScene_Terrain,
+};
+
+typedef flags32 debug_scene_flags;
+enum debug_scene_flag_bits : debug_scene_flags
+{
+    DebugSceneFlag_None                 = 0,
+    DebugSceneFlag_AnimatedFox          = (1u << 0),
+    DebugSceneFlag_TransparentDragon    = (1u << 1),
+    DebugSceneFlag_SponzaParticles      = (1u << 2),
+    DebugSceneFlag_SponzaAdHocLights    = (1u << 3),
+};
+
+internal void 
+DEBUGInitializeWorld(
+    game_world* World, 
+    assets* Assets, 
+    render_frame* Frame, 
+    memory_arena* Scratch,
+    debug_scene_type Type,
+    debug_scene_flags Flags);
 
 //
 // Implementation
