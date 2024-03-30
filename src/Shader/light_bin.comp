@@ -43,44 +43,59 @@ void main()
         MinDepthPerWave[gl_SubgroupID] = 1.0 / 0.0;
     }
     barrier();
-    if (gl_GlobalInvocationID.x >= PerFrame.RenderExtent.x || gl_GlobalInvocationID.y >= PerFrame.RenderExtent.y)
+
+    uint TileIndex = subgroupBroadcast(gl_WorkGroupID.x + gl_WorkGroupID.y * PerFrame.TileCount.x, 0);
+
+    float MaxDepth = 0.0;
+    float MinDepth = 1.0 / 0.0;
+    float InvDepthRange;
+    uint DepthMask = 0;
+
+    // Calculate depth bounds
     {
-        return;
+        // NOTE(boti): Depth bounds calculation can't be inside an if, because barrier()s can't be placed inside control flow !!!
+        bool IsTexelActive = (gl_GlobalInvocationID.x < PerFrame.RenderExtent.x) && (gl_GlobalInvocationID.y < PerFrame.RenderExtent.y);
+
+        v2 Depth2 = texelFetch(StructureImage, v2s(gl_GlobalInvocationID.xy), 0).zw;
+        float Depth = Depth2.x + Depth2.y;
+
+        if (IsTexelActive)
+        {
+            MaxDepth = subgroupMax(Depth);
+            MinDepth = subgroupMin(Depth);
+        }
+        if (subgroupElect())
+        {
+            MaxDepthPerWave[gl_SubgroupID] = subgroupMax(Depth);
+            MinDepthPerWave[gl_SubgroupID] = subgroupMin(Depth);
+        }
+        barrier();
+
+        for (uint WaveIndex = 0; WaveIndex < gl_NumSubgroups; WaveIndex++)
+        {
+            MaxDepth = max(MaxDepth, MaxDepthPerWave[WaveIndex]);
+            MinDepth = min(MinDepth, MinDepthPerWave[WaveIndex]);
+        }
+
+        InvDepthRange = 1.0 / (MaxDepth - MinDepth);
+        DepthMask = 1 << uint(floor(32.0 * clamp((Depth - MinDepth) * InvDepthRange, 0.0, 1.0)));
+        DepthMask = subgroupOr(DepthMask);
+        if (subgroupElect())
+        {
+            DepthMaskPerWave[gl_SubgroupID] = DepthMask;
+        }
+        barrier();
+
+        for (uint WaveIndex = 0; WaveIndex < gl_NumSubgroups; WaveIndex++)
+        {
+            DepthMask |= DepthMaskPerWave[WaveIndex];
+        }
     }
 
-    uint TileIndex = gl_WorkGroupID.x + gl_WorkGroupID.y * PerFrame.TileCount.x;
-
-    v2 Depth2 = texelFetch(StructureImage, v2s(gl_GlobalInvocationID.xy), 0).zw;
-    float Depth = Depth2.x + Depth2.y;
-
-    float MaxDepth = subgroupMax(Depth);
-    float MinDepth = subgroupMin(Depth);
-    if (subgroupElect())
-    {
-        MaxDepthPerWave[gl_SubgroupID] = subgroupMax(Depth);
-        MinDepthPerWave[gl_SubgroupID] = subgroupMin(Depth);
-    }
-    barrier();
-
-    for (uint WaveIndex = 0; WaveIndex < gl_NumSubgroups; WaveIndex++)
-    {
-        MaxDepth = max(MaxDepth, MaxDepthPerWave[WaveIndex]);
-        MinDepth = min(MinDepth, MinDepthPerWave[WaveIndex]);
-    }
-
-    float InvDepthRange = 1.0 / (MaxDepth - MinDepth);
-    uint DepthMask = 1 << uint(floor(32.0 * clamp((Depth - MinDepth) * InvDepthRange, 0.0, 1.0)));
-    DepthMask = subgroupOr(DepthMask);
-    if (subgroupElect())
-    {
-        DepthMaskPerWave[gl_SubgroupID] = DepthMask;
-    }
-    barrier();
-
-    for (uint WaveIndex = 0; WaveIndex < gl_NumSubgroups; WaveIndex++)
-    {
-        DepthMask |= DepthMaskPerWave[WaveIndex];
-    }
+    MaxDepth        = subgroupBroadcast(MaxDepth, 0);
+    MinDepth        = subgroupBroadcast(MinDepth, 0);
+    InvDepthRange   = subgroupBroadcast(InvDepthRange, 0);
+    DepthMask       = subgroupBroadcast(DepthMask, 0);
 
     v2u uMinXY = gl_WorkGroupID.xy * v2u(R_TileSizeX, R_TileSizeY);
     v2u uMaxXY = uMinXY + v2u(R_TileSizeX, R_TileSizeY);
