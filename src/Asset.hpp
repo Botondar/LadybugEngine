@@ -79,6 +79,7 @@ enum texture_type : u32
     TextureType_Diffuse,
     TextureType_Normal,
     TextureType_Material,
+    TextureType_Transmission,
 
     TextureType_Count,
 };
@@ -130,6 +131,8 @@ enum transparency_mode : u32
     Transparency_Opaque = 0,
     Transparency_AlphaTest,
     Transparency_AlphaBlend,
+
+    Transparency_Count,
 };
 
 struct material
@@ -145,6 +148,10 @@ struct material
     rgba8 MetallicRoughness;
     v3 Emission;
     f32 AlphaThreshold;
+    b32 TransmissionEnabled;
+    u32 TransmissionID;
+    material_sampler_id TransmissionSamplerID;
+    f32 Transmission;
 };
 
 //

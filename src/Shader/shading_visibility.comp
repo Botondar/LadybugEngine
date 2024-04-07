@@ -304,5 +304,6 @@ void main()
         }
     }
 
+    Lo = NanTo0(Lo);
     imageStore(HDRTarget[0], TexelID, v4(Lo, 1.0));
 }

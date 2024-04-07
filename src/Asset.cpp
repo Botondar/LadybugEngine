@@ -85,6 +85,9 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
                     Entry->Info.Format = Format_BC1_RGB_SRGB;
                 }
             } break;
+            // TODO(boti): Transmission should be BC4 (or packed into some channel of another texture),
+            // encoding it as BC5 is a temporary hack to get thing running
+            case TextureType_Transmission: 
             case TextureType_Normal:
             {
                 Entry->Info.Format = Format_BC5_UNorm;
@@ -148,6 +151,7 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
                                 (stbir_pixel_layout)DesiredChannelCount);
                         } break;
 
+                        case TextureType_Transmission:
                         case TextureType_Normal:
                         case TextureType_Material:
                         {
@@ -277,6 +281,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         Whiteness->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, &Info, InvalidRendererTextureID);
         Assets->DefaultTextures[TextureType_Diffuse] = Assets->WhitenessID;
         Assets->DefaultTextures[TextureType_Material] = Assets->WhitenessID;
+        Assets->DefaultTextures[TextureType_Transmission] = Assets->WhitenessID;
 
         u32 Texel = 0xFFFFFFFFu;
         TransferTexture(Frame, Whiteness->RendererID, Info, AllTextureSubresourceRange(), &Texel);
@@ -621,6 +626,8 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             Material->AlphaThreshold = SrcMaterial->AlphaCutoff;
             Material->Albedo = PackRGBA(SrcMaterial->BaseColorFactor);
             Material->MetallicRoughness = PackRGBA(v4{ 1.0f, SrcMaterial->RoughnessFactor, SrcMaterial->MetallicFactor, 1.0f });
+            Material->TransmissionEnabled = SrcMaterial->TransmissionEnabled;
+            Material->Transmission = SrcMaterial->TransmissionFactor;
 
             auto ConvertGLTFSampler = [](gltf_sampler* Sampler) -> material_sampler_id
             {
@@ -679,6 +686,19 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                     *Texture = LoadAndUploadTexture(SrcMaterial->MetallicRoughnessTexture.TextureIndex, TextureType_Material, SrcMaterial->AlphaMode);
                 }
                 Material->MetallicRoughnessID = *Texture;
+            }
+            if (SrcMaterial->TransmissionTexture.TextureIndex != U32_MAX)
+            {
+                gltf_texture* GLTFTexture = GLTF.Textures + SrcMaterial->TransmissionTexture.TextureIndex;
+                gltf_sampler* Sampler = GLTF.Samplers + GLTFTexture->SamplerIndex;
+                Material->TransmissionSamplerID = ConvertGLTFSampler(Sampler);
+
+                u32* Texture = TextureTable + SrcMaterial->TransmissionTexture.TextureIndex;
+                if (!*Texture)
+                {
+                    *Texture = LoadAndUploadTexture(SrcMaterial->TransmissionTexture.TextureIndex, TextureType_Transmission, GLTF_ALPHA_MODE_OPAQUE);
+                }
+                Material->TransmissionID = *Texture;
             }
         }
         else

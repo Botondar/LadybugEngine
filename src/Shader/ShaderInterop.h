@@ -181,9 +181,14 @@ struct v4u8
 #define draw_group u32
 #define DrawGroup_Opaque            0
 #define DrawGroup_AlphaTest         1
-#define DrawGroup_Skinned           2
+#define DrawGroup_Transparent       2
+#define DrawGroup_Skinned           3
 
-#define DrawGroup_Count             3
+#define DrawGroup_Count             4
+
+StaticAssert(DrawGroup_Count < 32);
+
+
 
 #define debug_view_mode u32
 #define DebugView_None              0
@@ -282,15 +287,18 @@ struct renderer_material
 {
     v3 Emissive;
     f32 AlphaThreshold;
+    f32 Transmission;
     rgba8 DiffuseColor;
     rgba8 BaseMaterial;
     renderer_texture_id DiffuseID;
     renderer_texture_id NormalID;
     renderer_texture_id MetallicRoughnessID;
+    renderer_texture_id TransmissionID;
     // TODO(boti): These sampler IDs could just be packed into a single u32
     material_sampler_id DiffuseSamplerID;
     material_sampler_id NormalSamplerID;
     material_sampler_id MetallicRoughnessSamplerID;
+    material_sampler_id TransmissionSamplerID;
 };
 
 struct instance_data

@@ -277,6 +277,13 @@ DEBUGInitializeWorld(
         {
             // Ignored
         } break;
+        case DebugScene_TransmissionTest:
+        {
+            m4 Transform = YUpToZUp;
+            // TODO(boti): hard-coded path
+            DEBUGLoadTestScene(Scratch, Assets, World, Frame,
+                               "F:/dev/Assets/glTF-Sample-Assets/Models/TransmissionTest/glTF/TransmissionTest.gltf", Transform);
+        } break;
         case DebugScene_Sponza:
         {
             m4 Transform = YUpToZUp;
@@ -476,9 +483,15 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         World->Camera.Yaw = 0.5f * Pi;
 
         // Load debug scene
+        #if 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
-                             DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights|DebugSceneFlag_TransparentDragon);
+                             DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);
+        #else
+        DEBUGInitializeWorld(World, Assets, Frame, Scratch,
+                             DebugScene_TransmissionTest, 
+                             0);
+        #endif
         World->IsLoaded = true;
     }
 
@@ -520,7 +533,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         f32 Lambda = -T / Log2(PrecisionAfterT);
 
         Camera->dP = Lerp(Camera->dP, Camera->dPTarget, 1.0f - Exp2(-dt / Lambda));
-        Camera->P += Camera->dP * dt;;
+        Camera->P += Camera->dP * dt;
 
         Frame->CameraTransform = GetTransform(Camera);
         Frame->CameraFocalLength = 1.0f / Tan(0.5f * Camera->FieldOfView);
@@ -530,7 +543,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
     // Sun update
     {
-        World->SunL = 2.0f * v3{ 10.0f, 7.0f, 5.0f };
+        World->SunL = 1.0f * v3{ 10.0f, 7.0f, 5.0f };
         #if 1
         World->SunV = Normalize(v3{ +4.25f, -1.0f, 8.0f });
         #else
@@ -634,21 +647,38 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 texture* AlbedoTexture              = Assets->Textures + Material->AlbedoID;
                 texture* NormalTexture              = Assets->Textures + Material->NormalID;
                 texture* MetallicRoughnessTexture   = Assets->Textures + Material->MetallicRoughnessID;
-                
+                texture* TransmissionTexture        = (Material->TransmissionID != U32_MAX) ? Assets->Textures + Material->TransmissionID : nullptr;
+
+
                 renderer_material RenderMaterial = 
                 {
                     .Emissive                   = Material->Emission,
                     .AlphaThreshold             = Material->AlphaThreshold,
+                    .Transmission               = Material->Transmission,
                     .DiffuseColor               = Material->Albedo,
                     .BaseMaterial               = Material->MetallicRoughness,
                     .DiffuseID                  = AlbedoTexture->RendererID,
                     .NormalID                   = NormalTexture->RendererID,
                     .MetallicRoughnessID        = MetallicRoughnessTexture->RendererID,
+                    .TransmissionID             = TransmissionTexture ? TransmissionTexture->RendererID : InvalidRendererTextureID,
                     .DiffuseSamplerID           = Material->AlbedoSamplerID,
                     .NormalSamplerID            = Material->NormalSamplerID,
-                    .MetallicRoughnessSamplerID = Material->MetallicRoughnessSamplerID
+                    .MetallicRoughnessSamplerID = Material->MetallicRoughnessSamplerID,
+                    .TransmissionSamplerID      = Material->TransmissionSamplerID,
                 };
-                draw_group Group = (Material->Transparency == Transparency_AlphaTest) ? DrawGroup_AlphaTest : DrawGroup_Opaque;
+
+                draw_group TransparencyToDrawGroupTable[Transparency_Count] =
+                {
+                    [Transparency_Opaque] = DrawGroup_Opaque,
+                    [Transparency_AlphaTest] = DrawGroup_AlphaTest,
+                    [Transparency_AlphaBlend] = DrawGroup_AlphaTest,
+                };
+
+                draw_group Group = TransparencyToDrawGroupTable[Material->Transparency];
+                if (Material->TransmissionEnabled)
+                {
+                    Group = DrawGroup_Transparent;
+                }
                 DrawMesh(Frame, Group, Mesh->Allocation, Entity->Transform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
             }
         }

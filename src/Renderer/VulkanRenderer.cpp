@@ -1804,11 +1804,18 @@ DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, pipeline* Pipelines, dr
             continue;
         }
 
+        if (Pipelines[Group] == Pipeline_None)
+        {
+            CurrentOffset += DrawCount * sizeof(VkDrawIndexedIndirectCommand);
+            continue;
+        }
+
         VkBuffer VertexBuffer = VK_NULL_HANDLE;
         switch (Group)
         {
             case DrawGroup_Opaque:
             case DrawGroup_AlphaTest:
+            case DrawGroup_Transparent:
             {
                 VertexBuffer = Frame->Renderer->GeometryBuffer.VertexMemory.Buffer;
             } break;
@@ -3086,6 +3093,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     {
                         case DrawGroup_Opaque:
                         case DrawGroup_AlphaTest:
+                        case DrawGroup_Transparent:
                         {
                             IndirectCommands[ID] = 
                             {
@@ -3683,6 +3691,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         {
             [DrawGroup_Opaque]      = Pipeline_Prepass,
             [DrawGroup_AlphaTest]   = Pipeline_Prepass_AlphaTest,
+            [DrawGroup_Transparent] = Pipeline_None,
             [DrawGroup_Skinned]     = Pipeline_Prepass,
         };
         DrawList(Frame, PrepassCmd, Pipelines, &PrimaryDrawList);
@@ -4072,6 +4081,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 [DrawGroup_Opaque]      = Pipeline_ShadowCascade,
                 [DrawGroup_AlphaTest]   = Pipeline_ShadowCascade_AlphaTest,
+                [DrawGroup_Transparent] = Pipeline_None,
                 [DrawGroup_Skinned]     = Pipeline_ShadowCascade,
             };
             DrawList(Frame, ShadowCmd, Pipelines, CascadeDrawLists + CascadeIndex);
@@ -4217,6 +4227,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 {
                     [DrawGroup_Opaque]      = Pipeline_Shadow,
                     [DrawGroup_AlphaTest]   = Pipeline_Shadow_AlphaTest,
+                    [DrawGroup_Transparent] = Pipeline_None,
                     [DrawGroup_Skinned]     = Pipeline_Shadow,
                 };
                 u32 Index = 6*ShadowIndex + LayerIndex;
@@ -4455,6 +4466,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 {
                     [DrawGroup_Opaque]      = Pipeline_ShadingForward,
                     [DrawGroup_AlphaTest]   = Pipeline_ShadingForward_AlphaTest,
+                    [DrawGroup_Transparent] = Pipeline_None,
                     [DrawGroup_Skinned]     = Pipeline_ShadingForward,
                 };
                 DrawList(Frame, RenderCmd, Pipelines, &PrimaryDrawList);
@@ -4470,6 +4482,19 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         pipeline_with_layout SkyPipeline = Renderer->Pipelines[Pipeline_Sky];
         vkCmdBindPipeline(RenderCmd, VK_PIPELINE_BIND_POINT_GRAPHICS, SkyPipeline.Pipeline);
         vkCmdDraw(RenderCmd, 3, 1, 0, 0);
+    }
+    vkCmdEndDebugUtilsLabelEXT(RenderCmd);
+
+    vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Transparent");
+    {
+        pipeline Pipelines[DrawGroup_Count] =
+        {
+            [DrawGroup_Opaque]      = Pipeline_None,
+            [DrawGroup_AlphaTest]   = Pipeline_None,
+            [DrawGroup_Transparent] = Pipeline_ShadingForward_Transparent,
+            [DrawGroup_Skinned]     = Pipeline_None,
+        };
+        DrawList(Frame, RenderCmd, Pipelines, &PrimaryDrawList);
     }
     vkCmdEndDebugUtilsLabelEXT(RenderCmd);
 

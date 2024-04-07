@@ -322,6 +322,24 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
             {
                 UnimplementedCodePath;
             }
+
+            json_element* Extensions = GetElement(&Src->Object, "extensions");
+            if (Extensions)
+            {
+                json_element* KHRTransmission = GetElement(&Extensions->Object, "KHR_materials_transmission");
+                if (KHRTransmission)
+                {
+                    Dst->TransmissionEnabled = true;
+                    Dst->TransmissionFactor = ParseF32(GetElement(&KHRTransmission->Object, "transmissionFactor"), GLTF_Flags_None, 0.0); // TODO(boti): Is this required?
+                    Dst->TransmissionTexture = ParseTextureInfo(GetElement(&KHRTransmission->Object, "transmissionTexture"), GLTF_Flags_None);
+                }
+            }
+
+            if (!Dst->TransmissionEnabled)
+            {
+                Dst->TransmissionFactor = 0.0f;
+                Dst->TransmissionTexture = ParseTextureInfo(nullptr, GLTF_Flags_None);
+            }
         }
     }
 

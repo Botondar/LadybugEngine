@@ -198,10 +198,24 @@ float GeometryGGX(in float Roughness, in float NdotV, in float NdotL)
     k *= k;
     k *= (1.0 / 8.0);
 
-    float G1 = NdotV / (NdotV*(1.0 - k) + k);
-    float G2 = NdotL / (NdotL*(1.0 - k) + k);
+    float G1 = abs(NdotV) / (abs(NdotV)*(1.0 - k) + k);
+    float G2 = abs(NdotL) / (abs(NdotL)*(1.0 - k) + k);
     float Result = G1*G2;
     return Result;
+}
+
+f32 GeometrySmithPart(f32 a2, f32 Ndot, f32 Hdot)
+{
+    f32 Result = 2.0 * abs(Ndot) * Hdot / (abs(Ndot) + sqrt(a2 + (1.0 - a2) * Ndot*Ndot));
+    return(Result);
+}
+
+f32 GeometrySmith(f32 Roughness, f32 NdotL, f32 HdotL, f32 NdotV, f32 HdotV)
+{
+    f32 a = Roughness*Roughness;
+    f32 a2 = a*a;
+    f32 Result = GeometrySmithPart(a2, NdotL, HdotL) * GeometrySmithPart(a2, NdotV, HdotV);
+    return(Result);
 }
 
 // NOTE(boti): Albedo must be weighted by (1 - Metallic) factor!
@@ -209,8 +223,8 @@ v3 CalculateOutgoingLuminance(v3 Li, v3 L, v3 N, v3 V,
                               v3 Albedo, in v3 F0, f32 Roughness)
 {
     // TODO(boti): N.V is independent of the light source, should we just precalculate and pass it in?
-    float NdotV = max(dot(N, V), 1.0);
-    float NdotL = max(dot(L, N), 0.0);
+    float NdotV = dot(N, V);
+    float NdotL = dot(L, N);
     vec3 Diffuse = Albedo;
 
     vec3 H = normalize(L + V);
@@ -219,13 +233,55 @@ v3 CalculateOutgoingLuminance(v3 Li, v3 L, v3 N, v3 V,
 
     float NdotH = max(dot(N, H), 0.0);
     float Distribution = DistributionGGX(Roughness, NdotH);
-    float Geometry = GeometryGGX(Roughness, NdotV, NdotL);
+    f32 Geometry = GeometrySmith(Roughness, NdotL, max(dot(H, L), 0.0), NdotV, max(dot(H, V), 0.0));
 
-    float SpecularDenominator = max(4.0 * NdotV * NdotL, 1e-4);
-    vec3 Specular = Distribution * Geometry * Fresnel / SpecularDenominator;
-    v3 Result = (Diffuse + Specular) * NdotL * Li;
+    float SpecularDenominator = 1.0 / max(4.0 * abs(NdotV) * abs(NdotL), 1e-4);
+    vec3 Specular = Distribution * Geometry * Fresnel * SpecularDenominator;
+    v3 Result = (Diffuse + Specular) * max(NdotL, 0.0) * Li;
     return(Result);
 }
+
+v3 CalculateOutgoingLuminanceTransmission(
+    v3 Li, v3 L, v3 N, v3 V,
+    v3 Albedo, in v3 F0, f32 Roughness, f32 Transmission)
+{
+    // TODO(boti): N.V is independent of the light source, should we just precalculate and pass it in?
+    float NdotV = dot(N, V);
+    float NdotL = dot(L, N);
+
+    vec3 Diffuse = Albedo;
+
+    vec3 H = normalize(L + V);
+    float VdotH = max(dot(V, H), 0.0);
+    vec3 Fresnel = FresnelSchlick(F0, VdotH);
+
+    float NdotH = max(dot(N, H), 0.0);
+    float Distribution = DistributionGGX(Roughness, NdotH);
+    f32 Geometry = GeometrySmith(
+        Roughness, 
+        NdotL, max(dot(H, L), 0.0), 
+        NdotV, max(dot(H, V), 0.0));
+
+    float SpecularDenominator = 1.0 / max(4.0 * abs(NdotV) * abs(NdotL), 1e-4);
+    vec3 Specular = Distribution * Geometry * Fresnel * SpecularDenominator;
+
+    v3 SpecularBTDF;
+    {
+        v3 Ht = normalize(V - 2.0*NdotL * N + L);
+
+        f32 DistributionT = DistributionGGX(Roughness, max(dot(N, Ht), 0.0));
+        f32 GeometryT = GeometrySmith(
+            Roughness, 
+            NdotL, max(dot(Ht, L), 0.0), 
+            NdotV, max(dot(Ht, V), 0.0));
+
+        Diffuse = mix(Diffuse, DistributionT * GeometryT * SpecularDenominator * Albedo, Transmission);
+    }
+
+    v3 Result = (Diffuse + Specular) * max(NdotL, 0.0) * Li;
+    return(Result);
+}
+
 
 //
 // Shadow helpers

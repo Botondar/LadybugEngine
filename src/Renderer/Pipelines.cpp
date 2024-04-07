@@ -1034,4 +1034,44 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .OverrideProps = PipelineProp_None,
         },
     },
+
+    [Pipeline_ShadingForward_Transparent] =
+    {
+        .Name = "shading_transparent",
+        .Type = PipelineType_Graphics,
+        .Inheritance = {},
+        .Layout = {},
+        .EnabledStages = ShaderStage_VS|ShaderStage_PS,
+        .InputAssemblerState = InputState_vertex,
+        .RasterizerState = 
+        {
+            .Flags = RS_FrontCW,
+            .Fill = Fill_Solid,
+            .CullFlags = Cull_Back,
+        },
+        .DepthStencilState = 
+        {
+            .Flags = DS_DepthTestEnable,
+            .DepthCompareOp = Compare_Greater,
+            .MinDepthBounds = 0.0f,
+            .MaxDepthBounds = 1.0f,
+        },
+        .BlendAttachmentCount = 1,
+        .BlendAttachments = 
+        {
+            { 
+                .BlendEnable = true,
+                .SrcColor = Blend_One,
+                .DstColor = Blend_One,
+                .ColorOp = BlendOp_Add,
+                .SrcAlpha = Blend_Zero,
+                .DstAlpha = Blend_One,
+                .AlphaOp = BlendOp_Add,
+            }
+        },
+        .ColorAttachmentCount = 1,
+        .ColorAttachments = { RTFormat_HDR },
+        .DepthAttachment = RTFormat_Depth,
+        .StencilAttachment = RTFormat_Undefined,
+    },
 };

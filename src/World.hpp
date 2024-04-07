@@ -160,6 +160,7 @@ enum debug_scene_type
     DebugScene_None = 0,
     DebugScene_Sponza,
     DebugScene_Terrain,
+    DebugScene_TransmissionTest,
 };
 
 typedef flags32 debug_scene_flags;

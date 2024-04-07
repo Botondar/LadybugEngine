@@ -25,6 +25,7 @@ enum pipeline : u32
     Pipeline_ShadingForward_AlphaTest,
     Pipeline_Shadow_AlphaTest,
     Pipeline_ShadowCascade_AlphaTest,
+    Pipeline_ShadingForward_Transparent,
 
     Pipeline_Count,
 };

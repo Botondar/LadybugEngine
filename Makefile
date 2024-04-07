@@ -39,6 +39,7 @@ TOOLS = "$(OUT)/lbmeta.exe"
 SHADERS = \
     build/blit.vs build/blit.fs \
     build/shading_forward.vs build/shading_forward.fs \
+    build/shading_transparent.vs build/shading_transparent.fs \
     build/prepass.vs build/prepass.fs \
     build/prepass_alphatest.vs build/prepass_alphatest.fs \
     build/shadow.vs build/shadow.fs \

@@ -158,11 +158,15 @@ struct gltf_material
 
     v4 BaseColorFactor;
 
+    b32 TransmissionEnabled;
+    f32 TransmissionFactor;
+
     gltf_texture_info BaseColorTexture;
     gltf_texture_info MetallicRoughnessTexture;
     gltf_texture_info NormalTexture;
     gltf_texture_info OcclusionTexture;
     gltf_texture_info EmissiveTexture;
+    gltf_texture_info TransmissionTexture;
 };
 
 struct gltf_skin

@@ -99,6 +99,9 @@ void main()
     {
         instance_data Instance = Instances[InstanceIndex];
 
+#if ShaderVariant_Transmission
+        f32 Transmission = Instance.Material.Transmission * texture(sampler2D(Textures[Instance.Material.TransmissionID], MatSamplers[Instance.Material.TransmissionSamplerID]), TexCoord).r;
+#endif
         v4 BaseColor = UnpackRGBA8(Instance.Material.DiffuseColor);
         v4 BaseMetallicRoughness = UnpackRGBA8(Instance.Material.BaseMaterial);
         v4 Albedo = BaseColor * texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord);
@@ -126,8 +129,15 @@ void main()
             CascadedShadow, Samplers[Sampler_Shadow], 
             ShadowP, CascadeBlends,
             PerFrame.CascadeScales, PerFrame.CascadeOffsets);
-        Lo += CalculateOutgoingLuminance(SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
-                                         DiffuseBase, F0, Roughness);
+#if ShaderVariant_Transmission
+        Lo += CalculateOutgoingLuminanceTransmission(
+            SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
+            DiffuseBase, F0, Roughness, Transmission);
+#else
+        Lo += CalculateOutgoingLuminance(
+            SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
+            DiffuseBase, F0, Roughness);
+#endif
 
         for (uint LightIndex = 0; LightIndex < Tiles[TileIndex].LightCount; LightIndex++)
         {
@@ -144,8 +154,15 @@ void main()
                                               PerFrame.PointShadows[Light.ShadowIndex].Near, 
                                               PerFrame.PointShadows[Light.ShadowIndex].Far);
             }
-            Lo += Shadow * CalculateOutgoingLuminance(Shadow * E, normalize(dP), N, V,
-                                                      DiffuseBase, F0, Roughness);
+#if ShaderVariant_Transmission
+            Lo += CalculateOutgoingLuminanceTransmission(
+                Shadow * E, normalize(dP), N, V,
+                DiffuseBase, F0, Roughness, Transmission);
+#else
+            Lo += CalculateOutgoingLuminance(
+                Shadow * E, normalize(dP), N, V,
+                DiffuseBase, F0, Roughness);
+#endif
         }
     }
 

@@ -11,7 +11,6 @@ struct renderer_texture_id
     u32 Value;
 };
 
-
 struct material_sampler_id
 {
     u32 Value;
