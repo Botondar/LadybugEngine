@@ -209,6 +209,7 @@ struct renderer
     render_target* DepthBuffer;
     render_target* StructureBuffer;
     render_target* HDRRenderTarget;
+    render_target* TransparentRenderTarget;
     render_target* BloomTarget;
     render_target* OcclusionBuffers[2];
     render_target* VisibilityBuffer;

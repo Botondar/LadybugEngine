@@ -103,8 +103,9 @@ struct v4u8
 #define Binding_Static_BloomImageGeneral            19
 #define Binding_Static_HDRMipStorageImages          20
 #define Binding_Static_BloomMipStorageImages        21
+#define Binding_Static_TransparentImage             22
 
-#define Binding_Static_Count                        22
+#define Binding_Static_Count                        23
 
 // Sampler set bindings
 #define Binding_Sampler_NamedSamplers               0

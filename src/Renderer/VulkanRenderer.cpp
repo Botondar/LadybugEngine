@@ -1289,25 +1289,28 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
 
     if (CreateRenderTargetHeap(&Renderer->RenderTargetHeap, R_RenderTargetMemorySize, Renderer->SetLayouts[Set_Static], Renderer->StaticResourceDescriptorMapping))
     {
+        render_target_heap* Heap = &Renderer->RenderTargetHeap;
         constexpr VkImageUsageFlagBits DepthStencil = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         constexpr VkImageUsageFlagBits Color = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         constexpr VkImageUsageFlagBits Sampled = VK_IMAGE_USAGE_SAMPLED_BIT;
         constexpr VkImageUsageFlagBits Storage = VK_IMAGE_USAGE_STORAGE_BIT;
-    
-        Renderer->DepthBuffer           = PushRenderTarget("Depth",         &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Depth]],      DepthStencil|Sampled,   1,
-                                                           U32_MAX, U32_MAX, U32_MAX, U32_MAX);
-        Renderer->StructureBuffer       = PushRenderTarget("Structure",     &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Structure]],  Color|Sampled,          1,
-                                                           Binding_Static_StructureImage, U32_MAX, U32_MAX, U32_MAX);
-        Renderer->HDRRenderTarget       = PushRenderTarget("HDR",           &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_HDR]],        Color|Sampled|Storage,  0,
-                                                           Binding_Static_HDRColorImage, U32_MAX, Binding_Static_HDRColorImageGeneral, Binding_Static_HDRMipStorageImages);
-        Renderer->BloomTarget           = PushRenderTarget("Bloom",         &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_HDR]],        Color|Sampled|Storage,  0,
-                                                           Binding_Static_BloomImage, U32_MAX, Binding_Static_BloomImageGeneral, Binding_Static_BloomMipStorageImages);
-        Renderer->OcclusionBuffers[0]   = PushRenderTarget("OcclusionRaw",  &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Occlusion]],  Color|Sampled|Storage,  1,
-                                                           Binding_Static_OcclusionRawImage, Binding_Static_OcclusionRawStorageImage, U32_MAX, U32_MAX);
-        Renderer->OcclusionBuffers[1]   = PushRenderTarget("Occlusion",     &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Occlusion]],  Color|Sampled|Storage,  1,
-                                                           Binding_Static_OcclusionImage, Binding_Static_OcclusionStorageImage, U32_MAX, U32_MAX);
-        Renderer->VisibilityBuffer      = PushRenderTarget("Visibility",    &Renderer->RenderTargetHeap, FormatTable[RenderTargetFormatTable[RTFormat_Visibility]], Color|Sampled,          1,
-                                                           Binding_Static_VisibilityImage, U32_MAX, U32_MAX, U32_MAX);
+
+        Renderer->DepthBuffer               = PushRenderTarget("Depth",         Heap, FormatTable[RenderTargetFormatTable[RTFormat_Depth]],      DepthStencil|Sampled,   1,
+                                                               U32_MAX, U32_MAX, U32_MAX, U32_MAX);
+        Renderer->StructureBuffer           = PushRenderTarget("Structure",     Heap, FormatTable[RenderTargetFormatTable[RTFormat_Structure]],  Color|Sampled,          1,
+                                                               Binding_Static_StructureImage, U32_MAX, U32_MAX, U32_MAX);
+        Renderer->HDRRenderTarget           = PushRenderTarget("HDR",           Heap, FormatTable[RenderTargetFormatTable[RTFormat_HDR]],        Color|Sampled|Storage,  0,
+                                                               Binding_Static_HDRColorImage, U32_MAX, Binding_Static_HDRColorImageGeneral, Binding_Static_HDRMipStorageImages);
+        Renderer->TransparentRenderTarget   = PushRenderTarget("Transparent",   Heap, FormatTable[RenderTargetFormatTable[RTFormat_HDR]],        Color|Sampled,          0,
+                                                               Binding_Static_TransparentImage, U32_MAX, U32_MAX, U32_MAX);
+        Renderer->BloomTarget               = PushRenderTarget("Bloom",         Heap, FormatTable[RenderTargetFormatTable[RTFormat_HDR]],        Color|Sampled|Storage,  0,
+                                                               Binding_Static_BloomImage, U32_MAX, Binding_Static_BloomImageGeneral, Binding_Static_BloomMipStorageImages);
+        Renderer->OcclusionBuffers[0]       = PushRenderTarget("OcclusionRaw",  Heap, FormatTable[RenderTargetFormatTable[RTFormat_Occlusion]],  Color|Sampled|Storage,  1,
+                                                               Binding_Static_OcclusionRawImage, Binding_Static_OcclusionRawStorageImage, U32_MAX, U32_MAX);
+        Renderer->OcclusionBuffers[1]       = PushRenderTarget("Occlusion",     Heap, FormatTable[RenderTargetFormatTable[RTFormat_Occlusion]],  Color|Sampled|Storage,  1,
+                                                               Binding_Static_OcclusionImage, Binding_Static_OcclusionStorageImage, U32_MAX, U32_MAX);
+        Renderer->VisibilityBuffer          = PushRenderTarget("Visibility",    Heap, FormatTable[RenderTargetFormatTable[RTFormat_Visibility]], Color|Sampled,          1,
+                                                               Binding_Static_VisibilityImage, U32_MAX, U32_MAX, U32_MAX);
     }
     else
     {

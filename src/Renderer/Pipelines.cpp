@@ -378,6 +378,14 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .DescriptorCount = 1,
                 .Stages = ShaderStage_All,
             },
+
+            [Binding_Static_TransparentImage] =
+            {
+                .Binding = Binding_Static_TransparentImage,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = ShaderStage_All,
+            },
         },
     },
 

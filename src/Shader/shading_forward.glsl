@@ -117,6 +117,9 @@ void main()
             atomicOr(MipFeedbacks[Instance.Material.DiffuseID], MipBucket);
             atomicOr(MipFeedbacks[Instance.Material.NormalID], MipBucket);
             atomicOr(MipFeedbacks[Instance.Material.MetallicRoughnessID], MipBucket);
+#if ShaderVariant_Transmission
+            atomicOr(MipFeedbacks[Instance.Material.TransmissionID], MipBucket);
+#endif
         }
 
         vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);
