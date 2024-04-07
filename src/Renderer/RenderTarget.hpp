@@ -44,4 +44,5 @@ internal render_target* PushRenderTarget(
     u32 StorageBinding,
     u32 BindingGeneral,
     u32 StorageMipBinding);
-internal bool ResizeRenderTargets(render_target_heap* Heap, v2u Extent);
+internal bool 
+ResizeRenderTargets(render_target_heap* Heap, gpu_deletion_queue* DeletionQueue, u32 FrameID, v2u Extent);

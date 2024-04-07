@@ -1,0 +1,19 @@
+#include "common.glsli"
+
+LayoutGroupSize(Sky);
+
+layout(push_constant)
+uniform PushConstants
+{
+    v3 SunV;
+    v3 SunL;
+};
+
+SetBinding(Static, SkyImage)
+writeonly uniform imageCube SkyImage;
+
+void main()
+{
+    v4 SkyColor = v4(0.05, 0.6, 1.0, 1.0);
+    imageStore(SkyImage, v3s(gl_GlobalInvocationID.xyz), SkyColor);
+}

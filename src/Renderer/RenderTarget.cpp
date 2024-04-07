@@ -137,7 +137,7 @@ PushRenderTarget(
 }
 
 internal bool 
-ResizeRenderTargets(render_target_heap* Heap, v2u Extent)
+ResizeRenderTargets(render_target_heap* Heap, gpu_deletion_queue* DeletionQueue, u32 FrameID, v2u Extent)
 {
     bool Result = true;
 
@@ -149,12 +149,12 @@ ResizeRenderTargets(render_target_heap* Heap, v2u Extent)
         if (!Result) break;
 
         render_target* RT = Heap->RenderTargets + RenderTargetIndex;
-        vkDestroyImageView(VK.Device, RT->View, nullptr);
+        PushDeletionEntry(DeletionQueue, FrameID, RT->View);
         for (u32 Mip = 0; Mip < RT->MipCount; Mip++)
         {
-            vkDestroyImageView(VK.Device, RT->MipViews[Mip], nullptr);
+            PushDeletionEntry(DeletionQueue, FrameID, RT->MipViews[Mip]);
         }
-        vkDestroyImage(VK.Device, RT->Image, nullptr);
+        PushDeletionEntry(DeletionQueue, FrameID, RT->Image);
 
         RT->MipCount = Min(MaxMipCount, RT->MaxMipCount);
 
@@ -324,6 +324,7 @@ ResizeRenderTargets(render_target_heap* Heap, v2u Extent)
             }
         }
 
+        // TODO(boti): Thid needs to go through the staging buffer !
         UpdateDescriptorBuffer(WriteAt, Writes, Heap->SetLayout, Heap->DescriptorBuffer);
     }
 

@@ -142,8 +142,7 @@ internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena
 
     // TODO(boti): Error handling cleanup
     u32 MemoryTypeIndex, DescriptorMemoryTypeIndex;
-    if (BitScanForward(&MemoryTypeIndex, MemoryTypes) &&
-        BitScanForward(&DescriptorMemoryTypeIndex, VK.BARMemTypes))
+    if (BitScanForward(&MemoryTypeIndex, MemoryTypes) && BitScanForward(&DescriptorMemoryTypeIndex, VK.BARMemTypes))
     {
         vkGetDescriptorSetLayoutBindingOffsetEXT(VK.Device, SetLayouts[Set_Bindless], Binding_Bindless_Textures, &Manager->TextureTableOffset);
         umm DescriptorBufferSize = 0;

@@ -104,8 +104,10 @@ struct v4u8
 #define Binding_Static_HDRMipStorageImages          20
 #define Binding_Static_BloomMipStorageImages        21
 #define Binding_Static_TransparentImage             22
+#define Binding_Static_SkyTexture                   23
+#define Binding_Static_SkyImage                     24
 
-#define Binding_Static_Count                        23
+#define Binding_Static_Count                        25
 
 // Sampler set bindings
 #define Binding_Sampler_NamedSamplers               0
@@ -165,6 +167,10 @@ struct v4u8
 #define ShadingVisibility_GroupSizeX    16
 #define ShadingVisibility_GroupSizeY    16
 #define ShadingVisibility_GroupSizeZ    1
+
+#define Sky_GroupSizeX                  8
+#define Sky_GroupSizeY                  8
+#define Sky_GroupSizeZ                  1
 
 #define LayoutGroupSize(name) layout(local_size_x = name##_GroupSizeX, local_size_y = name##_GroupSizeY, local_size_z = name##_GroupSizeZ) in
 #define SetBinding(s, b) layout(set = Set_##s, binding = Binding_##s##_##b)

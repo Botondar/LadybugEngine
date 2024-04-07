@@ -378,11 +378,26 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .DescriptorCount = 1,
                 .Stages = ShaderStage_All,
             },
-
             [Binding_Static_TransparentImage] =
             {
                 .Binding = Binding_Static_TransparentImage,
                 .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = ShaderStage_All,
+            },
+
+            // Misc
+            [Binding_Static_SkyTexture] =
+            {
+                .Binding = Binding_Static_SkyTexture,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = ShaderStage_All,
+            },
+            [Binding_Static_SkyImage] =
+            {
+                .Binding = Binding_Static_SkyImage,
+                .Type = Descriptor_StorageImage,
                 .DescriptorCount = 1,
                 .Stages = ShaderStage_All,
             },

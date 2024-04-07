@@ -52,7 +52,8 @@ SHADERS = \
     build/quad.vs build/quad.fs \
     build/skin.cs \
     build/light_bin.cs \
-    build/shading_visibility.cs
+    build/shading_visibility.cs \
+    build/sky.cs
 
 all: "$(OUT)/" "$(OUT)/Win_LadybugEngine.exe" "$(OUT)/game.dll" "$(OUT)/vulkan_renderer.dll" $(SHADERS) $(TOOLS)
 

@@ -214,6 +214,11 @@ struct renderer
     render_target* OcclusionBuffers[2];
     render_target* VisibilityBuffer;
 
+    gpu_memory_arena DeviceArena;
+
+    VkImage SkyImage;
+    VkImageView SkyImageView;
+
     VkPipelineLayout SystemPipelineLayout;
 
     gpu_memory_arena        ShadowArena;
@@ -285,27 +290,21 @@ struct renderer
     void*           StaticResourceDescriptorMapping;
 
     umm             MipFeedbackMemorySize;
-    VkDeviceMemory  MipFeedbackMemory;
     VkBuffer        MipFeedbackBuffer;
 
     umm             SkinningMemorySize;
-    VkDeviceMemory  SkinningMemory;
     VkBuffer        SkinningBuffer;
 
     umm             LightBufferMemorySize;
-    VkDeviceMemory  LightBufferMemory;
     VkBuffer        LightBuffer;
 
     umm             TileMemorySize;
-    VkDeviceMemory  TileMemory;
     VkBuffer        TileBuffer;
 
     umm             InstanceMemorySize;
-    VkDeviceMemory  InstanceMemory;
     VkBuffer        InstanceBuffer;
 
     umm             DrawMemorySize;
-    VkDeviceMemory  DrawMemory;
     VkBuffer        DrawBuffer;
 
     //

@@ -185,7 +185,7 @@ PushBuffer(gpu_memory_arena* Arena, VkDeviceSize Size, VkBufferUsageFlags Usage,
         .pNext = nullptr,
         .flags = 0,
         .size = Size,
-        .usage = Usage,
+        .usage = Usage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
@@ -846,35 +846,44 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         }
     }
 
-    Renderer->MipFeedbackMemorySize = R_MaxTextureCount * sizeof(u32);
-    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
-                                   Renderer->MipFeedbackMemorySize, &Renderer->MipFeedbackBuffer, &Renderer->MipFeedbackMemory);
-    ReturnOnFailure();
+    {
+        u32 DeviceMemoryIndex = 0;
+        u8 ScanResult = BitScanForward(&DeviceMemoryIndex, VK.GPUMemTypes);
+        Assert(ScanResult);
+        Renderer->DeviceArena = CreateGPUArena(MiB(1024), DeviceMemoryIndex, 0);
 
-    Renderer->SkinningMemorySize = R_SkinningBufferSize;
-    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK.GPUMemTypes, 
-                                   Renderer->SkinningMemorySize, &Renderer->SkinningBuffer, &Renderer->SkinningMemory);
-    ReturnOnFailure();
-    
-    Renderer->LightBufferMemorySize = R_MaxLightCount * sizeof(light);
-    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
-                                   Renderer->LightBufferMemorySize, &Renderer->LightBuffer, &Renderer->LightBufferMemory);
-    ReturnOnFailure();
-    
-    Renderer->TileMemorySize = sizeof(screen_tile) * R_MaxTileCountX * R_MaxTileCountY;
-    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
-                                   Renderer->TileMemorySize, &Renderer->TileBuffer, &Renderer->TileMemory);
-    ReturnOnFailure();
-
-    Renderer->InstanceMemorySize = MiB(64);
-    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK.GPUMemTypes,
-                                   Renderer->InstanceMemorySize, &Renderer->InstanceBuffer, &Renderer->InstanceMemory);
-    ReturnOnFailure();
-
-    Renderer->DrawMemorySize = MiB(128);
-    Result = CreateDedicatedBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, VK.GPUMemTypes,
-                                   Renderer->DrawMemorySize, &Renderer->DrawBuffer, &Renderer->DrawMemory);
-    ReturnOnFailure();
+        gpu_memory_arena* GpuArena = &Renderer->DeviceArena;
+        Renderer->MipFeedbackMemorySize = R_MaxTextureCount * sizeof(u32);
+        b32 PushResult = PushBuffer(GpuArena, Renderer->MipFeedbackMemorySize, 
+                                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
+                                    &Renderer->MipFeedbackBuffer);
+        Assert(PushResult);
+        Renderer->SkinningMemorySize = R_SkinningBufferSize;
+        PushResult = PushBuffer(GpuArena, Renderer->SkinningMemorySize, 
+                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                &Renderer->SkinningBuffer);
+        Assert(PushResult);
+        Renderer->LightBufferMemorySize = R_MaxLightCount * sizeof(light);
+        PushResult = PushBuffer(GpuArena, Renderer->LightBufferMemorySize, 
+                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                &Renderer->LightBuffer);
+        Assert(PushResult);
+        Renderer->TileMemorySize = sizeof(screen_tile) * R_MaxTileCountX * R_MaxTileCountY;
+        PushResult = PushBuffer(GpuArena, Renderer->TileMemorySize, 
+                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                &Renderer->TileBuffer);
+        Assert(PushResult);
+        Renderer->InstanceMemorySize = MiB(64);
+        PushResult = PushBuffer(GpuArena, Renderer->InstanceMemorySize, 
+                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                &Renderer->InstanceBuffer);
+        Assert(PushResult);
+        Renderer->DrawMemorySize = MiB(128);
+        PushResult = PushBuffer(GpuArena, Renderer->DrawMemorySize, 
+                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                                &Renderer->DrawBuffer);
+        Assert(PushResult);
+    }
 
     // Shadow storage
     {
@@ -1071,6 +1080,11 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         {
             return(0);
         }
+    }
+
+    // Sky image
+    {
+        //vkCreateImage(VK.Device, 
     }
 
     // BAR memory
@@ -2184,8 +2198,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     if (Frame->RenderExtent.X != Renderer->RenderTargetHeap.CurrentExtent.X ||
         Frame->RenderExtent.Y != Renderer->RenderTargetHeap.CurrentExtent.Y)
     {
-        vkDeviceWaitIdle(VK.Device);
-        ResizeRenderTargets(&Renderer->RenderTargetHeap, Frame->RenderExtent);
+        ResizeRenderTargets(&Renderer->RenderTargetHeap, &Renderer->DeletionQueue, Frame->FrameID, Frame->RenderExtent);
     }
 
     Frame->Uniforms.RenderExtent = Frame->RenderExtent;
@@ -5272,7 +5285,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             return(Result);
         };
 
-        AddEntry("BAR", Renderer->BARMemory.MemoryAt, Renderer->BARMemory.Size);
+        AddGPUArenaEntry("DeviceArena", &Renderer->DeviceArena);
+        AddEntry("BAR", Frame->BARBufferAt, Frame->BARBufferSize);
         AddGPUArenaEntry("RenderTarget", &Renderer->RenderTargetHeap.Arena);
         AddEntry("VertexBuffer", 
                  Renderer->GeometryBuffer.VertexMemory.CountInUse * Renderer->GeometryBuffer.VertexMemory.Stride, 
@@ -5284,8 +5298,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         AddGPUArenaEntry("TexturePersist", &Renderer->TextureManager.PersistentArena);
         AddGPUArenaEntry("Shadow", &Renderer->ShadowArena);
         AddEntry("Staging", Frame->StagingBuffer.At, Frame->StagingBuffer.Size);
-        AddEntry("LightBuffer", Frame->LightCount * sizeof(light), Renderer->LightBufferMemorySize);
-        AddEntry("TileBuffer", TileCountX * TileCountY * sizeof(screen_tile), Renderer->TileMemorySize);
     }
 }
 

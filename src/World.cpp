@@ -483,7 +483,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         World->Camera.Yaw = 0.5f * Pi;
 
         // Load debug scene
-        #if 0
+        #if 1
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
                              DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);
@@ -543,7 +543,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
     // Sun update
     {
-        World->SunL = 1.0f * v3{ 10.0f, 7.0f, 5.0f };
+        World->SunL = 2.0f * v3{ 10.0f, 7.0f, 5.0f };
         #if 1
         World->SunV = Normalize(v3{ +4.25f, -1.0f, 8.0f });
         #else

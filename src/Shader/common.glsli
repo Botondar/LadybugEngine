@@ -536,6 +536,38 @@ vec3 StructureDecode(in vec4 Structure)
 // Atmosphere
 //
 
+v3 CIEClearSky(v3 V, v3 Up, v3 SunV, v3 SunL, bool DoSun)
+{
+    v3 SkyV = dot(V, Up) >= 0.0 ? V : reflect(V, Up);
+    float CosGamma = dot(V, SunV);
+    float CosS = max(dot(SunV, Up), 0.0);
+    float CosTheta = dot(SkyV, Up);
+
+    float Gamma = acos(CosGamma);
+    float S = acos(CosS);
+    float SinGamma = sqrt(1.0 - CosGamma*CosGamma);
+
+    float Numerator = (1.0 - exp(-0.32 / CosTheta)) * (0.91 + 10.0 * exp(-3.0 * Gamma) + 0.45 * CosGamma * CosGamma);
+    float Denominator = 0.2738509 * (0.91 + 10.0 * exp(-3.0 * S) + 0.45 * CosS * CosS);
+
+    float Luminance = Numerator / max(Denominator, 1e-4);
+
+    float SunLuminance = GetLuminance(SunL);
+
+    v3 SkyColor = 0.1 * SunLuminance * vec3(0.2, 0.5, 1.0);
+    float SunWidth = 0.015;
+
+    v3 Result = max(SkyColor * Luminance, vec3(0.0));
+
+    if (DoSun)
+    {
+        float SunGamma = acos(dot(V, SunV));
+        Result = mix(SunL, Result, clamp(abs(SunGamma) / SunWidth, 0.0, 1.0));
+    }
+
+    return Result;
+}
+
 float AtmosphereSampleDistribution(float m, float t)
 {
     float Result = (1.0 - m) * t*t + m*t;
@@ -593,7 +625,7 @@ float CalculateAtmosphere(
     texture2DArray Cascades,
     sampler Sampler)
 {
-    const int StepCount = 32;
+    const int StepCount = 16;
     const float StepDistribution = 0.25;
 
     //v3 EndP = P * v3(1.0, 1.0, 0.999);
