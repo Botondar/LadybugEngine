@@ -6,8 +6,8 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-SetBindingLayout(Static, InstanceBuffer, scalar)
-readonly buffer InstanceBuffer
+layout(buffer_reference, scalar)
+readonly buffer instance_buffer
 {
     instance_data Instances[];
 };
@@ -27,7 +27,8 @@ layout(location = Attrib_TexCoord) in vec2 aTexCoord;
 
 void main()
 {
-    instance_data Instance = Instances[gl_InstanceIndex];
+    instance_buffer InstanceBuffer = instance_buffer(PerFrame.InstanceBufferAddress);
+    instance_data Instance = InstanceBuffer.Instances[gl_InstanceIndex];
     precise v3 WorldP  = TransformPoint(Instance.Transform, aP);
     ViewP = TransformPoint(PerFrame.ViewTransform, WorldP);
     gl_Position = PerFrame.ViewProjectionTransform * vec4(WorldP, 1.0);
@@ -61,7 +62,8 @@ vec4 StructureEncode(in float z)
 
 void main()
 {
-    instance_data Instance = Instances[InstanceIndex];
+    instance_buffer InstanceBuffer = instance_buffer(PerFrame.InstanceBufferAddress);
+    instance_data Instance = InstanceBuffer.Instances[InstanceIndex];
     VisibilityOut = v2u(InstanceIndex, gl_PrimitiveID);
     StructureOut = StructureEncode(ViewP.z);
 #if ShaderVariant_AlphaTest

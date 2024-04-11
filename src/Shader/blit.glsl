@@ -27,8 +27,8 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-SetBindingLayout(Static, TileBuffer, scalar)
-readonly buffer TileBuffer
+layout(buffer_reference, scalar)
+readonly buffer tile_buffer
 {
     screen_tile Tiles[];
 };
@@ -120,7 +120,8 @@ void main()
         v2u TileID = Coord / v2u(R_TileSizeX, R_TileSizeY);
         uint TileIndex = TileID.x + TileID.y * PerFrame.TileCount.x;
 
-        uint LightCount = Tiles[TileIndex].LightCount;
+        tile_buffer TileBuffer = tile_buffer(PerFrame.TileBufferAddress);
+        uint LightCount = TileBuffer.Tiles[TileIndex].LightCount;
         f32 Occupancy = f32(LightCount) / f32(R_MaxLightCountPerTile);
         
         v3 Colors[5] = v3[5](

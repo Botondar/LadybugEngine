@@ -8,34 +8,28 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-SetBindingLayout(Static, InstanceBuffer, scalar)
-readonly buffer InstanceBuffer
+layout(buffer_reference, scalar)
+readonly buffer instance_buffer
 {
-    instance_data InstanceData[];
+    instance_data Data[];
 };
 
-SetBindingLayout(Static, DrawBuffer, scalar)
-readonly buffer DrawBuffer
+layout(buffer_reference, scalar)
+readonly buffer draw_buffer
 {
-    draw_data DrawData[];
+    draw_data Data[];
 };
 
-SetBindingLayout(Static, IndexBuffer, scalar)
-readonly buffer IndexBuffer
+layout(buffer_reference, scalar)
+readonly buffer index_buffer
 {
-    u32 IndexData[];
+    u32 Data[];
 };
 
-SetBindingLayout(Static, VertexBuffer, scalar)
-readonly buffer VertexBuffer
+layout(buffer_reference, scalar)
+readonly buffer vertex_buffer
 {
-    vertex VertexData[];
-};
-
-SetBindingLayout(Static, SkinnedVertexBuffer, scalar)
-readonly buffer SkinnedVertexBuffer
-{
-    vertex SkinnedVertexData[];
+    vertex Data[];
 };
 
 SetBinding(Static, VisibilityImage) uniform utexture2D VisibilityImage;
@@ -49,14 +43,14 @@ SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 SetBinding(Sampler, MaterialSamplers) uniform sampler MatSamplers[R_MaterialSamplerCount];
 SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
-SetBindingLayout(Static, LightBuffer, scalar)
-readonly buffer LightBuffer
+layout(buffer_reference, scalar)
+readonly buffer light_buffer
 {
     light Lights[];
 };
 
-SetBindingLayout(Static, TileBuffer, scalar) 
-readonly buffer TileBuffer
+layout(buffer_reference, scalar) 
+readonly buffer tile_buffer
 {
     screen_tile Tiles[];
 };
@@ -78,24 +72,14 @@ struct unpacked_vertex
     v2 UV;
 };
 
-unpacked_vertex UnpackVertex(uint Index, buffer_type Type)
+unpacked_vertex UnpackVertex(vertex_buffer Buffer, uint Index)
 {
-    unpacked_vertex Vertex;
-    if (Type == BufferType_Skinned)
-    {
-        Vertex.P = SkinnedVertexData[Index].P;
-        Vertex.N = SkinnedVertexData[Index].N;
-        Vertex.T = SkinnedVertexData[Index].T;
-        Vertex.UV = SkinnedVertexData[Index].TexCoord;
-    }
-    else
-    {
-        Vertex.P = VertexData[Index].P;
-        Vertex.N = VertexData[Index].N;
-        Vertex.T = VertexData[Index].T;
-        Vertex.UV = VertexData[Index].TexCoord;
-    }
-    return(Vertex);
+    unpacked_vertex Result;
+    Result.P = Buffer.Data[Index].P;
+    Result.N = Buffer.Data[Index].N;
+    Result.T = Buffer.Data[Index].T;
+    Result.UV = Buffer.Data[Index].TexCoord;
+    return(Result);
 }
 
 f32 Wedge(v2 A, v2 B)
@@ -130,6 +114,11 @@ void main()
         return;
     }
     
+    tile_buffer     TileBuffer      = tile_buffer(PerFrame.TileBufferAddress);
+    light_buffer    LightBuffer     = light_buffer(PerFrame.LightBufferAddress);
+    instance_buffer InstanceBuffer  = instance_buffer(PerFrame.InstanceBufferAddress);
+    draw_buffer     DrawBuffer      = draw_buffer(PerFrame.DrawBufferAddress);
+
     v2s TexelID = v2s(gl_GlobalInvocationID.xy);
     uint TileIndex;
     {
@@ -148,19 +137,21 @@ void main()
         //
         // Instance/vertex fetch
         //
-        instance_data Instance = InstanceData[InstanceTriangleID.x];
-        draw_data Draw = DrawData[InstanceTriangleID.x];
+        instance_data Instance = InstanceBuffer.Data[InstanceTriangleID.x];
+        draw_data Draw = DrawBuffer.Data[InstanceTriangleID.x];
         
         uint IndexIndex = 3 * InstanceTriangleID.y + Draw.IndexOffset;
         
-        uint Index0 = IndexData[IndexIndex + 0];
-        uint Index1 = IndexData[IndexIndex + 1];
-        uint Index2 = IndexData[IndexIndex + 2];
+        index_buffer IndexBuffer = index_buffer(PerFrame.IndexBufferAddress);
+        uint Index0 = IndexBuffer.Data[IndexIndex + 0];
+        uint Index1 = IndexBuffer.Data[IndexIndex + 1];
+        uint Index2 = IndexBuffer.Data[IndexIndex + 2];
 
-        buffer_type BufferType = (InstanceTriangleID.x >= PerFrame.DrawGroupOffsets[DrawGroup_Skinned]) ? BufferType_Skinned : 0;
-        unpacked_vertex Vertex0 = UnpackVertex(Draw.VertexOffset + Index0, BufferType);
-        unpacked_vertex Vertex1 = UnpackVertex(Draw.VertexOffset + Index1, BufferType);
-        unpacked_vertex Vertex2 = UnpackVertex(Draw.VertexOffset + Index2, BufferType);
+        bool IsSkinned = (InstanceTriangleID.x >= PerFrame.DrawGroupOffsets[DrawGroup_Skinned]);
+        vertex_buffer VertexBuffer = vertex_buffer(IsSkinned ? PerFrame.SkinningBufferAddress : PerFrame.VertexBufferAddress);
+        unpacked_vertex Vertex0 = UnpackVertex(VertexBuffer, Draw.VertexOffset + Index0);
+        unpacked_vertex Vertex1 = UnpackVertex(VertexBuffer, Draw.VertexOffset + Index1);
+        unpacked_vertex Vertex2 = UnpackVertex(VertexBuffer, Draw.VertexOffset + Index2);
 
         //
         // Barycentrics
@@ -268,9 +259,9 @@ void main()
         }
         
         // Point lights
-        for (uint LightIndex = 0; LightIndex < Tiles[TileIndex].LightCount; LightIndex++)
+        for (uint LightIndex = 0; LightIndex < TileBuffer.Tiles[TileIndex].LightCount; LightIndex++)
         {
-            light Light = Lights[Tiles[TileIndex].LightIndices[LightIndex]];
+            light Light = LightBuffer.Lights[TileBuffer.Tiles[TileIndex].LightIndices[LightIndex]];
             v3 dP, E;
             CalculatePointLightParams(Light, P, dP, E);
 

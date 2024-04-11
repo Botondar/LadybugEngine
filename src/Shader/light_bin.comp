@@ -8,14 +8,14 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-SetBindingLayout(Static, LightBuffer, scalar)
-readonly buffer LightBuffer
+layout(buffer_reference, scalar)
+readonly buffer light_buffer
 {
     light Lights[];
 };
 
-SetBindingLayout(Static, TileBuffer, scalar)
-buffer TileBuffer
+layout(buffer_reference, scalar)
+writeonly buffer tile_buffer
 {
     screen_tile Tiles[];
 };
@@ -37,6 +37,9 @@ shared uint LightBufferAt = {};
 
 void main()
 {
+    light_buffer LightBuffer = light_buffer(PerFrame.LightBufferAddress);
+    tile_buffer TileBuffer = tile_buffer(PerFrame.TileBufferAddress);
+
     uint ThreadID = gl_LocalInvocationID.x + gl_LocalInvocationID.y * gl_WorkGroupSize.x;
     if (subgroupElect())
     {
@@ -123,8 +126,8 @@ void main()
     uint ThreadCount = gl_WorkGroupSize.x * gl_WorkGroupSize.y;
     for (uint LightIndex = ThreadID; LightIndex < PerFrame.LightCount; LightIndex += ThreadCount)
     {
-        v3 P = Lights[LightIndex].P.xyz;
-        float L = GetLuminance(Lights[LightIndex].E);
+        v3 P = LightBuffer.Lights[LightIndex].P.xyz;
+        float L = GetLuminance(LightBuffer.Lights[LightIndex].E);
         float R = sqrt(max(L / R_LuminanceThreshold, 0.0));
         if (IntersectAABBSphere(BoxP, HalfExtent, P, R))
         {
@@ -140,7 +143,7 @@ void main()
                 uint DstIndex = atomicAdd(LightBufferAt, 1);
                 if (DstIndex < R_MaxLightCountPerTile)
                 {
-                    Tiles[TileIndex].LightIndices[DstIndex] = LightIndex;
+                    TileBuffer.Tiles[TileIndex].LightIndices[DstIndex] = LightIndex;
                 }
             }
         }
@@ -149,6 +152,6 @@ void main()
     barrier();
     if (ThreadID == 0)
     {
-        Tiles[TileIndex].LightCount = min(LightBufferAt, R_MaxLightCountPerTile);
+        TileBuffer.Tiles[TileIndex].LightCount = min(LightBufferAt, R_MaxLightCountPerTile);
     }
 }

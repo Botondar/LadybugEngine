@@ -2,35 +2,45 @@
 
 LayoutGroupSize(Skin);
 
+SetBindingLayout(PerFrame, Constants, scalar) 
+uniform PerFrameBlock
+{
+    per_frame PerFrame;
+};
+
+layout(push_constant) 
+uniform PushConstants
+{
+    u64 SkinAddress;
+    uint SrcOffset;
+    uint DstOffset;
+    uint Count;
+};
+
+layout(buffer_reference, scalar)
+readonly buffer vertex_buffer
+{
+    vertex Data[];
+};
+
+layout(buffer_reference, scalar)
+writeonly buffer skinning_buffer
+{
+    vertex Data[];
+};
+
 layout(buffer_reference, scalar)
 readonly buffer skin
 {
     m4 Joints[];
 };
 
-layout(push_constant) 
-uniform PushConstants
-{
-    skin Skin;
-    uint SrcOffset;
-    uint DstOffset;
-    uint Count;
-};
-
-SetBindingLayout(Static, VertexBuffer, scalar)
-readonly buffer SrcVB_SSBO
-{
-    vertex Data[];
-} SrcVB;
-
-SetBindingLayout(Static, SkinnedVertexBuffer, scalar)
-writeonly buffer DstVB_SSBO
-{
-    vertex Data[];
-} DstVB;
-
 void main()
 {
+    skin Skin = skin(SkinAddress);
+    skinning_buffer DstVB = skinning_buffer(PerFrame.SkinningBufferAddress);
+    vertex_buffer SrcVB = vertex_buffer(PerFrame.VertexBufferAddress);
+
     uint Index = gl_GlobalInvocationID.x;
 
     if (Index < Count)

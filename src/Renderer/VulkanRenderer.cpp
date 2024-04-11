@@ -853,36 +853,58 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         Renderer->DeviceArena = CreateGPUArena(MiB(1024), DeviceMemoryIndex, 0);
 
         gpu_memory_arena* GpuArena = &Renderer->DeviceArena;
+        
         Renderer->MipFeedbackMemorySize = R_MaxTextureCount * sizeof(u32);
         b32 PushResult = PushBuffer(GpuArena, Renderer->MipFeedbackMemorySize, 
                                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
                                     &Renderer->MipFeedbackBuffer);
         Assert(PushResult);
+        
         Renderer->SkinningMemorySize = R_SkinningBufferSize;
         PushResult = PushBuffer(GpuArena, Renderer->SkinningMemorySize, 
                                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                                 &Renderer->SkinningBuffer);
         Assert(PushResult);
+        Renderer->SkinningBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->SkinningBuffer);
+
         Renderer->LightBufferMemorySize = R_MaxLightCount * sizeof(light);
         PushResult = PushBuffer(GpuArena, Renderer->LightBufferMemorySize, 
                                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                 &Renderer->LightBuffer);
         Assert(PushResult);
+        Renderer->LightBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->LightBuffer);
+
         Renderer->TileMemorySize = sizeof(screen_tile) * R_MaxTileCountX * R_MaxTileCountY;
         PushResult = PushBuffer(GpuArena, Renderer->TileMemorySize, 
                                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                 &Renderer->TileBuffer);
         Assert(PushResult);
+        Renderer->TileBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->TileBuffer);
+
         Renderer->InstanceMemorySize = MiB(64);
         PushResult = PushBuffer(GpuArena, Renderer->InstanceMemorySize, 
                                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                 &Renderer->InstanceBuffer);
         Assert(PushResult);
+        Renderer->InstanceBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->InstanceBuffer);
+
         Renderer->DrawMemorySize = MiB(128);
         PushResult = PushBuffer(GpuArena, Renderer->DrawMemorySize, 
                                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
                                 &Renderer->DrawBuffer);
         Assert(PushResult);
+        Renderer->DrawBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->DrawBuffer);
+
+        Renderer->PerFrameBufferSize = MiB(384);
+        PushResult = PushBuffer(GpuArena, Renderer->PerFrameBufferSize,
+                                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|
+                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|
+                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|
+                                VK_BUFFER_USAGE_INDEX_BUFFER_BIT|
+                                VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                &Renderer->PerFrameBuffer);
+        Assert(PushResult);
+        Renderer->PerFrameBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameBuffer);
     }
 
     // Shadow storage
@@ -1172,55 +1194,6 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     {
         descriptor_write Writes[] = 
         {
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_IndexBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->GeometryBuffer.IndexMemory.Buffer, 0, geometry_memory::GPUBlockSize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_VertexBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->GeometryBuffer.VertexMemory.Buffer, 0, geometry_memory::GPUBlockSize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_SkinnedVertexBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->SkinningBuffer, 0, Renderer->SkinningMemorySize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_InstanceBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->InstanceBuffer, 0, Renderer->InstanceMemorySize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_DrawBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->DrawBuffer, 0, Renderer->DrawMemorySize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_LightBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->LightBuffer, 0, Renderer->LightBufferMemorySize } },
-            },
-            {
-                .Type = Descriptor_StorageBuffer,
-                .Binding = Binding_Static_TileBuffer,
-                .BaseIndex = 0,
-                .Count = 1,
-                .Buffers = { { Renderer->TileBuffer, 0, Renderer->TileMemorySize } },
-            },
             {
                 .Type = Descriptor_StorageBuffer,
                 .Binding = Binding_Static_MipFeedbackBuffer,
@@ -1580,12 +1553,12 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|
                     VK_BUFFER_USAGE_INDEX_BUFFER_BIT|
                     VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
-                b32 PushResult = PushBuffer(&Renderer->BARMemory, Renderer->PerFrameBufferSize, Usage,
-                                            Renderer->PerFrameBuffers + FrameIndex,
-                                            Renderer->PerFrameBufferMappings + FrameIndex);
+                b32 PushResult = PushBuffer(&Renderer->BARMemory, Renderer->BARBufferSize, Usage,
+                                            Renderer->BARBuffers + FrameIndex,
+                                            Renderer->BARBufferMappings + FrameIndex);
                 if (PushResult)
                 {
-                    Renderer->PerFrameBufferAddresses[FrameIndex] = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameBuffers[FrameIndex]);
+                    Renderer->BARBufferAddresses[FrameIndex] = GetBufferDeviceAddress(VK.Device, Renderer->BARBuffers[FrameIndex]);
                 }
                 else
                 {
@@ -2048,9 +2021,9 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
     {
         Frame->StagingBuffer.At = 0;
 
-        Frame->BARBufferSize = Renderer->PerFrameBufferSize;
+        Frame->BARBufferSize = Renderer->BARBufferSize;
         Frame->BARBufferAt = 0;
-        Frame->BARBufferBase = Renderer->PerFrameBufferMappings[FrameID];
+        Frame->BARBufferBase = Renderer->BARBufferMappings[FrameID];
 
         Frame->CommandCount = 0;
         Frame->Commands = PushArray(Arena, 0, render_command, Frame->MaxCommandCount);
@@ -2223,6 +2196,14 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     VkCommandBuffer ShadowCmd = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_None, Pipeline_None);
 
     f32 AspectRatio = (f32)Frame->RenderExtent.X / (f32)Frame->RenderExtent.Y;
+
+    Frame->Uniforms.IndexBufferAddress      = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.IndexMemory.Buffer);
+    Frame->Uniforms.VertexBufferAddress     = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.VertexMemory.Buffer);
+    Frame->Uniforms.SkinningBufferAddress   = Renderer->SkinningBufferAddress;
+    Frame->Uniforms.LightBufferAddress      = Renderer->LightBufferAddress;
+    Frame->Uniforms.TileBufferAddress       = Renderer->TileBufferAddress;
+    Frame->Uniforms.InstanceBufferAddress   = Renderer->InstanceBufferAddress;
+    Frame->Uniforms.DrawBufferAddress       = Renderer->DrawBufferAddress;
 
     Frame->Uniforms.Ambience                    = 0.25f * v3{ 1.0f, 1.0f, 1.0f }; // TODO(boti): Expose this in the API
     Frame->Uniforms.Exposure                    = Frame->Config.Exposure;
@@ -3158,7 +3139,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                 };
                                 skinning_constants Push =
                                 {
-                                    .Address = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Command->BARBufferAt,
+                                    .Address = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt,
                                     .SrcVertexOffset = Draw->Geometry.VertexBlock->Offset,
                                     .DstVertexOffset = SkinnedVertexAt,
                                     .VertexCount = VertexCount,
@@ -3187,7 +3168,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         VkDeviceAddress ParticleAddress;
                         billboard_mode Mode;
                     } Push;
-                    Push.ParticleAddress = Renderer->PerFrameBufferAddresses[Frame->FrameID] + Command->BARBufferAt,
+                    Push.ParticleAddress = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt,
                     Push.Mode = Command->ParticleBatch.Mode,
                     vkCmdPushConstants(ParticleCB, Renderer->Pipelines[Pipeline_Quad].Layout, VK_SHADER_STAGE_ALL, 
                                        0, sizeof(Push), &Push);
@@ -3209,7 +3190,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 } break;
                 case RenderCommand_Batch2D:
                 {
-                    vkCmdBindVertexBuffers(GuiCB, 0, 1, &Renderer->PerFrameBuffers[Frame->FrameID], &Command->BARBufferAt);
+                    vkCmdBindVertexBuffers(GuiCB, 0, 1, &Renderer->BARBuffers[Frame->FrameID], &Command->BARBufferAt);
                     vkCmdDraw(GuiCB, Command->Batch2D.VertexCount, 1, 0, 0);
                 } break;
                 InvalidDefaultCase;

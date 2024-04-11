@@ -110,13 +110,16 @@ inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* 
 inline VkDeviceAddress 
 GetBufferDeviceAddress(VkDevice Device, VkBuffer Buffer)
 {
-    VkBufferDeviceAddressInfo Info = 
+    VkDeviceAddress Result = 0;
+    if (Buffer)
     {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-        .pNext = nullptr,
-        .buffer = Buffer,
-    };
-
-    VkDeviceAddress Result = vkGetBufferDeviceAddress(Device, &Info);
+        VkBufferDeviceAddressInfo Info = 
+        {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+            .pNext = nullptr,
+            .buffer = Buffer,
+        };
+        Result = vkGetBufferDeviceAddress(Device, &Info);
+    }
     return(Result);
 }

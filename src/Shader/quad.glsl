@@ -3,6 +3,13 @@
 #define Billboard_ViewAligned 0
 #define Billboard_ZAligned 1
 
+layout(push_constant) 
+uniform PushConstants
+{
+    u64 ParticleBufferAddress;
+    uint BillboardMode;
+};
+
 SetBindingLayout(PerFrame, Constants, scalar)
 uniform PerFrameBlock
 {
@@ -30,15 +37,10 @@ readonly buffer particle_buffer
     particle Particles[];
 };
 
-layout(push_constant) 
-uniform PushConstants
-{
-    particle_buffer ParticleBuffer;
-    uint BillboardMode;
-};
-
 void main()
 {
+    particle_buffer ParticleBuffer = particle_buffer(ParticleBufferAddress);
+
     v3 BaseVertices[4] = 
     {
         vec3(-1.0, +1.0, 0.0),

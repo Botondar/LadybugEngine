@@ -109,11 +109,6 @@ internal bool CreateGeometryBuffer(u64 MaxBlockCount, memory_arena* Arena, geome
             GeometryBuffer->BlockPool = BlockPool;
             Result = true;
         }
-
-        // HACK(boti): Now that the descriptor upload happens at init time, 
-        // we need to have the geometry buffers ready at that point
-        geometry_buffer_allocation Allocation = AllocateVertexBuffer(GeometryBuffer, 1, 1);
-        DeallocateVertexBuffer(GeometryBuffer, Allocation);
     }
     return Result;
 }

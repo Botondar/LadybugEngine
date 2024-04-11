@@ -6,8 +6,8 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-SetBindingLayout(Static, InstanceBuffer, scalar)
-buffer InstanceBuffer
+layout(buffer_reference, scalar)
+buffer instance_buffer
 {
     instance_data Instances[];
 };
@@ -31,7 +31,8 @@ layout(location = Attrib_TexCoord) in vec2 aTexCoord;
 
 void main()
 {
-    instance_data Instance = Instances[gl_InstanceIndex];
+    instance_buffer InstanceBuffer = instance_buffer(PerFrame.InstanceBufferAddress);
+    instance_data Instance = InstanceBuffer.Instances[gl_InstanceIndex];
     gl_Position = ViewProjection * v4(TransformPoint(Instance.Transform, aP), 1.0);
 #if ShaderVariant_AlphaTest
     TexCoord = aTexCoord;
@@ -54,7 +55,8 @@ SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
 void main()
 {
-    instance_data Instance = Instances[InstanceIndex];
+    instance_buffer InstanceBuffer = instance_buffer(PerFrame.InstanceBufferAddress);
+    instance_data Instance = InstanceBuffer.Instances[InstanceIndex];
     v4 Albedo = texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord);
     uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdyFine(TexCoord));
     atomicOr(MipFeedbacks[Instance.Material.DiffuseID], MipBucket);

@@ -208,62 +208,7 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
     {
         .BindingCount = Binding_Static_Count,
         .Bindings = 
-        {
-            // Geometry
-            [Binding_Static_IndexBuffer] = 
-            {
-                .Binding = Binding_Static_IndexBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = ShaderStage_All,
-            },
-            [Binding_Static_VertexBuffer] = 
-            {
-                .Binding = Binding_Static_VertexBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = ShaderStage_All,
-            },
-            [Binding_Static_SkinnedVertexBuffer] = 
-            {
-                .Binding = Binding_Static_SkinnedVertexBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = ShaderStage_All,
-            },
-
-            // Draw
-            [Binding_Static_InstanceBuffer] = 
-            {
-                .Binding = Binding_Static_InstanceBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = ShaderStage_All,
-            },
-            [Binding_Static_DrawBuffer] = 
-            {
-                .Binding = Binding_Static_DrawBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = ShaderStage_All,
-            },
-
-            // Light
-            [Binding_Static_LightBuffer] = 
-            {
-                .Binding = Binding_Static_LightBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = ShaderStage_All,
-            },
-            [Binding_Static_TileBuffer] = 
-            {
-                .Binding = Binding_Static_TileBuffer,
-                .Type = Descriptor_StorageBuffer,
-                .DescriptorCount = 1,
-                .Stages = ShaderStage_All,
-            },
-
+        {   
             // Shadow
             [Binding_Static_CascadedShadow] = 
             {

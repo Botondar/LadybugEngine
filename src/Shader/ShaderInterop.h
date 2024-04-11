@@ -22,6 +22,7 @@ struct v4u8
 #   define u32      uint
 #   define s32      int
 #   define f32      float
+#   define u64      uint64_t
 #   define v2       vec2
 #   define v2u      uvec2
 #   define v2s      ivec2
@@ -78,36 +79,29 @@ struct v4u8
 #define Set_User0               Set_Count
 
 // Static set bindings
-#define Binding_Static_IndexBuffer                  0
-#define Binding_Static_VertexBuffer                 1
-#define Binding_Static_SkinnedVertexBuffer          2
-#define Binding_Static_InstanceBuffer               3
-#define Binding_Static_DrawBuffer                   4
-#define Binding_Static_LightBuffer                  5
-#define Binding_Static_TileBuffer                   6
-#define Binding_Static_MipFeedbackBuffer            7
-#define Binding_Static_CascadedShadow               8
-#define Binding_Static_PointShadows                 9
-#define Binding_Static_VisibilityImage              10
-#define Binding_Static_OcclusionImage               11
-#define Binding_Static_StructureImage               12
-#define Binding_Static_OcclusionRawStorageImage     13
-#define Binding_Static_OcclusionStorageImage        14
-#define Binding_Static_OcclusionRawImage            15
-#define Binding_Static_HDRColorImage                16
-#define Binding_Static_BloomImage                   17
+#define Binding_Static_MipFeedbackBuffer            0
+#define Binding_Static_CascadedShadow               1
+#define Binding_Static_PointShadows                 2
+#define Binding_Static_VisibilityImage              3
+#define Binding_Static_OcclusionImage               4
+#define Binding_Static_StructureImage               5
+#define Binding_Static_OcclusionRawStorageImage     6
+#define Binding_Static_OcclusionStorageImage        7
+#define Binding_Static_OcclusionRawImage            8
+#define Binding_Static_HDRColorImage                9
+#define Binding_Static_BloomImage                   10
 // NOTE(boti): HDR and Bloom general images are workarounds
 // for the image layout being baked into the set
 // TODO(boti): Enhanced barriers are need for this in D3D12 (same-queue read + read/write)
-#define Binding_Static_HDRColorImageGeneral         18
-#define Binding_Static_BloomImageGeneral            19
-#define Binding_Static_HDRMipStorageImages          20
-#define Binding_Static_BloomMipStorageImages        21
-#define Binding_Static_TransparentImage             22
-#define Binding_Static_SkyTexture                   23
-#define Binding_Static_SkyImage                     24
+#define Binding_Static_HDRColorImageGeneral         11
+#define Binding_Static_BloomImageGeneral            12
+#define Binding_Static_HDRMipStorageImages          13
+#define Binding_Static_BloomMipStorageImages        14
+#define Binding_Static_TransparentImage             15
+#define Binding_Static_SkyTexture                   16
+#define Binding_Static_SkyImage                     17
 
-#define Binding_Static_Count                        25
+#define Binding_Static_Count                        18
 
 // Sampler set bindings
 #define Binding_Sampler_NamedSamplers               0
@@ -195,8 +189,6 @@ struct v4u8
 
 StaticAssert(DrawGroup_Count < 32);
 
-
-
 #define debug_view_mode u32
 #define DebugView_None              0
 #define DebugView_LightOccupancy    1
@@ -248,6 +240,14 @@ struct per_frame
     m4 CascadeViewProjections[4];
 
     point_shadow_data PointShadows[R_MaxShadowCount];
+
+    u64 IndexBufferAddress;
+    u64 VertexBufferAddress;
+    u64 SkinningBufferAddress;
+    u64 LightBufferAddress;
+    u64 TileBufferAddress;
+    u64 InstanceBufferAddress;
+    u64 DrawBufferAddress;
 
     f32 CascadeMinDistances[4];
     f32 CascadeMaxDistances[4];

@@ -267,10 +267,10 @@ struct renderer
     VkBuffer        PerFrameResourceDescriptorBuffers[R_MaxFramesInFlight];
     void*           PerFrameResourceDescriptorMappings[R_MaxFramesInFlight];
 
-    static constexpr umm PerFrameBufferSize = MiB(30);
-    VkBuffer        PerFrameBuffers[R_MaxFramesInFlight];
-    void*           PerFrameBufferMappings[R_MaxFramesInFlight];
-    VkDeviceAddress PerFrameBufferAddresses[R_MaxFramesInFlight];
+    static constexpr umm BARBufferSize = MiB(30);
+    VkBuffer        BARBuffers[R_MaxFramesInFlight];
+    void*           BARBufferMappings[R_MaxFramesInFlight];
+    VkDeviceAddress BARBufferAddresses[R_MaxFramesInFlight];
 
     VkDeviceMemory  StagingMemory;
     void*           StagingMemoryMapping;
@@ -293,19 +293,28 @@ struct renderer
     VkBuffer        MipFeedbackBuffer;
 
     umm             SkinningMemorySize;
+    u64             SkinningBufferAddress;
     VkBuffer        SkinningBuffer;
 
     umm             LightBufferMemorySize;
+    u64             LightBufferAddress;
     VkBuffer        LightBuffer;
 
     umm             TileMemorySize;
+    u64             TileBufferAddress;
     VkBuffer        TileBuffer;
 
     umm             InstanceMemorySize;
+    u64             InstanceBufferAddress;
     VkBuffer        InstanceBuffer;
 
     umm             DrawMemorySize;
+    u64             DrawBufferAddress;
     VkBuffer        DrawBuffer;
+
+    umm             PerFrameBufferSize;
+    u64             PerFrameBufferAddress;
+    VkBuffer        PerFrameBuffer;
 
     //
     // Pipelines, pipeline layouts and associated descriptor set layouts

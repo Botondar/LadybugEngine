@@ -6,8 +6,8 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-SetBindingLayout(Static, InstanceBuffer, scalar)
-readonly buffer InstanceBuffer
+layout(buffer_reference, scalar)
+readonly buffer instance_buffer
 {
     instance_data Instances[];
 };
@@ -33,7 +33,8 @@ layout(location = Attrib_Color)         in vec4 aColor;
 
 void main()
 {
-    instance_data Instance = Instances[gl_InstanceIndex];
+    instance_buffer InstanceBuffer = instance_buffer(PerFrame.InstanceBufferAddress);
+    instance_data Instance = InstanceBuffer.Instances[gl_InstanceIndex];
     precise v3 WorldP = TransformPoint(Instance.Transform, aP);
     TexCoord = aTexCoord;
     P = TransformPoint(PerFrame.ViewTransform, WorldP);
@@ -53,15 +54,17 @@ void main()
 
 #elif defined(FS)
 
+#ifndef ShaderVariant_Transmission
 layout(early_fragment_tests) in;
+#endif
 
-SetBindingLayout(Static, LightBuffer, scalar)
-readonly buffer LightBuffer
+layout(buffer_reference, scalar)
+readonly buffer light_buffer
 {
     light Lights[];
 };
-SetBindingLayout(Static, TileBuffer, scalar)
-readonly buffer TileBuffer
+layout(buffer_reference, scalar)
+readonly buffer tile_buffer
 {
     screen_tile Tiles[];
 };
@@ -89,6 +92,10 @@ layout(location = 0, index = 1) out v4 SourceTransmission;
 
 void main()
 {
+    instance_buffer InstanceBuffer = instance_buffer(PerFrame.InstanceBufferAddress);
+    light_buffer LightBuffer = light_buffer(PerFrame.LightBufferAddress);
+    tile_buffer TileBuffer = tile_buffer(PerFrame.TileBufferAddress);
+
     v3 Lo = vec3(0.0);
     v3 V = normalize(-P);
     f32 Alpha = 1.0;
@@ -101,7 +108,7 @@ void main()
     }
     
     {
-        instance_data Instance = Instances[InstanceIndex];
+        instance_data Instance = InstanceBuffer.Instances[InstanceIndex];
 
 #if ShaderVariant_Transmission
         f32 Transmission = Instance.Material.Transmission * texture(sampler2D(Textures[Instance.Material.TransmissionID], MatSamplers[Instance.Material.TransmissionSamplerID]), TexCoord).r;
@@ -150,9 +157,9 @@ void main()
             DiffuseBase, F0, Roughness);
 #endif
 
-        for (uint LightIndex = 0; LightIndex < Tiles[TileIndex].LightCount; LightIndex++)
+        for (uint LightIndex = 0; LightIndex < TileBuffer.Tiles[TileIndex].LightCount; LightIndex++)
         {
-            light Light = Lights[Tiles[TileIndex].LightIndices[LightIndex]];
+            light Light = LightBuffer.Lights[TileBuffer.Tiles[TileIndex].LightIndices[LightIndex]];
             v3 dP, E;
             CalculatePointLightParams(Light, P, dP, E);
             
@@ -245,10 +252,6 @@ void main()
             Lo += Extinction * (InScatterAmbience * PerFrame.Ambience + 0.0 * InScatterSun * SunShadow * PerFrame.SunL);
         }
     }
-#endif
-
-#if ShaderVariant_Transmission
-    //Lo = v3(0.0);
 #endif
 
     Lo = NanTo0(Lo);
