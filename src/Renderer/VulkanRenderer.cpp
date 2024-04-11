@@ -2657,6 +2657,30 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     };
     VkRect2D OutputScissor = { { 0, 0 }, { Frame->OutputExtent.X, Frame->OutputExtent.Y } };
 
+    f32 OutputAspect = OutputViewport.width / OutputViewport.height;
+
+    VkViewport BlitViewport = {};
+    BlitViewport.minDepth = 0.0f;
+    BlitViewport.maxDepth = 1.0f;
+    if (AspectRatio < OutputAspect)
+    {
+        BlitViewport.width = AspectRatio * Frame->OutputExtent.Y;
+        BlitViewport.height = Frame->OutputExtent.Y;
+        BlitViewport.x = 0.5f * (Frame->OutputExtent.X - BlitViewport.width);
+        BlitViewport.y = 0.0f;
+    }
+    else
+    {
+        BlitViewport.width = Frame->OutputExtent.X;
+        BlitViewport.height = (1.0f / AspectRatio) * Frame->OutputExtent.X;
+        BlitViewport.x = 0.0f;
+        BlitViewport.y = 0.5f * (Frame->OutputExtent.Y - BlitViewport.height);
+    }
+    VkRect2D BlitScissor = 
+    { 
+        { (s32)Round(BlitViewport.x), (s32)Round(BlitViewport.y) }, 
+        { (u32)Round(BlitViewport.width), (u32)Round(BlitViewport.height) }
+    };
 
     u32 SkinnedVertexAt = 0;
     VkCommandBuffer SkinningCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_None);
@@ -2672,8 +2696,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     VkCommandBuffer Widget3DCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_Gizmo);
     {
         vkCmdBeginDebugUtilsLabelEXT(Widget3DCB, "3D GUI");
-        vkCmdSetViewport(Widget3DCB, 0, 1, &OutputViewport);
-        vkCmdSetScissor(Widget3DCB, 0, 1, &OutputScissor);
+        vkCmdSetViewport(Widget3DCB, 0, 1, &BlitViewport);
+        vkCmdSetScissor(Widget3DCB, 0, 1, &BlitScissor);
 
         vkCmdBindPipeline(Widget3DCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->Pipelines[Pipeline_Gizmo].Pipeline);
 
@@ -5046,8 +5070,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         };
         vkCmdBeginRendering(RenderCmd, &RenderingInfo);
 
-        vkCmdSetViewport(RenderCmd, 0, 1, &OutputViewport);
-        vkCmdSetScissor(RenderCmd, 0, 1, &OutputScissor);
+        vkCmdSetViewport(RenderCmd, 0, 1, &BlitViewport);
+        vkCmdSetScissor(RenderCmd, 0, 1, &BlitScissor);
 
         // Blit
         vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Blit");

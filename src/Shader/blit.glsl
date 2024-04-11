@@ -1,8 +1,8 @@
 #include "common.glsli"
 
-#if defined(VS)
+interpolant(0) vec2 TexCoord;
 
-layout(location = 0) out vec2 TexCoord;
+#if defined(VS)
 
 void main()
 {
@@ -41,8 +41,6 @@ SetBinding(Static, StructureImage) uniform texture2D StructureImage;
 SetBinding(Static, VisibilityImage) uniform utexture2D VisibilityImage;
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
-
-layout(location = 0) in vec2 TexCoord;
 
 layout(location = 0) out vec4 Out0;
 
@@ -102,9 +100,8 @@ void main()
             Exposure = TargetLuminance / AverageLuminance;
         }
 #endif
-        v2 UV = gl_FragCoord.xy / v2(PerFrame.OutputExtent);
-        vec3 Sample = textureLod(sampler2D(HDRColorImage, Samplers[Sampler_LinearEdgeClamp]), UV, 0.0).rgb;
-        vec3 SampleBloom = textureLod(sampler2D(BloomImage, Samplers[Sampler_LinearEdgeClamp]), UV, 0.0).rgb;
+        vec3 Sample = textureLod(sampler2D(HDRColorImage, Samplers[Sampler_LinearEdgeClamp]), TexCoord, 0.0).rgb;
+        vec3 SampleBloom = textureLod(sampler2D(BloomImage, Samplers[Sampler_LinearEdgeClamp]), TexCoord, 0.0).rgb;
         Sample = mix(Sample, SampleBloom, PerFrame.BloomStrength);
 
         vec3 Exposed = Sample * Exposure;
