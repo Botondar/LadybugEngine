@@ -177,6 +177,10 @@ VkBlendFactor BlendFactorTable[Blend_Count] =
     [Blend_InvConstantColor]    = VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR,
     [Blend_ConstantAlpha]       = VK_BLEND_FACTOR_CONSTANT_ALPHA,
     [Blend_InvConstantAlpha]    = VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA,
+    [Blend_Src1Color]           = VK_BLEND_FACTOR_SRC1_COLOR,
+    [Blend_InvSrc1Color]        = VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR,
+    [Blend_Src1Alpha]           = VK_BLEND_FACTOR_SRC1_ALPHA,
+    [Blend_InvSrc1Alpha]        = VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,
 };
 
 VkCompareOp CompareOpTable[Compare_Count] = 

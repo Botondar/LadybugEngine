@@ -82,7 +82,10 @@ SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 SetBinding(Sampler, MaterialSamplers) uniform sampler MatSamplers[R_MaterialSamplerCount];
 SetBinding(Bindless, Textures) uniform texture2D Textures[];
 
-layout(location = 0) out vec4 Out0;
+layout(location = 0, index = 0) out v4 Out0;
+#if ShaderVariant_Transmission
+layout(location = 0, index = 1) out v4 SourceTransmission;
+#endif
 
 void main()
 {
@@ -136,6 +139,8 @@ void main()
         Lo += CalculateOutgoingLuminanceTransmission(
             SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
             DiffuseBase, F0, Roughness, Transmission);
+
+        SourceTransmission = v4(Transmission * DiffuseBase, 1.0);
 #else
         Lo += CalculateOutgoingLuminance(
             SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
@@ -237,6 +242,10 @@ void main()
             Lo += Extinction * (InScatterAmbience * PerFrame.Ambience + 0.0 * InScatterSun * SunShadow * PerFrame.SunL);
         }
     }
+#endif
+
+#if ShaderVariant_Transmission
+    //Lo = v3(0.0);
 #endif
 
     Lo = NanTo0(Lo);

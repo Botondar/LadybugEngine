@@ -175,6 +175,10 @@ enum blend_factor : u32
     Blend_InvConstantColor,
     Blend_ConstantAlpha,
     Blend_InvConstantAlpha,
+    Blend_Src1Color,
+    Blend_InvSrc1Color,
+    Blend_Src1Alpha,
+    Blend_InvSrc1Alpha,
 
     Blend_Count,
 };

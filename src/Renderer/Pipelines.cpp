@@ -1075,7 +1075,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .DepthStencilState = 
         {
             .Flags = DS_DepthTestEnable,
-            .DepthCompareOp = Compare_Greater,
+            .DepthCompareOp = Compare_GreaterEqual,
             .MinDepthBounds = 0.0f,
             .MaxDepthBounds = 1.0f,
         },
@@ -1085,7 +1085,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             { 
                 .BlendEnable = true,
                 .SrcColor = Blend_One,
-                .DstColor = Blend_One,
+                .DstColor = Blend_Src1Color,
                 .ColorOp = BlendOp_Add,
                 .SrcAlpha = Blend_Zero,
                 .DstAlpha = Blend_One,

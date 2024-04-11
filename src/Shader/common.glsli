@@ -278,7 +278,7 @@ v3 CalculateOutgoingLuminanceTransmission(
         Diffuse = mix(Diffuse, DistributionT * GeometryT * SpecularDenominator * Albedo, Transmission);
     }
 
-    v3 Result = (Diffuse + Specular) * max(NdotL, 0.0) * Li;
+    v3 Result = (Diffuse + Specular) * abs(NdotL) * Li;
     return(Result);
 }
 
