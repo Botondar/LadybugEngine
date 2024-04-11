@@ -116,19 +116,22 @@ void main()
     }
     else if (PerFrame.DebugViewMode == DebugView_LightOccupancy)
     {
-        v2u TileID = v2u(gl_FragCoord.xy) / v2u(R_TileSizeX, R_TileSizeY);
+        v2u Coord = v2u(TexCoord * v2(PerFrame.RenderExtent));
+        v2u TileID = Coord / v2u(R_TileSizeX, R_TileSizeY);
         uint TileIndex = TileID.x + TileID.y * PerFrame.TileCount.x;
 
         uint LightCount = Tiles[TileIndex].LightCount;
         f32 Occupancy = f32(LightCount) / f32(R_MaxLightCountPerTile);
         
-        v3 Colors[4] = v3[4](
+        v3 Colors[5] = v3[5](
             v3(0.0, 0.0, 1.0),
             v3(0.0, 1.0, 0.0),
             v3(1.0, 1.0, 0.0),
-            v3(1.0, 0.0, 0.0));
+            v3(1.0, 0.0, 0.0),
+            v3(1.0, 0.0, 0.0) // Repeated value for handling over-indexing
+        );
 
-        f32 fIndex = f32(Colors.length()) * Occupancy;
+        f32 fIndex = 4.0 * Occupancy;
         f32 Factor = fract(fIndex);
         uint Index = uint(floor(fIndex));
 
@@ -136,19 +139,19 @@ void main()
     }
     else if (PerFrame.DebugViewMode == DebugView_SSAO)
     {
-        f32 Occlusion = texelFetch(OcclusionImage, v2s(gl_FragCoord.xy), 0).r;
+        f32 Occlusion = textureLod(sampler2D(OcclusionImage, Samplers[Sampler_NoFilter]), TexCoord, 0.0).r;
         Out0 = v4(Occlusion.xxx, 1.0);
     }
     else if (PerFrame.DebugViewMode == DebugView_Structure)
     {
-        v3 Structure = StructureDecode(texelFetch(StructureImage, v2s(gl_FragCoord.xy), 0));
+        v3 Structure = StructureDecode(textureLod(sampler2D(StructureImage, Samplers[Sampler_NoFilter]), TexCoord, 0.0));
         Structure.xy = (1.0 / 0.03) * Structure.xy + v2(0.5);
         Structure.z = PerFrame.ProjectionTransform[2][2] + PerFrame.ProjectionTransform[2][3] / Structure.z;
         Out0 = v4(Structure, 1.0);
     }
     else if (PerFrame.DebugViewMode == DebugView_InstanceID || PerFrame.DebugViewMode == DebugView_TriangleID)
     {
-        v2u InstanceTriangleID = texelFetch(VisibilityImage, v2s(gl_FragCoord.xy), 0).xy;
+        v2u InstanceTriangleID = textureLod(usampler2D(VisibilityImage, Samplers[Sampler_NoFilter]), TexCoord, 0).xy;
         uint ID = (PerFrame.DebugViewMode == DebugView_InstanceID) ? InstanceTriangleID.x : InstanceTriangleID.y;
         uint HashID = HashPCG(ID);
 

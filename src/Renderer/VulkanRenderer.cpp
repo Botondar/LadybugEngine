@@ -2664,22 +2664,22 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     BlitViewport.maxDepth = 1.0f;
     if (AspectRatio < OutputAspect)
     {
-        BlitViewport.width = AspectRatio * Frame->OutputExtent.Y;
+        BlitViewport.width = Round(AspectRatio * Frame->OutputExtent.Y);
         BlitViewport.height = Frame->OutputExtent.Y;
-        BlitViewport.x = 0.5f * (Frame->OutputExtent.X - BlitViewport.width);
+        BlitViewport.x = Floor(0.5f * (Frame->OutputExtent.X - BlitViewport.width));
         BlitViewport.y = 0.0f;
     }
     else
     {
         BlitViewport.width = Frame->OutputExtent.X;
-        BlitViewport.height = (1.0f / AspectRatio) * Frame->OutputExtent.X;
+        BlitViewport.height = Round((1.0f / AspectRatio) * Frame->OutputExtent.X);
         BlitViewport.x = 0.0f;
-        BlitViewport.y = 0.5f * (Frame->OutputExtent.Y - BlitViewport.height);
+        BlitViewport.y = Floor(0.5f * (Frame->OutputExtent.Y - BlitViewport.height));
     }
     VkRect2D BlitScissor = 
     { 
-        { (s32)Round(BlitViewport.x), (s32)Round(BlitViewport.y) }, 
-        { (u32)Round(BlitViewport.width), (u32)Round(BlitViewport.height) }
+        { (s32)BlitViewport.x, (s32)BlitViewport.y }, 
+        { (u32)BlitViewport.width, (u32)BlitViewport.height }
     };
 
     u32 SkinnedVertexAt = 0;
