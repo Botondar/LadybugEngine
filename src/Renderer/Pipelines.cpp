@@ -1084,7 +1084,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         {
             { 
                 .BlendEnable = true,
-                .SrcColor = Blend_One,
+                .SrcColor = Blend_SrcAlpha,
                 .DstColor = Blend_Src1Color,
                 .ColorOp = BlendOp_Add,
                 .SrcAlpha = Blend_Zero,

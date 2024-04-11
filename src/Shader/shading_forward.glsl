@@ -91,6 +91,7 @@ void main()
 {
     v3 Lo = vec3(0.0);
     v3 V = normalize(-P);
+    f32 Alpha = 1.0;
 
     uint TileIndex;
     {
@@ -113,6 +114,8 @@ void main()
         f32 Metallic = MetallicRoughness.b * BaseMetallicRoughness.b;
         v3 N = UnpackSurfaceNormal01(texture(sampler2D(Textures[Instance.Material.NormalID], MatSamplers[Instance.Material.NormalSamplerID]), TexCoord).xy);
         N = normalize(TriT) * N.x + normalize(TriB) * N.y + normalize(TriN) * N.z;
+
+        Alpha = Albedo.a;
 
         // Desired mip level feedback
         {
@@ -140,7 +143,7 @@ void main()
             SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
             DiffuseBase, F0, Roughness, Transmission);
 
-        SourceTransmission = v4(Transmission * DiffuseBase, 1.0);
+        SourceTransmission = v4(mix(v3(1.0), Transmission * DiffuseBase, Albedo.a), 1.0);
 #else
         Lo += CalculateOutgoingLuminance(
             SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
@@ -249,7 +252,7 @@ void main()
 #endif
 
     Lo = NanTo0(Lo);
-    Out0 = vec4(Lo, 1.0);
+    Out0 = vec4(Lo, Alpha);
 }
 
 #endif
