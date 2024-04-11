@@ -47,8 +47,6 @@ struct v4u8
 //
 // Config
 //
-#define R_AlphaTestThreshold 0.5f
-
 #define R_TileSizeX             16
 #define R_TileSizeY             16
 #define R_MaxLightCountPerTile  255

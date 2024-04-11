@@ -37,11 +37,6 @@ static_assert(sizeof(per_frame) <= KiB(64));
 //
 constexpr u32 R_MaxFramesInFlight = 2u;
 
-constexpr u32 R_MaxRenderTargetSizeX = 3840;
-constexpr u32 R_MaxRenderTargetSizeY = 2160;
-constexpr u32 R_MaxTileCountX = CeilDiv(R_MaxRenderTargetSizeX, R_TileSizeX);
-constexpr u32 R_MaxTileCountY = CeilDiv(R_MaxRenderTargetSizeY, R_TileSizeY);
-
 constexpr u64 R_RenderTargetMemorySize      = MiB(320);
 constexpr u64 R_TextureMemorySize           = MiB(512);
 constexpr u64 R_ShadowMapMemorySize         = MiB(256);
@@ -49,7 +44,6 @@ constexpr u32 R_MaxShadowCascadeCount       = 4;
 constexpr u32 R_ShadowResolution            = 2048u; // TODO(boti): Rename, this only applies to the cascades
 constexpr u32 R_PointShadowResolution       = 256u;
 constexpr u64 R_VertexBufferMaxBlockCount   = (1llu << 18);
-constexpr u64 R_SkinningBufferSize          = MiB(128);
 
 //
 // Limits

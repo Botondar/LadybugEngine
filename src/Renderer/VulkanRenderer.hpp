@@ -12,8 +12,6 @@
 #include "Renderer/Pipelines.hpp"
 #include "Renderer/rhi_vulkan.hpp"
 
-constexpr u32 R_MaxSkinnedVertexCount = 1u << 20;
-
 struct gpu_memory_arena
 {
     VkDeviceMemory Memory;
@@ -162,8 +160,9 @@ internal b32 PushBeginBarrier(frame_stage* Stage, const VkBufferMemoryBarrier2* 
 
 struct draw_list
 {
-    u32 DrawGroupDrawCounts[DrawGroup_Count];
+    VkBuffer DrawBuffer;
     umm DrawBufferOffset;
+    u32 DrawGroupDrawCounts[DrawGroup_Count];
 };
 
 struct point_shadow_map
@@ -291,26 +290,6 @@ struct renderer
 
     umm             MipFeedbackMemorySize;
     VkBuffer        MipFeedbackBuffer;
-
-    umm             SkinningMemorySize;
-    u64             SkinningBufferAddress;
-    VkBuffer        SkinningBuffer;
-
-    umm             LightBufferMemorySize;
-    u64             LightBufferAddress;
-    VkBuffer        LightBuffer;
-
-    umm             TileMemorySize;
-    u64             TileBufferAddress;
-    VkBuffer        TileBuffer;
-
-    umm             InstanceMemorySize;
-    u64             InstanceBufferAddress;
-    VkBuffer        InstanceBuffer;
-
-    umm             DrawMemorySize;
-    u64             DrawBufferAddress;
-    VkBuffer        DrawBuffer;
 
     umm             PerFrameBufferSize;
     u64             PerFrameBufferAddress;
