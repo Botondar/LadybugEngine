@@ -280,15 +280,14 @@ DEBUGInitializeWorld(
         case DebugScene_TransmissionTest:
         {
             m4 Transform = YUpToZUp;
-            // TODO(boti): hard-coded path
             DEBUGLoadTestScene(Scratch, Assets, World, Frame,
-                               "F:/dev/Assets/glTF-Sample-Assets/Models/TransmissionTest/glTF/TransmissionTest.gltf", Transform);
+                               "data/glTF-Sample-Assets/Models/TransmissionTest/glTF/TransmissionTest.gltf", Transform);
         } break;
         case DebugScene_Sponza:
         {
             m4 Transform = YUpToZUp;
             DEBUGLoadTestScene(Scratch, Assets, World, Frame,
-                               "data/Scenes/Sponza/Sponza.gltf", Transform);
+                               "data/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", Transform);
         } break;
         case DebugScene_Terrain:
         {
@@ -446,15 +445,14 @@ DEBUGInitializeWorld(
                                      0.0f, 0.0f, 1e-2f, 0.0f,
                                      0.0f, 0.0f, 0.0f, 1.0f);
         DEBUGLoadTestScene(Scratch, Assets, World, Frame, 
-                           "data/Scenes/Fox/Fox.gltf", Transform);
+                           "data/glTF-Sample-Assets/Models/Fox/glTF/Fox.gltf", Transform);
     }
 
     if (Flags & DebugSceneFlag_TransparentDragon)
     {
         m4 Transform = YUpToZUp;
-        // TODO(boti): Hard-coded absolute path on my drive...
         DEBUGLoadTestScene(Scratch, Assets, World, Frame,
-                           "F:/dev/Assets/glTF-Sample-Assets/Models/DragonAttenuation/glTF/DragonAttenuation.gltf", Transform);
+                           "data/glTF-Sample-Assets/Models/DragonAttenuation/glTF/DragonAttenuation.gltf", Transform);
     }
 }
 
