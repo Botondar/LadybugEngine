@@ -871,6 +871,15 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                                 &Renderer->PerFrameBuffer);
         Assert(PushResult);
         Renderer->PerFrameBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameBuffer);
+        VkDebugUtilsObjectNameInfoEXT Name =
+        {
+            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+            .pNext = nullptr,
+            .objectType = VK_OBJECT_TYPE_BUFFER,
+            .objectHandle = (u64)Renderer->PerFrameBuffer,
+            .pObjectName = "PerFrameBuffer",
+        };
+        vkSetDebugUtilsObjectNameEXT(VK.Device, &Name);
     }
 
     // Shadow storage
@@ -3017,8 +3026,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
                                 Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
                                 Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                                Barrier.dstStageMask = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
-                                Barrier.dstAccessMask = VK_ACCESS_2_INDEX_READ_BIT;
+                                Barrier.dstStageMask = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+                                Barrier.dstAccessMask = VK_ACCESS_2_INDEX_READ_BIT|VK_ACCESS_2_SHADER_READ_BIT;
                                 PushBeginBarrier(&FrameStages[FrameStage_Prepass], &Barrier);
                             }
                         } break;
@@ -3289,8 +3298,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         .pNext = nullptr,
                         .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
                         .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                        .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                        .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                        .dstStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                        .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
                         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                         .buffer = Renderer->PerFrameBuffer,
@@ -3590,7 +3599,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .pNext = nullptr,
             .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             .dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT|VK_ACCESS_2_SHADER_READ_BIT,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -4388,7 +4397,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .dstStageMask = (Frame->Config.ShadingMode == ShadingMode_Forward)
                 ? VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             .dstAccessMask = (Frame->Config.ShadingMode == ShadingMode_Forward)
-                ? VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT : VK_ACCESS_2_SHADER_WRITE_BIT,
+                ? VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT : VK_ACCESS_2_SHADER_WRITE_BIT,
             .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
             .newLayout = (Frame->Config.ShadingMode == ShadingMode_Forward) 
                 ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL,
@@ -5115,8 +5124,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .pNext = nullptr,
             .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
             .dstAccessMask = VK_ACCESS_2_NONE,
             .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
