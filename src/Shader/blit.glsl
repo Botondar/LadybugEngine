@@ -39,6 +39,7 @@ SetBinding(Static, BloomImage) uniform texture2D BloomImage;
 SetBinding(Static, OcclusionImage) uniform texture2D OcclusionImage;
 SetBinding(Static, StructureImage) uniform texture2D StructureImage;
 SetBinding(Static, VisibilityImage) uniform utexture2D VisibilityImage;
+SetBinding(Static, BRDFLutTexture) uniform texture2D BRDFLut;
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 

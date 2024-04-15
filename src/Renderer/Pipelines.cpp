@@ -346,6 +346,20 @@ const descriptor_set_layout_info SetLayoutInfos[Set_Count] =
                 .DescriptorCount = 1,
                 .Stages = ShaderStage_All,
             },
+            [Binding_Static_BRDFLutImage] =
+            {
+                .Binding = Binding_Static_BRDFLutImage,
+                .Type = Descriptor_StorageImage,
+                .DescriptorCount = 1,
+                .Stages = ShaderStage_All,
+            },
+            [Binding_Static_BRDFLutTexture] =
+            {
+                .Binding = Binding_Static_BRDFLutTexture,
+                .Type = Descriptor_SampledImage,
+                .DescriptorCount = 1,
+                .Stages = ShaderStage_All,
+            },
         },
     },
 
@@ -949,6 +963,14 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
             .DescriptorSetCount = 0,
             .DescriptorSets = {},
         },
+    },
+
+    [Pipeline_EnvironmentBRDF] =
+    {
+        .Name = "environment_brdf",
+        .Type = PipelineType_Compute,
+        .Inheritance = {},
+        .Layout = {},
     },
 
     [Pipeline_Prepass_AlphaTest] =

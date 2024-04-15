@@ -34,6 +34,8 @@
 #define AsU32(F32) floatBitsToUint(F32)
 #define AsS32(F32) floatBitsToInt(F32)
 
+#define Clamp01(A) clamp(A, 0, 1)
+
 f32 Ratio0(f32 A, f32 B)
 {
     f32 Result = 0.0;
@@ -139,6 +141,12 @@ v3 NanTo0(v3 V)
 //
 // Random
 //
+f32 U32ToF32Norm(uint U32)
+{
+    f32 Result = AsF32(0x3F800000 | (U32 & 0xFFFFFFu)) - 1.0;
+    return(Result);
+}
+
 uint HashPCG(uint In)
 {
     uint State = In * 747796405u + 2891336453u;
@@ -147,11 +155,53 @@ uint HashPCG(uint In)
     return(Result);
 }
 
-f32 U32ToF32Norm(uint U32)
+uint IQHash2D(v2u V)
 {
-    f32 Result = AsF32(0x3F800000 | (U32 & 0xFFFFFFu)) - 1.0;
+    v2u Q       = 1103515245u * ((V >> 1u) ^ V.yx);
+    uint Result = 1103515245u * ( Q.x      ^ (Q.y >> 3u));
     return(Result);
 }
+
+uint RandomPCG(inout uint State)
+{
+    State = State * 747796405u + 2891336453u;
+    uint Result = ((State >> ((State >> 28u) + 4u)) ^ State) * 277803737u;
+    Result = (Result >> 22u) ^ Result;
+    return(Result);
+}
+
+f32 Random01(inout uint State)
+{
+    f32 Result = U32ToF32Norm(RandomPCG(State));
+    return(Result);
+}
+
+v3 RandomOnSphere(inout uint State)
+{
+    f32 Phi = 2.0 * PI * Random01(State);
+    f32 CosTheta = 2.0 * Random01(State) - 1.0;
+    
+    f32 SinTheta = sqrt(1.0 - CosTheta*CosTheta);
+    f32 SinPhi = sin(Phi);
+    f32 CosPhi = cos(Phi);
+
+    v3 Result = v3(SinTheta * CosPhi, SinTheta * SinPhi, CosTheta);
+    return(Result);
+}
+
+v3 RandomOnHemisphere(inout uint State)
+{
+    f32 Phi = 2.0 * PI * Random01(State);
+    f32 CosTheta = Random01(State); // NOTE(boti): [0,1) cos(theta) -> positive Z, hemisphere
+    
+    f32 SinTheta = sqrt(1.0 - CosTheta*CosTheta);
+    f32 SinPhi = sin(Phi);
+    f32 CosPhi = cos(Phi);
+
+    v3 Result = v3(SinTheta * CosPhi, SinTheta * SinPhi, CosTheta);
+    return(Result);
+}
+
 
 //
 // PBR shading functions
@@ -205,6 +255,18 @@ float GeometryGGX(in float Roughness, in float NdotV, in float NdotL)
     return Result;
 }
 
+float GeometryGGX_IBL(in float Roughness, in float NdotV, in float NdotL)
+{
+    float k = Roughness*Roughness / 2.0;
+
+    float G1 = abs(NdotV) / (abs(NdotV)*(1.0 - k) + k);
+    float G2 = abs(NdotL) / (abs(NdotL)*(1.0 - k) + k);
+    float Result = G1*G2;
+    return Result;
+}
+
+// TODO(boti): Figure out where the geometry function in the glTF spec actually comes from, and how it should be used
+#if 0
 f32 GeometrySmithPart(f32 a2, f32 Ndot, f32 Hdot)
 {
     f32 Result = 2.0 * abs(Ndot) * Hdot / (abs(Ndot) + sqrt(a2 + (1.0 - a2) * Ndot*Ndot));
@@ -218,6 +280,7 @@ f32 GeometrySmith(f32 Roughness, f32 NdotL, f32 HdotL, f32 NdotV, f32 HdotV)
     f32 Result = GeometrySmithPart(a2, NdotL, HdotL) * GeometrySmithPart(a2, NdotV, HdotV);
     return(Result);
 }
+#endif
 
 // NOTE(boti): Albedo must be weighted by (1 - Metallic) factor!
 v3 CalculateOutgoingLuminance(v3 Li, v3 L, v3 N, v3 V, 
@@ -234,7 +297,7 @@ v3 CalculateOutgoingLuminance(v3 Li, v3 L, v3 N, v3 V,
 
     float NdotH = max(dot(N, H), 0.0);
     float Distribution = DistributionGGX(Roughness, NdotH);
-    f32 Geometry = GeometrySmith(Roughness, NdotL, max(dot(H, L), 0.0), NdotV, max(dot(H, V), 0.0));
+    f32 Geometry = GeometryGGX(Roughness, NdotL, NdotV);
 
     float SpecularDenominator = 1.0 / max(4.0 * abs(NdotV) * abs(NdotL), 1e-4);
     vec3 Specular = Distribution * Geometry * Fresnel * SpecularDenominator;
@@ -258,10 +321,7 @@ v3 CalculateOutgoingLuminanceTransmission(
 
     float NdotH = max(dot(N, H), 0.0);
     float Distribution = DistributionGGX(Roughness, NdotH);
-    f32 Geometry = GeometrySmith(
-        Roughness, 
-        NdotL, max(dot(H, L), 0.0), 
-        NdotV, max(dot(H, V), 0.0));
+    f32 Geometry = GeometryGGX(Roughness, NdotL, NdotV);
 
     float SpecularDenominator = 1.0 / max(4.0 * abs(NdotV) * abs(NdotL), 1e-4);
     vec3 Specular = Distribution * Geometry * Fresnel * SpecularDenominator;
@@ -271,10 +331,7 @@ v3 CalculateOutgoingLuminanceTransmission(
         v3 Ht = normalize(V - 2.0*NdotL * N + L);
 
         f32 DistributionT = DistributionGGX(Roughness, max(dot(N, Ht), 0.0));
-        f32 GeometryT = GeometrySmith(
-            Roughness, 
-            NdotL, max(dot(Ht, L), 0.0), 
-            NdotV, max(dot(Ht, V), 0.0));
+        f32 GeometryT = GeometryGGX(Roughness, NdotL, NdotV);
 
         Diffuse = mix(Diffuse, DistributionT * GeometryT * SpecularDenominator * Albedo, Transmission);
     }

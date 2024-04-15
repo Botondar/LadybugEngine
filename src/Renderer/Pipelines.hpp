@@ -20,6 +20,7 @@ enum pipeline : u32
     Pipeline_Skinning,
     Pipeline_LightBinning,
     Pipeline_ShadingVisibility,
+    Pipeline_EnvironmentBRDF,
 
     Pipeline_Prepass_AlphaTest,
     Pipeline_ShadingForward_AlphaTest,

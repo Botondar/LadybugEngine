@@ -75,6 +75,8 @@ coherent buffer MipFeedbackBuffer
     uint MipFeedbacks[];
 };
 
+SetBinding(Static, BRDFLutTexture) uniform texture2D BRDFLut;
+
 SetBinding(Static, StructureImage) uniform texture2D StructureImage;
 SetBinding(Static, OcclusionImage) uniform texture2D OcclusionImage;
 
@@ -139,8 +141,11 @@ void main()
         vec3 DiffuseBase = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb;
 
         Lo += Instance.Material.Emissive;
-        Lo += PerFrame.Ambience * Albedo.rgb * texelFetch(OcclusionImage, v2s(gl_FragCoord.xy), 0).r;
-
+        {
+            f32 Occlusion = texelFetch(OcclusionImage, v2s(gl_FragCoord.xy), 0).r;
+            v2 EnvBRDF = textureLod(sampler2D(BRDFLut, Samplers[Sampler_LinearEdgeClamp]), v2(MetallicRoughness.g, Clamp01(dot(N, V))), 0.0).rg;
+            Lo += Occlusion * PerFrame.Ambience * (DiffuseBase + F0 * EnvBRDF.x + EnvBRDF.y);
+        }
         f32 SunShadow = CalculateCascadedShadow(
             CascadedShadow, Samplers[Sampler_Shadow], 
             ShadowP, CascadeBlends,

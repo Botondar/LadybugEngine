@@ -215,8 +215,17 @@ struct renderer
 
     gpu_memory_arena DeviceArena;
 
-    VkImage SkyImage;
-    VkImageView SkyImageView;
+    b32             EnvironmentBRDFReady;
+    v2u             EnvironmentBRDFResolution;
+    VkDeviceMemory  EnvironmentBRDFMemory;
+    VkImage         EnvironmentBRDFImage;
+    VkImageView     EnvironmentBRDFImageView;
+
+    b32             SkyReady;
+    v2u             SkyResolution;
+    VkDeviceMemory  SkyImageMemory;
+    VkImage         SkyImage;
+    VkImageView     SkyImageView;
 
     VkPipelineLayout SystemPipelineLayout;
 

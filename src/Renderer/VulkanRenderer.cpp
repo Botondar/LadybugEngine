@@ -85,6 +85,50 @@ internal VkResult CreateDedicatedBuffer(
     return Result;
 }
 
+internal VkResult
+CreateDedicatedImage(const VkImageCreateInfo* Info, u32 MemoryTypes, VkImage* pImage, VkDeviceMemory* pMemory)
+{
+    VkResult Result = VK_SUCCESS;
+
+    VkMemoryRequirements MemoryRequirements = GetImageMemoryRequirements(VK.Device, Info, VK_IMAGE_ASPECT_COLOR_BIT);
+    u32 MemoryTypeIndex;
+    if (BitScanForward(&MemoryTypeIndex, MemoryTypes & MemoryRequirements.memoryTypeBits))
+    {
+        VkImage Image = VK_NULL_HANDLE;
+        if ((Result = vkCreateImage(VK.Device, Info, nullptr, &Image)) == VK_SUCCESS)
+        {
+            VkMemoryAllocateInfo AllocInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .allocationSize = MemoryRequirements.size,
+                .memoryTypeIndex = MemoryTypeIndex,
+            };
+
+            VkDeviceMemory Memory = VK_NULL_HANDLE;
+            if ((Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Memory)) == VK_SUCCESS)
+            {
+                if ((Result = vkBindImageMemory(VK.Device, Image, Memory, 0)) == VK_SUCCESS)
+                {
+                    *pImage = Image;
+                    *pMemory = Memory;
+                    Image = VK_NULL_HANDLE;
+                    Memory = VK_NULL_HANDLE;
+                }
+                vkFreeMemory(VK.Device, Memory, nullptr);
+            }
+
+            vkDestroyImage(VK.Device, Image, nullptr);
+        }
+    }
+    else
+    {
+        Result = VK_ERROR_UNKNOWN;
+    }
+
+    return(Result);
+}
+
 internal gpu_memory_arena 
 CreateGPUArena(umm Size, u32 MemoryTypeIndex, gpu_memory_arena_flags Flags)
 {
@@ -1079,9 +1123,76 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         }
     }
 
+    // Environment BRDF image
+    {
+        Renderer->EnvironmentBRDFResolution = { 128, 128 };
+        VkImageCreateInfo Info = 
+        {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = VK_FORMAT_R16G16_SFLOAT,
+            .extent = { Renderer->EnvironmentBRDFResolution.X, Renderer->EnvironmentBRDFResolution.Y, 1 },
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_STORAGE_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        };
+        Result = CreateDedicatedImage(&Info, VK.GPUMemTypes, &Renderer->EnvironmentBRDFImage, &Renderer->EnvironmentBRDFMemory);
+        ReturnOnFailure();
+
+        VkImageViewCreateInfo ViewInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .image = Renderer->EnvironmentBRDFImage,
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = VK_FORMAT_R16G16_SFLOAT,
+            .components = {},
+            .subresourceRange= 
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = VK_REMAINING_MIP_LEVELS,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        };
+
+        Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &Renderer->EnvironmentBRDFImageView);
+        ReturnOnFailure();
+    }
+
     // Sky image
     {
-        //vkCreateImage(VK.Device, 
+        Renderer->SkyResolution = { 256, 256 };
+        VkImageCreateInfo Info =
+        {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = VK_FORMAT_B10G11R11_UFLOAT_PACK32,
+            .extent = { Renderer->SkyResolution.X, Renderer->SkyResolution.Y, 1 },
+            .mipLevels = 1,
+            .arrayLayers = 6,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_STORAGE_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = nullptr,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        };
+        Result = CreateDedicatedImage(&Info, VK.GPUMemTypes, &Renderer->SkyImage, &Renderer->SkyImageMemory);
+        ReturnOnFailure();
     }
 
     // BAR memory
@@ -1189,6 +1300,20 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 .BaseIndex = 0,
                 .Count = R_MaxShadowCount,
                 .Images = {}, // NOTE(boti): Filled after this array def.
+            },
+            {
+                .Type = Descriptor_SampledImage,
+                .Binding = Binding_Static_BRDFLutTexture,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->EnvironmentBRDFImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL } },
+            },
+            {
+                .Type = Descriptor_StorageImage,
+                .Binding = Binding_Static_BRDFLutImage,
+                .BaseIndex = 0,
+                .Count = 1,
+                .Images = { { Renderer->EnvironmentBRDFImageView, VK_IMAGE_LAYOUT_GENERAL } },
             },
         };
 
@@ -2178,7 +2303,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     Frame->Uniforms.IndexBufferAddress      = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.IndexMemory.Buffer);
     Frame->Uniforms.VertexBufferAddress     = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.VertexMemory.Buffer);
 
-    Frame->Uniforms.Ambience                    = 0.25f * v3{ 1.0f, 1.0f, 1.0f }; // TODO(boti): Expose this in the API
+    Frame->Uniforms.Ambience                    = 0.5f * v3{ 1.0f, 1.0f, 1.0f }; // TODO(boti): Expose this in the API
     Frame->Uniforms.Exposure                    = Frame->Config.Exposure;
     Frame->Uniforms.DebugViewMode               = Frame->Config.DebugViewMode;
     Frame->Uniforms.SSAOIntensity               = Frame->Config.SSAOIntensity;
@@ -3212,59 +3337,61 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         u64 LightBufferOffset = 0;
         if (PushPerFrame(LightBufferSize, &LightBufferOffset))
         {
-            VkBufferMemoryBarrier2 BeginBarriers[] = 
+            if (LightBufferSize)
             {
+                VkBufferMemoryBarrier2 BeginBarriers[] = 
+                {
+                    {
+                        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                        .pNext = nullptr,
+                        .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+                        .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                        .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                        .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                        .buffer = Renderer->PerFrameBuffer,
+                        .offset = LightBufferOffset,
+                        .size = LightBufferSize,
+                    },
+                };
+                VkDependencyInfo BeginDependency = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .bufferMemoryBarrierCount = CountOf(BeginBarriers),
+                    .pBufferMemoryBarriers = BeginBarriers,
+                };
+                vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
+
+                VkBufferCopy LightBufferCopy = 
+                {
+                    .srcOffset = LightDataOffset,
+                    .dstOffset = LightBufferOffset,
+                    .size = LightBufferSize,
+                };
+                if (LightBufferCopy.size > 0)
+                {
+                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &LightBufferCopy);
+                }
+
+                VkBufferMemoryBarrier2 EndBarrier = 
                 {
                     .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                     .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-                    .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .buffer = Renderer->PerFrameBuffer,
                     .offset = LightBufferOffset,
                     .size = LightBufferSize,
-                },
-            };
-            VkDependencyInfo BeginDependency = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .pNext = nullptr,
-                .dependencyFlags = 0,
-                .bufferMemoryBarrierCount = CountOf(BeginBarriers),
-                .pBufferMemoryBarriers = BeginBarriers,
-            };
-            vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
-
-            VkBufferCopy LightBufferCopy = 
-            {
-                .srcOffset = LightDataOffset,
-                .dstOffset = LightBufferOffset,
-                .size = LightBufferSize,
-            };
-            if (LightBufferCopy.size > 0)
-            {
-                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &LightBufferCopy);
+                };
+                PushBeginBarrier(&FrameStages[FrameStage_LightBinning], &EndBarrier);
             }
-
-            VkBufferMemoryBarrier2 EndBarrier = 
-            {
-                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Renderer->PerFrameBuffer,
-                .offset = LightBufferOffset,
-                .size = LightBufferSize,
-            };
-            PushBeginBarrier(&FrameStages[FrameStage_LightBinning], &EndBarrier);
-
             Frame->Uniforms.LightBufferAddress = Renderer->PerFrameBufferAddress + LightBufferOffset;
         }
         else
@@ -3590,6 +3717,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     // Skinning
     //
     BeginFrameStage(PrepassCmd, &FrameStages[FrameStage_Skinning], "Skinning");
+    if (SkinnedVertexBufferSize)
     {
         vkCmdExecuteCommands(PrepassCmd, 1, &SkinningCB);
 
@@ -3610,6 +3738,84 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
     }
     EndFrameStage(PrepassCmd, &FrameStages[FrameStage_Skinning]);
+
+    //
+    // Init time
+    //
+
+    // Environemnt BRDF Lut
+    if (!Renderer->EnvironmentBRDFReady)
+    {
+        VkImageMemoryBarrier2 BeginBarrier =
+        {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = Renderer->EnvironmentBRDFImage,
+            .subresourceRange = 
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = VK_REMAINING_MIP_LEVELS,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        };
+
+        VkDependencyInfo BeginDependency =
+        {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &BeginBarrier,
+        };
+
+        vkCmdPipelineBarrier2(PrepassCmd, &BeginDependency);
+
+        pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_EnvironmentBRDF];
+        vkCmdBindPipeline(PrepassCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
+
+        u32 SampleCount = 4096;
+        vkCmdPushConstants(PrepassCmd, Pipeline.Layout, VK_SHADER_STAGE_ALL, 0, sizeof(SampleCount), &SampleCount);
+        vkCmdDispatch(PrepassCmd,
+                      CeilDiv(Renderer->EnvironmentBRDFResolution.X, EnvironmentBRDF_GroupSizeX),
+                      CeilDiv(Renderer->EnvironmentBRDFResolution.Y, EnvironmentBRDF_GroupSizeY),
+                      1);
+
+        VkImageMemoryBarrier2 EndBarrier =
+        {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
+            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = Renderer->EnvironmentBRDFImage,
+            .subresourceRange = 
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = VK_REMAINING_MIP_LEVELS,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        };
+        PushBeginBarrier(&FrameStages[FrameStage_Shading], &EndBarrier);
+
+        Renderer->EnvironmentBRDFReady = true;
+    }
 
     vkCmdSetViewport(PrepassCmd, 0, 1, &PrimaryViewport);
     vkCmdSetScissor(PrepassCmd, 0, 1, &PrimaryScissor);
@@ -3988,6 +4194,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     // Light binning
     //
     BeginFrameStage(PreLightCmd, &FrameStages[FrameStage_LightBinning], "LightBinning");
+    if (TileBufferSize)
     {
         pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_LightBinning];
         vkCmdBindPipeline(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);

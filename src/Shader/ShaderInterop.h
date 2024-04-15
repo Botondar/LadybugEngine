@@ -98,8 +98,10 @@ struct v4u8
 #define Binding_Static_TransparentImage             15
 #define Binding_Static_SkyTexture                   16
 #define Binding_Static_SkyImage                     17
+#define Binding_Static_BRDFLutImage                 18
+#define Binding_Static_BRDFLutTexture               19
 
-#define Binding_Static_Count                        18
+#define Binding_Static_Count                        20
 
 // Sampler set bindings
 #define Binding_Sampler_NamedSamplers               0
@@ -159,6 +161,10 @@ struct v4u8
 #define ShadingVisibility_GroupSizeX    16
 #define ShadingVisibility_GroupSizeY    16
 #define ShadingVisibility_GroupSizeZ    1
+
+#define EnvironmentBRDF_GroupSizeX      16
+#define EnvironmentBRDF_GroupSizeY      16
+#define EnvironmentBRDF_GroupSizeZ      1
 
 #define Sky_GroupSizeX                  8
 #define Sky_GroupSizeY                  8

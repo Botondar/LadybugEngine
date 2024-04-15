@@ -1,0 +1,72 @@
+#include "common.glsli"
+
+LayoutGroupSize(EnvironmentBRDF);
+
+layout(push_constant)
+uniform PushConstants
+{
+    uint SampleCount;
+};
+
+SetBinding(Static, BRDFLutImage) writeonly uniform image2D BRDFLut;
+
+v3 DistributionGGX_ImportanceSampleH(v2 Xi, f32 Roughness)
+{
+    f32 Alpha = Roughness*Roughness;
+    f32 Alpha2 = Alpha*Alpha;
+
+    f32 Phi = 2.0 * PI * Xi.x;
+    f32 CosTheta = sqrt((1.0 - Xi.y) / (1.0 + (Alpha2 - 1.0) * Xi.y));
+
+    f32 SinTheta = sqrt(1.0 - CosTheta*CosTheta);
+    f32 SinPhi = sin(Phi);
+    f32 CosPhi = cos(Phi);
+
+    v3 Result = v3(SinTheta * CosPhi, SinTheta * SinPhi, CosTheta);
+    return(Result);
+}
+
+void main()
+{
+    v2u LutExtent = imageSize(BRDFLut);
+    if (any(greaterThanEqual(gl_GlobalInvocationID.xy, LutExtent)))
+    {
+        return;
+    }
+
+    f32 Roughness   = (f32(gl_GlobalInvocationID.x) + 0.5) / f32(LutExtent.x);
+    f32 NdotV       = (f32(gl_GlobalInvocationID.y) + 0.5) / f32(LutExtent.y);
+    v3 V = v3(sqrt(1.0 - NdotV*NdotV), 0.0, NdotV);
+
+    uint RandomState = IQHash2D(gl_GlobalInvocationID.xy);
+
+    f32 A = 0.0;
+    f32 B = 0.0;
+    
+    for (uint SampleIndex = 0; SampleIndex < SampleCount; SampleIndex++)
+    {
+        v2 Xi = v2(Random01(RandomState), Random01(RandomState));
+        v3 H = DistributionGGX_ImportanceSampleH(Xi, Roughness);
+        v3 L = 2.0 * dot(V, H) * H - V;
+
+        f32 NdotL = Clamp01(L.z);
+        f32 NdotH = Clamp01(H.z);
+        f32 HdotV = Clamp01(dot(H, V));
+        f32 HdotL = Clamp01(dot(H, L));
+
+        if (NdotL > 0.0)
+        {
+            f32 G = GeometryGGX_IBL(Roughness, NdotL, NdotV);
+            f32 Visibility = G * HdotV / (NdotH * NdotV);
+            f32 Fresnel = pow(1.0 - HdotV, 5.0);
+            A += (1.0 - Fresnel) * Visibility;
+            B += Fresnel * Visibility;
+        }
+    }
+
+    f32 Weight = 1.0 / f32(SampleCount);
+    A *= Weight;
+    B *= Weight;
+
+    imageStore(BRDFLut, v2s(gl_GlobalInvocationID.xy), v4(A, B, 0.0, 0.0));
+}

@@ -53,7 +53,8 @@ SHADERS = \
     build/skin.cs \
     build/light_bin.cs \
     build/shading_visibility.cs \
-    build/sky.cs
+    build/sky.cs \
+    build/environment_brdf.cs
 
 all: "$(OUT)/" "$(OUT)/Win_LadybugEngine.exe" "$(OUT)/game.dll" "$(OUT)/vulkan_renderer.dll" $(SHADERS) $(TOOLS)
 

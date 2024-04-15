@@ -38,6 +38,7 @@ SetBinding(Static, HDRMipStorageImages) uniform restrict writeonly image2D HDRTa
 
 SetBinding(Static, CascadedShadow) uniform texture2DArray CascadedShadow;
 SetBinding(Static, PointShadows) uniform textureCube PointShadows[];
+SetBinding(Static, BRDFLutTexture) uniform texture2D BRDFLut;
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 SetBinding(Sampler, MaterialSamplers) uniform sampler MatSamplers[R_MaterialSamplerCount];
@@ -60,9 +61,6 @@ coherent buffer MipFeedbackBuffer
 {
     uint MipFeedbacks[];
 };
-
-#define buffer_type uint
-#define BufferType_Skinned 1
 
 struct unpacked_vertex
 {
@@ -240,9 +238,12 @@ void main()
         v3 F0 = mix(v3(0.04), Albedo.rgb, MetallicRoughness.b);
         v3 DiffuseBase = (1.0 - MetallicRoughness.b) * (v3(1.0) - F0) * Albedo.rgb;
 
-        // Ambient + emissive
         Lo += Instance.Material.Emissive;
-        Lo += PerFrame.Ambience * Albedo.rgb * texelFetch(OcclusionImage, TexelID, 0).r;
+        {
+            f32 Occlusion = texelFetch(OcclusionImage, TexelID, 0).r;
+            v2 EnvBRDF = textureLod(sampler2D(BRDFLut, Samplers[Sampler_LinearEdgeClamp]), v2(MetallicRoughness.g, Clamp01(dot(N, V))), 0.0).rg;
+            Lo += Occlusion * PerFrame.Ambience * (DiffuseBase + F0 * EnvBRDF.x + EnvBRDF.y);
+        }
 
         // Sun
         {
