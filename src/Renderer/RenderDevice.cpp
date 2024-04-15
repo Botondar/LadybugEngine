@@ -114,7 +114,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
 
                 .descriptorBuffer = VK_TRUE,
                 .descriptorBufferCaptureReplay = VK_FALSE,
-                .descriptorBufferImageLayoutIgnored = VK_FALSE,
+                .descriptorBufferImageLayoutIgnored = VK_TRUE,
                 .descriptorBufferPushDescriptors = VK_FALSE,
             };
             Vulkan->Vulkan13Features = 
