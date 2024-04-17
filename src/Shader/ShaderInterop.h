@@ -90,7 +90,6 @@ struct v4u8
 #define Binding_Static_BloomImage                   10
 // NOTE(boti): HDR and Bloom general images are workarounds
 // for the image layout being baked into the set
-// TODO(boti): Descriptor buffer image layout ignored feature is now required, we can remove these binding and rework the bloom transitions
 // TODO(boti): Enhanced barriers are need for this in D3D12 (same-queue read + read/write)
 #define Binding_Static_HDRColorImageGeneral         11
 #define Binding_Static_BloomImageGeneral            12
