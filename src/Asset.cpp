@@ -5,6 +5,8 @@ internal mesh_data CreateCubeMesh(memory_arena* Arena);
 internal mesh_data CreateSphereMesh(memory_arena* Arena);
 internal mesh_data CreateArrowMesh(memory_arena* Arena);
 
+internal loaded_image LoadTIFF(memory_arena* Arena, buffer File, u32 DesiredChannelCount);
+
 //
 // Utility
 //
@@ -101,7 +103,7 @@ LoadImage(memory_arena* Arena, buffer FileData, u32 DesiredChannelCount)
                 {
                     for (u32 Pixel = 0; Pixel < PixelCount; Pixel++)
                     {
-                        ImageData[Pixel + 3] = 0xFFu;
+                        ImageData[DesiredChannelCount*Pixel + 3] = 0xFFu;
                     }
                 }
 
@@ -121,12 +123,315 @@ LoadImage(memory_arena* Arena, buffer FileData, u32 DesiredChannelCount)
         } break;
         case ImageFile_TIF:
         {
-            // TODO(boti)
+            Result = LoadTIFF(Arena, FileData, DesiredChannelCount);
         } break;
         default:
         {
             // TODO(boti): logging
         } break;
+    }
+
+    return(Result);
+}
+
+internal loaded_image LoadTIFF(memory_arena* Arena, buffer File, u32 DesiredChannelCount)
+{
+    loaded_image Result = {};
+
+    static constexpr u16 ByteOrderLittleEndian  = 0x4949u;
+    static constexpr u16 ByteOrderBigEndian     = 0x4D4Du;
+
+    enum tiff_entry_type : u16
+    {
+        TIFFEntry_Undefined = 0,
+
+        TIFFEntry_U8        = 1,
+        TIFFEntry_ASCII     = 2, // NOTE(boti): NULL terminator included in count (of tiff_ifd_entry)
+        TIFFEntry_U16       = 3,
+        TIFFEntry_U32       = 4,
+        TIFFEntry_U32x2     = 5, // NOTE(boti): Num/denom pair
+        TIFFEntry_S8        = 6,
+        TIFFEntry_X8        = 7, // NOTE(boti): 8-bit undefined
+        TIFFEntry_S16       = 8,
+        TIFFEntry_S32       = 9,
+        TIFFEntry_S32x2     = 10, // NOTE(boti): Num/denom pair
+        TIFFEntry_F32       = 11,
+        TIFFEntry_F64       = 12,
+
+        TIFFEntry_Count,
+    };
+
+    enum tiff_entry_tag : u16
+    {
+        TIFF_ExtentX            = 0x100u,
+        TIFF_ExtentY            = 0x101u,
+        TIFF_BitsPerSample      = 0x102u,
+        TIFF_Compression        = 0x103u,
+        TIFF_SamplesPerPixel    = 0x115u,
+
+        // NOTE(boti): Image may be broken into "strips", which have to be assembled
+        TIFF_StripByteOffsets           = 0x111u, // NOTE(boti): Per strip
+        TIFF_StripExtentY               = 0x116u, // NOTE(boti): Single value that applies to all strips (except the last one, as StripExtentY*StripCount may not equal ExtentY)
+        TIFF_StripDecompressedByteCount = 0x117u, // NOTE(boti): Per strip
+    };
+
+#pragma pack(push, 1)
+    struct tiff_header
+    {
+        u16 ByteOrder;
+        u16 Tag;
+        u32 ImageFileDirectoryOffset;
+    };
+
+    struct tiff_ifd_entry
+    {
+        tiff_entry_tag  Tag;
+        tiff_entry_type Type;
+        u32             Count;
+        u32             OffsetOrValue;
+    };
+
+    struct tiff_ifd
+    {
+        u16 EntryCount;
+        tiff_ifd_entry Entries[1]; // NOTE(boti): At least one required by spec
+    };
+
+#pragma pack(pop)
+
+    const u32 TiffStrideTable[TIFFEntry_Count] =
+    {
+        [TIFFEntry_Undefined]   = 0,
+
+        [TIFFEntry_U8]          = 1,
+        [TIFFEntry_ASCII]       = 1,
+        [TIFFEntry_U16]         = 2,
+        [TIFFEntry_U32]         = 4,
+        [TIFFEntry_U32x2]       = 8,
+        [TIFFEntry_S8]          = 1,
+        [TIFFEntry_X8]          = 1,
+        [TIFFEntry_S16]         = 2,
+        [TIFFEntry_S32]         = 4,
+        [TIFFEntry_S32x2]       = 8,
+        [TIFFEntry_F32]         = 4,
+        [TIFFEntry_F64]         = 8,
+    };
+
+    enum tiff_compression : u16
+    {
+        TIFFCompression_Undefined = 0,
+        TIFFCompression_Uncompressed = 1,
+    };
+
+    static_assert(sizeof(tiff_header) == 8);
+    static_assert(sizeof(tiff_ifd_entry) == 12);
+
+    Assert(File.Size >= sizeof(tiff_header));
+    tiff_header* Header = (tiff_header*)File.Data;
+
+    Assert((Header->ByteOrder == ByteOrderLittleEndian) || (Header->ByteOrder == ByteOrderBigEndian));
+    b32 IsBigEndian = (Header->ByteOrder == ByteOrderBigEndian);
+
+    u16 Tag = IsBigEndian ? EndianFlip16(Header->Tag) : Header->Tag;
+    Assert(Tag == 42);
+
+    u32 ImageFileDirectoryOffset = IsBigEndian ? EndianFlip32(Header->ImageFileDirectoryOffset) : Header->ImageFileDirectoryOffset;
+    if (ImageFileDirectoryOffset + sizeof(tiff_ifd) >= File.Size)
+    {
+        UnhandledError("Corrupt TIFF file (ImageFileDirectory offset out of bounds)");
+    }
+
+    tiff_ifd* ImageFileDirectory = (tiff_ifd*)OffsetPtr(File.Data, ImageFileDirectoryOffset);
+    u16 EntryCount = IsBigEndian ? EndianFlip16(ImageFileDirectory->EntryCount) : ImageFileDirectory->EntryCount;
+
+    Assert(EntryCount >= 1);
+    if (ImageFileDirectoryOffset + EntryCount * sizeof(tiff_ifd_entry) + sizeof(u16) >= File.Size)
+    {
+        UnhandledError("Corrupt TIFF file (ImageFileDirectory netries out of bounds)");
+    }
+
+    v2u Extent = {};
+    constexpr u32 MaxChannelCount = 4;
+    u32 ChannelCount = 0;
+    u32 ChannelCountFromBitDepth = 0;
+    u32 ChannelBitDepths[MaxChannelCount] = {};
+    u32 Compression = 0;
+    u32 DataOffset = 0;
+    for (u32 EntryIndex = 0; EntryIndex < EntryCount; EntryIndex++)
+    {
+        tiff_ifd_entry Entry = ImageFileDirectory->Entries[EntryIndex];
+        if (IsBigEndian)
+        {
+            Entry.Tag           = (tiff_entry_tag)EndianFlip16((u16)Entry.Tag);
+            Entry.Type          = (tiff_entry_type)EndianFlip16((u16)Entry.Type);
+            Entry.Count         = EndianFlip32(Entry.Count);
+            Entry.OffsetOrValue = EndianFlip32(Entry.OffsetOrValue); // TODO(boti): This isn't correct, if the value actually fits there are additional packing rules
+        }
+
+        if (Entry.Type == TIFFEntry_Undefined || Entry.Type >= TIFFEntry_Count)
+        {
+            continue;
+        }
+
+        switch (Entry.Tag)
+        {
+            case TIFF_ExtentX:
+            {
+                Verify(Entry.Type == TIFFEntry_U16 || Entry.Type == TIFFEntry_U32);
+                Verify(Entry.Count == 1);
+                Extent.X = Entry.OffsetOrValue;
+            } break;
+            case TIFF_ExtentY:
+            {
+                Verify(Entry.Type == TIFFEntry_U16 || Entry.Type == TIFFEntry_U32);
+                Verify(Entry.Count == 1);
+                Extent.Y = Entry.OffsetOrValue;
+            } break;
+            case TIFF_BitsPerSample:
+            {
+                Verify(Entry.Type == TIFFEntry_U16);
+                ChannelCountFromBitDepth = Entry.Count;
+                if (Entry.Count == 1)
+                {
+                    ChannelBitDepths[0] = Entry.OffsetOrValue;
+                }
+                else if (Entry.Count == 3)
+                {
+                    if (Entry.OffsetOrValue + Entry.Count * sizeof(u16) >= File.Size)
+                    {
+                        UnhandledError("Corrupt TIFF file (bits per sample data out of bounds)");
+                    }
+
+                    u16* ChannelAt = (u16*)OffsetPtr(File.Data, Entry.OffsetOrValue);
+                    for (u32 ChannelIndex = 0; ChannelIndex < Entry.Count; ChannelIndex++)
+                    {
+                        u16 Value = *ChannelAt++;
+                        ChannelBitDepths[ChannelIndex] = IsBigEndian ? EndianFlip16(Value) : Value;
+                    }
+                }
+                else
+                {
+                    UnimplementedCodePath;
+                }
+            } break;
+            case TIFF_Compression:
+            {
+                Verify(Entry.Type == TIFFEntry_U16);
+                Verify(Entry.Count == 1);
+                Compression = Entry.OffsetOrValue;
+            } break;
+            case TIFF_SamplesPerPixel:
+            {
+                Verify(Entry.Type == TIFFEntry_U16);
+                Verify(Entry.Count == 1);
+                ChannelCount = Entry.OffsetOrValue;
+            } break;
+            case TIFF_StripByteOffsets:
+            {
+                Verify(Entry.Type == TIFFEntry_U16 || Entry.Type == TIFFEntry_U32);
+                if (Entry.Count == 1)
+                {
+                    DataOffset = Entry.OffsetOrValue;
+                }
+                else
+                {
+                    UnimplementedCodePath;
+                }
+            } break;
+            case TIFF_StripExtentY:
+            {
+                // TODO(boti): Currently ignored because we only support single strip images
+            } break;
+            case TIFF_StripDecompressedByteCount:
+            {
+            } break;
+        }
+    }
+
+    if (ChannelCount == 0)
+    {
+        ChannelCount = ChannelCountFromBitDepth;
+    }
+
+    if (ChannelCount != ChannelCountFromBitDepth)
+    {
+        UnhandledError("TIFF is weird");
+    }
+
+    Verify(Extent.X != 0 && Extent.Y != 0);
+    Verify(ChannelCount != 0);
+    Verify(DataOffset != 0);
+
+    if (Compression == TIFFCompression_Uncompressed)
+    {
+        u32 BitDepth = ChannelBitDepths[0];
+        for (u32 ChannelIndex = 1; ChannelIndex < ChannelCount; ChannelIndex++)
+        {
+            if (BitDepth != ChannelBitDepths[ChannelIndex])
+            {
+                UnimplementedCodePath;
+            }
+        }
+        if ((BitDepth % 8) != 0)
+        {
+            UnimplementedCodePath;
+        }
+
+        umm ImageSize = (umm)Extent.X * Extent.Y * ChannelCount * (BitDepth / 8);
+        if (DataOffset + ImageSize <= File.Size)
+        {
+            Result.Data = PushArray(Arena, 0, u8, ImageSize);
+            if (Result.Data)
+            {
+                umm DstSize = (umm)Extent.X * Extent.Y * DesiredChannelCount;
+                Result.Width = Extent.X;
+                Result.Height = Extent.Y;
+                Result.ChannelCount = DesiredChannelCount;
+                u8* DstAt = (u8*)Result.Data;
+                u8* SrcImage = (u8*)OffsetPtr(File.Data, DataOffset);
+                u8* SrcAt = SrcImage;
+                for (u32 Y = 0; Y < Extent.Y; Y++)
+                {
+                    for (u32 X = 0; X < Extent.X; X++)
+                    {
+                        // HACK(boti): We know the usage we're gonna be called with from process entry...
+                        if (BitDepth == 16 && ChannelCount == 3 && (DesiredChannelCount == 4))
+                        {
+                            u16 R = *(u16*)SrcAt;
+                            SrcAt += 2;
+                            u16 G = *(u16*)SrcAt;
+                            SrcAt += 2;
+                            u16 B = *(u16*)SrcAt;
+                            SrcAt += 2;
+
+                            if (IsBigEndian)
+                            {
+                                R = EndianFlip16(R);
+                                G = EndianFlip16(G);
+                                B = EndianFlip16(B);
+                            }
+
+                            *DstAt++ = (u8)(R >> 8);
+                            *DstAt++ = (u8)(G >> 8);
+                            *DstAt++ = (u8)(B >> 8);
+                            *DstAt++ = 0xFF;
+                        }
+                        else
+                        {
+                            UnimplementedCodePath;
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            UnhandledError("Corrupt TIFF file (image data out of bounds)");
+        }
+    }
+    else
+    {
+        UnimplementedCodePath;
     }
 
     return(Result);
@@ -256,7 +561,6 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
 
             // TODO(boti): This was originally 64 byte (cache) aligned for multithreading purposes
             // Move to PushSize_?
-            // TODO(boti): Now that we're in control of where the source image is loaded, we don't need to copy the 0th mip anymore
             rgba8* DownscaleBuffer = PushArray(Scratch, 0, rgba8, Entry->Info.Width*Entry->Info.Height);
             rgba8* SrcAt = SrcImage;
             u8* DstAt = MipChain;
@@ -1595,7 +1899,8 @@ DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, const char* Paths[Textu
         const char* PathString = Paths[TextureType];
         if (PathString && Assets->TextureCount < Assets->MaxTextureCount)
         {
-            texture* Texture = Assets->Textures + Assets->TextureCount++;
+            u32 ID = Assets->TextureCount++;
+            texture* Texture = Assets->Textures + ID;
             memset(Texture, 0, sizeof(texture));
             renderer_texture_id Placeholder = Assets->Textures[DefaultTextureID].RendererID;
             Texture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, nullptr, Placeholder);
@@ -1604,6 +1909,7 @@ DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, const char* Paths[Textu
             if (MakeFilepathFromZ(&Path, PathString))
             {
                 AddEntry(&Assets->TextureQueue, Texture, (texture_type)TextureType, false, &Path);
+                Result.IDs[TextureType] = ID;
             }
         }
         else

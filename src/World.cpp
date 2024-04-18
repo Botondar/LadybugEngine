@@ -176,7 +176,7 @@ GenerateTerrainChunk(height_field* Field, memory_arena* Arena)
                 .P = P,
                 .N = N, 
                 .T = { T.X, T.Y, T.Z, 1.0f },
-                .TexCoord = { 0.0f, 0.0f },
+                .TexCoord = { 0.5f * P.X, 0.5f * P.Y },
                 .Color = PackRGBA8(0xFF, 0xFF, 0xFF),
             };
         }
@@ -334,13 +334,17 @@ DEBUGInitializeWorld(
 
             World->TerrainMaterialID = Assets->MaterialCount++;
             material* TerrainMaterial = Assets->Materials + World->TerrainMaterialID;
-            TerrainMaterial->AlbedoID               = TextureSet.IDs[TextureType_Diffuse];
-            TerrainMaterial->NormalID               = TextureSet.IDs[TextureType_Normal];
-            TerrainMaterial->MetallicRoughnessID    = TextureSet.IDs[TextureType_Material];
-            TerrainMaterial->Transparency           = Transparency_Opaque;
-            TerrainMaterial->Albedo                 = PackRGBA8(0x10, 0x10, 0x10);
-            TerrainMaterial->MetallicRoughness      = PackRGBA8(0xFF, 0xFF, 0x00);
-            TerrainMaterial->Emission               = { 0.0f, 0.0f, 0.0f };
+            TerrainMaterial->AlbedoID                   = TextureSet.IDs[TextureType_Diffuse];
+            TerrainMaterial->NormalID                   = TextureSet.IDs[TextureType_Normal];
+            TerrainMaterial->MetallicRoughnessID        = TextureSet.IDs[TextureType_Material];
+            TerrainMaterial->AlbedoSamplerID            = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
+            TerrainMaterial->NormalSamplerID            = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
+            TerrainMaterial->MetallicRoughnessSamplerID = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
+            TerrainMaterial->Transparency               = Transparency_Opaque;
+            TerrainMaterial->Albedo                     = PackRGBA8(0xFF, 0xFF, 0xFF);
+            TerrainMaterial->MetallicRoughness          = PackRGBA8(0xFF, 0xFF, 0x00);
+            TerrainMaterial->Emission                   = { 0.0f, 0.0f, 0.0f };
+            
 
             mesh_data TerrainMesh = GenerateTerrainChunk(&World->HeightField, Scratch);
 
@@ -490,7 +494,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         World->Camera.Yaw = 0.5f * Pi;
 
         // Load debug scene
-        #if 1
+        #if 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
                              DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);

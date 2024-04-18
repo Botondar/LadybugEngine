@@ -12,6 +12,10 @@
 //
 // Bit
 //
+LB_INLINE u16 EndianFlip16(u16 Value);
+LB_INLINE u32 EndianFlip32(u32 Value);
+LB_INLINE u64 EndianFlip64(u64 Value);
+
 LB_INLINE u32 FindLeastSignificantSetBit(u32 Value);
 LB_INLINE u32 TrailingZeroCount(u32 Value);
 LB_INLINE u32 CountSetBits(u32 Value);
@@ -32,6 +36,36 @@ LB_INLINE u32 AtomicLoadAndIncrement(volatile u32* Value);
 //
 // Implementation
 //
+LB_INLINE u16 EndianFlip16(u16 Value)
+{
+    u16 Result = (Value << 8) | (Value >> 8);
+    return(Result);
+}
+
+LB_INLINE u32 EndianFlip32(u32 Value)
+{
+    u32 Result = 
+        (Value << 24) | 
+        (Value >> 24) |
+        ((Value << 8) & 0x00FF0000u) |
+        ((Value >> 8) & 0x0000FF00u);
+    return(Result);
+}
+
+LB_INLINE u64 EndianFlip64(u64 Value)
+{
+    u64 Result = 
+        (Value << 56) |
+        (Value >> 56) |
+        ((Value << 40) & 0x00FF000000000000llu) |
+        ((Value >> 40) & 0x000000000000FF00llu) |
+        ((Value << 24) & 0x0000FF0000000000llu) |
+        ((Value >> 24) & 0x0000000000FF0000llu) |
+        ((Value <<  8) & 0x000000FF00000000llu) |
+        ((Value >>  8) & 0x00000000FF000000llu);
+    return(Result);
+}
+
 LB_INLINE u32 TrailingZeroCount(u32 Value)
 {
     u32 Result = (u32)_mm_tzcnt_32(Value);
