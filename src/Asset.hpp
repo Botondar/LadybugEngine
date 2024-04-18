@@ -22,6 +22,34 @@ struct trs_transform
 inline m4 TRSToM4(trs_transform Transform);
 inline trs_transform M4ToTRS(m4 M);
 
+enum image_file_type : u32
+{
+    ImageFile_Undefined = 0,
+
+    ImageFile_BMP,
+    ImageFile_TIF,
+    ImageFile_PNG,
+    ImageFile_JPG,
+
+    ImageFile_Count,
+};
+
+lbfn image_file_type 
+DetermineImageFileType(memory_arena* Arena, buffer FileData);
+
+// TODO(boti): Currently this is mostly a shim around stb_image,
+// but in the future we'll probably want to formalize this to use the format enum, etc.
+struct loaded_image
+{
+    u32 Width;
+    u32 Height;
+    u32 ChannelCount; // NOTE(boti): Currently assumed to be 8 bits/channel
+    void* Data;
+};
+
+lbfn loaded_image
+LoadImage(memory_arena* Arena, buffer FileData, u32 DesiredChannelCount);
+
 //
 // Skin and animation
 //
@@ -82,6 +110,11 @@ enum texture_type : u32
     TextureType_Transmission,
 
     TextureType_Count,
+};
+
+struct texture_set
+{
+    u32 IDs[TextureType_Count];
 };
 
 struct texture_queue_entry
@@ -210,6 +243,9 @@ lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Frame
 lbfn void DEBUGLoadTestScene(memory_arena* Scratch, 
                              assets* Assets, struct game_world* World, render_frame* Frame,
                              const char* ScenePath, m4 BaseTransform);
+
+lbfn texture_set 
+DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, const char* Paths[TextureType_Count]);
 
 lbfn void AssetThread(void* Param);
 

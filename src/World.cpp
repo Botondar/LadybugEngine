@@ -323,15 +323,24 @@ DEBUGInitializeWorld(
                 }
             }
 
+            const char* TextureSetPaths[TextureType_Count] =
+            {
+                [TextureType_Diffuse] = "data/texture/TCom_Sand_Muddy2_2x2_4K_albedo.tif",
+                [TextureType_Normal] = "data/texture/TCom_Sand_Muddy2_2x2_4K_normal.tif",
+                [TextureType_Material] = nullptr, // TODO(boti): We need to break away from the glTF roughness=g, metallic=b here
+                [TextureType_Transmission] = nullptr,
+            };
+            texture_set TextureSet = DEBUGLoadTextureSet(Assets, Frame, TextureSetPaths);
+
             World->TerrainMaterialID = Assets->MaterialCount++;
             material* TerrainMaterial = Assets->Materials + World->TerrainMaterialID;
-            TerrainMaterial->AlbedoID = Assets->DefaultTextures[TextureType_Diffuse];
-            TerrainMaterial->NormalID = Assets->DefaultTextures[TextureType_Normal];
-            TerrainMaterial->MetallicRoughnessID = Assets->DefaultTextures[TextureType_Material];
-            TerrainMaterial->Transparency = Transparency_Opaque;
-            TerrainMaterial->Albedo = PackRGBA8(0x10, 0x10, 0x10);
-            TerrainMaterial->MetallicRoughness = PackRGBA8(0xFF, 0xFF, 0x00);
-            TerrainMaterial->Emission = { 0.0f, 0.0f, 0.0f };
+            TerrainMaterial->AlbedoID               = TextureSet.IDs[TextureType_Diffuse];
+            TerrainMaterial->NormalID               = TextureSet.IDs[TextureType_Normal];
+            TerrainMaterial->MetallicRoughnessID    = TextureSet.IDs[TextureType_Material];
+            TerrainMaterial->Transparency           = Transparency_Opaque;
+            TerrainMaterial->Albedo                 = PackRGBA8(0x10, 0x10, 0x10);
+            TerrainMaterial->MetallicRoughness      = PackRGBA8(0xFF, 0xFF, 0x00);
+            TerrainMaterial->Emission               = { 0.0f, 0.0f, 0.0f };
 
             mesh_data TerrainMesh = GenerateTerrainChunk(&World->HeightField, Scratch);
 
@@ -485,11 +494,16 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
                              DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);
-        #else
+        #elif 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_TransmissionTest, 
                              0);
+        #elif 1
+        DEBUGInitializeWorld(World, Assets, Frame, Scratch,
+                             DebugScene_Terrain,
+                             DebugSceneFlag_None);
         #endif
+
         World->IsLoaded = true;
     }
 

@@ -1,7 +1,140 @@
+//
+// Internal interface
+//
 internal mesh_data CreateCubeMesh(memory_arena* Arena);
 internal mesh_data CreateSphereMesh(memory_arena* Arena);
 internal mesh_data CreateArrowMesh(memory_arena* Arena);
 
+//
+// Utility
+//
+
+lbfn image_file_type 
+DetermineImageFileType(buffer FileData)
+{
+    image_file_type Result = ImageFile_Undefined;
+
+    for (u32 Candidate = 1;
+        (Result == ImageFile_Undefined) && (Candidate < ImageFile_Count);
+        Candidate++)
+    {
+        switch (Candidate)
+        {
+            case ImageFile_BMP:
+            {
+                u8 RefTag[2] = { 0x42u, 0x4Du };
+                if (FileData.Size >= sizeof(RefTag))
+                {
+                    if (memcmp(FileData.Data, RefTag, sizeof(RefTag)) == 0)
+                    {
+                        Result = (image_file_type)Candidate;
+                    }
+                }
+            } break;
+            case ImageFile_TIF:
+            {
+                if (FileData.Size >= 8)
+                {
+                    u16 ByteOrder = *(u16*)OffsetPtr(FileData.Data, 0);
+                    if (ByteOrder == 0x4949u || ByteOrder == 0x4D4Du)
+                    {
+                        u16 Tag = *(u16*)OffsetPtr(FileData.Data, 2);
+                        if (ByteOrder == 0x4D4Du)
+                        {
+                            Tag = (Tag << 8) | (Tag >> 8);
+                        }
+                        if (Tag == 42)
+                        {
+                            Result = (image_file_type)Candidate;
+                        }
+                    }
+                }
+            } break;
+            case ImageFile_PNG:
+            {
+                u8 RefTag[8] = { 137u, 80u, 78u, 71u, 13u, 10u, 26u, 10u };
+                if (FileData.Size >= sizeof(RefTag))
+                {
+                    if (memcmp(FileData.Data, RefTag, sizeof(RefTag)) == 0)
+                    {
+                        Result = (image_file_type)Candidate;
+                    }
+                }
+            } break;
+            case ImageFile_JPG:
+            {
+                // TODO(boti): This tag consists of the JFIF begin marker and JPEG Start-Of-Image bytes, 
+                // read the spec more carefully to figure out if we're doing the correct thing here
+                u8 RefTag[2] = { 0xFFu, 0xD8u };
+                if (FileData.Size >= sizeof(RefTag))
+                {
+                    if (memcmp(FileData.Data, RefTag, sizeof(RefTag)) == 0)
+                    {
+                        Result = (image_file_type)Candidate;
+                    }
+                }
+            } break;
+        }
+    }
+    return(Result);
+}
+
+lbfn loaded_image
+LoadImage(memory_arena* Arena, buffer FileData, u32 DesiredChannelCount)
+{
+    loaded_image Result = {};
+
+    image_file_type FileType = DetermineImageFileType(FileData);
+    switch (FileType)
+    {
+        case ImageFile_BMP:
+        case ImageFile_PNG:
+        case ImageFile_JPG:
+        {
+            int Width, Height, ChannelCount;
+            u8* ImageData = stbi_load_from_memory((const u8*)FileData.Data, (int)FileData.Size, &Width, &Height, &ChannelCount, (int)DesiredChannelCount);
+            if (ImageData)
+            {
+                umm PixelCount = (umm)Width * (umm)Height;
+                // NOTE(boti): Fill alpha as opaque if an alpha channel is requested but wasn't present
+                if (DesiredChannelCount == 4 && ChannelCount < 4)
+                {
+                    for (u32 Pixel = 0; Pixel < PixelCount; Pixel++)
+                    {
+                        ImageData[Pixel + 3] = 0xFFu;
+                    }
+                }
+
+                // Wasteful copy to get the same memory management guarantees when using stb_image
+                umm ImageSize = PixelCount * (umm)DesiredChannelCount;
+                Result.Data = PushSize_(Arena, 0, ImageSize, 64);
+                if (Result.Data)
+                {
+                    Result.Width = (u32)Width;
+                    Result.Height = (u32)Height;
+                    Result.ChannelCount = DesiredChannelCount;
+                    memcpy(Result.Data, ImageData, ImageSize);
+                }
+
+                stbi_image_free(ImageData);
+            }
+        } break;
+        case ImageFile_TIF:
+        {
+            // TODO(boti)
+        } break;
+        default:
+        {
+            // TODO(boti): logging
+        } break;
+    }
+
+    return(Result);
+}
+
+//
+// Texture queue
+//
 lbfn void AssetThread(void* Param)
 {
     assets* Assets = (assets*)Param;
@@ -99,19 +232,14 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
             InvalidDefaultCase;
         }
         
-        u32 ChannelCount;
-        int DesiredChannelCount = 4;
-        rgba8* SrcImage = (rgba8*)stbi_load(Entry->Path.Path, (int*)&Entry->Info.Width, (int*)&Entry->Info.Height, (int*)&ChannelCount, DesiredChannelCount);
+        u32 DesiredChannelCount = 4;
+        buffer ImageFile = Platform.LoadEntireFile(Entry->Path.Path, Scratch);
+        loaded_image Image = LoadImage(Scratch, ImageFile, DesiredChannelCount);
+        rgba8* SrcImage = (rgba8*)Image.Data;
+        Entry->Info.Width = Image.Width;
+        Entry->Info.Height = Image.Height;
         if (SrcImage)
         {
-            if (ChannelCount == 3)
-            {
-                for (u32 Index = 0; Index < Entry->Info.Width*Entry->Info.Height; Index++)
-                {
-                    SrcImage[Index].A = 0xFF;
-                }
-            }
-
             Entry->Info.MipCount = GetMaxMipCount(Entry->Info.Width, Entry->Info.Height);
             format_byterate ByteRate = FormatByterateTable[Entry->Info.Format];
             u64 TotalMipChainSize = GetMipChainSize(Entry->Info.Width, Entry->Info.Height, Entry->Info.MipCount, 1, ByteRate);
@@ -128,6 +256,7 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
 
             // TODO(boti): This was originally 64 byte (cache) aligned for multithreading purposes
             // Move to PushSize_?
+            // TODO(boti): Now that we're in control of where the source image is loaded, we don't need to copy the 0th mip anymore
             rgba8* DownscaleBuffer = PushArray(Scratch, 0, rgba8, Entry->Info.Width*Entry->Info.Height);
             rgba8* SrcAt = SrcImage;
             u8* DstAt = MipChain;
@@ -221,12 +350,11 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
                     }
                 }
             }
-            stbi_image_free(SrcImage);
             Entry->ReadyToTransfer = true;
         }
         else 
         {
-            UnhandledError("Failed to load glTF image");
+            UnhandledError("Failed to load image");
         }
         RestoreArena(Scratch, Checkpoint);
     }
@@ -237,6 +365,9 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
     return(Result);
 }
 
+//
+// Assets
+//
 lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scratch)
 {
     b32 Result = true;
@@ -361,19 +492,17 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         u8* MemoryAt = (u8*)Memory;
         for (u32 ParticleIndex = 0; ParticleIndex < Particle_COUNT; ParticleIndex++)
         {
-            s32 Width, Height, ChannelCount;
-            u8* Texels = stbi_load(ParticlePaths[ParticleIndex], &Width, &Height, &ChannelCount, 1);
-            if (Texels)
-            {
-                Assert(((u32)Width == Info.Width) && ((u32)Height == Info.Height));
-                memcpy(MemoryAt, Texels, ImageSize);
-                MemoryAt += ImageSize;
-                stbi_image_free(Texels);
-            }
-            else
-            {
-                UnhandledError("Failed to load particle texture");
-            }
+            memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
+
+            buffer FileData = Platform.LoadEntireFile(ParticlePaths[ParticleIndex], Scratch);
+            memory_arena Tmp = InitializeArena(ImageSize, MemoryAt);
+            loaded_image Image = LoadImage(&Tmp, FileData, 1);
+
+            Assert(Image.Data);
+            Assert(Image.Width == Info.Width && Image.Height == Info.Height);
+            MemoryAt += ImageSize;
+
+            RestoreArena(Scratch, Checkpoint);
         }
 
         TransferTexture(Frame, ParticleArray->RendererID, Info, AllTextureSubresourceRange(), Memory);
@@ -1453,6 +1582,37 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             }
         }
     }
+}
+
+lbfn texture_set 
+DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, const char* Paths[TextureType_Count])
+{
+    texture_set Result = {};
+
+    for (u32 TextureType = 0; TextureType < TextureType_Count; TextureType++)
+    {
+        u32 DefaultTextureID = Assets->DefaultTextures[TextureType];
+        const char* PathString = Paths[TextureType];
+        if (PathString && Assets->TextureCount < Assets->MaxTextureCount)
+        {
+            texture* Texture = Assets->Textures + Assets->TextureCount++;
+            memset(Texture, 0, sizeof(texture));
+            renderer_texture_id Placeholder = Assets->Textures[DefaultTextureID].RendererID;
+            Texture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, nullptr, Placeholder);
+
+            filepath Path = {};
+            if (MakeFilepathFromZ(&Path, PathString))
+            {
+                AddEntry(&Assets->TextureQueue, Texture, (texture_type)TextureType, false, &Path);
+            }
+        }
+        else
+        {
+            Result.IDs[TextureType] = DefaultTextureID;
+        }
+    }
+
+    return(Result);
 }
 
 internal mesh_data CreateCubeMesh(memory_arena* Arena)
