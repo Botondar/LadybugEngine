@@ -2702,22 +2702,31 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         }
     }
     
-    u64 PerFrameBufferAt = 0;
-    auto PushPerFrame = [&PerFrameBufferAt, Renderer](u64 Size, u64* Offset) -> b32
+    struct gpu_buffer_range
     {
-        b32 Result = true;
+        u64 Address;
+        u64 ByteCount;
+        u64 ByteOffset;
+    };
+
+    u64 PerFrameBufferAt = 0;
+    auto PushPerFrame = [&PerFrameBufferAt, Renderer](u64 ByteCount) -> gpu_buffer_range
+    {
+        gpu_buffer_range Result = {};
 
         u64 EffectiveAt = Align(PerFrameBufferAt, 256);
-        if (EffectiveAt + Size <= Renderer->PerFrameBufferSize)
+        if (EffectiveAt + ByteCount <= Renderer->PerFrameBufferSize)
         {
-            *Offset = EffectiveAt;
-            PerFrameBufferAt = EffectiveAt + Size;
+            Result.Address = Renderer->PerFrameBufferAddress + EffectiveAt;
+            Result.ByteCount = ByteCount;
+            Result.ByteOffset = EffectiveAt;
+
+            PerFrameBufferAt = EffectiveAt + ByteCount;
         }
         else
         {
             // TODO(boti): dynamic allocation
             UnimplementedCodePath;
-            Result = false;
         }
 
         return(Result);
@@ -2727,11 +2736,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     u32 TileCountY = CeilDiv(Frame->RenderExtent.Y, R_TileSizeY);
     Frame->Uniforms.TileCount = { TileCountX, TileCountY };
 
-    u64 TileBufferSize = TileCountX * TileCountY * sizeof(screen_tile);
-    u64 TileBufferOffset = 0;
-    PushPerFrame(TileBufferSize, &TileBufferOffset);
-    Frame->Uniforms.TileBufferAddress = Renderer->PerFrameBufferAddress + TileBufferOffset;
-
+    gpu_buffer_range TileBufferRange = PushPerFrame(TileCountX * TileCountY * sizeof(screen_tile));
+    Frame->Uniforms.TileBufferAddress = TileBufferRange.Address;
 
     frustum CascadeFrustums[R_MaxShadowCascadeCount];
     SetupSceneRendering(Frame, CascadeFrustums);
@@ -2788,9 +2794,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         { (u32)BlitViewport.width, (u32)BlitViewport.height }
     };
 
-    u64 SkinnedVertexBufferOffset = 0;
-    u64 SkinnedVertexBufferSize = 0;
     u32 SkinnedVertexCount = 0;
+    gpu_buffer_range SkinnedVertexBufferRange = {};
     VkCommandBuffer SkinningCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_None);
     vkCmdBindPipeline(SkinningCB, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->Pipelines[Pipeline_Skinning].Pipeline);
 
@@ -3321,183 +3326,147 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             }
         }
 
-        SkinnedVertexBufferSize = SkinnedVertexCount * sizeof(vertex);
-        if (PushPerFrame(SkinnedVertexBufferSize, &SkinnedVertexBufferOffset))
-        {
-            Frame->Uniforms.SkinningBufferAddress = Renderer->PerFrameBufferAddress + SkinnedVertexBufferOffset;
-        }
-        else
-        {
-            // TODO(boti): Allocate new block
-            UnimplementedCodePath;
-        }
+        SkinnedVertexBufferRange = PushPerFrame(SkinnedVertexCount * sizeof(vertex));
+        Frame->Uniforms.SkinningBufferAddress = SkinnedVertexBufferRange.Address;
 
         // Upload lights
-        u64 LightBufferSize = Frame->Uniforms.LightCount * sizeof(light);
-        u64 LightBufferOffset = 0;
-        if (PushPerFrame(LightBufferSize, &LightBufferOffset))
+        gpu_buffer_range LightBufferRange = PushPerFrame(Frame->Uniforms.LightCount * sizeof(light));
+        Frame->Uniforms.LightBufferAddress = LightBufferRange.Address;
+        if (LightBufferRange.ByteCount)
         {
-            if (LightBufferSize)
+            VkBufferMemoryBarrier2 BeginBarriers[] = 
             {
-                VkBufferMemoryBarrier2 BeginBarriers[] = 
                 {
-                    {
-                        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                        .pNext = nullptr,
-                        .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-                        .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                        .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                        .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
-                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .buffer = Renderer->PerFrameBuffer,
-                        .offset = LightBufferOffset,
-                        .size = LightBufferSize,
-                    },
-                };
-                VkDependencyInfo BeginDependency = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                     .pNext = nullptr,
-                    .dependencyFlags = 0,
-                    .bufferMemoryBarrierCount = CountOf(BeginBarriers),
-                    .pBufferMemoryBarriers = BeginBarriers,
-                };
-                vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
+                    .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+                    .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .buffer = Renderer->PerFrameBuffer,
+                    .offset = LightBufferRange.ByteOffset,
+                    .size = LightBufferRange.ByteCount,
+                },
+            };
+            VkDependencyInfo BeginDependency = 
+            {
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext = nullptr,
+                .dependencyFlags = 0,
+                .bufferMemoryBarrierCount = CountOf(BeginBarriers),
+                .pBufferMemoryBarriers = BeginBarriers,
+            };
+            vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
 
-                VkBufferCopy LightBufferCopy = 
+            VkBufferCopy LightBufferCopy = 
+            {
+                .srcOffset = LightDataOffset,
+                .dstOffset = LightBufferRange.ByteOffset,
+                .size = LightBufferRange.ByteCount,
+            };
+            if (LightBufferCopy.size > 0)
+            {
+                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &LightBufferCopy);
+            }
+
+            VkBufferMemoryBarrier2 EndBarrier = 
+            {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = Renderer->PerFrameBuffer,
+                .offset = LightBufferRange.ByteOffset,
+                .size = LightBufferRange.ByteCount,
+            };
+            PushBeginBarrier(&FrameStages[FrameStage_LightBinning], &EndBarrier);
+        }
+
+        // Upload instance data
+        gpu_buffer_range InstanceBufferRange = PushPerFrame(InstanceCount * sizeof(instance_data));
+        Frame->Uniforms.InstanceBufferAddress = InstanceBufferRange.Address;
+        if (InstanceBufferRange.ByteCount)
+        {
+            Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(instance_data));
+            if (Frame->StagingBuffer.At + InstanceBufferRange.ByteCount <= Frame->StagingBuffer.Size)
+            {
+                memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At), Instances, InstanceBufferRange.ByteCount);
+                VkBufferCopy Copy = 
                 {
-                    .srcOffset = LightDataOffset,
-                    .dstOffset = LightBufferOffset,
-                    .size = LightBufferSize,
+                    .srcOffset = Frame->StagingBuffer.At,
+                    .dstOffset = InstanceBufferRange.ByteOffset,
+                    .size = InstanceBufferRange.ByteCount,
                 };
-                if (LightBufferCopy.size > 0)
-                {
-                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &LightBufferCopy);
-                }
+                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &Copy);
 
                 VkBufferMemoryBarrier2 EndBarrier = 
                 {
                     .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                     .pNext = nullptr,
                     .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                     .buffer = Renderer->PerFrameBuffer,
-                    .offset = LightBufferOffset,
-                    .size = LightBufferSize,
+                    .offset = InstanceBufferRange.ByteOffset,
+                    .size = InstanceBufferRange.ByteCount,
                 };
-                PushBeginBarrier(&FrameStages[FrameStage_LightBinning], &EndBarrier);
-            }
-            Frame->Uniforms.LightBufferAddress = Renderer->PerFrameBufferAddress + LightBufferOffset;
-        }
-        else
-        {
-            // TODO(boti): Allocate more per frame memory
-            UnimplementedCodePath;
-        }
-
-        // Upload instance data
-        Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(instance_data));
-        u64 InstanceBufferSize = InstanceCount * sizeof(instance_data);
-        u64 InstanceBufferOffset = 0;
-        if (PushPerFrame(InstanceBufferSize, &InstanceBufferOffset))
-        {
-            if (Frame->StagingBuffer.At + InstanceBufferSize <= Frame->StagingBuffer.Size)
-            {
-                if (InstanceBufferSize)
-                {
-                    memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At), Instances, InstanceBufferSize);
-                    VkBufferCopy Copy = 
-                    {
-                        .srcOffset = Frame->StagingBuffer.At,
-                        .dstOffset = InstanceBufferOffset,
-                        .size = InstanceBufferSize,
-                    };
-                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &Copy);
-
-                    VkBufferMemoryBarrier2 EndBarrier = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                        .pNext = nullptr,
-                        .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                        .dstStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                        .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
-                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .buffer = Renderer->PerFrameBuffer,
-                        .offset = InstanceBufferOffset,
-                        .size = InstanceBufferSize,
-                    };
-                    PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
-                    Frame->StagingBuffer.At += InstanceBufferSize;
-
-                    Frame->Uniforms.InstanceBufferAddress = InstanceBufferOffset + Renderer->PerFrameBufferAddress;
-                }
+                PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
+                Frame->StagingBuffer.At += InstanceBufferRange.ByteCount;
+                
             }
             else
             {
                 UnhandledError("Out of staging memory when uploading instance data");
             }
         }
-        else
-        {
-            // TODO(boti): Allocate more per frame memory
-            UnimplementedCodePath;
-        }
 
         // Upload (global) draw data
-        Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(VkDrawIndexedIndirectCommand));
-        u64 GlobalDrawBufferSize = InstanceCount * sizeof(VkDrawIndexedIndirectCommand);
-        u64 GlobalDrawBufferOffset = 0;
-        if (PushPerFrame(GlobalDrawBufferSize, &GlobalDrawBufferOffset))
+        gpu_buffer_range GlobalDrawBufferRange = PushPerFrame(InstanceCount * sizeof(VkDrawIndexedIndirectCommand));
+        Frame->Uniforms.DrawBufferAddress = GlobalDrawBufferRange.Address;
+        if (GlobalDrawBufferRange.ByteCount)
         {
-            if (Frame->StagingBuffer.At + GlobalDrawBufferSize <= Frame->StagingBuffer.Size)
+            Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(VkDrawIndexedIndirectCommand));
+            if (Frame->StagingBuffer.At + GlobalDrawBufferRange.ByteCount <= Frame->StagingBuffer.Size)
             {
-                if (GlobalDrawBufferSize)
+                memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At), IndirectCommands, GlobalDrawBufferRange.ByteCount);
+                VkBufferCopy Copy = 
                 {
-                    memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At), IndirectCommands, GlobalDrawBufferSize);
-                    VkBufferCopy Copy = 
-                    {
-                        .srcOffset = Frame->StagingBuffer.At,
-                        .dstOffset = GlobalDrawBufferOffset,
-                        .size = GlobalDrawBufferSize,
-                    };
-                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &Copy);
+                    .srcOffset = Frame->StagingBuffer.At,
+                    .dstOffset = GlobalDrawBufferRange.ByteOffset,
+                    .size = GlobalDrawBufferRange.ByteCount,
+                };
+                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &Copy);
 
-                    VkBufferMemoryBarrier2 EndBarrier = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                        .pNext = nullptr,
-                        .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                        .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                        .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .buffer = Renderer->PerFrameBuffer,
-                        .offset = GlobalDrawBufferOffset,
-                        .size = GlobalDrawBufferSize,
-                    };
-                    PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
-                    Frame->StagingBuffer.At += GlobalDrawBufferSize;
-
-                    Frame->Uniforms.DrawBufferAddress = GlobalDrawBufferOffset + Renderer->PerFrameBufferAddress;
-                }
+                VkBufferMemoryBarrier2 EndBarrier = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .buffer = Renderer->PerFrameBuffer,
+                    .offset = GlobalDrawBufferRange.ByteOffset,
+                    .size = GlobalDrawBufferRange.ByteCount,
+                };
+                PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
+                Frame->StagingBuffer.At += GlobalDrawBufferRange.ByteCount;
             }
             else
             {
                 UnhandledError("Out of staging memory when uploading draw data");
             }
-        }
-        else
-        {
-            // TODO(boti): Allocate MOAR per frame memory
-            UnimplementedCodePath;
         }
 
         Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(VkDrawIndexedIndirectCommand));
@@ -3560,57 +3529,49 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 }
             }
 
-            umm MemorySize = TotalDrawCountPerList * sizeof(VkDrawIndexedIndirectCommand);
-
-            if (PushPerFrame(MemorySize, &DrawList->DrawBufferOffset))
+            gpu_buffer_range DrawBufferRange = PushPerFrame(TotalDrawCountPerList * sizeof(VkDrawIndexedIndirectCommand));
+            if (DrawBufferRange.ByteCount)
             {
                 DrawList->DrawBuffer = Renderer->PerFrameBuffer;
+                DrawList->DrawBufferOffset = DrawBufferRange.ByteOffset;
 
-                if (TotalDrawCountPerList)
+                VkBufferCopy Copy =
                 {
-                    VkBufferCopy Copy =
-                    {
-                        .srcOffset = Frame->StagingBuffer.At,
-                        .dstOffset = DrawList->DrawBufferOffset,
-                        .size = MemorySize,
-                    };
+                    .srcOffset = Frame->StagingBuffer.At,
+                    .dstOffset = DrawBufferRange.ByteOffset,
+                    .size = DrawBufferRange.ByteCount,
+                };
 
-                    VkDependencyInfo BeginDependency = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                        .pNext = nullptr,
-                        .dependencyFlags = 0,
-                        .bufferMemoryBarrierCount = 0,
-                        .pBufferMemoryBarriers = nullptr,
-                    };
-                    vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
+                VkDependencyInfo BeginDependency = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .bufferMemoryBarrierCount = 0,
+                    .pBufferMemoryBarriers = nullptr,
+                };
+                vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
 
-                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], DrawList->DrawBuffer, 1, &Copy);
+                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], DrawList->DrawBuffer, 1, &Copy);
 
-                    VkBufferMemoryBarrier2 EndBarrier
-                    {
-                        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                        .pNext = nullptr,
-                        .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                        .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-                        .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
-                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .buffer = DrawList->DrawBuffer,
-                        .offset = DrawList->DrawBufferOffset,
-                        .size = MemorySize,
-                    };
-                    PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
-                }
-            }
-            else
-            {
-                // TODO(boti): Allocate more per frame memory
-                UnimplementedCodePath;
+                VkBufferMemoryBarrier2 EndBarrier
+                {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
+                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                    .buffer = DrawList->DrawBuffer,
+                    .offset = DrawBufferRange.ByteOffset,
+                    .size = DrawBufferRange.ByteCount,
+                };
+                PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
             }
 
-            Frame->StagingBuffer.At += MemorySize;
+            Frame->StagingBuffer.At += DrawBufferRange.ByteCount;
         }
     }
     vkCmdEndDebugUtilsLabelEXT(ParticleCB);
@@ -3717,7 +3678,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     // Skinning
     //
     BeginFrameStage(PrepassCmd, &FrameStages[FrameStage_Skinning], "Skinning");
-    if (SkinnedVertexBufferSize)
+    if (SkinnedVertexBufferRange.ByteCount)
     {
         vkCmdExecuteCommands(PrepassCmd, 1, &SkinningCB);
 
@@ -3732,8 +3693,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .buffer = Renderer->PerFrameBuffer,
-            .offset = SkinnedVertexBufferOffset,
-            .size = SkinnedVertexBufferSize,
+            .offset = SkinnedVertexBufferRange.ByteOffset,
+            .size = SkinnedVertexBufferRange.ByteCount,
         };
         PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
     }
@@ -4194,7 +4155,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     // Light binning
     //
     BeginFrameStage(PreLightCmd, &FrameStages[FrameStage_LightBinning], "LightBinning");
-    if (TileBufferSize)
+    // NOTE(boti): This should always pass...
+    if (TileBufferRange.ByteCount)
     {
         pipeline_with_layout Pipeline = Renderer->Pipelines[Pipeline_LightBinning];
         vkCmdBindPipeline(PreLightCmd, VK_PIPELINE_BIND_POINT_COMPUTE, Pipeline.Pipeline);
@@ -4213,8 +4175,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .buffer = Renderer->PerFrameBuffer,
-            .offset = TileBufferOffset,
-            .size = TileBufferSize,
+            .offset = TileBufferRange.ByteOffset,
+            .size = TileBufferRange.ByteCount,
         };
         PushBeginBarrier(&FrameStages[FrameStage_Shading], &EndBarrier);
     }
