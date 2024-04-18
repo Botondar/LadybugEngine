@@ -100,7 +100,12 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         TextGUI(&Context, 24.0f, "%.2fms", 1000.0f * IO->dt);
         TextGUI(&Context, 20.0f, "%s", Platform.GetDeviceName(Frame->Renderer));
         TextGUI(&Context, 20.0f, "Output@%ux%u", Frame->OutputExtent.X, Frame->OutputExtent.Y);
-        TextGUI(&Context, 20.0f, "Rendering@%ux%u", Frame->RenderExtent, Frame->RenderExtent.Y);
+        v2u RenderExtent = Frame->RenderExtent;
+        if (RenderExtent.X == 0 || RenderExtent.Y == 0)
+        {
+            RenderExtent = Frame->OutputExtent;
+        }
+        TextGUI(&Context, 20.0f, "Rendering@%ux%u", RenderExtent.X, RenderExtent.Y);
     }
 
     if (!Editor->IsEnabled) 
