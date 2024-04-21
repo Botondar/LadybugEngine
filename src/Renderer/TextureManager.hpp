@@ -104,6 +104,7 @@ struct texture_manager
     u32                 TextureCount;
     renderer_texture    Textures[R_MaxTextureCount];
 
+    // TODO(boti): Remove special textures and just pass the ID to the relevant shaders (particle, UI)
     u32                 SpecialTextureCount;
     renderer_texture    SpecialTextures[MaxSpecialTextureCount];
 };

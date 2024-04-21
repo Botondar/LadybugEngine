@@ -163,6 +163,8 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         assets* Assets = GameState->Assets;
         for (u32 RequestIndex = 0; RequestIndex < RenderFrame->TextureRequestCount; RequestIndex++)
         {
+            // TODO(boti): I don't think this is needed anymore, default textures go into persistent memory, 
+            // so the renderer shouldn't request them?
             texture_request* Request = RenderFrame->TextureRequests + RequestIndex;
 
             b32 IsDefaultTexture = false;

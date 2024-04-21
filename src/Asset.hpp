@@ -102,6 +102,33 @@ struct texture
     void* Memory;
 };
 
+enum texture_data_type : u32
+{
+    TextureData_Undefined = 0,
+
+    TextureData_Albedo,
+    TextureData_Normal,
+    TextureData_Roughness,
+    TextureData_Metallic,
+    TextureData_Occlusion,
+    TextureData_Height,
+    TextureData_Transmission,
+
+    TextureData_Count,
+};
+static_assert(TextureData_Count < 32);
+
+typedef flags32 texture_channel_flags;
+enum texture_channel_bits : texture_channel_flags
+{
+    TextureChannel_None = 0,
+
+    TextureChannel_R = (1u << 0),
+    TextureChannel_G = (1u << 1),
+    TextureChannel_B = (1u << 2),
+    TextureChannel_A = (1u << 3),
+};
+
 enum texture_type : u32
 {
     TextureType_Diffuse,

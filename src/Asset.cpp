@@ -1026,7 +1026,13 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         return Result;
     };
 
-    u32* TextureTable = PushArray(Scratch, MemPush_Clear, u32, GLTF.TextureCount);
+    struct loaded_gltf_texture
+    {
+        u32 AssetID;
+        u32 Usage;
+    };
+
+    loaded_gltf_texture* TextureTable = PushArray(Scratch, MemPush_Clear, loaded_gltf_texture, GLTF.TextureCount);
 
     for (u32 MaterialIndex = 0; MaterialIndex < GLTF.MaterialCount; MaterialIndex++)
     {
@@ -1062,81 +1068,93 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             Material->TransmissionEnabled = SrcMaterial->TransmissionEnabled;
             Material->Transmission = SrcMaterial->TransmissionFactor;
 
-            auto ConvertGLTFSampler = [](gltf_sampler* Sampler) -> material_sampler_id
+            auto ProcessTexture = [&GLTF, TextureTable, LoadAndUploadTexture](
+                gltf_texture_info* TextureInfo,
+                texture_type TextureType,
+                flags32 Usage,
+                gltf_alpha_mode AlphaMode,
+                material_sampler_id* SamplerID, 
+                u32* TextureID)
             {
-                auto ConvertGLTFWrap = [](gltf_wrap Wrap) -> tex_wrap
+                auto ConvertGLTFSampler = [](gltf_sampler* Sampler) -> material_sampler_id
                 {
-                    tex_wrap Result = Wrap_Repeat;
-                    switch (Wrap)
+                    auto ConvertGLTFWrap = [](gltf_wrap Wrap) -> tex_wrap
                     {
-                        case GLTF_WRAP_REPEAT:          Result = Wrap_Repeat; break;
-                        case GLTF_WRAP_CLAMP_TO_EDGE:   Result = Wrap_ClampToEdge; break;
-                        case GLTF_WRAP_MIRRORED_REPEAT: Result = Wrap_RepeatMirror; break;
-                        InvalidDefaultCase;
-                    }
+                        tex_wrap Result = Wrap_Repeat;
+                        switch (Wrap)
+                        {
+                            case GLTF_WRAP_REPEAT:          Result = Wrap_Repeat; break;
+                            case GLTF_WRAP_CLAMP_TO_EDGE:   Result = Wrap_ClampToEdge; break;
+                            case GLTF_WRAP_MIRRORED_REPEAT: Result = Wrap_RepeatMirror; break;
+                                InvalidDefaultCase;
+                        }
+                        return(Result);
+                    };
+
+                    material_sampler_id Result = GetMaterialSamplerID(ConvertGLTFWrap(Sampler->WrapU), ConvertGLTFWrap(Sampler->WrapV), Wrap_Repeat);
                     return(Result);
                 };
 
-                material_sampler_id Result = GetMaterialSamplerID(ConvertGLTFWrap(Sampler->WrapU), ConvertGLTFWrap(Sampler->WrapV), Wrap_Repeat);
-                return(Result);
+                if (TextureInfo->TextureIndex != U32_MAX)
+                {
+                    gltf_texture* GLTFTexture = GLTF.Textures + TextureInfo->TextureIndex;
+                    gltf_sampler* Sampler = GLTF.Samplers + GLTFTexture->SamplerIndex;
+                    *SamplerID = ConvertGLTFSampler(Sampler);
+                    
+                    loaded_gltf_texture* Texture = TextureTable + TextureInfo->TextureIndex;
+                    if (!Texture->AssetID)
+                    {
+                        Texture->AssetID = LoadAndUploadTexture(TextureInfo->TextureIndex, TextureType, AlphaMode);
+                    }
+                    *TextureID = Texture->AssetID;
+                    Texture->Usage |= Usage;
+                }
             };
 
-            if (SrcMaterial->BaseColorTexture.TextureIndex != U32_MAX)
-            {
-                gltf_texture* GLTFTexture = GLTF.Textures + SrcMaterial->BaseColorTexture.TextureIndex;
-                gltf_sampler* Sampler = GLTF.Samplers + GLTFTexture->SamplerIndex;
-                Material->AlbedoSamplerID = ConvertGLTFSampler(Sampler);
-
-                u32* Texture = TextureTable + SrcMaterial->BaseColorTexture.TextureIndex;
-                if (!*Texture)
-                {
-                    *Texture = LoadAndUploadTexture(SrcMaterial->BaseColorTexture.TextureIndex, TextureType_Diffuse, SrcMaterial->AlphaMode);
-                }
-                Material->AlbedoID = *Texture;
-            }
-            if (SrcMaterial->NormalTexture.TextureIndex != U32_MAX)
-            {
-                gltf_texture* GLTFTexture = GLTF.Textures + SrcMaterial->NormalTexture.TextureIndex;
-                gltf_sampler* Sampler = GLTF.Samplers + GLTFTexture->SamplerIndex;
-                Material->NormalSamplerID = ConvertGLTFSampler(Sampler);
-
-                u32* Texture = TextureTable + SrcMaterial->NormalTexture.TextureIndex;
-                if (!*Texture)
-                {
-                    *Texture = LoadAndUploadTexture(SrcMaterial->NormalTexture.TextureIndex, TextureType_Normal, SrcMaterial->AlphaMode);
-                }
-                Material->NormalID = *Texture;
-            }
-            if (SrcMaterial->MetallicRoughnessTexture.TextureIndex != U32_MAX)
-            {
-                gltf_texture* GLTFTexture = GLTF.Textures + SrcMaterial->MetallicRoughnessTexture.TextureIndex;
-                gltf_sampler* Sampler = GLTF.Samplers + GLTFTexture->SamplerIndex;
-                Material->MetallicRoughnessSamplerID = ConvertGLTFSampler(Sampler);
-
-                u32* Texture = TextureTable + SrcMaterial->MetallicRoughnessTexture.TextureIndex;
-                if (!*Texture)
-                {
-                    *Texture = LoadAndUploadTexture(SrcMaterial->MetallicRoughnessTexture.TextureIndex, TextureType_Material, SrcMaterial->AlphaMode);
-                }
-                Material->MetallicRoughnessID = *Texture;
-            }
-            if (SrcMaterial->TransmissionTexture.TextureIndex != U32_MAX)
-            {
-                gltf_texture* GLTFTexture = GLTF.Textures + SrcMaterial->TransmissionTexture.TextureIndex;
-                gltf_sampler* Sampler = GLTF.Samplers + GLTFTexture->SamplerIndex;
-                Material->TransmissionSamplerID = ConvertGLTFSampler(Sampler);
-
-                u32* Texture = TextureTable + SrcMaterial->TransmissionTexture.TextureIndex;
-                if (!*Texture)
-                {
-                    *Texture = LoadAndUploadTexture(SrcMaterial->TransmissionTexture.TextureIndex, TextureType_Transmission, GLTF_ALPHA_MODE_OPAQUE);
-                }
-                Material->TransmissionID = *Texture;
-            }
+            ProcessTexture(&SrcMaterial->BaseColorTexture, 
+                           TextureType_Diffuse, 
+                           (1u << TextureData_Albedo),
+                           SrcMaterial->AlphaMode,
+                           &Material->AlbedoSamplerID, 
+                           &Material->AlbedoID);
+            ProcessTexture(&SrcMaterial->NormalTexture,
+                           TextureType_Normal, 
+                           (1u << TextureData_Normal),
+                           SrcMaterial->AlphaMode,
+                           &Material->NormalSamplerID, 
+                           &Material->NormalID);
+            ProcessTexture(&SrcMaterial->MetallicRoughnessTexture,
+                           TextureType_Material, 
+                           (1u << TextureData_Metallic) | (1u << TextureData_Roughness),
+                           SrcMaterial->AlphaMode,
+                           &Material->MetallicRoughnessSamplerID, 
+                           &Material->MetallicRoughnessID);
+            ProcessTexture(&SrcMaterial->TransmissionTexture, 
+                           TextureType_Transmission, 
+                           (1u << TextureData_Transmission),
+                           GLTF_ALPHA_MODE_OPAQUE,
+                           &Material->TransmissionSamplerID, 
+                           &Material->TransmissionID);
         }
         else
         {
             UnhandledError("Out of material pool");
+        }
+    }
+
+    for (u32 TextureIndex = 0; TextureIndex < GLTF.TextureCount; TextureIndex++)
+    {
+        loaded_gltf_texture* Texture = TextureTable + TextureIndex;
+        if (Texture->Usage)
+        {
+            if      (Texture->Usage == (1u << TextureData_Albedo)) { }
+            else if (Texture->Usage == (1u << TextureData_Normal)) { }
+            else if (Texture->Usage == ((1u << TextureData_Metallic) | (1u << TextureData_Roughness))) { }
+            else if (Texture->Usage == (1u << TextureData_Transmission)) { }
+            else
+            {
+                Assert(!"Here!");
+            }
         }
     }
 
