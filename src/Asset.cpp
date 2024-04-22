@@ -995,29 +995,22 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         u32 Result = Assets->TextureCount++;
         if (TextureIndex < GLTF.TextureCount)
         {
-            if ((Assets->TextureQueue.CompletionGoal - Assets->TextureQueue.CompletionCount) < Assets->TextureQueue.MaxEntryCount)
+            gltf_texture* Texture = GLTF.Textures + TextureIndex;
+            if (Texture->ImageIndex >= GLTF.ImageCount) UnhandledError("Invalid glTF image index");
+            
+            gltf_image* Image = GLTF.Images + Texture->ImageIndex;
+            if (Image->BufferViewIndex != U32_MAX) UnimplementedCodePath;
+            
+            if (!OverwriteNameAndExtension(&Filepath, Image->URI))
             {
-                gltf_texture* Texture = GLTF.Textures + TextureIndex;
-                if (Texture->ImageIndex >= GLTF.ImageCount) UnhandledError("Invalid glTF image index");
-
-                gltf_image* Image = GLTF.Images + Texture->ImageIndex;
-                if (Image->BufferViewIndex != U32_MAX) UnimplementedCodePath;
-
-                if (!OverwriteNameAndExtension(&Filepath, Image->URI))
-                {
-                    UnhandledError("Invalid glTF image path");
-                }
-                
-                renderer_texture_id Placeholder = Assets->Textures[Assets->DefaultTextures[Type]].RendererID;
-                texture* TextureAsset = Assets->Textures + Result;
-                TextureAsset->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, nullptr, Placeholder);
-                TextureAsset->IsLoaded = false;
-                AddEntry(&Assets->TextureQueue, TextureAsset, Type, (AlphaMode != GLTF_ALPHA_MODE_OPAQUE), &Filepath);
+                UnhandledError("Invalid glTF image path");
             }
-            else
-            {
-                UnhandledError("Texture queue full");
-            }
+            
+            renderer_texture_id Placeholder = Assets->Textures[Assets->DefaultTextures[Type]].RendererID;
+            texture* TextureAsset = Assets->Textures + Result;
+            TextureAsset->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, nullptr, Placeholder);
+            TextureAsset->IsLoaded = false;
+            AddEntry(&Assets->TextureQueue, TextureAsset, Type, (AlphaMode != GLTF_ALPHA_MODE_OPAQUE), &Filepath);
         }
         else
         {
@@ -1068,11 +1061,9 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             Material->TransmissionEnabled = SrcMaterial->TransmissionEnabled;
             Material->Transmission = SrcMaterial->TransmissionFactor;
 
-            auto ProcessTexture = [&GLTF, TextureTable, LoadAndUploadTexture](
+            auto ProcessTexture = [&GLTF, Assets, TextureTable, LoadAndUploadTexture](
                 gltf_texture_info* TextureInfo,
-                texture_type TextureType,
                 flags32 Usage,
-                gltf_alpha_mode AlphaMode,
                 material_sampler_id* SamplerID, 
                 u32* TextureID)
             {
@@ -1104,7 +1095,14 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                     loaded_gltf_texture* Texture = TextureTable + TextureInfo->TextureIndex;
                     if (!Texture->AssetID)
                     {
-                        Texture->AssetID = LoadAndUploadTexture(TextureInfo->TextureIndex, TextureType, AlphaMode);
+                        if (Assets->TextureCount < Assets->MaxTextureCount)
+                        {
+                            Texture->AssetID = Assets->TextureCount++;
+                        }
+                        else
+                        {
+                            UnimplementedCodePath;
+                        }
                     }
                     *TextureID = Texture->AssetID;
                     Texture->Usage |= Usage;
@@ -1112,27 +1110,19 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             };
 
             ProcessTexture(&SrcMaterial->BaseColorTexture, 
-                           TextureType_Diffuse, 
                            (1u << TextureData_Albedo),
-                           SrcMaterial->AlphaMode,
                            &Material->AlbedoSamplerID, 
                            &Material->AlbedoID);
             ProcessTexture(&SrcMaterial->NormalTexture,
-                           TextureType_Normal, 
                            (1u << TextureData_Normal),
-                           SrcMaterial->AlphaMode,
                            &Material->NormalSamplerID, 
                            &Material->NormalID);
             ProcessTexture(&SrcMaterial->MetallicRoughnessTexture,
-                           TextureType_Material, 
                            (1u << TextureData_Metallic) | (1u << TextureData_Roughness),
-                           SrcMaterial->AlphaMode,
                            &Material->MetallicRoughnessSamplerID, 
                            &Material->MetallicRoughnessID);
             ProcessTexture(&SrcMaterial->TransmissionTexture, 
-                           TextureType_Transmission, 
                            (1u << TextureData_Transmission),
-                           GLTF_ALPHA_MODE_OPAQUE,
                            &Material->TransmissionSamplerID, 
                            &Material->TransmissionID);
         }
@@ -1145,15 +1135,61 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
     for (u32 TextureIndex = 0; TextureIndex < GLTF.TextureCount; TextureIndex++)
     {
         loaded_gltf_texture* Texture = TextureTable + TextureIndex;
-        if (Texture->Usage)
+
+        gltf_texture* GLTFTexture = GLTF.Textures + TextureIndex;
+        if (GLTFTexture->ImageIndex >= GLTF.ImageCount)
         {
-            if      (Texture->Usage == (1u << TextureData_Albedo)) { }
-            else if (Texture->Usage == (1u << TextureData_Normal)) { }
-            else if (Texture->Usage == ((1u << TextureData_Metallic) | (1u << TextureData_Roughness))) { }
-            else if (Texture->Usage == (1u << TextureData_Transmission)) { }
+            UnhandledError("Corrupt glTF texture: image index out of bounds");
+        }
+        gltf_image* Image = GLTF.Images + GLTFTexture->ImageIndex;
+        if ((Image->URI.Length == 0) || (Image->BufferViewIndex != U32_MAX))
+        {
+            UnimplementedCodePath;
+        }
+        
+        if (Texture->AssetID && Texture->Usage)
+        {
+            b32 DoUpload = true;
+            b32 AlphaEnabled = false;
+            texture_type Type = TextureType_Diffuse;
+
+            if (Texture->Usage == (1u << TextureData_Albedo)) 
+            {
+                AlphaEnabled = true;
+                Type = TextureType_Diffuse;
+            }
+            else if (Texture->Usage == (1u << TextureData_Normal)) 
+            {
+                Type = TextureType_Normal;
+            }
+            else if (Texture->Usage == ((1u << TextureData_Metallic) | (1u << TextureData_Roughness))) 
+            {
+                Type = TextureType_Material;
+            }
+            else if (Texture->Usage == (1u << TextureData_Transmission)) 
+            {
+                Type = TextureType_Transmission;
+            }
             else
             {
-                Assert(!"Here!");
+                DoUpload = false;
+            }
+
+            if (DoUpload)
+            {
+                renderer_texture_id Placeholder = Assets->Textures[Assets->DefaultTextures[Type]].RendererID;
+                texture* Asset = Assets->Textures + Texture->AssetID;
+                Asset->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, nullptr, Placeholder);
+                Asset->IsLoaded = false;
+
+                if (OverwriteNameAndExtension(&Filepath, Image->URI))
+                {
+                    AddEntry(&Assets->TextureQueue, Asset, Type, AlphaEnabled, &Filepath);
+                }
+                else
+                {
+                    UnhandledError("Invalid glTF image URI");
+                }
             }
         }
     }
