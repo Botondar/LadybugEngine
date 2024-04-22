@@ -2477,9 +2477,12 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         // NOTE(boti): Because we're always discarding a contiguous range we can just use the bit count to iterate
                         texture_info Info = 
                         {
-                            .Width = Max(Texture->Info.Width >> MipCountToDiscard, 1u),
-                            .Height = Max(Texture->Info.Height >> MipCountToDiscard, 1u),
-                            .Depth = 1,
+                            .Extent = 
+                            {
+                                Max(Texture->Info.Extent.X >> MipCountToDiscard, 1u),
+                                Max(Texture->Info.Extent.Y >> MipCountToDiscard, 1u),
+                                1,
+                            },
                             .MipCount = CurrentMipCount - MipCountToDiscard,
                             .ArrayCount = Texture->Info.ArrayCount,
                             .Format = Texture->Info.Format,
@@ -2598,8 +2601,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                             .dstOffset = { 0, 0, 0 },
                                             .extent = 
                                             {
-                                                .width = Max(Info.Width >> DstMipIndex, 1u),
-                                                .height = Max(Info.Height >> DstMipIndex, 1u),
+                                                .width = Max(Info.Extent.X >> DstMipIndex, 1u),
+                                                .height = Max(Info.Extent.Y >> DstMipIndex, 1u),
                                                 .depth = 1,
                                             },
                                         };
@@ -2885,13 +2888,13 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         {
                             texture_info* Info = &Op->Texture.Info;
                             texture_subresource_range* Range = &Op->Texture.SubresourceRange;
-                            if (Info->Depth > 1)
+                            if (Info->Extent.Z > 1)
                             {
                                 UnimplementedCodePath;
                             }
 
                             format_byterate ByteRate = FormatByterateTable[Info->Format];
-                            umm TotalSize = GetMipChainSize(Info->Width, Info->Height, Info->MipCount, Info->ArrayCount, ByteRate);
+                            umm TotalSize = GetMipChainSize(Info->Extent.X, Info->Extent.Y, Info->MipCount, Info->ArrayCount, ByteRate);
 
                             u32 CopyCount = Info->MipCount * Info->ArrayCount;
                             VkBufferImageCopy* Copies = PushArray(Frame->Arena, 0, VkBufferImageCopy, CopyCount);
@@ -2902,22 +2905,25 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                             {
                                 for (u32 MipIndex = 0; MipIndex < Info->MipCount; MipIndex++)
                                 {
-                                    u32 Width = Max(Info->Width >> MipIndex, 1u);
-                                    u32 Height = Max(Info->Height >> MipIndex, 1u);
+                                    v2u Extent = 
+                                    {
+                                        Max(Info->Extent.X >> MipIndex, 1u),
+                                        Max(Info->Extent.Y >> MipIndex, 1u),
+                                    };
 
                                     u32 RowLength = 0;
                                     u32 ImageHeight = 0;
                                     u64 TexelCount;
                                     if (ByteRate.Flags & FormatFlag_BlockCompressed)
                                     {
-                                        RowLength = Align(Width, 4u);
-                                        ImageHeight = Align(Height, 4u);
+                                        RowLength = Align(Extent.X, 4u);
+                                        ImageHeight = Align(Extent.Y, 4u);
 
                                         TexelCount = (u64)RowLength * ImageHeight;
                                     }
                                     else
                                     {
-                                        TexelCount = Width * Height;
+                                        TexelCount = Extent.X * Extent.Y;
                                     }
                                     u64 MipSize = TexelCount * ByteRate.Numerator / ByteRate.Denominator;
 
@@ -2932,7 +2938,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                         .layerCount = 1,
                                     },
                                     CopyAt->imageOffset = { 0, 0, 0 },
-                                    CopyAt->imageExtent = { Width, Height, 1 },
+                                    CopyAt->imageExtent = { Extent.X, Extent.Y, 1 },
 
                                     Offset += MipSize;
                                     CopyAt++;
@@ -2999,7 +3005,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                         Frame->StagingBuffer.At += DescriptorSize;
 
                                         u32 MipBucket;
-                                        BitScanReverse(&MipBucket, Max(Info->Width, Info->Height));
+                                        BitScanReverse(&MipBucket, Max(Info->Extent.X, Info->Extent.Y));
                                         u32 MipMask = (1 << (MipBucket + 1)) - 1;
                                         Texture->MipResidencyMask = MipMask;
                                         Texture->Info = Op->Texture.Info;

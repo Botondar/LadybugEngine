@@ -263,7 +263,7 @@ internal VkSamplerCreateInfo SamplerStateToVulkanSamplerInfo(sampler_state Sampl
 
 internal VkImageCreateInfo TextureInfoToVulkan(texture_info Info)
 {
-    Assert(Info.Depth == 1);
+    Assert(Info.Extent.Z == 1);
     VkImageCreateInfo Result = 
     {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -271,7 +271,7 @@ internal VkImageCreateInfo TextureInfoToVulkan(texture_info Info)
         .flags = 0,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = FormatTable[Info.Format],
-        .extent = { Info.Width, Info.Height, Info.Depth },
+        .extent = { Info.Extent.X, Info.Extent.Y, Info.Extent.Z },
         .mipLevels = Info.MipCount,
         .arrayLayers = Info.ArrayCount,
         .samples = VK_SAMPLE_COUNT_1_BIT,

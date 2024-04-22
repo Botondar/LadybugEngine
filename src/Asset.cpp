@@ -5,7 +5,7 @@ internal mesh_data CreateCubeMesh(memory_arena* Arena);
 internal mesh_data CreateSphereMesh(memory_arena* Arena);
 internal mesh_data CreateArrowMesh(memory_arena* Arena);
 
-internal loaded_image LoadTIFF(memory_arena* Arena, buffer File, u32 DesiredChannelCount);
+internal loaded_image LoadTIFF(memory_arena* Arena, buffer File);
 
 //
 // Utility
@@ -82,7 +82,7 @@ DetermineImageFileType(buffer FileData)
 }
 
 lbfn loaded_image
-LoadImage(memory_arena* Arena, buffer FileData, u32 DesiredChannelCount)
+LoadImage(memory_arena* Arena, buffer FileData)
 {
     loaded_image Result = {};
 
@@ -94,27 +94,19 @@ LoadImage(memory_arena* Arena, buffer FileData, u32 DesiredChannelCount)
         case ImageFile_JPG:
         {
             int Width, Height, ChannelCount;
-            u8* ImageData = stbi_load_from_memory((const u8*)FileData.Data, (int)FileData.Size, &Width, &Height, &ChannelCount, (int)DesiredChannelCount);
+            u8* ImageData = stbi_load_from_memory((const u8*)FileData.Data, (int)FileData.Size, &Width, &Height, &ChannelCount, 0);
             if (ImageData)
             {
                 umm PixelCount = (umm)Width * (umm)Height;
-                // NOTE(boti): Fill alpha as opaque if an alpha channel is requested but wasn't present
-                if (DesiredChannelCount == 4 && ChannelCount < 4)
-                {
-                    for (u32 Pixel = 0; Pixel < PixelCount; Pixel++)
-                    {
-                        ImageData[DesiredChannelCount*Pixel + 3] = 0xFFu;
-                    }
-                }
 
                 // Wasteful copy to get the same memory management guarantees when using stb_image
-                umm ImageSize = PixelCount * (umm)DesiredChannelCount;
+                umm ImageSize = PixelCount * ChannelCount;
                 Result.Data = PushSize_(Arena, 0, ImageSize, 64);
                 if (Result.Data)
                 {
-                    Result.Width = (u32)Width;
-                    Result.Height = (u32)Height;
-                    Result.ChannelCount = DesiredChannelCount;
+                    Result.Extent = { (u32)Width, (u32)Height };
+                    Result.ChannelCount = (u32)ChannelCount;
+                    Result.BitDepthPerChannel = 8;
                     memcpy(Result.Data, ImageData, ImageSize);
                 }
 
@@ -123,7 +115,7 @@ LoadImage(memory_arena* Arena, buffer FileData, u32 DesiredChannelCount)
         } break;
         case ImageFile_TIF:
         {
-            Result = LoadTIFF(Arena, FileData, DesiredChannelCount);
+            Result = LoadTIFF(Arena, FileData);
         } break;
         default:
         {
@@ -134,7 +126,7 @@ LoadImage(memory_arena* Arena, buffer FileData, u32 DesiredChannelCount)
     return(Result);
 }
 
-internal loaded_image LoadTIFF(memory_arena* Arena, buffer File, u32 DesiredChannelCount)
+internal loaded_image LoadTIFF(memory_arena* Arena, buffer File)
 {
     loaded_image Result = {};
 
@@ -383,10 +375,10 @@ internal loaded_image LoadTIFF(memory_arena* Arena, buffer File, u32 DesiredChan
             Result.Data = PushArray(Arena, 0, u8, ImageSize);
             if (Result.Data)
             {
-                umm DstSize = (umm)Extent.X * Extent.Y * DesiredChannelCount;
-                Result.Width = Extent.X;
-                Result.Height = Extent.Y;
-                Result.ChannelCount = DesiredChannelCount;
+                Result.Extent = Extent;
+                Result.ChannelCount = ChannelCount;
+                Result.BitDepthPerChannel = 8; // HACK(boti): See below, we're doing the conversion here
+                umm DstSize = (umm)Extent.X * Extent.Y * ChannelCount * (Result.BitDepthPerChannel / 8);
                 u8* DstAt = (u8*)Result.Data;
                 u8* SrcImage = (u8*)OffsetPtr(File.Data, DataOffset);
                 u8* SrcAt = SrcImage;
@@ -395,7 +387,7 @@ internal loaded_image LoadTIFF(memory_arena* Arena, buffer File, u32 DesiredChan
                     for (u32 X = 0; X < Extent.X; X++)
                     {
                         // HACK(boti): We know the usage we're gonna be called with from process entry...
-                        if (BitDepth == 16 && ChannelCount == 3 && (DesiredChannelCount == 4))
+                        if (BitDepth == 16 && ChannelCount == 3)
                         {
                             u16 R = *(u16*)SrcAt;
                             SrcAt += 2;
@@ -414,7 +406,6 @@ internal loaded_image LoadTIFF(memory_arena* Arena, buffer File, u32 DesiredChan
                             *DstAt++ = (u8)(R >> 8);
                             *DstAt++ = (u8)(G >> 8);
                             *DstAt++ = (u8)(B >> 8);
-                            *DstAt++ = 0xFF;
                         }
                         else
                         {
@@ -505,9 +496,6 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
         memory_arena* Scratch = &Queue->Scratch;
         memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
 
-        Entry->Info.Depth = 1;
-        Entry->Info.ArrayCount = 1;
-
         int Alpha = 0;
         switch (Entry->TextureType)
         {
@@ -537,17 +525,21 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
             InvalidDefaultCase;
         }
         
-        u32 DesiredChannelCount = 4;
         buffer ImageFile = Platform.LoadEntireFile(Entry->Path.Path, Scratch);
-        loaded_image Image = LoadImage(Scratch, ImageFile, DesiredChannelCount);
-        rgba8* SrcImage = (rgba8*)Image.Data;
-        Entry->Info.Width = Image.Width;
-        Entry->Info.Height = Image.Height;
+        loaded_image Image = LoadImage(Scratch, ImageFile);
+
+        // TODO(boti): Currently all images get converted to 8bpc at load time,
+        // but if we ever support higher bit depths, this function will need to get updated as well
+        Assert(Image.BitDepthPerChannel == 8);
+
+        u8* SrcImage = (u8*)Image.Data;
+        Entry->Info.Extent = { Image.Extent.X, Image.Extent.Y, 1 };
+        Entry->Info.ArrayCount = 1;
         if (SrcImage)
         {
-            Entry->Info.MipCount = GetMaxMipCount(Entry->Info.Width, Entry->Info.Height);
+            Entry->Info.MipCount = GetMaxMipCount(Entry->Info.Extent.X, Entry->Info.Extent.Y);
             format_byterate ByteRate = FormatByterateTable[Entry->Info.Format];
-            u64 TotalMipChainSize = GetMipChainSize(Entry->Info.Width, Entry->Info.Height, Entry->Info.MipCount, 1, ByteRate);
+            u64 TotalMipChainSize = GetMipChainSize(Entry->Info.Extent.X, Entry->Info.Extent.Y, Entry->Info.MipCount, 1, ByteRate);
             umm MipChainBegin = GetNextEntryOffset(Queue, TotalMipChainSize, Queue->RingBufferWriteAt);
             while (((MipChainBegin + TotalMipChainSize) - Queue->RingBufferReadAt) >= Queue->RingBufferSize)
             {
@@ -559,29 +551,27 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
 
             u32 BlockSize = 16 * ByteRate.Numerator / ByteRate.Denominator;
 
-            // TODO(boti): This was originally 64 byte (cache) aligned for multithreading purposes
-            // Move to PushSize_?
-            rgba8* DownscaleBuffer = PushArray(Scratch, 0, rgba8, Entry->Info.Width*Entry->Info.Height);
-            rgba8* SrcAt = SrcImage;
+            u8* DownscaleBuffer = (u8*)PushSize_(Scratch, 0, Entry->Info.Extent.X * Entry->Info.Extent.Y, 64);
+            u8* SrcAt = SrcImage;
             u8* DstAt = MipChain;
             for (u32 MipIndex = 0; MipIndex < Entry->Info.MipCount; MipIndex++)
             {
-                u32 Width = Max(Entry->Info.Width >> MipIndex, 1u);
-                u32 Height = Max(Entry->Info.Height >> MipIndex, 1u);
+                u32 ExtentX = Max(Entry->Info.Extent.X >> MipIndex, 1u);
+                u32 ExtentY = Max(Entry->Info.Extent.Y >> MipIndex, 1u);
 
                 if (MipIndex != 0)
                 {
-                    u32 PrevWidth = Max(Entry->Info.Width >> (MipIndex - 1), 1u);
-                    u32 PrevHeight = Max(Entry->Info.Height >> (MipIndex - 1), 1u);
+                    u32 PrevExtentX = Max(Entry->Info.Extent.X >> (MipIndex - 1), 1u);
+                    u32 PrevExtentY = Max(Entry->Info.Extent.Y >> (MipIndex - 1), 1u);
 
                     switch (Entry->TextureType)
                     {
                         case TextureType_Diffuse:
                         {
                             stbir_resize_uint8_srgb(
-                                (u8*)SrcAt, PrevWidth, PrevHeight, 0, 
-                                (u8*)DownscaleBuffer, Width, Height, 0,
-                                (stbir_pixel_layout)DesiredChannelCount);
+                                (u8*)SrcAt, PrevExtentX, PrevExtentY, 0, 
+                                (u8*)DownscaleBuffer, ExtentX, ExtentY, 0,
+                                (stbir_pixel_layout)Image.ChannelCount);
                         } break;
 
                         case TextureType_Transmission:
@@ -589,63 +579,58 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
                         case TextureType_Material:
                         {
                             stbir_resize_uint8_linear(
-                                (u8*)SrcAt, PrevWidth, PrevHeight, 0, 
-                                (u8*)DownscaleBuffer, Width, Height, 0,
-                                (stbir_pixel_layout)DesiredChannelCount);
+                                (u8*)SrcAt, PrevExtentX, PrevExtentY, 0, 
+                                (u8*)DownscaleBuffer, ExtentX, ExtentY, 0,
+                                (stbir_pixel_layout)Image.ChannelCount);
                         } break;
                         InvalidDefaultCase;
                     }
                     SrcAt = DownscaleBuffer;
                 }
 
-                for (u32 Y = 0; Y < Height; Y += 4)
+                for (u32 Y = 0; Y < ExtentX; Y += 4)
                 {
-                    for (u32 X = 0; X < Width; X += 4)
+                    for (u32 X = 0; X < ExtentY; X += 4)
                     {
-                        u32 Y0 = (Y + 0) * Width;
-                        u32 Y1 = (Y + 1) * Width;
-                        u32 Y2 = (Y + 2) * Width;
-                        u32 Y3 = (Y + 3) * Width;
                         switch (Entry->Info.Format)
                         {
                             case Format_BC3_SRGB: Alpha = 1;
                             case Format_BC3_UNorm: Alpha = 1;
                             case Format_BC1_RGB_SRGB:
                             {
-                                rgba8 SrcBlock[16] = 
+                                Assert(Image.ChannelCount == 3 || Image.ChannelCount == 4);
+
+                                u8 Block[4*4][4];
+                                for (u32 BlockY = 0; BlockY < 4; BlockY++)
                                 {
-                                    SrcAt[X+0 + Y0], SrcAt[X+1 + Y0], SrcAt[X+2 + Y0], SrcAt[X+3 + Y0],
-                                    SrcAt[X+0 + Y1], SrcAt[X+1 + Y1], SrcAt[X+2 + Y1], SrcAt[X+3 + Y1],
-                                    SrcAt[X+0 + Y2], SrcAt[X+1 + Y2], SrcAt[X+2 + Y2], SrcAt[X+3 + Y2],
-                                    SrcAt[X+0 + Y3], SrcAt[X+1 + Y3], SrcAt[X+2 + Y3], SrcAt[X+3 + Y3],
-                                };
-                                stb_compress_dxt_block(DstAt, (u8*)SrcBlock, Alpha, STB_DXT_HIGHQUAL);
+                                    for (u32 BlockX = 0; BlockX < 4; BlockX++)
+                                    {
+                                        umm Offset = ((X + BlockX) + (Y + BlockY) * ExtentX) * Image.ChannelCount;
+                                        u8* Src = SrcAt + Offset;
+                                        Block[BlockX + 4 * BlockY][0] = Src[0];
+                                        Block[BlockX + 4 * BlockY][1] = Src[1];
+                                        Block[BlockX + 4 * BlockY][2] = Src[2];
+                                        Block[BlockX + 4 * BlockY][3] = (Image.ChannelCount == 4) ? Src[3] : 0xFFu;
+                                    }
+                                }
+                                stb_compress_dxt_block(DstAt, (u8*)Block, Alpha, STB_DXT_HIGHQUAL);
                             } break;
                             case Format_BC5_UNorm:
                             {
-                                u8 SrcBlock[16][2] = 
+                                Assert(Image.ChannelCount >= 2);
+
+                                u8 Block[4*4][2];
+                                for (u32 BlockY = 0; BlockY < 4; BlockY++)
                                 {
-                                    { SrcAt[X+0 + Y0].R, SrcAt[X+0 + Y0].G },
-                                    { SrcAt[X+1 + Y0].R, SrcAt[X+1 + Y0].G },
-                                    { SrcAt[X+2 + Y0].R, SrcAt[X+2 + Y0].G },
-                                    { SrcAt[X+3 + Y0].R, SrcAt[X+3 + Y0].G },
-
-                                    { SrcAt[X+0 + Y1].R, SrcAt[X+0 + Y1].G },
-                                    { SrcAt[X+1 + Y1].R, SrcAt[X+1 + Y1].G },
-                                    { SrcAt[X+2 + Y1].R, SrcAt[X+2 + Y1].G },
-                                    { SrcAt[X+3 + Y1].R, SrcAt[X+3 + Y1].G },
-
-                                    { SrcAt[X+0 + Y2].R, SrcAt[X+0 + Y2].G },
-                                    { SrcAt[X+1 + Y2].R, SrcAt[X+1 + Y2].G },
-                                    { SrcAt[X+2 + Y2].R, SrcAt[X+2 + Y2].G },
-                                    { SrcAt[X+3 + Y2].R, SrcAt[X+3 + Y2].G },
-
-                                    { SrcAt[X+0 + Y3].R, SrcAt[X+0 + Y3].G },
-                                    { SrcAt[X+1 + Y3].R, SrcAt[X+1 + Y3].G },
-                                    { SrcAt[X+2 + Y3].R, SrcAt[X+2 + Y3].G },
-                                    { SrcAt[X+3 + Y3].R, SrcAt[X+3 + Y3].G },
-                                };
-                                stb_compress_bc5_block(DstAt, (u8*)SrcBlock);
+                                    for (u32 BlockX = 0; BlockX < 4; BlockX++)
+                                    {
+                                        umm Offset = ((X + BlockX) + (Y + BlockY) * ExtentX) * Image.ChannelCount;
+                                        u8* Src = SrcAt + Offset;
+                                        Block[BlockX + 4*BlockY][0] = Src[0];
+                                        Block[BlockX + 4*BlockY][1] = Src[1];
+                                    }
+                                }
+                                stb_compress_bc5_block(DstAt, (u8*)Block);
                             } break;
                             InvalidDefaultCase;
                         }
@@ -699,9 +684,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
     {
         texture_info Info =
         {
-            .Width = 1,
-            .Height = 1,
-            .Depth = 1,
+            .Extent = { 1, 1, 1 },
             .MipCount = 1,
             .ArrayCount = 1,
             .Format = Format_R8G8B8A8_SRGB,
@@ -726,9 +709,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
     {
         texture_info Info =
         {
-            .Width = 1,
-            .Height = 1,
-            .Depth = 1,
+            .Extent = { 1, 1, 1 },
             .MipCount = 1,
             .ArrayCount = 1,
             .Format = Format_R8G8_UNorm,
@@ -780,16 +761,14 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         // but we may want to figure out some way for the user code to pack texture arrays/atlases dynamically
         texture_info Info =
         {
-            .Width = 512,
-            .Height = 512,
-            .Depth = 1,
+            .Extent = { 512, 512, 1 },
             .MipCount = 1,
             .ArrayCount = Particle_COUNT,
             .Format = Format_R8_UNorm,
             .Swizzle = { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
         };
 
-        umm ImageSize = Info.Width * Info.Height;
+        umm ImageSize = Info.Extent.X * Info.Extent.Y;
         umm MemorySize = ImageSize * Particle_COUNT;
         void* Memory = PushSize_(Scratch, 0, MemorySize, 0x100);
 
@@ -799,12 +778,30 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
             memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
 
             buffer FileData = Platform.LoadEntireFile(ParticlePaths[ParticleIndex], Scratch);
-            memory_arena Tmp = InitializeArena(ImageSize, MemoryAt);
-            loaded_image Image = LoadImage(&Tmp, FileData, 1);
+            loaded_image Image = LoadImage(Scratch, FileData);
 
-            Assert(Image.Data);
-            Assert(Image.Width == Info.Width && Image.Height == Info.Height);
-            MemoryAt += ImageSize;
+            if (Image.Data && 
+                (Image.Extent.X == Info.Extent.X) && 
+                (Image.Extent.Y == Info.Extent.Y) &&
+                Image.BitDepthPerChannel == 8)
+            {
+                u8* SrcAt = (u8*)Image.Data;
+
+                // HACK(boti): We know that we're using the black background particles, so the R channel is the alpha
+                const u32 TargetChannel = 0;
+                for (u32 Y = 0; Y  < Image.Extent.Y; Y++)
+                {
+                    for (u32 X = 0; X < Image.Extent.X; X++)
+                    {
+                        *MemoryAt++ = SrcAt[TargetChannel];
+                        SrcAt += Image.ChannelCount;
+                    }
+                }
+            }
+            else
+            {
+                UnimplementedCodePath;
+            }
 
             RestoreArena(Scratch, Checkpoint);
         }
@@ -907,9 +904,7 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Fra
 
             texture_info Info = 
             {
-                .Width = FontFile->Bitmap.Width,
-                .Height = FontFile->Bitmap.Height,
-                .Depth = 1,
+                .Extent = { FontFile->Bitmap.Width, FontFile->Bitmap.Height, 1 },
                 .MipCount = 1,
                 .ArrayCount = 1,
                 .Format = Format_R8_UNorm,

@@ -41,14 +41,14 @@ DetermineImageFileType(memory_arena* Arena, buffer FileData);
 // but in the future we'll probably want to formalize this to use the format enum, etc.
 struct loaded_image
 {
-    u32 Width;
-    u32 Height;
-    u32 ChannelCount; // NOTE(boti): Currently assumed to be 8 bits/channel
+    v2u Extent;
+    u32 ChannelCount;
+    u32 BitDepthPerChannel;
     void* Data;
 };
 
 lbfn loaded_image
-LoadImage(memory_arena* Arena, buffer FileData, u32 DesiredChannelCount);
+LoadImage(memory_arena* Arena, buffer FileData);
 
 //
 // Skin and animation

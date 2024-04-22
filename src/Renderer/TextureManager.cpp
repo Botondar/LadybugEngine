@@ -324,7 +324,7 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
             .flags = 0,
             .imageType = VK_IMAGE_TYPE_2D, // TODO(boti): Maybe this should be passed in as well?
             .format = FormatTable[Info.Format],
-            .extent = { Info.Width, Info.Height, Info.Depth },
+            .extent = { Info.Extent.X, Info.Extent.Y, Info.Extent.Z },
             .mipLevels = Info.MipCount,
             .arrayLayers = Info.ArrayCount,
             .samples = VK_SAMPLE_COUNT_1_BIT,

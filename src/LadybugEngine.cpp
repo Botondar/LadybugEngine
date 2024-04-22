@@ -88,7 +88,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     {
         ResetArena(&GameState->TransientArena);
         v2u Resolution = { 0, 0 };
-        Resolution = { 1366, 768 };
+        //Resolution = { 1366, 768 };
         RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, Resolution);
     }
     RenderFrame->ImmediateTextureID = GameState->Assets->Textures[GameState->Assets->DefaultFontTextureID].RendererID;
@@ -137,7 +137,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             texture_queue_entry* Entry = Queue->Entries + EntryIndex;
             if (Entry->ReadyToTransfer)
             {
-                umm TotalSize = GetMipChainSize(Entry->Info.Width, Entry->Info.Height, 
+                umm TotalSize = GetMipChainSize(Entry->Info.Extent.X, Entry->Info.Extent.Y, 
                                                 Entry->Info.MipCount, Entry->Info.ArrayCount,
                                                 FormatByterateTable[Entry->Info.Format]);
                 umm Begin = GetNextEntryOffset(Queue, TotalSize, Queue->RingBufferReadAt);
@@ -201,14 +201,15 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
                             if (Subresource.BaseArray != 0 || Subresource.ArrayCount != U32_MAX) UnimplementedCodePath;
                             umm Offset = GetPackedTexture2DMipOffset(&Texture->Info, Subresource.BaseMip);
 
-                            u32 EffectiveWidth = Max(Texture->Info.Width >> Subresource.BaseMip, 1u);
-                            u32 EffectiveHeight = Max(Texture->Info.Height >> Subresource.BaseMip, 1u);
+                            v2u EffectiveExtent = 
+                            {
+                                Max(Texture->Info.Extent.X >> Subresource.BaseMip, 1u),
+                                Max(Texture->Info.Extent.Y >> Subresource.BaseMip, 1u),
+                            };
                             texture_info CopyInfo = 
                             {
-                                .Width = EffectiveWidth,
-                                .Height = EffectiveHeight,
-                                .Depth = 1,
-                                .MipCount =  Min(GetMaxMipCount(EffectiveWidth, EffectiveHeight), Subresource.MipCount),
+                                .Extent = { EffectiveExtent.X, EffectiveExtent.Y, 1 },
+                                .MipCount =  Min(GetMaxMipCount(EffectiveExtent.X, EffectiveExtent.Y), Subresource.MipCount),
                                 .ArrayCount = 1,
                                 .Format = Texture->Info.Format,
                                 .Swizzle = Texture->Info.Swizzle,

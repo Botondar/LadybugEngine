@@ -244,6 +244,7 @@ constexpr f32 F32_EPSILON = 1.19209290e-7f;
 #include <cmath>
 
 union v2u;
+union v3u;
 union v2;
 union v3;
 union v4;
@@ -313,6 +314,12 @@ union v2u
 {
     u32 E[2];
     struct { u32 X, Y; };
+};
+
+union v3u
+{
+    u32 E[3];
+    struct { u32 X, Y, Z; };
 };
 
 union v2

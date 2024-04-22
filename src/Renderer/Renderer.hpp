@@ -530,9 +530,7 @@ struct format_byterate
 
 struct texture_info
 {
-    u32 Width;
-    u32 Height;
-    u32 Depth;
+    v3u Extent;
     u32 MipCount;
     u32 ArrayCount;
     format Format;
@@ -557,9 +555,9 @@ inline texture_subresource_range AllTextureSubresourceRange()
 inline b32 AreTextureInfosSameFormat(texture_info A, texture_info B)
 {
     b32 Result = 
-        (A.Width == B.Width) &&
-        (A.Height == B.Height) &&
-        (A.Depth == B.Depth) &&
+        (A.Extent.X == B.Extent.X) &&
+        (A.Extent.Y == B.Extent.Y) &&
+        (A.Extent.Z == B.Extent.Z) &&
         (A.MipCount == B.MipCount) &&
         (A.ArrayCount == B.ArrayCount) &&
         (A.Format == B.Format);
@@ -1170,21 +1168,21 @@ inline umm GetPackedTexture2DMipOffset(const texture_info* Info, u32 Mip)
     // TODO(boti): This is really just the same code as GetMipChainSize...
     // NOTE(boti): MipCount from info is ignored, 
     // we return the offset even if that mip level is not present in the texture
-    u32 MipCount = GetMaxMipCount(Info->Width, Info->Height);
+    u32 MipCount = GetMaxMipCount(Info->Extent.X, Info->Extent.Y);
     if (Mip < MipCount)
     {
         format_byterate Byterate = FormatByterateTable[Info->Format];
 
         for (u32 CurrentMip = 0; CurrentMip < Mip; CurrentMip++)
         {
-            u32 Width = Max(Info->Width >> CurrentMip, 1u);
-            u32 Height = Max(Info->Height >> CurrentMip, 1u);
+            u32 ExtentX = Max(Info->Extent.X >> CurrentMip, 1u);
+            u32 ExtentY = Max(Info->Extent.Y >> CurrentMip, 1u);
             if (Byterate.Flags & FormatFlag_BlockCompressed)
             {
-                Width = Align(Width, 4u);
-                Height = Align(Height, 4u);
+                ExtentX = Align(ExtentX, 4u);
+                ExtentY = Align(ExtentY, 4u);
             }
-            Result += ((umm)Width * (umm)Height * Byterate.Numerator) / Byterate.Denominator;
+            Result += ((umm)ExtentX * (umm)ExtentY * Byterate.Numerator) / Byterate.Denominator;
         }
     }
 
@@ -1200,11 +1198,11 @@ inline texture_subresource_range SubresourceFromMipMask(u32 Mask, texture_info I
     u32 MostDetailedMipInMask;
     if (BitScanReverse(&MostDetailedMipInMask, Mask))
     {
-        u32 MipCount = GetMaxMipCount(Info.Width, Info.Height);
+        u32 MipCount = GetMaxMipCount(Info.Extent.X, Info.Extent.Y);
         u32 ResolutionFromMask = 1 << MostDetailedMipInMask;
         u32 MipCountFromMask = GetMaxMipCount(ResolutionFromMask, ResolutionFromMask);
 
-        u32 MaxExtent = Max(Info.Width, Info.Height);
+        u32 MaxExtent = Max(Info.Extent.X, Info.Extent.Y);
         if (MipCountFromMask > MipCount) 
         {
             MipCountFromMask = MipCount;
@@ -1270,7 +1268,7 @@ TransferTexture(render_frame* Frame, renderer_texture_id ID,
     b32 Result = true;
 
     format_byterate ByteRate = FormatByterateTable[Info.Format];
-    umm TotalSize = GetMipChainSize(Info.Width, Info.Height, Info.MipCount, Info.ArrayCount, ByteRate);
+    umm TotalSize = GetMipChainSize(Info.Extent.X, Info.Extent.Y, Info.MipCount, Info.ArrayCount, ByteRate);
     render_command* Command = PushCommand_(Frame, RenderCommand_Transfer, 0, 0, 64, TotalSize);
     if (Command)
     {
