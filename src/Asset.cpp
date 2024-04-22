@@ -990,35 +990,6 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         }
     }
 
-    auto LoadAndUploadTexture = [&](u32 TextureIndex, texture_type Type, gltf_alpha_mode AlphaMode) -> u32
-    {
-        u32 Result = Assets->TextureCount++;
-        if (TextureIndex < GLTF.TextureCount)
-        {
-            gltf_texture* Texture = GLTF.Textures + TextureIndex;
-            if (Texture->ImageIndex >= GLTF.ImageCount) UnhandledError("Invalid glTF image index");
-            
-            gltf_image* Image = GLTF.Images + Texture->ImageIndex;
-            if (Image->BufferViewIndex != U32_MAX) UnimplementedCodePath;
-            
-            if (!OverwriteNameAndExtension(&Filepath, Image->URI))
-            {
-                UnhandledError("Invalid glTF image path");
-            }
-            
-            renderer_texture_id Placeholder = Assets->Textures[Assets->DefaultTextures[Type]].RendererID;
-            texture* TextureAsset = Assets->Textures + Result;
-            TextureAsset->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, nullptr, Placeholder);
-            TextureAsset->IsLoaded = false;
-            AddEntry(&Assets->TextureQueue, TextureAsset, Type, (AlphaMode != GLTF_ALPHA_MODE_OPAQUE), &Filepath);
-        }
-        else
-        {
-            //Assert(!"WARNING: default texture");
-        }
-        return Result;
-    };
-
     struct loaded_gltf_image
     {
         u32 AssetID;
@@ -1061,7 +1032,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             Material->TransmissionEnabled = SrcMaterial->TransmissionEnabled;
             Material->Transmission = SrcMaterial->TransmissionFactor;
 
-            auto ProcessTexture = [&GLTF, Assets, ImageTable, LoadAndUploadTexture](
+            auto ProcessTexture = [&GLTF, Assets, ImageTable](
                 gltf_texture_info* TextureInfo,
                 flags32 Usage,
                 material_sampler_id* SamplerID, 
@@ -1124,6 +1095,10 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             ProcessTexture(&SrcMaterial->MetallicRoughnessTexture,
                            (1u << TextureData_Metallic) | (1u << TextureData_Roughness),
                            &Material->MetallicRoughnessSamplerID, 
+                           &Material->MetallicRoughnessID);
+            ProcessTexture(&SrcMaterial->OcclusionTexture,
+                           (1u << TextureData_Occlusion),
+                           &Material->MetallicRoughnessSamplerID, // TODO(boti): rename
                            &Material->MetallicRoughnessID);
             ProcessTexture(&SrcMaterial->TransmissionTexture, 
                            (1u << TextureData_Transmission),
