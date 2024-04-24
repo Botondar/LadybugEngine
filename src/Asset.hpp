@@ -118,25 +118,44 @@ enum texture_data_type : u32
 };
 static_assert(TextureData_Count < 32);
 
-typedef flags32 texture_channel_flags;
-enum texture_channel_bits : texture_channel_flags
-{
-    TextureChannel_None = 0,
-
-    TextureChannel_R = (1u << 0),
-    TextureChannel_G = (1u << 1),
-    TextureChannel_B = (1u << 2),
-    TextureChannel_A = (1u << 3),
-};
-
 enum texture_type : u32
 {
-    TextureType_Diffuse,
+    TextureType_Albedo, // NOTE(boti): Also includes coverage when alpha is present
     TextureType_Normal,
-    TextureType_Material,
+    TextureType_RoMe,
+    TextureType_Occlusion,
     TextureType_Transmission,
 
     TextureType_Count,
+};
+
+enum texture_channel : u32
+{
+    TextureChannel_Undefined = 0,
+
+    TextureChannel_R,
+    TextureChannel_G,
+    TextureChannel_B,
+    TextureChannel_A,
+};
+
+inline u32 IndexFromChannel(texture_channel Channel)
+{
+    Assert(Channel);
+    u32 Result = (u32)Channel - 1;
+    return(Result);
+}
+
+struct texture_load_op
+{
+    texture_type Type;
+    filepath Path;
+
+    struct
+    {
+        texture_channel RoughnessChannel;
+        texture_channel MetallicChannel;
+    } RoughnessMetallic;
 };
 
 struct texture_set
@@ -149,9 +168,7 @@ struct texture_queue_entry
     texture* Texture;
 
     // Input parameters for processing
-    texture_type TextureType;
-    b32 AlphaEnabled;
-    filepath Path;
+    texture_load_op Op;
 
     // Output parameters for transfer
     volatile b32 ReadyToTransfer;
@@ -177,7 +194,7 @@ struct texture_queue
 };
 
 lbfn b32 IsEmpty(texture_queue* Queue);
-lbfn void AddEntry(texture_queue* Queue, texture* Texture, texture_type Type, b32 AlphaEnabled, const filepath* Path);
+lbfn void AddEntry(texture_queue* Queue, texture* Texture, texture_load_op Op);
 lbfn b32 ProcessEntry(texture_queue* Queue);
 // NOTE(boti): Wraps around when Begin+TotalSize > MemorySize
 lbfn umm GetNextEntryOffset(texture_queue* Queue, umm TotalSize, umm Begin);
@@ -270,9 +287,6 @@ lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Frame
 lbfn void DEBUGLoadTestScene(memory_arena* Scratch, 
                              assets* Assets, struct game_world* World, render_frame* Frame,
                              const char* ScenePath, m4 BaseTransform);
-
-lbfn texture_set 
-DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, const char* Paths[TextureType_Count]);
 
 lbfn void AssetThread(void* Param);
 

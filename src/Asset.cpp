@@ -458,7 +458,7 @@ lbfn umm GetNextEntryOffset(texture_queue* Queue, umm TotalSize, umm Begin)
     return(Begin);
 }
 
-lbfn void AddEntry(texture_queue* Queue, texture* Texture, texture_type Type, b32 AlphaEnabled, const filepath* Path)
+lbfn void AddEntry(texture_queue* Queue, texture* Texture, texture_load_op Op)
 {
     // TODO(boti): Spin-wait here?
     if (Queue->CompletionGoal - Queue->CompletionCount < Queue->MaxEntryCount)
@@ -467,9 +467,7 @@ lbfn void AddEntry(texture_queue* Queue, texture* Texture, texture_type Type, b3
         Queue->Entries[Index] =
         {
             .Texture = Texture,
-            .TextureType = Type,
-            .AlphaEnabled = AlphaEnabled,
-            .Path = *Path,
+            .Op = Op,
             .ReadyToTransfer = false,
         };
         Platform.ReleaseSemaphore(Queue->Semaphore, 1, nullptr);
@@ -492,41 +490,101 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
     if (Queue->ProcessingCount < Queue->CompletionGoal)
     {
         texture_queue_entry* Entry = Queue->Entries + (Queue->ProcessingCount++ % Queue->MaxEntryCount);
+        texture_load_op* Op = &Entry->Op;
 
         memory_arena* Scratch = &Queue->Scratch;
         memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
 
-        int Alpha = 0;
-        switch (Entry->TextureType)
+        loaded_image Image = {};
+        buffer ImageFile = Platform.LoadEntireFile(Op->Path.Path, Scratch);
+        switch (Op->Type)
         {
-            case TextureType_Diffuse:
+            case TextureType_Albedo:
             {
-                if (Entry->AlphaEnabled)
+                Image = LoadImage(Scratch, ImageFile);
+                Assert(Image.ChannelCount == 3 || Image.ChannelCount == 4);
+                Entry->Info.Format = (Image.ChannelCount == 3) ? Format_BC1_RGB_SRGB : Format_BC3_SRGB;
+            } break;
+            case TextureType_Normal:
+            {
+                Image = LoadImage(Scratch, ImageFile);
+                Entry->Info.Format = Format_BC5_UNorm;
+            } break;
+            case TextureType_RoMe:
+            {
+                loaded_image SourceImage = LoadImage(Scratch, ImageFile);
+                Assert(SourceImage.Data);
+                // TODO(boti): See todo below
+                Assert(SourceImage.BitDepthPerChannel == 8);
+
+                u32 ChannelCount = 0;
+                if (Op->RoughnessMetallic.RoughnessChannel && Op->RoughnessMetallic.MetallicChannel)
                 {
-                    Alpha = 1;
-                    Entry->Info.Format = Format_BC3_SRGB;
+                    Assert(IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel) < SourceImage.ChannelCount);
+                    Assert(IndexFromChannel(Op->RoughnessMetallic.MetallicChannel) < SourceImage.ChannelCount);
+                    Entry->Info.Swizzle = { Swizzle_One, Swizzle_R, Swizzle_G, Swizzle_One };
+                    ChannelCount = 2;
+                }
+                else if (Op->RoughnessMetallic.RoughnessChannel)
+                {
+                    Assert(IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel) < SourceImage.ChannelCount);
+                    Entry->Info.Swizzle = { Swizzle_One, Swizzle_R, Swizzle_Zero, Swizzle_One };
+                    ChannelCount = 1;
+                }
+                else if (Op->RoughnessMetallic.MetallicChannel)
+                {
+                    Assert(IndexFromChannel(Op->RoughnessMetallic.MetallicChannel) < SourceImage.ChannelCount);
+                    Entry->Info.Swizzle = { Swizzle_One, Swizzle_One, Swizzle_R, Swizzle_One };
+                    ChannelCount = 1;
                 }
                 else
                 {
-                    Entry->Info.Format = Format_BC1_RGB_SRGB;
+                    InvalidCodePath;
+                }
+
+                Entry->Info.Format = (ChannelCount == 2) ? Format_BC5_UNorm : Format_BC4_UNorm;
+
+                Image.Extent = SourceImage.Extent;
+                Image.ChannelCount = ChannelCount;
+                Image.BitDepthPerChannel = SourceImage.BitDepthPerChannel;
+                Image.Data = PushSize_(Scratch, 0, Image.Extent.X * Image.Extent.Y * Image.ChannelCount * (Image.BitDepthPerChannel / 8), 64);
+                Assert(Image.Data);
+
+                u8* SrcAt = (u8*)SourceImage.Data;
+                u8* DstAt = (u8*)Image.Data;
+                for (u32 Y = 0; Y < SourceImage.Extent.Y; Y++)
+                {
+                    for (u32 X = 0; X < SourceImage.Extent.X; X++)
+                    {
+                        if (ChannelCount == 2)
+                        {
+                            DstAt[0] = SrcAt[IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel)];
+                            DstAt[1] = SrcAt[IndexFromChannel(Op->RoughnessMetallic.MetallicChannel)];
+                        }
+                        else
+                        {
+                            DstAt[0] = Op->RoughnessMetallic.RoughnessChannel ?
+                                SrcAt[IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel)] :
+                                SrcAt[IndexFromChannel(Op->RoughnessMetallic.MetallicChannel)];
+                        }
+                        DstAt += Image.ChannelCount;
+                        SrcAt += SourceImage.ChannelCount;
+                    }
                 }
             } break;
-            // TODO(boti): Transmission should be BC4 (or packed into some channel of another texture),
-            // encoding it as BC5 is a temporary hack to get thing running
-            case TextureType_Transmission: 
-            case TextureType_Normal:
+
+            case TextureType_Occlusion:
             {
-                Entry->Info.Format = Format_BC5_UNorm;
+                UnimplementedCodePath;
             } break;
-            case TextureType_Material:
+
+            case TextureType_Transmission:
             {
-                Entry->Info.Format = Format_BC3_UNorm;
+                UnimplementedCodePath;
             } break;
+
             InvalidDefaultCase;
         }
-        
-        buffer ImageFile = Platform.LoadEntireFile(Entry->Path.Path, Scratch);
-        loaded_image Image = LoadImage(Scratch, ImageFile);
 
         // TODO(boti): Currently all images get converted to 8bpc at load time,
         // but if we ever support higher bit depths, this function will need to get updated as well
@@ -559,46 +617,50 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
                 u32 ExtentX = Max(Entry->Info.Extent.X >> MipIndex, 1u);
                 u32 ExtentY = Max(Entry->Info.Extent.Y >> MipIndex, 1u);
 
+                //
+                // Mip generation
+                //
                 if (MipIndex != 0)
                 {
                     u32 PrevExtentX = Max(Entry->Info.Extent.X >> (MipIndex - 1), 1u);
                     u32 PrevExtentY = Max(Entry->Info.Extent.Y >> (MipIndex - 1), 1u);
 
-                    switch (Entry->TextureType)
+                    switch (Op->Type)
                     {
-                        case TextureType_Diffuse:
+                        case TextureType_Albedo:
                         {
+                            stbir_pixel_layout PixelLayout = (Image.ChannelCount == 4) ? STBIR_RGBA_PM : STBIR_RGB;
                             stbir_resize_uint8_srgb(
                                 (u8*)SrcAt, PrevExtentX, PrevExtentY, 0, 
                                 (u8*)DownscaleBuffer, ExtentX, ExtentY, 0,
-                                (stbir_pixel_layout)Image.ChannelCount);
+                                PixelLayout);
                         } break;
 
-                        case TextureType_Transmission:
-                        case TextureType_Normal:
-                        case TextureType_Material:
+                        default:
                         {
                             stbir_resize_uint8_linear(
                                 (u8*)SrcAt, PrevExtentX, PrevExtentY, 0, 
                                 (u8*)DownscaleBuffer, ExtentX, ExtentY, 0,
                                 (stbir_pixel_layout)Image.ChannelCount);
                         } break;
-                        InvalidDefaultCase;
                     }
                     SrcAt = DownscaleBuffer;
                 }
 
+                //
+                // BC compression
+                //
                 for (u32 Y = 0; Y < ExtentX; Y += 4)
                 {
                     for (u32 X = 0; X < ExtentY; X += 4)
                     {
                         switch (Entry->Info.Format)
                         {
-                            case Format_BC3_SRGB: Alpha = 1;
-                            case Format_BC3_UNorm: Alpha = 1;
+                            case Format_BC3_SRGB:
                             case Format_BC1_RGB_SRGB:
                             {
                                 Assert(Image.ChannelCount == 3 || Image.ChannelCount == 4);
+                                int Alpha = (Image.ChannelCount == 4);
 
                                 u8 Block[4*4][4];
                                 for (u32 BlockY = 0; BlockY < 4; BlockY++)
@@ -614,6 +676,20 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
                                     }
                                 }
                                 stb_compress_dxt_block(DstAt, (u8*)Block, Alpha, STB_DXT_HIGHQUAL);
+                            } break;
+                            case Format_BC4_UNorm:
+                            {
+                                u8 Block[4*4][1];
+                                for (u32 BlockY = 0; BlockY < 4; BlockY++)
+                                {
+                                    for (u32 BlockX = 0; BlockX < 4; BlockX++)
+                                    {
+                                        umm Offset = ((X + BlockX) + (Y + BlockY) * ExtentX) * Image.ChannelCount;
+                                        u8* Src = SrcAt + Offset;
+                                        Block[BlockX + 4*BlockY][0] = Src[0];
+                                    }
+                                }
+                                stb_compress_bc4_block(DstAt, (u8*)Block);
                             } break;
                             case Format_BC5_UNorm:
                             {
@@ -697,9 +773,10 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         texture* Whiteness = Assets->Textures + Assets->WhitenessID;
 
         Whiteness->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, &Info, InvalidRendererTextureID);
-        Assets->DefaultTextures[TextureType_Diffuse] = Assets->WhitenessID;
-        Assets->DefaultTextures[TextureType_Material] = Assets->WhitenessID;
-        Assets->DefaultTextures[TextureType_Transmission] = Assets->WhitenessID;
+        Assets->DefaultTextures[TextureType_Albedo]         = Assets->WhitenessID;
+        Assets->DefaultTextures[TextureType_RoMe]           = Assets->WhitenessID;
+        Assets->DefaultTextures[TextureType_Occlusion]      = Assets->WhitenessID;
+        Assets->DefaultTextures[TextureType_Transmission]   = Assets->WhitenessID;
 
         u32 Texel = 0xFFFFFFFFu;
         TransferTexture(Frame, Whiteness->RendererID, Info, AllTextureSubresourceRange(), &Texel);
@@ -1007,9 +1084,9 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         {
             material* Material = Assets->Materials + Assets->MaterialCount++;
 
-            Material->AlbedoID = Assets->DefaultTextures[TextureType_Diffuse];
+            Material->AlbedoID = Assets->DefaultTextures[TextureType_Albedo];
             Material->NormalID = Assets->DefaultTextures[TextureType_Normal];
-            Material->MetallicRoughnessID = Assets->DefaultTextures[TextureType_Material];
+            Material->MetallicRoughnessID = Assets->DefaultTextures[TextureType_RoMe];
             Material->AlbedoSamplerID = { 0 };
             Material->NormalSamplerID = { 0 };
             Material->MetallicRoughnessSamplerID = { 0 };
@@ -1118,25 +1195,24 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         if (Image->AssetID && Image->Usage)
         {
             b32 DoUpload = true;
-            b32 AlphaEnabled = false;
-            texture_type Type = TextureType_Diffuse;
+            texture_load_op Op = {};
 
             if (Image->Usage == (1u << TextureData_Albedo))
             {
-                AlphaEnabled = true;
-                Type = TextureType_Diffuse;
+                Op.Type = TextureType_Albedo;
             }
             else if (Image->Usage == (1u << TextureData_Normal))
             {
-                Type = TextureType_Normal;
+                Op.Type = TextureType_Normal;
             }
             else if (Image->Usage == ((1u << TextureData_Metallic) | (1u << TextureData_Roughness)))
             {
-                Type = TextureType_Material;
+                Op.Type = TextureType_RoMe;
+                Op.RoughnessMetallic = { TextureChannel_G, TextureChannel_B };
             }
             else if (Image->Usage == (1u << TextureData_Transmission)) 
             {
-                Type = TextureType_Transmission;
+                Op.Type = TextureType_Transmission;
             }
             else
             {
@@ -1145,14 +1221,15 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
             if (DoUpload)
             {
-                renderer_texture_id Placeholder = Assets->Textures[Assets->DefaultTextures[Type]].RendererID;
+                renderer_texture_id Placeholder = Assets->Textures[Assets->DefaultTextures[Op.Type]].RendererID;
                 texture* Asset = Assets->Textures + Image->AssetID;
                 Asset->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, nullptr, Placeholder);
                 Asset->IsLoaded = false;
 
-                if (OverwriteNameAndExtension(&Filepath, GLTFImage->URI))
+                Op.Path = Filepath;
+                if (OverwriteNameAndExtension(&Op.Path, GLTFImage->URI))
                 {
-                    AddEntry(&Assets->TextureQueue, Asset, Type, AlphaEnabled, &Filepath);
+                    AddEntry(&Assets->TextureQueue, Asset, Op);
                 }
                 else
                 {
@@ -1908,39 +1985,6 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
             }
         }
     }
-}
-
-lbfn texture_set 
-DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, const char* Paths[TextureType_Count])
-{
-    texture_set Result = {};
-
-    for (u32 TextureType = 0; TextureType < TextureType_Count; TextureType++)
-    {
-        u32 DefaultTextureID = Assets->DefaultTextures[TextureType];
-        const char* PathString = Paths[TextureType];
-        if (PathString && Assets->TextureCount < Assets->MaxTextureCount)
-        {
-            u32 ID = Assets->TextureCount++;
-            texture* Texture = Assets->Textures + ID;
-            memset(Texture, 0, sizeof(texture));
-            renderer_texture_id Placeholder = Assets->Textures[DefaultTextureID].RendererID;
-            Texture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, nullptr, Placeholder);
-
-            filepath Path = {};
-            if (MakeFilepathFromZ(&Path, PathString))
-            {
-                AddEntry(&Assets->TextureQueue, Texture, (texture_type)TextureType, false, &Path);
-                Result.IDs[TextureType] = ID;
-            }
-        }
-        else
-        {
-            Result.IDs[TextureType] = DefaultTextureID;
-        }
-    }
-
-    return(Result);
 }
 
 internal mesh_data CreateCubeMesh(memory_arena* Arena)

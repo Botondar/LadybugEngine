@@ -168,7 +168,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             texture_request* Request = RenderFrame->TextureRequests + RequestIndex;
 
             b32 IsDefaultTexture = false;
-            for (u32 TextureType = TextureType_Diffuse; TextureType < TextureType_Count; TextureType++)
+            for (u32 TextureType = TextureType_Albedo; TextureType < TextureType_Count; TextureType++)
             {
                 if (Request->TextureID.Value == Assets->Textures[Assets->DefaultTextures[TextureType]].RendererID.Value)
                 {
