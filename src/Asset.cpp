@@ -256,7 +256,7 @@ internal loaded_image LoadTIFF(memory_arena* Arena, buffer File)
     };
 
     u32 StripExtentY = 0;
-    constexpr u32 MaxStripCount = 32; // TODO(boti): We'll want to be able to handle this dynamically
+    constexpr u32 MaxStripCount = 512; // TODO(boti): We'll want to be able to handle this dynamically
     u32 StripCount = 0;
     tiff_strip Strips[MaxStripCount];
 
@@ -530,6 +530,22 @@ internal loaded_image LoadTIFF(memory_arena* Arena, buffer File)
     else
     {
         UnimplementedCodePath;
+    }
+
+    // Y-flip
+    for (u32 Y = 0; Y < Result.Extent.Y / 2; Y++)
+    {
+        u32 FlipY = Result.Extent.Y - Y - 1;
+        u32 ByteCount = Result.Extent.X * Result.ChannelCount * 1;
+        
+        u8* AAt = (u8*)OffsetPtr(Result.Data, Y * Result.Extent.X * Result.ChannelCount * 1);
+        u8* BAt = (u8*)OffsetPtr(Result.Data, FlipY * Result.Extent.X * Result.ChannelCount * 1);
+        while (ByteCount--)
+        {
+            u8 Temp = *AAt;
+            *AAt++ = *BAt;
+            *BAt++ = Temp;
+        }
     }
 
     return(Result);
