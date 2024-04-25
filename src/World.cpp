@@ -323,21 +323,21 @@ DEBUGInitializeWorld(
                 }
             }
 
-            #if 0
-            const char* TextureSetPaths[TextureType_Count] =
+            texture_set_entry TextureSetEntries[TextureType_Count] =
             {
-                [TextureType_Albedo] = "data/texture/TCom_Sand_Muddy2_2x2_4K_albedo.tif",
-                [TextureType_Normal] = "data/texture/TCom_Sand_Muddy2_2x2_4K_normal.tif",
-                [TextureType_Material] = nullptr, // TODO(boti): We need to break away from the glTF roughness=g, metallic=b here
-                [TextureType_Transmission] = nullptr,
+                [TextureType_Albedo]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_albedo.tif" },
+                [TextureType_Normal]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_normal.tif" },
+                [TextureType_RoMe]          = { "data/texture/TCom_Sand_Muddy2_2x2_4K_roughness.tif", TextureChannel_R, TextureChannel_Undefined },
+                [TextureType_Occlusion]     = {},
+                [TextureType_Transmission]  = {},
             };
-            texture_set TextureSet = DEBUGLoadTextureSet(Assets, Frame, TextureSetPaths);
+            texture_set TextureSet = DEBUGLoadTextureSet(Assets, Frame, TextureSetEntries);
 
             World->TerrainMaterialID = Assets->MaterialCount++;
             material* TerrainMaterial = Assets->Materials + World->TerrainMaterialID;
             TerrainMaterial->AlbedoID                   = TextureSet.IDs[TextureType_Albedo];
             TerrainMaterial->NormalID                   = TextureSet.IDs[TextureType_Normal];
-            TerrainMaterial->MetallicRoughnessID        = TextureSet.IDs[TextureType_Material];
+            TerrainMaterial->MetallicRoughnessID        = TextureSet.IDs[TextureType_RoMe];
             TerrainMaterial->AlbedoSamplerID            = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
             TerrainMaterial->NormalSamplerID            = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
             TerrainMaterial->MetallicRoughnessSamplerID = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
@@ -368,7 +368,7 @@ DEBUGInitializeWorld(
                                           0.0f, 0.0f, 0.0f, 1.0f);
             TerrainEntity->PieceCount = 1;
             TerrainEntity->Pieces[0].MeshID = ChunkMeshID;
-            #endif
+            
         } break;
         InvalidDefaultCase;
     }
@@ -496,7 +496,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         World->Camera.Yaw = 0.5f * Pi;
 
         // Load debug scene
-        #if 1
+        #if 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
                              DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);

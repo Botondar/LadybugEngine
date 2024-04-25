@@ -15,6 +15,7 @@
 LB_INLINE u16 EndianFlip16(u16 Value);
 LB_INLINE u32 EndianFlip32(u32 Value);
 LB_INLINE u64 EndianFlip64(u64 Value);
+LB_INLINE void EndianFlip(void* Dst, const void* Src, u32 ByteCount);
 
 LB_INLINE u32 FindLeastSignificantSetBit(u32 Value);
 LB_INLINE u32 TrailingZeroCount(u32 Value);
@@ -64,6 +65,30 @@ LB_INLINE u64 EndianFlip64(u64 Value)
         ((Value <<  8) & 0x000000FF00000000llu) |
         ((Value >>  8) & 0x00000000FF000000llu);
     return(Result);
+}
+
+LB_INLINE void EndianFlip(void* Dst, const void* Src, u32 ByteCount)
+{
+    switch (ByteCount)
+    {
+        case 1:
+        {
+            *(u8*)Dst = *(const u8*)Src;
+        } break;
+        case 2:
+        {
+            *(u16*)Dst = EndianFlip16(*(const u16*)Src);
+        } break;
+        case 4:
+        {
+            *(u32*)Dst = EndianFlip32(*(const u32*)Src);
+        } break;
+        case 8:
+        {
+            *(u64*)Dst = EndianFlip64(*(const u64*)Src);
+        } break;
+        InvalidDefaultCase;
+    }
 }
 
 LB_INLINE u32 TrailingZeroCount(u32 Value)

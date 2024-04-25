@@ -158,11 +158,6 @@ struct texture_load_op
     } RoughnessMetallic;
 };
 
-struct texture_set
-{
-    u32 IDs[TextureType_Count];
-};
-
 struct texture_queue_entry
 {
     texture* Texture;
@@ -202,7 +197,6 @@ lbfn umm GetNextEntryOffset(texture_queue* Queue, umm TotalSize, umm Begin);
 //
 // Material
 //
-
 enum transparency_mode : u32
 {
     Transparency_Opaque = 0,
@@ -280,6 +274,20 @@ struct assets
     skin Skins[MaxSkinCount];
     animation Animations[MaxAnimationCount];
 };
+
+struct texture_set
+{
+    u32 IDs[TextureType_Count];
+};
+
+struct texture_set_entry
+{
+    const char* Path;
+    texture_channel RoughnessChannel;
+    texture_channel MetallicChannel;
+};
+
+lbfn texture_set DEBUGLoadTextureSet(assets* Assets, texture_set_entry Entries[TextureType_Count]);
 
 lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scratch);
 
