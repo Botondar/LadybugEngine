@@ -48,9 +48,7 @@ struct platform_api
     protect_page*           ProtectPage;
 
     // Renderer
-    // TODO(boti): Make CreateRenderer fill an render_api struct with all the info
     create_renderer*    CreateRenderer;
-    get_device_name*    GetDeviceName;
     allocate_geometry*  AllocateGeometry;
     allocate_texture*   AllocateTexture;
     begin_render_frame* BeginRenderFrame;

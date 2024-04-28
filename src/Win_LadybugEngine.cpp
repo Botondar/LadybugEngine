@@ -429,7 +429,6 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     if (RendererDLL)
     {
         GameMemory.PlatformAPI.CreateRenderer       = (create_renderer*)    GetProcAddress(RendererDLL, "CreateRenderer");
-        GameMemory.PlatformAPI.GetDeviceName        = (get_device_name*)    GetProcAddress(RendererDLL, "GetDeviceName");
         GameMemory.PlatformAPI.AllocateGeometry     = (allocate_geometry*)  GetProcAddress(RendererDLL, "AllocateGeometry");
         GameMemory.PlatformAPI.AllocateTexture      = (allocate_texture*)   GetProcAddress(RendererDLL, "AllocateTexture");
         GameMemory.PlatformAPI.BeginRenderFrame     = (begin_render_frame*) GetProcAddress(RendererDLL, "BeginRenderFrame");

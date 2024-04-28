@@ -40,6 +40,7 @@ struct game_state
     memory_arena TransientArena;
 
     renderer* Renderer;
+    renderer_info RendererInfo;
 
     u64 FrameID;
 

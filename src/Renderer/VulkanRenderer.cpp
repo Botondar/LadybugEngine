@@ -761,12 +761,6 @@ ProcessDeletionEntries(gpu_deletion_queue* Queue, u32 FrameID)
     Queue->FrameEntryWriteAt[FrameID] = Queue->EntryWriteAt;
 }
 
-extern "C" Signature_GetDeviceName(GetDeviceName)
-{
-    const char* Result = Renderer->Vulkan.DeviceProps.deviceName;
-    return(Result);
-}
-
 extern "C" Signature_CreateRenderer(CreateRenderer)
 {
     renderer_init_result Result = {};
@@ -1728,6 +1722,9 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     // Pipelines
     Result.ErrorCode = CreatePipelines(Renderer, Scratch);
     ReturnOnFailure("Failed to create pipelines");
+
+    // Gather info
+    Result.Info.DeviceName = Renderer->Vulkan.DeviceProps.deviceName;
 
     #undef ReturnOnFailure
     #undef ReturnWithFailure

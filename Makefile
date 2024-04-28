@@ -28,7 +28,6 @@ SRC_ALL = $(SRC_BASE) $(SRC_RENDERER) $(SRC_LBLIB) "$(SRC)/Shader/ShaderInterop.
 GAME_EXPORT = -EXPORT:Game_UpdateAndRender
 RENDERER_EXPORT = \
     -EXPORT:CreateRenderer \
-    -EXPORT:GetDeviceName \
     -EXPORT:AllocateGeometry \
     -EXPORT:AllocateTexture \
     -EXPORT:BeginRenderFrame \

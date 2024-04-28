@@ -920,7 +920,6 @@ struct render_frame
 };
 
 #define Signature_CreateRenderer(name)      renderer_init_result        name(struct platform_api* PlatformAPI, memory_arena* Arena, memory_arena* Scratch)
-#define Signature_GetDeviceName(name)       const char*                 name(renderer* Renderer)
 #define Signature_AllocateGeometry(name)    geometry_buffer_allocation  name(renderer* Renderer, u32 VertexCount, u32 IndexCount)
 /* NOTE(boti): Passing nullptr as Info is allowed as a way to allocate a texture _name_ only.
  * Such a name can't be used as a placeholder until it has been uploaded with some data (after a frame boundary).
@@ -930,7 +929,6 @@ struct render_frame
 #define Signature_EndRenderFrame(name)      void                        name(render_frame* Frame)
 
 typedef Signature_CreateRenderer(create_renderer);
-typedef Signature_GetDeviceName(get_device_name);
 typedef Signature_AllocateGeometry(allocate_geometry);
 typedef Signature_AllocateTexture(allocate_texture);
 typedef Signature_BeginRenderFrame(begin_render_frame);

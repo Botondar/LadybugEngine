@@ -47,7 +47,11 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
         renderer_init_result RendererInit = Platform.CreateRenderer(&Memory->PlatformAPI, &GameState->TotalArena, &GameState->TransientArena);
         GameState->Renderer = RendererInit.Renderer;
-        if (!RendererInit.Renderer)
+        if (RendererInit.Renderer)
+        {
+            GameState->RendererInfo = RendererInit.Info;
+        }
+        else
         {
             GameIO->bQuitRequested = true;
             GameIO->QuitMessage = RendererInit.ErrorMessage;
