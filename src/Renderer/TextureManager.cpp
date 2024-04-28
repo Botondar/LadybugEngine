@@ -144,6 +144,7 @@ internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena
         Manager->DescriptorArena    = CreateGPUArena(DescriptorBufferSize, DescriptorMemoryTypeIndex, GpuMemoryFlag_Mapped);
 
         Manager->PersistentArena    = CreateGPUArena(MiB(32), MemoryTypeIndex, GpuMemoryFlag_None);
+        SetObjectName(VK.Device, Manager->PersistentArena.Memory, "TexturePersist");
         {
             VkMemoryAllocateInfo AllocInfo = 
             {
@@ -157,6 +158,7 @@ internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena
             {
                 Manager->Cache.MemorySize = MemorySize;
                 Manager->Cache.MemoryTypeIndex = MemoryTypeIndex;
+                SetObjectName(VK.Device, Manager->Cache.Memory, "TextureCache");
             }
             else
             {

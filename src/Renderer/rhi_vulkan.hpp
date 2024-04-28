@@ -12,6 +12,10 @@ PFN_vkSetDebugUtilsObjectNameEXT        vkSetDebugUtilsObjectNameEXT_;
 #define vkSetDebugUtilsObjectNameEXT    vkSetDebugUtilsObjectNameEXT_
 
 inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* Label);
+
+static VkResult SetObjectName(VkDevice Device, VkObjectType Type, u64 Handle, const char* Name);
+inline VkResult SetObjectName(VkDevice Device, VkDeviceMemory Memory, const char* Name);
+
 //
 // VK_EXT_descriptor_buffer
 //
@@ -122,4 +126,23 @@ GetBufferDeviceAddress(VkDevice Device, VkBuffer Buffer)
         Result = vkGetBufferDeviceAddress(Device, &Info);
     }
     return(Result);
+}
+
+static VkResult SetObjectName(VkDevice Device, VkObjectType Type, u64 Handle, const char* Name)
+{
+    VkDebugUtilsObjectNameInfoEXT NameInfo = 
+    {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+        .pNext = nullptr,
+        .objectType = Type,
+        .objectHandle = Handle,
+        .pObjectName = Name,
+    };
+    VkResult Result = vkSetDebugUtilsObjectNameEXT(Device, &NameInfo);
+    return(Result);
+}
+
+inline VkResult SetObjectName(VkDevice Device, VkDeviceMemory Memory, const char* Name)
+{
+    return SetObjectName(Device, VK_OBJECT_TYPE_DEVICE_MEMORY, (u64)Memory, Name);
 }

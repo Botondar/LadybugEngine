@@ -89,6 +89,7 @@ CreateRenderTargetHeap(render_target_heap* Heap, u64 MemorySize, VkDescriptorSet
         Heap->Arena = CreateGPUArena(MemorySize, MemoryType, GpuMemoryFlag_None);
         if (Heap->Arena.Memory)
         {
+            SetObjectName(VK.Device, Heap->Arena.Memory, "RenderTarget");
             Heap->SetLayout = SetLayout;
             Heap->DescriptorBuffer = DescriptorBuffer;
             Result = true;

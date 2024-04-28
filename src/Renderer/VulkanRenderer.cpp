@@ -955,6 +955,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             Renderer->ShadowArena = CreateGPUArena(R_ShadowMapMemorySize, MemoryTypeIndex, GpuMemoryFlag_None);
             if (Renderer->ShadowArena.Memory)
             {
+                SetObjectName(VK.Device, Renderer->ShadowArena.Memory, "ShadowMemory");
+
                 VkImageCreateInfo CascadeImageInfo = 
                 {
                     .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -1201,7 +1203,11 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     if (BARMemoryTypeIndexFound)
     {
         Renderer->BARMemory = CreateGPUArena(MiB(64), BARMemoryTypeIndex, true);
-        if (!Renderer->BARMemory.Memory)
+        if (Renderer->BARMemory.Memory)
+        {
+            SetObjectName(VK.Device, Renderer->BARMemory.Memory, "BAR");
+        }
+        else
         {
             // TODO(boti): logging
             return(0);
@@ -1546,6 +1552,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->StagingMemory);
                 ReturnOnFailure();
 
+                SetObjectName(VK.Device, Renderer->StagingMemory, "Staging");
+
                 Result = vkMapMemory(VK.Device, Renderer->StagingMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->StagingMemoryMapping);
                 for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
                 {
@@ -1595,6 +1603,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 };
                 Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->MipReadbackMemory);
                 ReturnOnFailure();
+
+                SetObjectName(VK.Device, Renderer->MipReadbackMemory, "MipReadback");
 
                 Result = vkMapMemory(VK.Device, Renderer->MipReadbackMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->MipReadbackMapping);
                 for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
