@@ -323,6 +323,7 @@ DEBUGInitializeWorld(
                 }
             }
 
+            #if 1
             texture_set_entry TextureSetEntries[TextureType_Count] =
             {
                 [TextureType_Albedo]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_albedo.tif" },
@@ -331,6 +332,16 @@ DEBUGInitializeWorld(
                 [TextureType_Occlusion]     = {},
                 [TextureType_Transmission]  = {},
             };
+            #else
+            texture_set_entry TextureSetEntries[TextureType_Count] =
+            {
+                [TextureType_Albedo]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_albedo.tif" },
+                [TextureType_Normal]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_normal.tif" },
+                [TextureType_RoMe]          = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_roughness.tif", TextureChannel_R, TextureChannel_Undefined },
+                [TextureType_Occlusion]     = {},
+                [TextureType_Transmission]  = {},
+            };
+            #endif
             texture_set TextureSet = DEBUGLoadTextureSet(Assets, Frame, TextureSetEntries);
 
             World->TerrainMaterialID = Assets->MaterialCount++;
