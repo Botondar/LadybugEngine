@@ -45,11 +45,12 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         constexpr umm TransientArenaSize = MiB(512);
         GameState->TransientArena = InitializeArena(TransientArenaSize, PushSize_(&GameState->TotalArena, 0, TransientArenaSize, 64));
 
-        GameState->Renderer = Platform.CreateRenderer(&Memory->PlatformAPI, &GameState->TotalArena, &GameState->TransientArena);
-        if (!GameState->Renderer)
+        renderer_init_result RendererInit = Platform.CreateRenderer(&Memory->PlatformAPI, &GameState->TotalArena, &GameState->TransientArena);
+        GameState->Renderer = RendererInit.Renderer;
+        if (!RendererInit.Renderer)
         {
             GameIO->bQuitRequested = true;
-            GameIO->QuitMessage = "Renderer creation failed";
+            GameIO->QuitMessage = RendererInit.ErrorMessage;
             return;
         }
         RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputExtent);

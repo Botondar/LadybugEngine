@@ -832,6 +832,22 @@ struct render_stats
 
 struct renderer;
 
+struct renderer_info
+{
+    const char* DeviceName;
+};
+
+struct renderer_init_result
+{
+    renderer* Renderer;
+
+    // NOTE(boti): Extra information if Renderer is null
+    u64 ErrorCode;
+    const char* ErrorMessage;
+
+    renderer_info Info;
+};
+
 struct render_frame
 {
     renderer* Renderer;
@@ -903,7 +919,7 @@ struct render_frame
     per_frame Uniforms;
 };
 
-#define Signature_CreateRenderer(name)      renderer*                   name(struct platform_api* PlatformAPI, memory_arena* Arena, memory_arena* Scratch)
+#define Signature_CreateRenderer(name)      renderer_init_result        name(struct platform_api* PlatformAPI, memory_arena* Arena, memory_arena* Scratch)
 #define Signature_GetDeviceName(name)       const char*                 name(renderer* Renderer)
 #define Signature_AllocateGeometry(name)    geometry_buffer_allocation  name(renderer* Renderer, u32 VertexCount, u32 IndexCount)
 /* NOTE(boti): Passing nullptr as Info is allowed as a way to allocate a texture _name_ only.

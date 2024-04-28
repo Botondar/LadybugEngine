@@ -3,12 +3,6 @@
 vulkan VK;
 platform_api Platform;
 
-#define ReturnOnFailure() \
-if (Result != VK_SUCCESS) { \
-    UnhandledError("Renderer init error"); \
-    return nullptr; \
-}
-
 #include "RenderDevice.cpp"
 #include "Geometry.cpp"
 #include "RenderTarget.cpp"
@@ -775,12 +769,37 @@ extern "C" Signature_GetDeviceName(GetDeviceName)
 
 extern "C" Signature_CreateRenderer(CreateRenderer)
 {
+    renderer_init_result Result = {};
+
     Platform = *PlatformAPI;
 
-    renderer* Renderer = PushStruct(Arena, 0, renderer);
-    if (!Renderer) return nullptr;
-    VkResult Result = InitializeVulkan(&Renderer->Vulkan);
-    ReturnOnFailure();
+    memory_arena_checkpoint InitCheckpoint = ArenaCheckpoint(Arena);
+
+    Result.Renderer = PushStruct(Arena, 0, renderer);
+    if (!Result.Renderer) 
+    {
+        Result.ErrorMessage = "Failed to allocate renderer from arena";
+        return(Result);
+    }
+    renderer* Renderer = Result.Renderer;
+
+    #define ReturnOnFailure(msg)                    \
+        if (Result.ErrorCode != VK_SUCCESS) {       \
+            Result.Renderer = nullptr;              \
+            Result.ErrorMessage = msg;              \
+            RestoreArena(Arena, InitCheckpoint);    \
+            return(Result);                         \
+        }
+
+    #define ReturnWithFailure(err_code, msg)        \
+        Result.Renderer = nullptr;                  \
+        Result.ErrorCode = err_code;                \
+        Result.ErrorMessage = msg;                  \
+        RestoreArena(Arena, InitCheckpoint);        \
+        return(Result)
+
+    Result.ErrorCode = InitializeVulkan(&Renderer->Vulkan);
+    ReturnOnFailure("Failed to initialize Vulkan instance or device");
     VK = Renderer->Vulkan;
 
     // Create samplers
@@ -788,8 +807,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         for (u32 Index = 0; Index < Sampler_Count; Index++)
         {
             VkSamplerCreateInfo Info = SamplerStateToVulkanSamplerInfo(SamplerInfos[Index]);
-            Result = vkCreateSampler(VK.Device, &Info, nullptr, &Renderer->Samplers[Index]);
-            Verify(Result == VK_SUCCESS);
+            Result.ErrorCode = vkCreateSampler(VK.Device, &Info, nullptr, &Renderer->Samplers[Index]);
+            ReturnOnFailure("Failed to create builtin sampler");
         }
 
         for (u32 Index = 0; Index < R_MaterialSamplerCount; Index++)
@@ -819,8 +838,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                     .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
                     .unnormalizedCoordinates = VK_FALSE,
                 };
-                Result = vkCreateSampler(VK.Device, &Info, nullptr, Renderer->MaterialSamplers + Index);
-                Verify(Result == VK_SUCCESS);
+                Result.ErrorCode = vkCreateSampler(VK.Device, &Info, nullptr, Renderer->MaterialSamplers + Index);
+                ReturnOnFailure("Failed to create material sampler");
             }
             else
             {
@@ -876,8 +895,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 }
             }
 
-            Result = vkCreateDescriptorSetLayout(VK.Device, &CreateInfo, nullptr, &Renderer->SetLayouts[Index]);
-            Verify(Result == VK_SUCCESS);
+            Result.ErrorCode = vkCreateDescriptorSetLayout(VK.Device, &CreateInfo, nullptr, &Renderer->SetLayouts[Index]);
+            ReturnOnFailure("Failed to create descriptor set layout");
         }
     }
 
@@ -885,8 +904,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     {
         if (!CreateGeometryBuffer(R_VertexBufferMaxBlockCount, Arena, &Renderer->GeometryBuffer))
         {
-            Result = VK_ERROR_INITIALIZATION_FAILED;
-            ReturnOnFailure();
+            ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to create geometry buffer");
         }
     }
 
@@ -902,7 +920,10 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         b32 PushResult = PushBuffer(GpuArena, Renderer->MipFeedbackMemorySize, 
                                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
                                     &Renderer->MipFeedbackBuffer);
-        Assert(PushResult);
+        if (!PushResult)
+        {
+            ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to push MipFeedback buffer");
+        }
         
         Renderer->PerFrameBufferSize = MiB(96);
         PushResult = PushBuffer(GpuArena, Renderer->PerFrameBufferSize,
@@ -913,7 +934,10 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT|
                                 VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                                 &Renderer->PerFrameBuffer);
-        Assert(PushResult);
+        if (!PushResult)
+        {
+            ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to push PerFrame buffer");
+        }
         Renderer->PerFrameBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameBuffer);
         VkDebugUtilsObjectNameInfoEXT Name =
         {
@@ -975,8 +999,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                     .pQueueFamilyIndices = nullptr,
                     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 };
-                Result = vkCreateImage(VK.Device, &CascadeImageInfo, nullptr, &Renderer->CascadeMap);
-                ReturnOnFailure();
+                Result.ErrorCode = vkCreateImage(VK.Device, &CascadeImageInfo, nullptr, &Renderer->CascadeMap);
+                ReturnOnFailure("Failed to create shadow cascade image");
 
                 b32 PushResult = PushImage(&Renderer->ShadowArena, Renderer->CascadeMap);
                 if (PushResult)
@@ -1000,8 +1024,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                         },
                     };
         
-                    Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &Renderer->CascadeArrayView);
-                    ReturnOnFailure();
+                    Result.ErrorCode = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &Renderer->CascadeArrayView);
+                    ReturnOnFailure("Failed to create shadow cascade view");
         
                     for (u32 Cascade = 0; Cascade < R_MaxShadowCascadeCount; Cascade++)
                     {
@@ -1024,13 +1048,13 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                             },
                         };
         
-                        Result = vkCreateImageView(VK.Device, &CascadeViewInfo, nullptr, &Renderer->CascadeViews[Cascade]);
-                        ReturnOnFailure();
+                        Result.ErrorCode = vkCreateImageView(VK.Device, &CascadeViewInfo, nullptr, &Renderer->CascadeViews[Cascade]);
+                        ReturnOnFailure("Failed to create shadow cascade layer view");
                     }
                 }
                 else
                 {
-                    return(0);
+                    ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to push shadow cascade image");
                 }
 
                 // Point shadow maps
@@ -1057,8 +1081,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                     };
 
-                    Result = vkCreateImage(VK.Device, &ImageInfo, nullptr, &ShadowMap->Image);
-                    ReturnOnFailure();
+                    Result.ErrorCode = vkCreateImage(VK.Device, &ImageInfo, nullptr, &ShadowMap->Image);
+                    ReturnOnFailure("Failed to create shadow image");
 
                     PushResult = PushImage(&Renderer->ShadowArena, ShadowMap->Image);
                     if (PushResult)
@@ -1081,8 +1105,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                                 .layerCount = 6,
                             },
                         };
-                        Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &ShadowMap->CubeView);
-                        ReturnOnFailure();
+                        Result.ErrorCode = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &ShadowMap->CubeView);
+                        ReturnOnFailure("Failed to create shadow image view");
 
                         for (u32 LayerIndex = 0; LayerIndex < 6; LayerIndex++)
                         {
@@ -1104,24 +1128,24 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                                     .layerCount = 1,
                                 },
                             };
-                            Result = vkCreateImageView(VK.Device, &LayerViewInfo, nullptr, &ShadowMap->LayerViews[LayerIndex]);
-                            ReturnOnFailure();
+                            Result.ErrorCode = vkCreateImageView(VK.Device, &LayerViewInfo, nullptr, &ShadowMap->LayerViews[LayerIndex]);
+                            ReturnOnFailure("Failed to create shadow image layer view");
                         }
                     }
                     else
                     {
-                        return(0);
+                        ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to push shadow image");
                     }
                 }
             }
             else
             {
-                return(0);
+                ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to allocate shadow storage");
             }
         }
         else
         {
-            return(0);
+            ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to find suitable memory type for shadow storage");
         }
     }
 
@@ -1146,8 +1170,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             .pQueueFamilyIndices = nullptr,
             .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         };
-        Result = CreateDedicatedImage(&Info, VK.GPUMemTypes, &Renderer->EnvironmentBRDFImage, &Renderer->EnvironmentBRDFMemory);
-        ReturnOnFailure();
+        Result.ErrorCode = CreateDedicatedImage(&Info, VK.GPUMemTypes, &Renderer->EnvironmentBRDFImage, &Renderer->EnvironmentBRDFMemory);
+        ReturnOnFailure("Failed to create BRDF integration LUT image");
 
         VkImageViewCreateInfo ViewInfo = 
         {
@@ -1168,8 +1192,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             },
         };
 
-        Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &Renderer->EnvironmentBRDFImageView);
-        ReturnOnFailure();
+        Result.ErrorCode = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &Renderer->EnvironmentBRDFImageView);
+        ReturnOnFailure("Failed to create BRDF integration LUT image view");
     }
 
     // Sky image
@@ -1193,8 +1217,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             .pQueueFamilyIndices = nullptr,
             .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         };
-        Result = CreateDedicatedImage(&Info, VK.GPUMemTypes, &Renderer->SkyImage, &Renderer->SkyImageMemory);
-        ReturnOnFailure();
+        Result.ErrorCode = CreateDedicatedImage(&Info, VK.GPUMemTypes, &Renderer->SkyImage, &Renderer->SkyImageMemory);
+        ReturnOnFailure("FailedToCreate sky image");
     }
 
     // BAR memory
@@ -1209,14 +1233,12 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         }
         else
         {
-            // TODO(boti): logging
-            return(0);
+            ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to create BAR memory");
         }
     }
     else
     {
-        // TODO(boti): logging
-        return(0);
+        ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to find suitable memory type for BAR memory");
     }
 
     // Persistent descriptor buffers
@@ -1229,8 +1251,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                                     &Renderer->StaticResourceDescriptorMapping);
         if (!PushResult)
         {
-            UnhandledError("Failed to push static resource descriptor buffer");
-            return(0);
+            ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to push static resource descriptor buffer");
         }
     
         
@@ -1241,8 +1262,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                                 &Renderer->SamplerDescriptorMapping);
         if (!PushResult)
         {
-            UnhandledError("Failed to push sampler descriptor buffer");
-            return(0);
+            ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to push sampler descriptor buffer");
         }
     }
 
@@ -1342,13 +1362,16 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     // Surface
     {
         Renderer->Surface = Platform.CreateVulkanSurface(VK.Instance);
-        if (!Renderer->Surface) return nullptr;
+        if (!Renderer->Surface) 
+        {
+            ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to create Vulkan surface");
+        }
 
         constexpr u32 MaxSurfaceFormatCount = 32;
         u32 SurfaceFormatCount = MaxSurfaceFormatCount;
         VkSurfaceFormatKHR SurfaceFormats[MaxSurfaceFormatCount];
-        Result = vkGetPhysicalDeviceSurfaceFormatsKHR(VK.PhysicalDevice, Renderer->Surface, &SurfaceFormatCount, SurfaceFormats);
-        ReturnOnFailure();
+        Result.ErrorCode = vkGetPhysicalDeviceSurfaceFormatsKHR(VK.PhysicalDevice, Renderer->Surface, &SurfaceFormatCount, SurfaceFormats);
+        ReturnOnFailure("Failed to query physical device surface formats");
 
         for (u32 SurfaceFormatIndex = 0; SurfaceFormatIndex < SurfaceFormatCount; SurfaceFormatIndex++)
         {
@@ -1376,8 +1399,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         };
 
         Renderer->SwapchainImageCount = 2;
-        Result = ResizeSwapchain(Renderer, 0, false);
-        ReturnOnFailure();
+        Result.ErrorCode = ResizeSwapchain(Renderer, 0, false);
+        ReturnOnFailure("Failed to create Vulkan swapchain");
     }
 
     if (CreateRenderTargetHeap(&Renderer->RenderTargetHeap, R_RenderTargetMemorySize, Renderer->SetLayouts[Set_Static], Renderer->StaticResourceDescriptorMapping))
@@ -1407,7 +1430,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     }
     else
     {
-        return(0);
+        ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to create render target heap");
     }
 
     for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
@@ -1418,8 +1441,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             .pNext = nullptr,
             .flags = VK_FENCE_CREATE_SIGNALED_BIT,
         };
-        Result = vkCreateFence(VK.Device, &ImageFenceInfo, nullptr, &Renderer->ImageAcquiredFences[FrameIndex]);
-        ReturnOnFailure();
+        Result.ErrorCode = vkCreateFence(VK.Device, &ImageFenceInfo, nullptr, &Renderer->ImageAcquiredFences[FrameIndex]);
+        ReturnOnFailure("Failed to create image acquire fence");
 
         VkSemaphoreCreateInfo SemaphoreInfo = 
         {
@@ -1427,8 +1450,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             .pNext = nullptr,
             .flags = 0,
         };
-        Result = vkCreateSemaphore(VK.Device, &SemaphoreInfo, nullptr, &Renderer->ImageAcquiredSemaphores[FrameIndex]);
-        ReturnOnFailure();
+        Result.ErrorCode = vkCreateSemaphore(VK.Device, &SemaphoreInfo, nullptr, &Renderer->ImageAcquiredSemaphores[FrameIndex]);
+        ReturnOnFailure("Failed to create image acquire semaphore");
 
         VkSemaphoreTypeCreateInfo SemaphoreTypeInfo = 
         {
@@ -1443,12 +1466,12 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             .pNext = &SemaphoreTypeInfo,
             .flags = 0,
         };
-        Result = vkCreateSemaphore(VK.Device, &TimelineSemaphoreInfo, nullptr, &Renderer->TimelineSemaphore);
-        ReturnOnFailure();
+        Result.ErrorCode = vkCreateSemaphore(VK.Device, &TimelineSemaphoreInfo, nullptr, &Renderer->TimelineSemaphore);
+        ReturnOnFailure("Failed to create timeline semaphore");
         Renderer->TimelineSemaphoreCounter = 0;
 
-        Result = vkCreateSemaphore(VK.Device, &TimelineSemaphoreInfo, nullptr, &Renderer->ComputeTimelineSemaphore);
-        ReturnOnFailure();
+        Result.ErrorCode = vkCreateSemaphore(VK.Device, &TimelineSemaphoreInfo, nullptr, &Renderer->ComputeTimelineSemaphore);
+        ReturnOnFailure("Failed to create compute timeline semaphore");
         Renderer->ComputeTimelineSemaphoreCounter = 0;
 
         // Graphics command pool + buffers
@@ -1460,8 +1483,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 .flags = 0,
                 .queueFamilyIndex = VK.GraphicsQueueIdx,
             };
-            Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->CmdPools[FrameIndex]);
-            ReturnOnFailure();
+            Result.ErrorCode = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->CmdPools[FrameIndex]);
+            ReturnOnFailure("Failed to create graphics command pool");
         
             VkCommandBufferAllocateInfo PrimaryBufferInfo = 
             {
@@ -1471,8 +1494,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
                 .commandBufferCount = Renderer->MaxCmdBufferCountPerFrame,
             };
-            Result = vkAllocateCommandBuffers(VK.Device, &PrimaryBufferInfo, Renderer->CmdBuffers[FrameIndex]);
-            ReturnOnFailure();
+            Result.ErrorCode = vkAllocateCommandBuffers(VK.Device, &PrimaryBufferInfo, Renderer->CmdBuffers[FrameIndex]);
+            ReturnOnFailure("Failed to allocate graphics primary command buffers");
 
             VkCommandBufferAllocateInfo SecondaryBufferInfo = 
             {
@@ -1482,8 +1505,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 .level = VK_COMMAND_BUFFER_LEVEL_SECONDARY,
                 .commandBufferCount = Renderer->MaxSecondaryCmdBufferCountPerFrame,
             };
-            Result = vkAllocateCommandBuffers(VK.Device, &SecondaryBufferInfo, Renderer->SecondaryCmdBuffers[FrameIndex]);
-            ReturnOnFailure();
+            Result.ErrorCode = vkAllocateCommandBuffers(VK.Device, &SecondaryBufferInfo, Renderer->SecondaryCmdBuffers[FrameIndex]);
+            ReturnOnFailure("Failed to allocate graphics secondary command buffers");
         }
         
         // Compute command pool + buffers
@@ -1495,8 +1518,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 .flags = 0,
                 .queueFamilyIndex = VK.ComputeQueueIdx,
             };
-            Result = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->ComputeCmdPools[FrameIndex]);
-            ReturnOnFailure();
+            Result.ErrorCode = vkCreateCommandPool(VK.Device, &PoolInfo, nullptr, &Renderer->ComputeCmdPools[FrameIndex]);
+            ReturnOnFailure("Failed to create compute command pool");
         
             VkCommandBufferAllocateInfo BufferInfo = 
             {
@@ -1506,8 +1529,8 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
                 .commandBufferCount = 1,
             };
-            Result = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->ComputeCmdBuffers[FrameIndex]);
-            ReturnOnFailure();
+            Result.ErrorCode = vkAllocateCommandBuffers(VK.Device, &BufferInfo, &Renderer->ComputeCmdBuffers[FrameIndex]);
+            ReturnOnFailure("Failed to allocate compute command buffers");
         }
         
     }
@@ -1517,8 +1540,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     Renderer->TextureManager.DescriptorSetLayout = Renderer->SetLayouts[Set_Bindless];
     if (!CreateTextureManager(&Renderer->TextureManager, Arena, R_TextureMemorySize, VK.GPUMemTypes, Renderer->SetLayouts))
     {
-        Result = VK_ERROR_INITIALIZATION_FAILED;
-        ReturnOnFailure();
+        ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to create texture manager");
     }
 
     // Per frame
@@ -1549,20 +1571,20 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                     .allocationSize = R_MaxFramesInFlight * BufferInfo.size,
                     .memoryTypeIndex = MemoryType,
                 };
-                Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->StagingMemory);
-                ReturnOnFailure();
+                Result.ErrorCode = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->StagingMemory);
+                ReturnOnFailure("Failed to allocate staging memory");
 
                 SetObjectName(VK.Device, Renderer->StagingMemory, "Staging");
 
-                Result = vkMapMemory(VK.Device, Renderer->StagingMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->StagingMemoryMapping);
+                Result.ErrorCode = vkMapMemory(VK.Device, Renderer->StagingMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->StagingMemoryMapping);
                 for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
                 {
-                    Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->StagingBuffers[FrameIndex]);
-                    ReturnOnFailure();
+                    Result.ErrorCode = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->StagingBuffers[FrameIndex]);
+                    ReturnOnFailure("Failed to create staging buffer");
 
                     umm Offset = FrameIndex * BufferInfo.size;
-                    Result = vkBindBufferMemory(VK.Device, Renderer->StagingBuffers[FrameIndex], Renderer->StagingMemory, Offset);
-                    ReturnOnFailure();
+                    Result.ErrorCode = vkBindBufferMemory(VK.Device, Renderer->StagingBuffers[FrameIndex], Renderer->StagingMemory, Offset);
+                    ReturnOnFailure("Failed to bind staging buffer to staging memory");
 
                     Renderer->Frames[FrameIndex].StagingBuffer.Base = OffsetPtr(Renderer->StagingMemoryMapping, Offset);
                     Renderer->Frames[FrameIndex].StagingBuffer.Size = BufferInfo.size;
@@ -1571,7 +1593,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             }
             else
             {
-                return(0);
+                ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to find suitable memory type for staging memory");
             }
         }
 
@@ -1601,23 +1623,26 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                     .allocationSize = R_MaxFramesInFlight * BufferInfo.size,
                     .memoryTypeIndex = MemoryType,
                 };
-                Result = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->MipReadbackMemory);
-                ReturnOnFailure();
+                Result.ErrorCode = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &Renderer->MipReadbackMemory);
+                ReturnOnFailure("Failed to allocate mip readback memory");
 
                 SetObjectName(VK.Device, Renderer->MipReadbackMemory, "MipReadback");
 
-                Result = vkMapMemory(VK.Device, Renderer->MipReadbackMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->MipReadbackMapping);
+                Result.ErrorCode = vkMapMemory(VK.Device, Renderer->MipReadbackMemory, 0, VK_WHOLE_SIZE, 0, &Renderer->MipReadbackMapping);
                 for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
                 {
-                    Result = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->MipReadbackBuffers[FrameIndex]);
-                    ReturnOnFailure();
+                    Result.ErrorCode = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Renderer->MipReadbackBuffers[FrameIndex]);
+                    ReturnOnFailure("Failed to create mip readback buffer");
 
                     umm Offset = FrameIndex * BufferInfo.size;
-                    Result = vkBindBufferMemory(VK.Device, Renderer->MipReadbackBuffers[FrameIndex], Renderer->MipReadbackMemory, Offset);
-                    ReturnOnFailure();
+                    Result.ErrorCode = vkBindBufferMemory(VK.Device, Renderer->MipReadbackBuffers[FrameIndex], Renderer->MipReadbackMemory, Offset);
+                    ReturnOnFailure("Failed to bind mip readback buffer to mip readback memory");
                     Renderer->MipReadbackMappings[FrameIndex] = OffsetPtr(Renderer->MipReadbackMapping, Offset);
                 }
-
+            }
+            else
+            {
+                ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to find suitable memory type for mip readback");
             }
         }
 
@@ -1632,8 +1657,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                                             Renderer->PerFrameResourceDescriptorMappings + FrameIndex);
                 if (!PushResult)
                 {
-                    UnhandledError("Failed to push per-frame resource descriptor buffer");
-                    return(0);
+                    ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to push per-frame resource descriptor buffer");
                 }
             }
         }
@@ -1648,7 +1672,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                                             Renderer->PerFrameUniformBufferMappings + i);
                 if (!PushResult)
                 {
-                    return(0);
+                    ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to push per-frame uniform buffer");
                 }
             }
         }
@@ -1672,7 +1696,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                 }
                 else
                 {
-                    return(0);
+                    ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to push per-frame BAR buffer");
                 }
             }
         }
@@ -1697,15 +1721,18 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             .pPushConstantRanges = &PushConstantRange,
         };
 
-        Result = vkCreatePipelineLayout(VK.Device, &Info, nullptr, &Renderer->SystemPipelineLayout);
-        ReturnOnFailure();
+        Result.ErrorCode = vkCreatePipelineLayout(VK.Device, &Info, nullptr, &Renderer->SystemPipelineLayout);
+        ReturnOnFailure("Failed to create system pipeline layout");
     }
 
     // Pipelines
-    Result = CreatePipelines(Renderer, Scratch);
-    ReturnOnFailure();
+    Result.ErrorCode = CreatePipelines(Renderer, Scratch);
+    ReturnOnFailure("Failed to create pipelines");
 
-    return(Renderer);
+    #undef ReturnOnFailure
+    #undef ReturnWithFailure
+
+    return(Result);
 }
 
 internal VkResult ResizeSwapchain(renderer* Renderer, u32 FrameID, b32 Forced)
@@ -1887,8 +1914,6 @@ internal VkResult ResizeSwapchain(renderer* Renderer, u32 FrameID, b32 Forced)
     }
     return Result;
 }
-
-#undef ReturnOnFailure
 
 internal void 
 DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, pipeline* Pipelines, draw_list* List)
