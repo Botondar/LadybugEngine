@@ -625,16 +625,12 @@ inline bool IsValid(renderer_texture_id ID) { return ID.Value != InvalidRenderer
 inline f32 GetLuminance(v3 RGB);
 inline v3 SetLuminance(v3 RGB, f32 Luminance);
 
-// NOTE(boti): Normally textures get put into the bindless descriptor heap,
-// specifying a texture as "Special" prevents this, and it will be the user code's
-// responsibility to manage its descriptor
 typedef flags32 texture_flags;
 enum texture_flag_bits : texture_flags
 {
     TextureFlag_None                = 0,
 
-    TextureFlag_Special             = (1u << 0),
-    TextureFlag_PersistentMemory    = (1u << 1),
+    TextureFlag_PersistentMemory    = (1u << 0),
 };
 
 struct texture_request

@@ -3,11 +3,13 @@
 interpolant(0) vec2 TexCoord;
 interpolant(1) vec4 Color;
 
-#ifdef VS
 layout(push_constant) uniform PushConstants
 {
     mat4 Transform;
+    renderer_texture_id TextureID;
 };
+
+#ifdef VS
 
 layout(location = 0) in vec2 aP;
 layout(location = 1) in vec2 aTexCoord;
@@ -21,14 +23,14 @@ void main()
 }
 #else
 
-SetBinding(PerFrame, TextureUI) uniform texture2D Texture;
+SetBinding(Bindless, Textures) uniform texture2D Textures[];
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 
 layout(location = 0) out vec4 Out0;
 
 void main()
 {
-    vec4 Sample = texture(sampler2D(Texture, Samplers[Sampler_LinearEdgeClamp]), TexCoord);
+    vec4 Sample = texture(sampler2D(Textures[TextureID], Samplers[Sampler_LinearEdgeClamp]), TexCoord);
     Out0 = Color * Sample;
 }
 

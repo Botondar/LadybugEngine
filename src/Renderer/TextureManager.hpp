@@ -88,8 +88,6 @@ AllocateImage(texture_cache* Cache, VkImage Image);
 
 struct texture_manager
 {
-    static constexpr u32 MaxSpecialTextureCount = 2048u;
-
     VkDescriptorSetLayout DescriptorSetLayout;
 
     gpu_memory_arena    PersistentArena;
@@ -103,10 +101,6 @@ struct texture_manager
 
     u32                 TextureCount;
     renderer_texture    Textures[R_MaxTextureCount];
-
-    // TODO(boti): Remove special textures and just pass the ID to the relevant shaders (particle, UI)
-    u32                 SpecialTextureCount;
-    renderer_texture    SpecialTextures[MaxSpecialTextureCount];
 };
 
 // TODO(boti): Rework this API, it's horrible
@@ -116,8 +110,6 @@ CreateTextureManager(texture_manager* Manager, memory_arena* Arena, u64 MemorySi
 
 internal renderer_texture* 
 GetTexture(texture_manager* Manager, renderer_texture_id ID);
-
-internal b32 IsTextureSpecial(renderer_texture_id ID);
 
 internal renderer_texture_id
 AllocateTexture(texture_manager* Manager, texture_flags Flags, const texture_info* Info, renderer_texture_id Placeholder);

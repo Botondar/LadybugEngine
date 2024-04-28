@@ -2829,12 +2829,21 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdSetScissor(GuiCB, 0, 1, &OutputScissor);
 
         vkCmdBindPipeline(GuiCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->Pipelines[Pipeline_UI].Pipeline);
-        m4 OrthoTransform = M4(2.0f / Frame->OutputExtent.X, 0.0f, 0.0f, -1.0f,
-                               0.0f, 2.0f / Frame->OutputExtent.Y, 0.0f, -1.0f,
-                               0.0f, 0.0f, 1.0f, 0.0f,
-                               0.0f, 0.0f, 0.0f, 1.0f);
+        struct ui_constants
+        {
+            m4 Transform;
+            renderer_texture_id ID;
+        };
+        ui_constants Push = 
+        {
+            .Transform = M4(2.0f / Frame->OutputExtent.X, 0.0f, 0.0f, -1.0f,
+                            0.0f, 2.0f / Frame->OutputExtent.Y, 0.0f, -1.0f,
+                            0.0f, 0.0f, 1.0f, 0.0f,
+                            0.0f, 0.0f, 0.0f, 1.0f),
+            .ID = Frame->ImmediateTextureID,
+        };
         vkCmdPushConstants(GuiCB, Renderer->Pipelines[Pipeline_UI].Layout, VK_SHADER_STAGE_ALL, 
-                           0, sizeof(OrthoTransform), &OrthoTransform);
+                           0, sizeof(Push), &Push);
     }
 
     {
@@ -2973,47 +2982,44 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
                             if (IsAllocated)
                             {
-                                if (!IsTextureSpecial(Op->Texture.TargetID))
+                                umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
+                                if ((Frame->StagingBuffer.At + DescriptorSize) <= Frame->StagingBuffer.Size)
                                 {
-                                    umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
-                                    if ((Frame->StagingBuffer.At + DescriptorSize) <= Frame->StagingBuffer.Size)
+                                    VkDescriptorImageInfo DescriptorImage = 
                                     {
-                                        VkDescriptorImageInfo DescriptorImage = 
-                                        {
-                                            .sampler = VK_NULL_HANDLE,
-                                            .imageView = Texture->ViewHandle,
-                                            .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
-                                        };
-                                        VkDescriptorGetInfoEXT DescriptorInfo = 
-                                        {
-                                            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-                                            .pNext = nullptr,
-                                            .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                                            .data = { .pSampledImage = &DescriptorImage },
-                                        };
-                                        vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At));
-
-                                        umm DescriptorOffset = Renderer->TextureManager.TextureTableOffset + Op->Texture.TargetID.Value*DescriptorSize; // TODO(boti): standardize this
-                                        VkBufferCopy DescriptorCopy = 
-                                        {
-                                            .srcOffset = Frame->StagingBuffer.At,
-                                            .dstOffset = DescriptorOffset,
-                                            .size = DescriptorSize,
-                                        };
-                                        vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
-
-                                        Frame->StagingBuffer.At += DescriptorSize;
-
-                                        u32 MipBucket;
-                                        BitScanReverse(&MipBucket, Max(Info->Extent.X, Info->Extent.Y));
-                                        u32 MipMask = (1 << (MipBucket + 1)) - 1;
-                                        Texture->MipResidencyMask = MipMask;
-                                        Texture->Info = Op->Texture.Info;
-                                    }
-                                    else
+                                        .sampler = VK_NULL_HANDLE,
+                                        .imageView = Texture->ViewHandle,
+                                        .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                                    };
+                                    VkDescriptorGetInfoEXT DescriptorInfo = 
                                     {
-                                        UnimplementedCodePath;
-                                    }
+                                        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                                        .pNext = nullptr,
+                                        .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                        .data = { .pSampledImage = &DescriptorImage },
+                                    };
+                                    vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At));
+                                
+                                    umm DescriptorOffset = Renderer->TextureManager.TextureTableOffset + Op->Texture.TargetID.Value*DescriptorSize; // TODO(boti): standardize this
+                                    VkBufferCopy DescriptorCopy = 
+                                    {
+                                        .srcOffset = Frame->StagingBuffer.At,
+                                        .dstOffset = DescriptorOffset,
+                                        .size = DescriptorSize,
+                                    };
+                                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
+                                
+                                    Frame->StagingBuffer.At += DescriptorSize;
+                                
+                                    u32 MipBucket;
+                                    BitScanReverse(&MipBucket, Max(Info->Extent.X, Info->Extent.Y));
+                                    u32 MipMask = (1 << (MipBucket + 1)) - 1;
+                                    Texture->MipResidencyMask = MipMask;
+                                    Texture->Info = Op->Texture.Info;
+                                }
+                                else
+                                {
+                                    UnimplementedCodePath;
                                 }
 
                                 VkImageMemoryBarrier2 BeginBarrier = 
@@ -3302,9 +3308,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     {
                         VkDeviceAddress ParticleAddress;
                         billboard_mode Mode;
+                        renderer_texture_id TextureID;
                     } Push;
-                    Push.ParticleAddress = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt,
-                    Push.Mode = Command->ParticleBatch.Mode,
+                    Push.ParticleAddress = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt;
+                    Push.Mode = Command->ParticleBatch.Mode;
+                    Push.TextureID = Frame->ParticleTextureID;
                     vkCmdPushConstants(ParticleCB, Renderer->Pipelines[Pipeline_Quad].Layout, VK_SHADER_STAGE_ALL, 
                                        0, sizeof(Push), &Push);
                     vkCmdDraw(ParticleCB, 6 * Command->ParticleBatch.Count, 1, 0, 0);

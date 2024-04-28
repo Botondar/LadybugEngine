@@ -8,6 +8,7 @@ uniform PushConstants
 {
     u64 ParticleBufferAddress;
     uint BillboardMode;
+    renderer_texture_id TextureID;
 };
 
 SetBindingLayout(PerFrame, Constants, scalar)
@@ -90,7 +91,7 @@ void main()
 #else
 
 SetBinding(Static, StructureImage) uniform texture2D StructureImage;
-SetBinding(PerFrame, ParticleTexture) uniform texture2DArray Texture;
+SetBinding(Bindless, Textures) uniform texture2DArray TextureArrays[];
 
 SetBinding(Sampler, NamedSamplers) uniform sampler Samplers[Sampler_Count];
 
@@ -99,7 +100,7 @@ layout(location = 0) out v4 Target0;
 void main()
 {
     f32 Depth = StructureDecode(texelFetch(StructureImage, v2s(gl_FragCoord.xy), 0)).z;
-    v4 SampleColor = texture(sampler2DArray(Texture, Samplers[Sampler_Default]), vec3(TexCoord, float(ParticleTexture)));
+    v4 SampleColor = texture(sampler2DArray(TextureArrays[TextureID], Samplers[Sampler_Default]), vec3(TexCoord, float(ParticleTexture)));
 
     f32 FarFade = clamp(2.0 * (Depth - ViewP.z), 0.0, 1.0);
     f32 NearFade = clamp(ViewP.z - (PerFrame.NearZ + 0.01), 0.0, 1.0);

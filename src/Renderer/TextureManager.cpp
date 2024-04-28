@@ -1,16 +1,10 @@
 #include "TextureManager.hpp"
 
-constexpr u32 SpecialTextureBit = (1u << 31);
-
+// TODO(boti): We probably don't need this once the 0-texture will be the invalid id
 internal u32 GetTextureIndex(renderer_texture_id ID)
 {
-    u32 Result = ID.Value & (~SpecialTextureBit);
-    return(Result);
-}
-
-internal b32 IsTextureSpecial(renderer_texture_id ID)
-{
-    b32 Result = (ID.Value & SpecialTextureBit) != 0;
+    Assert(IsValid(ID));
+    u32 Result = ID.Value;
     return(Result);
 }
 
@@ -212,16 +206,8 @@ internal renderer_texture* GetTexture(texture_manager* Manager, renderer_texture
     if (IsValid(ID))
     {
         u32 Index = GetTextureIndex(ID);
-        if (IsTextureSpecial(ID))
-        {
-            Assert(Index < Manager->MaxSpecialTextureCount);
-            Result = Manager->SpecialTextures + Index;
-        }
-        else
-        {
-            Assert(Index < R_MaxTextureCount);
-            Result = Manager->Textures + Index;
-        }
+        Assert(Index < R_MaxTextureCount);
+        Result = Manager->Textures + Index;
     }
 
     return(Result);
@@ -231,22 +217,10 @@ internal renderer_texture_id
 AllocateNextID(texture_manager* Manager, texture_flags Flags)
 {
     renderer_texture_id Result = InvalidRendererTextureID;
-
-    if (Flags & TextureFlag_Special)
+    if (Manager->TextureCount < R_MaxTextureCount)
     {
-        if (Manager->SpecialTextureCount < Manager->MaxSpecialTextureCount)
-        {
-            Result = { SpecialTextureBit | Manager->SpecialTextureCount++ };
-        }
+        Result = { Manager->TextureCount++ };
     }
-    else
-    {
-        if (Manager->TextureCount < R_MaxTextureCount)
-        {
-            Result = { Manager->TextureCount++ };
-        }
-    }
-
     return(Result);
 }
 
@@ -276,7 +250,8 @@ AllocateTexture(texture_manager* Manager, texture_flags Flags, const texture_inf
             }
         }
 
-        if (IsValid(Placeholder) && !IsTextureSpecial(Result))
+        // TODO(boti): We can always use the placeholder once we make 0 the invalid texture
+        if (IsValid(Placeholder))
         {
             renderer_texture* PlaceholderTex = GetTexture(Manager, Placeholder);
             Assert(PlaceholderTex);
@@ -314,7 +289,7 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
 
     if (IsValid(ID))
     {
-        u32 Index = ID.Value & (~SpecialTextureBit);
+        u32 Index = GetTextureIndex(ID);
         renderer_texture* Texture = GetTexture(Manager, ID);
 
         VkImageCreateInfo ImageInfo = 
