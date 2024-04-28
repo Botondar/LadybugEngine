@@ -37,6 +37,13 @@ static VkSurfaceKHR Win_CreateVulkanSurface(VkInstance Instance)
     return(Surface);
 }
 
+static b32 Win_ProtectPage(void* Address, umm Size, b32 DoProtect)
+{
+    DWORD Flags = DoProtect ? PAGE_NOACCESS : PAGE_READWRITE;
+    b32 Result = VirtualProtect(Address, Size, Flags, nullptr);
+    return(Result);
+}
+
 static buffer Win_LoadEntireFile(const char* Path, memory_arena* Arena)
 {
     buffer Result = {};
@@ -416,6 +423,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     GameMemory.PlatformAPI.CreateSemaphore      = &Win_CreateSemaphore;
     GameMemory.PlatformAPI.WaitForSemaphore     = &Win_WaitForSemaphore;
     GameMemory.PlatformAPI.ReleaseSemaphore     = &Win_ReleaseSemaphore;
+    GameMemory.PlatformAPI.ProtectPage          = &Win_ProtectPage;
 
     HMODULE RendererDLL = LoadLibraryA("vulkan_renderer.dll");
     if (RendererDLL)

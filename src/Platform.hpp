@@ -31,6 +31,8 @@ typedef void                create_thread           (thread_procedure* Proc, voi
 typedef platform_semaphore  create_semaphore        (u32 InitialCount, u32 MaxCount);
 typedef void                wait_for_semaphore      (platform_semaphore Semaphore, u32 TimeoutMS);
 typedef void                release_semaphore       (platform_semaphore Semaphore, u32 ReleaseCount, u32* PrevCount);
+// TODO(boti): This is a temporary API, DoProtect=true will deny RWX to the page, false will allow RW
+typedef b32                 protect_page            (void* Address, umm Size, b32 DoProtect);
 
 struct platform_api
 {
@@ -43,6 +45,7 @@ struct platform_api
     create_semaphore*       CreateSemaphore;
     wait_for_semaphore*     WaitForSemaphore;
     release_semaphore*      ReleaseSemaphore;
+    protect_page*           ProtectPage;
 
     // Renderer
     // TODO(boti): Make CreateRenderer fill an render_api struct with all the info
