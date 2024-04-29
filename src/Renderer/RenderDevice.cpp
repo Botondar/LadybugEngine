@@ -1,3 +1,144 @@
+struct required_feature
+{
+    umm OffsetInStruct;
+    const char* Name;
+};
+
+#define RequiredFeature(s, f) { OffsetOf(s, f), #f }
+
+#define RequiredDeviceFeature(f) RequiredFeature(VkPhysicalDeviceFeatures, f)
+static const required_feature RequiredDeviceFeatures[] =
+{
+    RequiredDeviceFeature(robustBufferAccess),
+    RequiredDeviceFeature(fullDrawIndexUint32),
+    RequiredDeviceFeature(geometryShader),
+    RequiredDeviceFeature(dualSrcBlend),
+    RequiredDeviceFeature(multiDrawIndirect),
+    RequiredDeviceFeature(drawIndirectFirstInstance),
+    RequiredDeviceFeature(depthClamp),
+    RequiredDeviceFeature(depthBiasClamp),
+    RequiredDeviceFeature(depthBounds),
+    RequiredDeviceFeature(alphaToOne),
+    RequiredDeviceFeature(samplerAnisotropy),
+    RequiredDeviceFeature(textureCompressionBC),
+    RequiredDeviceFeature(pipelineStatisticsQuery),
+    RequiredDeviceFeature(fragmentStoresAndAtomics),
+    RequiredDeviceFeature(shaderImageGatherExtended),
+    RequiredDeviceFeature(shaderStorageImageExtendedFormats),
+    RequiredDeviceFeature(shaderStorageImageMultisample),
+    RequiredDeviceFeature(shaderStorageImageReadWithoutFormat),
+    RequiredDeviceFeature(shaderStorageImageWriteWithoutFormat),
+    RequiredDeviceFeature(shaderUniformBufferArrayDynamicIndexing),
+    RequiredDeviceFeature(shaderSampledImageArrayDynamicIndexing),
+    RequiredDeviceFeature(shaderStorageBufferArrayDynamicIndexing),
+    RequiredDeviceFeature(shaderInt64),
+    RequiredDeviceFeature(shaderInt16),
+    RequiredDeviceFeature(shaderResourceResidency),
+    RequiredDeviceFeature(shaderResourceMinLod),
+    RequiredDeviceFeature(sparseBinding),
+    RequiredDeviceFeature(sparseResidencyBuffer),
+    RequiredDeviceFeature(sparseResidencyImage2D),
+    RequiredDeviceFeature(sparseResidencyImage3D),
+    RequiredDeviceFeature(sparseResidencyAliased),
+};
+
+#define RequiredVulkan11Feature(f) RequiredFeature(VkPhysicalDeviceVulkan11Features, f)
+static const required_feature RequiredVulkan11Features[] = 
+{
+    RequiredVulkan11Feature(storageBuffer16BitAccess),
+    RequiredVulkan11Feature(uniformAndStorageBuffer16BitAccess),
+    RequiredVulkan11Feature(shaderDrawParameters),
+};
+
+#define RequiredVulkan12Feature(f) RequiredFeature(VkPhysicalDeviceVulkan12Features, f)
+static const required_feature RequiredVulkan12Features[] =
+{
+    RequiredVulkan12Feature(drawIndirectCount),
+    RequiredVulkan12Feature(storageBuffer8BitAccess),
+    RequiredVulkan12Feature(uniformAndStorageBuffer8BitAccess),
+    RequiredVulkan12Feature(descriptorIndexing),
+    RequiredVulkan12Feature(shaderUniformTexelBufferArrayDynamicIndexing),
+    RequiredVulkan12Feature(shaderStorageTexelBufferArrayDynamicIndexing),
+    RequiredVulkan12Feature(shaderUniformBufferArrayNonUniformIndexing),
+    RequiredVulkan12Feature(shaderSampledImageArrayNonUniformIndexing),
+    RequiredVulkan12Feature(shaderStorageBufferArrayNonUniformIndexing),
+    RequiredVulkan12Feature(shaderStorageImageArrayNonUniformIndexing),
+    RequiredVulkan12Feature(shaderUniformTexelBufferArrayNonUniformIndexing),
+    RequiredVulkan12Feature(shaderStorageTexelBufferArrayNonUniformIndexing),
+    RequiredVulkan12Feature(descriptorBindingSampledImageUpdateAfterBind),
+    RequiredVulkan12Feature(descriptorBindingStorageBufferUpdateAfterBind),
+    RequiredVulkan12Feature(descriptorBindingUniformTexelBufferUpdateAfterBind),
+    RequiredVulkan12Feature(descriptorBindingStorageTexelBufferUpdateAfterBind),
+    RequiredVulkan12Feature(descriptorBindingUpdateUnusedWhilePending),
+    RequiredVulkan12Feature(descriptorBindingPartiallyBound),
+    RequiredVulkan12Feature(descriptorBindingVariableDescriptorCount),
+    RequiredVulkan12Feature(runtimeDescriptorArray),
+    RequiredVulkan12Feature(scalarBlockLayout),
+    RequiredVulkan12Feature(imagelessFramebuffer),
+    RequiredVulkan12Feature(uniformBufferStandardLayout),
+    RequiredVulkan12Feature(separateDepthStencilLayouts),
+    RequiredVulkan12Feature(hostQueryReset),
+    RequiredVulkan12Feature(timelineSemaphore),
+    RequiredVulkan12Feature(bufferDeviceAddress),
+    RequiredVulkan12Feature(vulkanMemoryModel),
+    RequiredVulkan12Feature(vulkanMemoryModelDeviceScope),
+    RequiredVulkan12Feature(shaderOutputViewportIndex),
+    RequiredVulkan12Feature(shaderOutputLayer),
+    RequiredVulkan12Feature(subgroupBroadcastDynamicId),
+};
+
+#define RequiredVulkan13Feature(f) RequiredFeature(VkPhysicalDeviceVulkan13Features, f)
+static const required_feature RequiredVulkan13Features[] = 
+{
+    RequiredVulkan13Feature(robustImageAccess),
+    RequiredVulkan13Feature(inlineUniformBlock),
+    RequiredVulkan13Feature(descriptorBindingInlineUniformBlockUpdateAfterBind),
+    RequiredVulkan13Feature(synchronization2),
+    RequiredVulkan13Feature(shaderZeroInitializeWorkgroupMemory),
+    RequiredVulkan13Feature(dynamicRendering),
+    RequiredVulkan13Feature(maintenance4),
+
+};
+
+#define RequiredDescriptorBufferFeatures(f) RequiredFeature(VkPhysicalDeviceDescriptorBufferFeaturesEXT, f)
+static const required_feature RequiredDescriptorBufferFeatures[] =
+{
+    RequiredDescriptorBufferFeatures(descriptorBuffer),
+};
+
+static const char* RequiredInstanceExtensions[] =
+{
+    VK_KHR_SURFACE_EXTENSION_NAME,
+    "VK_KHR_win32_surface",
+    VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+};
+
+internal b32
+CheckRequiredFeatureSupport(const void* FeatureStruct, u32 FeatureCount, const required_feature* RequiredFeatures)
+{
+    b32 Result = true;
+    for (u32 FeatureIndex = 0; FeatureIndex < FeatureCount; FeatureIndex++)
+    {
+        const required_feature* Feature = RequiredFeatures + FeatureIndex;
+        VkBool32 IsFeatureSupported = *(VkBool32*)OffsetPtr(FeatureStruct, Feature->OffsetInStruct);
+        if (!IsFeatureSupported)
+        {
+            Result = false;
+            break;
+        }
+    }
+    return(Result);
+}
+
+internal void
+SetRequiredFeatures(void* FeatureStruct, u32 FeatureCount, const required_feature* Features)
+{
+    for (u32 FeatureIndex = 0; FeatureIndex < FeatureCount; FeatureIndex++)
+    {
+        *(VkBool32*)OffsetPtr(FeatureStruct, Features[FeatureIndex].OffsetInStruct) = VK_TRUE;
+    }
+}
+
 internal VkResult InitializeVulkan(vulkan* Vulkan)
 {
     VkResult Result = VK_SUCCESS;
@@ -11,13 +152,6 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
 
     u32 RequiredInstanceLayerCount = UseValidation ? RequiredInstanceLayerCount_ : 0;
     const char** RequiredInstanceLayers = UseValidation ? RequiredInstanceLayers_ : nullptr;
-
-    const char* RequiredInstanceExtensions[] = 
-    {
-        VK_KHR_SURFACE_EXTENSION_NAME,
-        "VK_KHR_win32_surface",
-        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-    };
 
     const char* RequiredDeviceExtensions[] = 
     {
@@ -53,13 +187,43 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
         Result = vkEnumeratePhysicalDevices(Vulkan->Instance, &PhysicalDeviceCount, PhysicalDevices);
         if (Result == VK_SUCCESS)
         {
+            Vulkan->DescriptorBufferFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT };
+            Vulkan->Vulkan13Features = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+                .pNext = &Vulkan->DescriptorBufferFeatures,
+            };
+            Vulkan->Vulkan12Features = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+                .pNext = &Vulkan->Vulkan13Features,
+            };
+            Vulkan->Vulkan11Features = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+                .pNext = &Vulkan->Vulkan12Features,
+            };
+            Vulkan->DeviceFeatures = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                .pNext = &Vulkan->Vulkan11Features,
+            };
+
+
             VkPhysicalDevice SelectedDevice = VK_NULL_HANDLE;
             VkPhysicalDeviceProperties DeviceProps = {};
             // TODO(boti): better device selection
             for (u32 DeviceIndex = 0; DeviceIndex < PhysicalDeviceCount; DeviceIndex++)
             {
                 vkGetPhysicalDeviceProperties(PhysicalDevices[DeviceIndex], &DeviceProps);
-                if (DeviceProps.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+                vkGetPhysicalDeviceFeatures2(PhysicalDevices[DeviceIndex], &Vulkan->DeviceFeatures);
+
+                b32 AllRequiredFeaturesSupported = CheckRequiredFeatureSupport(&Vulkan->DeviceFeatures.features, CountOf(RequiredDeviceFeatures), RequiredDeviceFeatures);
+                AllRequiredFeaturesSupported &= CheckRequiredFeatureSupport(&Vulkan->Vulkan11Features, CountOf(RequiredVulkan11Features), RequiredVulkan11Features);
+                AllRequiredFeaturesSupported &= CheckRequiredFeatureSupport(&Vulkan->Vulkan12Features, CountOf(RequiredVulkan12Features), RequiredVulkan12Features);
+                AllRequiredFeaturesSupported &= CheckRequiredFeatureSupport(&Vulkan->Vulkan13Features, CountOf(RequiredVulkan13Features), RequiredVulkan13Features);
+                AllRequiredFeaturesSupported &= CheckRequiredFeatureSupport(&Vulkan->DescriptorBufferFeatures, CountOf(RequiredDescriptorBufferFeatures), RequiredDescriptorBufferFeatures);
+                if ((DeviceProps.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) && AllRequiredFeaturesSupported)
                 {
                     SelectedDevice = PhysicalDevices[DeviceIndex];
                     break;
@@ -106,118 +270,24 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
             {
                 UnimplementedCodePath;
             }
+            
+            // NOTE(boti): Keeps sType and pNext intact
+            #define ClearVulkanStruct(s) memset(OffsetPtr((s), sizeof(VkBaseOutStructure)), 0, sizeof(*(s)) - sizeof(VkBaseOutStructure))
 
-            Vulkan->DescriptorBufferFeatures = 
-            {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT,
-                .pNext = nullptr,
+            ClearVulkanStruct(&Vulkan->DescriptorBufferFeatures);
+            ClearVulkanStruct(&Vulkan->Vulkan13Features);
+            ClearVulkanStruct(&Vulkan->Vulkan12Features);
+            ClearVulkanStruct(&Vulkan->Vulkan11Features);
+            ClearVulkanStruct(&Vulkan->DeviceFeatures);
+            
+            #undef ClearVulkanStruct
 
-                .descriptorBuffer = VK_TRUE,
-                .descriptorBufferCaptureReplay = VK_FALSE,
-                .descriptorBufferImageLayoutIgnored = VK_FALSE,
-                .descriptorBufferPushDescriptors = VK_FALSE,
-            };
-            Vulkan->Vulkan13Features = 
-            {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
-                .pNext = &Vulkan->DescriptorBufferFeatures,
-
-                .robustImageAccess = VK_TRUE,
-                .inlineUniformBlock = VK_TRUE,
-                .descriptorBindingInlineUniformBlockUpdateAfterBind = VK_TRUE,
-                .synchronization2 = VK_TRUE,
-                .shaderZeroInitializeWorkgroupMemory = VK_TRUE,
-                .dynamicRendering = VK_TRUE,
-                .maintenance4 = VK_TRUE,
-            };
-            Vulkan->Vulkan12Features = 
-            {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-                .pNext = &Vulkan->Vulkan13Features,
-
-                .drawIndirectCount = VK_TRUE,
-                .storageBuffer8BitAccess = VK_TRUE,
-                .uniformAndStorageBuffer8BitAccess = VK_TRUE,
-                .descriptorIndexing = VK_TRUE,
-                .shaderUniformTexelBufferArrayDynamicIndexing = VK_TRUE,
-                .shaderStorageTexelBufferArrayDynamicIndexing = VK_TRUE,
-                .shaderUniformBufferArrayNonUniformIndexing = VK_TRUE,
-                .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
-                .shaderStorageBufferArrayNonUniformIndexing = VK_TRUE,
-                .shaderStorageImageArrayNonUniformIndexing = VK_TRUE,
-                .shaderUniformTexelBufferArrayNonUniformIndexing = VK_TRUE,
-                .shaderStorageTexelBufferArrayNonUniformIndexing = VK_TRUE,
-                //.descriptorBindingUniformBufferUpdateAfterBind = VK_TRUE,
-                .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
-                .descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE,
-                .descriptorBindingUniformTexelBufferUpdateAfterBind = VK_TRUE,
-                .descriptorBindingStorageTexelBufferUpdateAfterBind = VK_TRUE,
-                .descriptorBindingUpdateUnusedWhilePending = VK_TRUE,
-                .descriptorBindingPartiallyBound = VK_TRUE,
-                .descriptorBindingVariableDescriptorCount = VK_TRUE,
-                .runtimeDescriptorArray = VK_TRUE,
-                .scalarBlockLayout = VK_TRUE,
-                .imagelessFramebuffer = VK_TRUE,
-                .uniformBufferStandardLayout = VK_TRUE,
-                .separateDepthStencilLayouts = VK_TRUE,
-                .hostQueryReset = VK_TRUE,
-                .timelineSemaphore = VK_TRUE,
-                .bufferDeviceAddress = VK_TRUE,
-                //.bufferDeviceAddressCaptureReplay = VK_TRUE,
-                .vulkanMemoryModel = VK_TRUE,
-                .vulkanMemoryModelDeviceScope = VK_TRUE,
-                .shaderOutputViewportIndex = VK_TRUE,
-                .shaderOutputLayer = VK_TRUE,
-                .subgroupBroadcastDynamicId = VK_TRUE,
-            };
-            Vulkan->Vulkan11Features = 
-            {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-                .pNext = &Vulkan->Vulkan12Features,
-
-                .storageBuffer16BitAccess = VK_TRUE,
-                .uniformAndStorageBuffer16BitAccess = VK_TRUE,
-                .shaderDrawParameters = VK_TRUE,
-            };
-            Vulkan->DeviceFeatures = 
-            {
-                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-                .pNext = &Vulkan->Vulkan11Features,
-                .features = 
-                {
-                    .robustBufferAccess                         = VK_TRUE,
-                    .fullDrawIndexUint32                        = VK_TRUE,
-                    .geometryShader                             = VK_TRUE,
-                    .dualSrcBlend                               = VK_TRUE,
-                    .multiDrawIndirect                          = VK_TRUE,
-                    .drawIndirectFirstInstance                  = VK_TRUE,
-                    .depthClamp                                 = VK_TRUE,
-                    .depthBiasClamp                             = VK_TRUE,
-                    .depthBounds                                = VK_TRUE,
-                    .alphaToOne                                 = VK_TRUE,
-                    .samplerAnisotropy                          = VK_TRUE,
-                    .textureCompressionBC                       = VK_TRUE,
-                    .pipelineStatisticsQuery                    = VK_TRUE,
-                    .fragmentStoresAndAtomics                   = VK_TRUE,
-                    .shaderImageGatherExtended                  = VK_TRUE,
-                    .shaderStorageImageExtendedFormats          = VK_TRUE,
-                    .shaderStorageImageMultisample              = VK_TRUE,
-                    .shaderStorageImageReadWithoutFormat        = VK_TRUE,
-                    .shaderStorageImageWriteWithoutFormat       = VK_TRUE,
-                    .shaderUniformBufferArrayDynamicIndexing    = VK_TRUE,
-                    .shaderSampledImageArrayDynamicIndexing     = VK_TRUE,
-                    .shaderStorageBufferArrayDynamicIndexing    = VK_TRUE,
-                    .shaderInt64                                = VK_TRUE,
-                    .shaderInt16                                = VK_TRUE,
-                    .shaderResourceResidency                    = VK_TRUE,
-                    .shaderResourceMinLod                       = VK_TRUE,
-                    .sparseBinding                              = VK_TRUE,
-                    .sparseResidencyBuffer                      = VK_TRUE,
-                    .sparseResidencyImage2D                     = VK_TRUE,
-                    .sparseResidencyImage3D                     = VK_TRUE,
-                    .sparseResidencyAliased                     = VK_TRUE,
-                },
-            };
+            // NOTE(boti): Only request the required features
+            SetRequiredFeatures(&Vulkan->DeviceFeatures.features, CountOf(RequiredDeviceFeatures), RequiredDeviceFeatures);
+            SetRequiredFeatures(&Vulkan->Vulkan11Features, CountOf(RequiredVulkan11Features), RequiredVulkan11Features);
+            SetRequiredFeatures(&Vulkan->Vulkan12Features, CountOf(RequiredVulkan12Features), RequiredVulkan12Features);
+            SetRequiredFeatures(&Vulkan->Vulkan13Features, CountOf(RequiredVulkan13Features), RequiredVulkan13Features);
+            SetRequiredFeatures(&Vulkan->DescriptorBufferFeatures, CountOf(RequiredDescriptorBufferFeatures), RequiredDescriptorBufferFeatures);
 
             // TODO(boti): This code is incorrect on shared memory devices
             vkGetPhysicalDeviceMemoryProperties(Vulkan->PhysicalDevice, &Vulkan->MemoryProps);

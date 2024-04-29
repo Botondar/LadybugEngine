@@ -134,25 +134,31 @@ constexpr u32 INVALID_INDEX_U32 = U32_MAX;
 inline umm Align(umm Value, umm Alignment)
 {
     umm Result = (Value + Alignment - 1) & ~(Alignment - 1);
-    return Result;
+    return(Result);
 }
 
 inline u32 Align(u32 Value, u32 Alignment)
 {
     u32 Result = (Value + Alignment - 1) & ~(Alignment - 1);
-    return Result;
+    return(Result);
 }
 
-inline void* AlignPtr(void* Base, size_t Alignment)
+inline void* AlignPtr(void* Base, umm Alignment)
 {
-    void* Result = (void*)Align((size_t)Base, Alignment);
-    return Result;
+    void* Result = (void*)Align((umm)Base, Alignment);
+    return(Result);
 }
 
-inline void* OffsetPtr(void* Base, size_t Size)
+inline void* OffsetPtr(void* Base, umm Size)
 {
     void* Result = (void*)((u8*)Base + Size);
-    return Result;
+    return(Result);
+}
+
+inline const void* OffsetPtr(const void* Base, umm Size)
+{
+    const void* Result = (const void*)((u8*)Base + Size);
+    return(Result);
 }
 
 inline u32 TruncateU64ToU32(u64 Value);
