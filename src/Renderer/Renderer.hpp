@@ -37,7 +37,7 @@ static_assert(sizeof(per_frame) <= KiB(64));
 //
 constexpr u32 R_MaxFramesInFlight = 2u;
 
-constexpr u64 R_RenderTargetMemorySize      = MiB(320);
+constexpr u64 R_RenderTargetMemorySize      = MiB(512);
 constexpr u64 R_TextureMemorySize           = MiB(512);
 constexpr u64 R_ShadowMapMemorySize         = MiB(256);
 constexpr u32 R_MaxShadowCascadeCount       = 4;
