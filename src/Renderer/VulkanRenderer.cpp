@@ -1724,7 +1724,9 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
     ReturnOnFailure("Failed to create pipelines");
 
     // Gather info
-    Result.Info.DeviceName = Renderer->Vulkan.DeviceProps.deviceName;
+    Result.Info.DeviceName = Renderer->Vulkan.DeviceProps.properties.deviceName;
+    static_assert(sizeof(Renderer->Vulkan.Vulkan11Props.deviceLUID) == sizeof(device_luid));
+    memcpy(&Result.Info.DeviceLUID, Renderer->Vulkan.Vulkan11Props.deviceLUID, sizeof(device_luid));
 
     #undef ReturnOnFailure
     #undef ReturnWithFailure

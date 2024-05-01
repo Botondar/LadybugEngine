@@ -62,6 +62,11 @@ constexpr u32 MinPushConstantSize                   = 128;
 
 constexpr f32 GlobalMaxLOD = 1000.0f;
 
+struct device_luid
+{
+    u64 Value;
+};
+
 typedef flags32 format_flags;
 enum format_flag_bits : format_flags
 {
@@ -835,6 +840,7 @@ struct renderer;
 struct renderer_info
 {
     const char* DeviceName;
+    device_luid DeviceLUID;
 };
 
 struct renderer_init_result
@@ -1260,12 +1266,12 @@ PushCommand_(render_frame* Frame, render_command_type Type,
         memset(Command, 0, sizeof(*Command));
         Command->Type = Type;
 
-        Command->BARBufferAt = AlignedBAR;
-        Command->BARBufferSize = BARUsage;
-        Frame->BARBufferAt = AlignedBAR + BARUsage;
-        Command->StagingBufferAt = AlignedStaging;
-        Command->StagingBufferSize = StagingUsage;
-        Frame->StagingBuffer.At = AlignedStaging + StagingUsage;
+        Command->BARBufferAt        = AlignedBAR;
+        Command->BARBufferSize      = BARUsage;
+        Frame->BARBufferAt          = AlignedBAR + BARUsage;
+        Command->StagingBufferAt    = AlignedStaging;
+        Command->StagingBufferSize  = StagingUsage;
+        Frame->StagingBuffer.At     = AlignedStaging + StagingUsage;
     }
     return(Command);
 }

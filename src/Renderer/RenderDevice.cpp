@@ -187,6 +187,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
         Result = vkEnumeratePhysicalDevices(Vulkan->Instance, &PhysicalDeviceCount, PhysicalDevices);
         if (Result == VK_SUCCESS)
         {
+            // Feature chain
             Vulkan->DescriptorBufferFeatures = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT };
             Vulkan->Vulkan13Features = 
             {
@@ -209,13 +210,29 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                 .pNext = &Vulkan->Vulkan11Features,
             };
 
+            // Property chain
+            Vulkan->DescriptorBufferProps = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT,
+                .pNext = nullptr,
+            };
+            Vulkan->Vulkan11Props = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES,
+                .pNext = &Vulkan->DescriptorBufferProps,
+            };
+            Vulkan->DeviceProps = 
+            {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+                .pNext = &Vulkan->Vulkan11Props,
+            };
 
             VkPhysicalDevice SelectedDevice = VK_NULL_HANDLE;
-            VkPhysicalDeviceProperties DeviceProps = {};
             // TODO(boti): better device selection
             for (u32 DeviceIndex = 0; DeviceIndex < PhysicalDeviceCount; DeviceIndex++)
             {
-                vkGetPhysicalDeviceProperties(PhysicalDevices[DeviceIndex], &DeviceProps);
+                // TODO(boti): Enumerate extensions
+                vkGetPhysicalDeviceProperties2(PhysicalDevices[DeviceIndex], &Vulkan->DeviceProps);
                 vkGetPhysicalDeviceFeatures2(PhysicalDevices[DeviceIndex], &Vulkan->DeviceFeatures);
 
                 b32 AllRequiredFeaturesSupported = CheckRequiredFeatureSupport(&Vulkan->DeviceFeatures.features, CountOf(RequiredDeviceFeatures), RequiredDeviceFeatures);
@@ -223,7 +240,7 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
                 AllRequiredFeaturesSupported &= CheckRequiredFeatureSupport(&Vulkan->Vulkan12Features, CountOf(RequiredVulkan12Features), RequiredVulkan12Features);
                 AllRequiredFeaturesSupported &= CheckRequiredFeatureSupport(&Vulkan->Vulkan13Features, CountOf(RequiredVulkan13Features), RequiredVulkan13Features);
                 AllRequiredFeaturesSupported &= CheckRequiredFeatureSupport(&Vulkan->DescriptorBufferFeatures, CountOf(RequiredDescriptorBufferFeatures), RequiredDescriptorBufferFeatures);
-                if ((DeviceProps.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) && AllRequiredFeaturesSupported)
+                if ((Vulkan->DeviceProps.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) && AllRequiredFeaturesSupported)
                 {
                     SelectedDevice = PhysicalDevices[DeviceIndex];
                     break;
@@ -233,38 +250,22 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
             if (SelectedDevice)
             {
                 Vulkan->PhysicalDevice = PhysicalDevices[0];
-                Vulkan->DeviceProps = DeviceProps;
             }
             else
             {
                 UnhandledError("Failed to find appropriate device");
             }
 
-            // TODO(boti): Fold this into the device selection loop
-            {
-                Vulkan->DescriptorBufferProps = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_PROPERTIES_EXT,
-                    .pNext = nullptr,
-                };
-                VkPhysicalDeviceProperties2 Props2 = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-                    .pNext = &Vulkan->DescriptorBufferProps,
-                };
-                vkGetPhysicalDeviceProperties2(SelectedDevice, &Props2);
-            }
+            Vulkan->TimestampPeriod = Vulkan->DeviceProps.properties.limits.timestampPeriod;
 
-            Vulkan->TimestampPeriod = Vulkan->DeviceProps.limits.timestampPeriod;
+            Vulkan->TexelBufferAlignment        = Vulkan->DeviceProps.properties.limits.minTexelBufferOffsetAlignment;
+            Vulkan->ConstantBufferAlignment     = Vulkan->DeviceProps.properties.limits.minUniformBufferOffsetAlignment;
+            Vulkan->StorageBufferAlignment      = Vulkan->DeviceProps.properties.limits.minStorageBufferOffsetAlignment;
 
-            Vulkan->TexelBufferAlignment = Vulkan->DeviceProps.limits.minTexelBufferOffsetAlignment;
-            Vulkan->ConstantBufferAlignment = Vulkan->DeviceProps.limits.minUniformBufferOffsetAlignment;
-            Vulkan->StorageBufferAlignment = Vulkan->DeviceProps.limits.minStorageBufferOffsetAlignment;
-
-            Vulkan->MaxTexelBufferCount = Vulkan->DeviceProps.limits.maxTexelBufferElements;
-            Vulkan->MaxConstantBufferByteSize = Vulkan->DeviceProps.limits.maxUniformBufferRange;
-            Vulkan->MaxStorageBufferByteSize = Vulkan->DeviceProps.limits.maxStorageBufferRange;
-            Vulkan->MaxPushConstantByteSize = Vulkan->DeviceProps.limits.maxPushConstantsSize;
+            Vulkan->MaxTexelBufferCount         = Vulkan->DeviceProps.properties.limits.maxTexelBufferElements;
+            Vulkan->MaxConstantBufferByteSize   = Vulkan->DeviceProps.properties.limits.maxUniformBufferRange;
+            Vulkan->MaxStorageBufferByteSize    = Vulkan->DeviceProps.properties.limits.maxStorageBufferRange;
+            Vulkan->MaxPushConstantByteSize     = Vulkan->DeviceProps.properties.limits.maxPushConstantsSize;
 
             if (Vulkan->MaxConstantBufferByteSize < (1 << 16))
             {

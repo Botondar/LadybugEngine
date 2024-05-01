@@ -43,7 +43,8 @@ struct vulkan
     u32 QueueFamilyCount;
     VkQueueFamilyProperties QueueFamilies[MaxQueueFamilyCount];
     VkPhysicalDeviceMemoryProperties MemoryProps;
-    VkPhysicalDeviceProperties DeviceProps;
+    VkPhysicalDeviceProperties2 DeviceProps;
+    VkPhysicalDeviceVulkan11Properties Vulkan11Props;
     VkPhysicalDeviceDescriptorBufferPropertiesEXT DescriptorBufferProps;
 
     VkPhysicalDeviceFeatures2 DeviceFeatures;
