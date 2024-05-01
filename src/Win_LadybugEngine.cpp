@@ -10,7 +10,7 @@ internal HWND WinWindow;
 
 static void Win_DebugPrint(const char* Format, ...)
 {
-    constexpr size_t BuffSize = 512;
+    constexpr size_t BuffSize = 1llu << 16;
     char Buff[BuffSize];
 
     va_list ArgList;
