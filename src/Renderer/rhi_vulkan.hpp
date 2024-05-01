@@ -6,10 +6,12 @@
 PFN_vkCmdBeginDebugUtilsLabelEXT        vkCmdBeginDebugUtilsLabelEXT_;
 PFN_vkCmdEndDebugUtilsLabelEXT          vkCmdEndDebugUtilsLabelEXT_;
 PFN_vkSetDebugUtilsObjectNameEXT        vkSetDebugUtilsObjectNameEXT_;
+PFN_vkCreateDebugUtilsMessengerEXT      vkCreateDebugUtilsMessengerEXT_;
 
 //#define vkCmdBeginDebugUtilsLabelEXT    vkCmdBeginDebugUtilsLabelEXT_
 #define vkCmdEndDebugUtilsLabelEXT      vkCmdEndDebugUtilsLabelEXT_
 #define vkSetDebugUtilsObjectNameEXT    vkSetDebugUtilsObjectNameEXT_
+#define vkCreateDebugUtilsMessengerEXT  vkCreateDebugUtilsMessengerEXT_
 
 inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* Label);
 
@@ -145,4 +147,9 @@ static VkResult SetObjectName(VkDevice Device, VkObjectType Type, u64 Handle, co
 inline VkResult SetObjectName(VkDevice Device, VkDeviceMemory Memory, const char* Name)
 {
     return SetObjectName(Device, VK_OBJECT_TYPE_DEVICE_MEMORY, (u64)Memory, Name);
+}
+
+inline VkResult SetObjectName(VkDevice Device, VkPipeline Pipeline, const char* Name)
+{
+    return SetObjectName(Device, VK_OBJECT_TYPE_PIPELINE, (u64)Pipeline, Name);
 }

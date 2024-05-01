@@ -139,11 +139,22 @@ SetRequiredFeatures(void* FeatureStruct, u32 FeatureCount, const required_featur
     }
 }
 
+internal VkBool32 
+VulkanDebugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT Severity, 
+    VkDebugUtilsMessageTypeFlagsEXT Type,
+    const VkDebugUtilsMessengerCallbackDataEXT* Data,
+    void* User)
+{
+    Platform.DebugPrint("%s\n", Data->pMessage);
+    return(VK_FALSE);
+}
+
 internal VkResult InitializeVulkan(vulkan* Vulkan)
 {
     VkResult Result = VK_SUCCESS;
 
-    constexpr b32 UseValidation = true;
+    constexpr b32 UseValidation = false;
     const char* RequiredInstanceLayers_[] = 
     {
         "VK_LAYER_KHRONOS_validation",
@@ -181,6 +192,32 @@ internal VkResult InitializeVulkan(vulkan* Vulkan)
     Result = vkCreateInstance(&Info, nullptr, &Vulkan->Instance);
     if (Result == VK_SUCCESS)
     {
+        if (UseValidation)
+        {
+            vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(Vulkan->Instance, "vkCreateDebugUtilsMessengerEXT");
+            if (vkCreateDebugUtilsMessengerEXT)
+            {
+                VkDebugUtilsMessengerCreateInfoEXT DebugMessengerInfo = 
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .messageSeverity = 
+                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT|
+                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT|
+                        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+                    .messageType = 
+                        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT|
+                        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT|
+                        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT|
+                        VK_DEBUG_UTILS_MESSAGE_TYPE_DEVICE_ADDRESS_BINDING_BIT_EXT,
+                    .pfnUserCallback = &VulkanDebugCallback,
+                    .pUserData = nullptr,
+                };
+                Result = vkCreateDebugUtilsMessengerEXT(Vulkan->Instance, &DebugMessengerInfo, nullptr, &Vulkan->DebugMessenger);
+            }
+        }
+
         constexpr u32 MaxPhysicalDeviceCount = 8;
         u32 PhysicalDeviceCount = MaxPhysicalDeviceCount;
         VkPhysicalDevice PhysicalDevices[MaxPhysicalDeviceCount];

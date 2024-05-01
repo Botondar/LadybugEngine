@@ -13,6 +13,8 @@ struct vulkan
     VkQueue ComputeQueue;
     VkQueue TransferQueue;
 
+    VkDebugUtilsMessengerEXT DebugMessenger;
+
     //
     // Constants
     //
