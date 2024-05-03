@@ -320,8 +320,6 @@ struct renderer_material
 struct instance_data
 {
     m4 Transform;
-    // NOTE(boti): This is currently the _base_ of the vertex buffer, 
-    // but in the future we might want to point directly at the vertex data?
     u64 VertexBufferAddress; 
     renderer_material Material;
 };
