@@ -25,6 +25,31 @@
 #   define interpolant(n)
 #endif
 
+#define DefineBufferType(name, data_type)   \
+layout(buffer_reference, scalar)            \
+buffer name                                 \
+{                                           \
+    data_type Data[];                       \
+};                                          \
+layout(buffer_reference, scalar)            \
+readonly buffer name##_r                    \
+{                                           \
+    data_type Data[];                       \
+};                                          \
+layout(buffer_reference, scalar)            \
+writeonly buffer name##_w                   \
+{                                           \
+    data_type Data[];                       \
+}
+
+DefineBufferType(vertex_buffer,     vertex);
+DefineBufferType(index_buffer,      u32);
+DefineBufferType(instance_buffer,   instance_data);
+DefineBufferType(draw_buffer,       draw_data);
+DefineBufferType(light_buffer,      light);
+DefineBufferType(tile_buffer,       screen_tile);
+DefineBufferType(skin,              m4);
+
 //
 // Common
 //

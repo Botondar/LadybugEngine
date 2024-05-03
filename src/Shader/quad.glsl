@@ -32,15 +32,11 @@ struct particle
     v2 HalfExtent;
 };
 
-layout(buffer_reference, scalar)
-readonly buffer particle_buffer
-{
-    particle Particles[];
-};
+DefineBufferType(particle_buffer, particle);
 
 void main()
 {
-    particle_buffer ParticleBuffer = particle_buffer(ParticleBufferAddress);
+    particle_buffer_r ParticleBuffer = particle_buffer_r(ParticleBufferAddress);
 
     v3 BaseVertices[4] = 
     {
@@ -59,7 +55,7 @@ void main()
     uint LocalIndex = gl_VertexIndex % 6;
 
     v3 BaseP = BaseVertices[IndexData[LocalIndex]];
-    particle Particle = ParticleBuffer.Particles[GlobalIndex];
+    particle Particle = ParticleBuffer.Data[GlobalIndex];
 
     v3 X = PerFrame.CameraTransform[0].xyz;
     v3 Y = PerFrame.CameraTransform[1].xyz;

@@ -8,18 +8,6 @@ uniform PerFrameBlock
     per_frame PerFrame;
 };
 
-layout(buffer_reference, scalar)
-readonly buffer light_buffer
-{
-    light Lights[];
-};
-
-layout(buffer_reference, scalar)
-writeonly buffer tile_buffer
-{
-    screen_tile Tiles[];
-};
-
 SetBinding(Static, StructureImage) uniform texture2D StructureImage;
 
 bool IntersectAABBSphere(v3 P, v3 HalfExtent, v3 C, float R)
@@ -37,8 +25,8 @@ shared uint LightBufferAt = {};
 
 void main()
 {
-    light_buffer LightBuffer = light_buffer(PerFrame.LightBufferAddress);
-    tile_buffer TileBuffer = tile_buffer(PerFrame.TileBufferAddress);
+    light_buffer_r  LightBuffer = light_buffer_r(PerFrame.LightBufferAddress);
+    tile_buffer_w   TileBuffer  = tile_buffer_w(PerFrame.TileBufferAddress);
 
     uint ThreadID = gl_LocalInvocationID.x + gl_LocalInvocationID.y * gl_WorkGroupSize.x;
     if (subgroupElect())
@@ -126,8 +114,8 @@ void main()
     uint ThreadCount = gl_WorkGroupSize.x * gl_WorkGroupSize.y;
     for (uint LightIndex = ThreadID; LightIndex < PerFrame.LightCount; LightIndex += ThreadCount)
     {
-        v3 P = LightBuffer.Lights[LightIndex].P.xyz;
-        float L = GetLuminance(LightBuffer.Lights[LightIndex].E);
+        v3 P = LightBuffer.Data[LightIndex].P.xyz;
+        float L = GetLuminance(LightBuffer.Data[LightIndex].E);
         float R = sqrt(max(L / R_LuminanceThreshold, 0.0));
         if (IntersectAABBSphere(BoxP, HalfExtent, P, R))
         {
@@ -143,7 +131,7 @@ void main()
                 uint DstIndex = atomicAdd(LightBufferAt, 1);
                 if (DstIndex < R_MaxLightCountPerTile)
                 {
-                    TileBuffer.Tiles[TileIndex].LightIndices[DstIndex] = LightIndex;
+                    TileBuffer.Data[TileIndex].LightIndices[DstIndex] = LightIndex;
                 }
             }
         }
@@ -152,6 +140,6 @@ void main()
     barrier();
     if (ThreadID == 0)
     {
-        TileBuffer.Tiles[TileIndex].LightCount = min(LightBufferAt, R_MaxLightCountPerTile);
+        TileBuffer.Data[TileIndex].LightCount = min(LightBufferAt, R_MaxLightCountPerTile);
     }
 }

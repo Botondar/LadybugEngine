@@ -17,29 +17,11 @@ uniform PushConstants
     uint Count;
 };
 
-layout(buffer_reference, scalar)
-readonly buffer vertex_buffer
-{
-    vertex Data[];
-};
-
-layout(buffer_reference, scalar)
-writeonly buffer skinning_buffer
-{
-    vertex Data[];
-};
-
-layout(buffer_reference, scalar)
-readonly buffer skin
-{
-    m4 Joints[];
-};
-
 void main()
 {
-    skin Skin = skin(SkinAddress);
-    skinning_buffer DstVB = skinning_buffer(PerFrame.SkinningBufferAddress);
-    vertex_buffer SrcVB = vertex_buffer(PerFrame.VertexBufferAddress);
+    skin_r Skin = skin_r(SkinAddress);
+    vertex_buffer_w DstVB = vertex_buffer_w(PerFrame.SkinningBufferAddress);
+    vertex_buffer_r SrcVB = vertex_buffer_r(PerFrame.VertexBufferAddress);
 
     uint Index = gl_GlobalInvocationID.x;
 
@@ -51,10 +33,10 @@ void main()
         v4 Weights = SrcVB.Data[SrcOffset + Index].Weights;
         uvec4 JointIndices = uvec4(SrcVB.Data[SrcOffset + Index].Joints);
 
-        m4 J0 = Skin.Joints[JointIndices[0]];
-        m4 J1 = Skin.Joints[JointIndices[1]];
-        m4 J2 = Skin.Joints[JointIndices[2]];
-        m4 J3 = Skin.Joints[JointIndices[3]];
+        m4 J0 = Skin.Data[JointIndices[0]];
+        m4 J1 = Skin.Data[JointIndices[1]];
+        m4 J2 = Skin.Data[JointIndices[2]];
+        m4 J3 = Skin.Data[JointIndices[3]];
 
         v3 P = 
             Weights[0] * TransformPoint(J0, InP) +
