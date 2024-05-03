@@ -49,6 +49,7 @@ DefineBufferType(draw_buffer,       draw_data);
 DefineBufferType(light_buffer,      light);
 DefineBufferType(tile_buffer,       screen_tile);
 DefineBufferType(skin,              m4);
+DefineBufferType(vertex_2d_buffer,  vertex_2d);
 
 //
 // Common

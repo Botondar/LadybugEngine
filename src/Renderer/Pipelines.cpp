@@ -339,7 +339,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Inheritance = {},
         .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = {},
+        .InputAssemblerState = { .Topology = Topology_TriangleList },
         .RasterizerState = 
         {
             .Flags = RS_FrontCW,
@@ -371,7 +371,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Inheritance = {},
         .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = {},
+        .InputAssemblerState = { .Topology = Topology_TriangleList },
         .RasterizerState = 
         {
             .Flags = RS_FrontCW,
@@ -403,7 +403,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Inheritance = {},
         .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = {},
+        .InputAssemblerState = { .Topology = Topology_TriangleList },
         .RasterizerState = 
         {
             .Flags = RS_DepthClampEnable|RS_DepthBiasEnable,
@@ -435,7 +435,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Inheritance = {},
         .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = {},
+        .InputAssemblerState = { .Topology = Topology_TriangleList },
         .RasterizerState = 
         {
             .Flags = RS_DepthBiasEnable,
@@ -467,7 +467,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Inheritance = {},
         .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = {},
+        .InputAssemblerState = { .Topology = Topology_TriangleList },
         .RasterizerState = 
         {
             .Flags = RS_Flags_None,
@@ -499,15 +499,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Inheritance = {},
         .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = 
-        {
-            .Topology = Topology_TriangleList,
-            .EnablePrimitiveRestart = false,
-            .BindingCount = 0,
-            .AttribCount = 0,
-            .Bindings = {},
-            .Attribs = {},
-        },
+        .InputAssemblerState = { .Topology = Topology_TriangleList },
         .RasterizerState = 
         {
             .Flags = RS_Flags_None,
@@ -540,35 +532,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Inheritance = {},
         .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = 
-        {
-            .Topology = Topology_TriangleList,
-            .EnablePrimitiveRestart = false,
-            .BindingCount = 1,
-            .AttribCount = 3,
-            .Bindings = { { .Stride = sizeof(vertex_2d), .InstanceStepRate = 0 } },
-            .Attribs = 
-            {
-                {
-                    .Index = 0,
-                    .Binding = 0,
-                    .Format = Format_R32G32_Float,
-                    .ByteOffset = OffsetOf(vertex_2d, P),
-                },
-                {
-                    .Index = 1,
-                    .Binding = 0,
-                    .Format = Format_R32G32_Float,
-                    .ByteOffset = OffsetOf(vertex_2d, TexCoord),
-                },
-                {
-                    .Index = 2,
-                    .Binding = 0,
-                    .Format = Format_R8G8B8A8_UNorm,
-                    .ByteOffset = OffsetOf(vertex_2d, Color),
-                },
-            },
-        },
+        .InputAssemblerState = { .Topology = Topology_TriangleList },
         .RasterizerState = 
         {
             .Flags = RS_Flags_None,
@@ -858,7 +822,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Inheritance = {},
         .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = {},
+        .InputAssemblerState = { .Topology = Topology_TriangleList },
         .RasterizerState = 
         {
             .Flags = RS_FrontCW,

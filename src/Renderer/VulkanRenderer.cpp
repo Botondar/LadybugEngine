@@ -2846,21 +2846,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdSetScissor(GuiCB, 0, 1, &OutputScissor);
 
         vkCmdBindPipeline(GuiCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->Pipelines[Pipeline_UI].Pipeline);
-        struct ui_constants
-        {
-            m4 Transform;
-            renderer_texture_id ID;
-        };
-        ui_constants Push = 
-        {
-            .Transform = M4(2.0f / Frame->OutputExtent.X, 0.0f, 0.0f, -1.0f,
-                            0.0f, 2.0f / Frame->OutputExtent.Y, 0.0f, -1.0f,
-                            0.0f, 0.0f, 1.0f, 0.0f,
-                            0.0f, 0.0f, 0.0f, 1.0f),
-            .ID = Frame->ImmediateTextureID,
-        };
-        vkCmdPushConstants(GuiCB, Renderer->Pipelines[Pipeline_UI].Layout, VK_SHADER_STAGE_ALL, 
-                           0, sizeof(Push), &Push);
     }
 
     {
@@ -3350,7 +3335,20 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 } break;
                 case RenderCommand_Batch2D:
                 {
-                    vkCmdBindVertexBuffers(GuiCB, 0, 1, &Renderer->BARBuffers[Frame->FrameID], &Command->BARBufferAt);
+                    struct
+                    {
+                        m4 Transform;
+                        u64 VertexBufferAddress;
+                        renderer_texture_id TextureID;
+                    } Push;
+                    Push.Transform = M4(
+                        2.0f / Frame->OutputExtent.X, 0.0f, 0.0f, -1.0f,
+                        0.0f, 2.0f / Frame->OutputExtent.Y, 0.0f, -1.0f,
+                        0.0f, 0.0f, 1.0f, 0.0f,
+                        0.0f, 0.0f, 0.0f, 1.0f);
+                    Push.VertexBufferAddress    = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt;
+                    Push.TextureID              = Frame->ImmediateTextureID;
+                    vkCmdPushConstants(GuiCB, Renderer->Pipelines[Pipeline_UI].Layout, VK_SHADER_STAGE_ALL, 0, sizeof(Push), &Push);
                     vkCmdDraw(GuiCB, Command->Batch2D.VertexCount, 1, 0, 0);
                 } break;
                 InvalidDefaultCase;

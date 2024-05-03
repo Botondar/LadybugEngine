@@ -6,20 +6,17 @@ interpolant(1) vec4 Color;
 layout(push_constant) uniform PushConstants
 {
     mat4 Transform;
+    vertex_2d_buffer_r VertexBuffer;
     renderer_texture_id TextureID;
 };
 
 #ifdef VS
 
-layout(location = 0) in vec2 aP;
-layout(location = 1) in vec2 aTexCoord;
-layout(location = 2) in vec4 aColor;
-
 void main()
 {
-    gl_Position = Transform * vec4(aP, 0.0, 1.0);
-    TexCoord = aTexCoord;
-    Color = aColor;
+    gl_Position = Transform * vec4(VertexBuffer.Data[gl_VertexIndex].P, 0.0, 1.0);
+    TexCoord = VertexBuffer.Data[gl_VertexIndex].TexCoord;
+    Color = UnpackRGBA8(VertexBuffer.Data[gl_VertexIndex].Color);
 }
 #else
 

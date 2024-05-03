@@ -212,6 +212,13 @@ struct vertex
     rgba8 Color;
 };
 
+struct vertex_2d
+{
+    v2 P;
+    v2 TexCoord;
+    rgba8 Color;
+};
+
 struct light
 {
     v3 P;

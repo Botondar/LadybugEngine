@@ -700,13 +700,6 @@ struct vertex_skin8
 };
 typedef vertex_skin8 vertex_skin;
 
-struct vertex_2d
-{
-    v2 P;
-    v2 TexCoord;
-    rgba8 Color;
-};
-
 enum billboard_mode : u32
 {
     Billboard_ViewAligned = 0, // Billboards facing the camera directly
