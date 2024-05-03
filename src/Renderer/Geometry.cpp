@@ -8,19 +8,18 @@ internal bool CreateGeometryMemory(geometry_memory* Memory, geometry_buffer_type
 {
     bool Result = false;
 
-    VkBufferUsageFlags Usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    VkBufferUsageFlags Usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT|VK_BUFFER_USAGE_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
     u32 Stride = 0;
     switch (Type)
     {
         case geometry_buffer_type::Vertex:
         {
             Stride = sizeof(vertex);
-            Usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
         } break;
         case geometry_buffer_type::Index:
         {
             Stride = sizeof(vert_index);
-            Usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+            Usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
         } break;
         InvalidDefaultCase;
     }

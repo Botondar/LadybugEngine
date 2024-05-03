@@ -1,105 +1,3 @@
-
-vertex_state InputState_vertex = 
-{
-    .Topology = Topology_TriangleList,
-    .EnablePrimitiveRestart = false,
-    // TODO(boti): We should figure out some way to not have to hard-code these.
-    .BindingCount = 1,
-    .AttribCount = 5,
-    .Bindings = 
-    {
-        { sizeof(vertex), 0 },
-    },
-    .Attribs = 
-    {
-        {
-            .Index = Attrib_Position,
-            .Binding = 0,
-            .Format = Format_R32G32B32_Float,
-            .ByteOffset = OffsetOf(vertex, P),
-        },
-        {
-            .Index = Attrib_Normal,
-            .Binding = 0,
-            .Format = Format_R32G32B32_Float,
-            .ByteOffset = OffsetOf(vertex, N),
-        },
-        {
-            .Index = Attrib_TangentSign,
-            .Binding = 0,
-            .Format = Format_R32G32B32A32_Float,
-            .ByteOffset = OffsetOf(vertex, T),
-        },
-        {
-            .Index = Attrib_TexCoord,
-            .Binding = 0,
-            .Format = Format_R32G32_Float,
-            .ByteOffset = OffsetOf(vertex, TexCoord),
-        },
-        {
-            .Index = Attrib_Color,
-            .Binding = 0,
-            .Format = Format_R8G8B8A8_UNorm,
-            .ByteOffset = OffsetOf(vertex, Color),
-        },
-    },
-};
-
-vertex_state InputState_skinned =
-{
-    .Topology = Topology_TriangleList,
-    .EnablePrimitiveRestart = false,
-    .BindingCount = 1,
-    .AttribCount = 7,
-    .Bindings = { { sizeof(vertex), 0 } },
-    .Attribs = 
-    {
-        {
-            .Index = Attrib_Position,
-            .Binding = 0,
-            .Format = Format_R32G32B32_Float,
-            .ByteOffset = OffsetOf(vertex, P),
-        },
-        {
-            .Index = Attrib_Normal,
-            .Binding = 0,
-            .Format = Format_R32G32B32_Float,
-            .ByteOffset = OffsetOf(vertex, N),
-        },
-        {
-            .Index = Attrib_TangentSign,
-            .Binding = 0,
-            .Format = Format_R32G32B32A32_Float,
-            .ByteOffset = OffsetOf(vertex, T),
-        },
-        {
-            .Index = Attrib_TexCoord,
-            .Binding = 0,
-            .Format = Format_R32G32_Float,
-            .ByteOffset = OffsetOf(vertex, TexCoord),
-        },
-        {
-            .Index = Attrib_Color,
-            .Binding = 0,
-            .Format = Format_R8G8B8A8_UNorm,
-            .ByteOffset = OffsetOf(vertex, Color),
-        },
-        {
-            .Index = Attrib_JointWeights,
-            .Binding = 0,
-            .Format = Format_R32G32B32A32_Float,
-            .ByteOffset = OffsetOf(vertex, Weights),
-        },
-        {
-            .Index = Attrib_JointIndices,
-            .Binding = 0,
-            .Format = Format_R8G8B8A8_UInt,
-            .ByteOffset = OffsetOf(vertex, Joints),
-        },
-    },
-};
-
-
 const sampler_state SamplerInfos[Sampler_Count] = 
 {
     [Sampler_Default] = 
@@ -438,18 +336,10 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "shading_forward",
         .Type = PipelineType_Graphics,
-        .Inheritance = 
-        {
-            .ParentID = Pipeline_None,
-            .OverrideProps = PipelineProp_None,
-        },
-        .Layout = 
-        {
-            .DescriptorSetCount = 0,
-            .DescriptorSets = {},
-        },
+        .Inheritance = {},
+        .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = InputState_vertex,
+        .InputAssemblerState = {},
         .RasterizerState = 
         {
             .Flags = RS_FrontCW,
@@ -478,18 +368,10 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "prepass",
         .Type = PipelineType_Graphics,
-        .Inheritance = 
-        {
-            .ParentID = Pipeline_None,
-            .OverrideProps = PipelineProp_None,
-        },
-        .Layout = 
-        {
-            .DescriptorSetCount = 0,
-            .DescriptorSets = {},
-        },
+        .Inheritance = {},
+        .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = InputState_vertex,
+        .InputAssemblerState = {},
         .RasterizerState = 
         {
             .Flags = RS_FrontCW,
@@ -518,18 +400,10 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "shadow",
         .Type = PipelineType_Graphics,
-        .Inheritance = 
-        {
-            .ParentID = Pipeline_None,
-            .OverrideProps = PipelineProp_None,
-        },
-        .Layout = 
-        {
-            .DescriptorSetCount = 0,
-            .DescriptorSets = {},
-        },
+        .Inheritance = {},
+        .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = InputState_vertex,
+        .InputAssemblerState = {},
         .RasterizerState = 
         {
             .Flags = RS_DepthClampEnable|RS_DepthBiasEnable,
@@ -558,18 +432,10 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "shadow",
         .Type = PipelineType_Graphics,
-        .Inheritance = 
-        {
-            .ParentID = Pipeline_None,
-            .OverrideProps = PipelineProp_None,
-        },
-        .Layout = 
-        {
-            .DescriptorSetCount = 0,
-            .DescriptorSets = {},
-        },
+        .Inheritance = {},
+        .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = InputState_vertex,
+        .InputAssemblerState = {},
         .RasterizerState = 
         {
             .Flags = RS_DepthBiasEnable,
@@ -598,18 +464,10 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "gizmo",
         .Type = PipelineType_Graphics,
-        .Inheritance = 
-        {
-            .ParentID = Pipeline_None,
-            .OverrideProps = PipelineProp_None,
-        },
-        .Layout = 
-        {
-            .DescriptorSetCount = 0,
-            .DescriptorSets = {},
-        },
+        .Inheritance = {},
+        .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = InputState_vertex,
+        .InputAssemblerState = {},
         .RasterizerState = 
         {
             .Flags = RS_Flags_None,
@@ -638,16 +496,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "sky",
         .Type = PipelineType_Graphics,
-        .Inheritance = 
-        {
-            .ParentID = Pipeline_None,
-            .OverrideProps = PipelineProp_None,
-        },
-        .Layout = 
-        {
-            .DescriptorSetCount = 0,
-            .DescriptorSets = {},
-        },
+        .Inheritance = {},
+        .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
         .InputAssemblerState = 
         {
@@ -687,16 +537,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "ui",
         .Type = PipelineType_Graphics,
-        .Inheritance = 
-        {
-            .ParentID = Pipeline_None,
-            .OverrideProps = PipelineProp_None,
-        },
-        .Layout = 
-        {
-            .DescriptorSetCount = 0,
-            .DescriptorSets = {},
-        },
+        .Inheritance = {},
+        .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
         .InputAssemblerState = 
         {
@@ -868,16 +710,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "quad",
         .Type = PipelineType_Graphics,
-        .Inheritance = 
-        {
-            .ParentID = Pipeline_None,
-            .OverrideProps = PipelineProp_None,
-        },
-        .Layout = 
-        {
-            .DescriptorSetCount = 0,
-            .DescriptorSets = {},
-        },
+        .Inheritance = {},
+        .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
         .InputAssemblerState = 
         {
@@ -922,16 +756,8 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
     {
         .Name = "skin",
         .Type = PipelineType_Compute,
-        .Inheritance = 
-        {
-            .ParentID = Pipeline_None,
-            .OverrideProps = PipelineProp_None,
-        },
-        .Layout = 
-        {
-            .DescriptorSetCount = 0,
-            .DescriptorSets = {},
-        },
+        .Inheritance = {},
+        .Layout = {},
         .EnabledStages = ShaderStage_CS,
     },
     [Pipeline_LightBinning] =
@@ -1032,7 +858,7 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         .Inheritance = {},
         .Layout = {},
         .EnabledStages = ShaderStage_VS|ShaderStage_PS,
-        .InputAssemblerState = InputState_vertex,
+        .InputAssemblerState = {},
         .RasterizerState = 
         {
             .Flags = RS_FrontCW,

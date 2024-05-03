@@ -18,14 +18,12 @@ interpolant(2) vec3 SrcColor;
 
 #if defined(VS)
 
-layout(location = 0) in vec3 aP;
-layout(location = 1) in vec3 aN;
-
 void main()
 {
-    P = (PerFrame.ViewTransform * (Transform * vec4(aP, 1.0))).xyz;
+    vertex_buffer_r VertexBuffer = vertex_buffer_r(PerFrame.VertexBufferAddress);
+    P = (PerFrame.ViewTransform * (Transform * vec4(VertexBuffer.Data[gl_VertexIndex].P, 1.0))).xyz;
     // TODO(boti): determine whether we'll need Inv/Transpose here
-    N = normalize((PerFrame.ViewTransform * (Transform * vec4(aN, 0.0))).xyz);
+    N = normalize((PerFrame.ViewTransform * (Transform * vec4(VertexBuffer.Data[gl_VertexIndex].N, 0.0))).xyz);
     SrcColor = UnpackRGBA8(iSrcColor).rgb;
     gl_Position = PerFrame.ProjectionTransform * vec4(P, 1.0);
     

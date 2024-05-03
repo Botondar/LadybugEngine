@@ -20,16 +20,17 @@ interpolant(1) flat uint InstanceIndex;
 
 #if defined(VS)
 
-layout(location = Attrib_Position) in vec3 aP;
-layout(location = Attrib_TexCoord) in vec2 aTexCoord;
-
 void main()
 {
     instance_buffer_r InstanceBuffer = instance_buffer_r(PerFrame.InstanceBufferAddress);
     instance_data Instance = InstanceBuffer.Data[gl_InstanceIndex];
-    gl_Position = ViewProjection * v4(TransformPoint(Instance.Transform, aP), 1.0);
+
+    bool IsSkinned = gl_InstanceIndex >= PerFrame.DrawGroupOffsets[DrawGroup_Skinned];
+    vertex_buffer_r VertexBuffer = vertex_buffer_r(IsSkinned ? PerFrame.SkinningBufferAddress : PerFrame.VertexBufferAddress);
+
+    gl_Position = ViewProjection * v4(TransformPoint(Instance.Transform, VertexBuffer.Data[gl_VertexIndex].P), 1.0);
 #if ShaderVariant_AlphaTest
-    TexCoord = aTexCoord;
+    TexCoord = VertexBuffer.Data[gl_VertexIndex].TexCoord;
     InstanceIndex = gl_InstanceIndex;
 #endif
     

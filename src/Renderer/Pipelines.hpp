@@ -31,8 +31,6 @@ enum pipeline : u32
     Pipeline_Count,
 };
 
-extern vertex_state InputState_vertex;
-
 extern const sampler_state SamplerInfos[Sampler_Count];
 extern const descriptor_set_layout_info SetLayoutInfos[Set_Count];
 extern const pipeline_info PipelineInfos[Pipeline_Count];

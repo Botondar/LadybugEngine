@@ -1941,28 +1941,7 @@ DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, pipeline* Pipelines, dr
             continue;
         }
 
-        u64 VertexBufferOffset = 0;
-        VkBuffer VertexBuffer = VK_NULL_HANDLE;
-        switch (Group)
-        {
-            case DrawGroup_Opaque:
-            case DrawGroup_AlphaTest:
-            case DrawGroup_Transparent:
-            {
-                VertexBuffer = Frame->Renderer->GeometryBuffer.VertexMemory.Buffer;
-            } break;
-            case DrawGroup_Skinned:
-            {
-                VertexBuffer = Frame->Renderer->PerFrameBuffer;
-
-                // HACK(boti): either move to vertex pulling or find a better way to bind the skinning buffer
-                VertexBufferOffset = Frame->Uniforms.SkinningBufferAddress - Frame->Renderer->PerFrameBufferAddress;
-            } break;
-            InvalidDefaultCase;
-        }
-
         vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Frame->Renderer->Pipelines[Pipelines[Group]].Pipeline);
-        vkCmdBindVertexBuffers(CmdBuffer, 0, 1, &VertexBuffer, &VertexBufferOffset);
         vkCmdDrawIndexedIndirect(CmdBuffer, List->DrawBuffer, List->DrawBufferOffset + CurrentOffset, DrawCount, sizeof(VkDrawIndexedIndirectCommand));
         CurrentOffset += DrawCount * sizeof(VkDrawIndexedIndirectCommand);
     }
@@ -2857,10 +2836,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdSetScissor(Widget3DCB, 0, 1, &BlitScissor);
 
         vkCmdBindPipeline(Widget3DCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->Pipelines[Pipeline_Gizmo].Pipeline);
-
-        const VkDeviceSize ZeroOffset = 0;
-        vkCmdBindVertexBuffers(Widget3DCB, 0, 1, &Renderer->GeometryBuffer.VertexMemory.Buffer, &ZeroOffset);
-        vkCmdBindIndexBuffer(Widget3DCB, Renderer->GeometryBuffer.IndexMemory.Buffer, ZeroOffset, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(Widget3DCB, Renderer->GeometryBuffer.IndexMemory.Buffer, 0, VK_INDEX_TYPE_UINT32);
     }
 
     VkCommandBuffer GuiCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_UI);
@@ -3183,8 +3159,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
                                 Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
                                 Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                                Barrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-                                Barrier.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+                                Barrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+                                Barrier.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
                                 PushBeginBarrier(&FrameStages[FrameStage_Skinning], &Barrier);
                             }
 
@@ -3743,8 +3719,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .pNext = nullptr,
             .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT|VK_ACCESS_2_SHADER_READ_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
             .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
             .buffer = Renderer->PerFrameBuffer,
