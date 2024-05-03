@@ -24,8 +24,7 @@ void main()
     instance_buffer_r InstanceBuffer = instance_buffer_r(PerFrame.InstanceBufferAddress);
     instance_data Instance = InstanceBuffer.Data[gl_InstanceIndex];
 
-    bool IsSkinned = (gl_InstanceIndex >= PerFrame.DrawGroupOffsets[DrawGroup_Skinned]);
-    vertex_buffer_r VertexBuffer = vertex_buffer_r(IsSkinned ? PerFrame.SkinningBufferAddress : PerFrame.VertexBufferAddress);
+    vertex_buffer_r VertexBuffer = vertex_buffer_r(Instance.VertexBufferAddress);
 
     precise v3 WorldP   = TransformPoint(Instance.Transform, VertexBuffer.Data[gl_VertexIndex].P);
     TexCoord            = VertexBuffer.Data[gl_VertexIndex].TexCoord;

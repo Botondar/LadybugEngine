@@ -109,8 +109,7 @@ void main()
         uint Index1 = IndexBuffer.Data[IndexIndex + 1];
         uint Index2 = IndexBuffer.Data[IndexIndex + 2];
 
-        bool IsSkinned = (InstanceTriangleID.x >= PerFrame.DrawGroupOffsets[DrawGroup_Skinned]);
-        vertex_buffer_r VertexBuffer = vertex_buffer_r(IsSkinned ? PerFrame.SkinningBufferAddress : PerFrame.VertexBufferAddress);
+        vertex_buffer_r VertexBuffer = vertex_buffer_r(Instance.VertexBufferAddress);
         unpacked_vertex Vertex0 = UnpackVertex(VertexBuffer, Draw.VertexOffset + Index0);
         unpacked_vertex Vertex1 = UnpackVertex(VertexBuffer, Draw.VertexOffset + Index1);
         unpacked_vertex Vertex2 = UnpackVertex(VertexBuffer, Draw.VertexOffset + Index2);

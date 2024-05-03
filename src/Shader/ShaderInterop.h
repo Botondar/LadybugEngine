@@ -187,9 +187,8 @@ struct v4u8
 #define DrawGroup_Opaque            0
 #define DrawGroup_AlphaTest         1
 #define DrawGroup_Transparent       2
-#define DrawGroup_Skinned           3
 
-#define DrawGroup_Count             4
+#define DrawGroup_Count             3
 
 StaticAssert(DrawGroup_Count < 32);
 
@@ -254,7 +253,6 @@ struct per_frame
 
     u64 IndexBufferAddress;
     u64 VertexBufferAddress;
-    u64 SkinningBufferAddress;
     u64 LightBufferAddress;
     u64 TileBufferAddress;
     u64 InstanceBufferAddress;
@@ -322,6 +320,9 @@ struct renderer_material
 struct instance_data
 {
     m4 Transform;
+    // NOTE(boti): This is currently the _base_ of the vertex buffer, 
+    // but in the future we might want to point directly at the vertex data?
+    u64 VertexBufferAddress; 
     renderer_material Material;
 };
 

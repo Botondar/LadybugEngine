@@ -725,9 +725,18 @@ struct draw_batch_2d
     u32 VertexCount;
 };
 
+typedef flags32 draw_flags;
+enum draw_flag_bits : draw_flags
+{
+    Draw_None    = 0,
+
+    Draw_Skinned = (1u << 0),
+};
+
 struct draw_command
 {
     draw_group Group;
+    draw_flags Flags;
     mmbox BoundingBox;
     renderer_material Material;
     m4 Transform;
@@ -1341,11 +1350,9 @@ DrawMesh(render_frame* Frame,
         Command->Draw.Group = Group;
         if (IsSkinned)
         {
-            // TODO(boti): Skinned should probably be a flag/subgroup on the command, not a DrawGroup itself
-            Command->Draw.Group = DrawGroup_Skinned;
+            Command->Draw.Flags |= Draw_Skinned;
             memcpy(OffsetPtr(Frame->BARBufferBase, Command->BARBufferAt), Pose, PoseByteCount);
         }
-
         Command->Draw.BoundingBox = BoundingBox;
         Command->Draw.Material = Material;
         Command->Draw.Transform = Transform;

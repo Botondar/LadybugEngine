@@ -1955,38 +1955,26 @@ internal void BeginFrameStage(VkCommandBuffer CmdBuffer, frame_stage* Stage, con
     {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .pNext = nullptr,
-        .memoryBarrierCount         = Stage->BeginGlobalMemoryBarrierCount,
-        .pMemoryBarriers            = Stage->BeginGlobalMemoryBarriers,
-        .bufferMemoryBarrierCount   = Stage->BeginBufferMemoryBarrierCount,
-        .pBufferMemoryBarriers      = Stage->BeginBufferMemoryBarriers,
-        .imageMemoryBarrierCount    = Stage->BeginImageMemoryBarrierCount,
-        .pImageMemoryBarriers       = Stage->BeginImageMemoryBarriers,
+        .memoryBarrierCount         = Stage->GlobalMemoryBarrierCount,
+        .pMemoryBarriers            = Stage->GlobalMemoryBarriers,
+        .bufferMemoryBarrierCount   = Stage->BufferMemoryBarrierCount,
+        .pBufferMemoryBarriers      = Stage->BufferMemoryBarriers,
+        .imageMemoryBarrierCount    = Stage->ImageMemoryBarrierCount,
+        .pImageMemoryBarriers       = Stage->ImageMemoryBarriers,
     };
     vkCmdPipelineBarrier2(CmdBuffer, &DependencyInfo);
 }
 internal void EndFrameStage(VkCommandBuffer CmdBuffer, frame_stage* Stage)
 {
-    VkDependencyInfo DependencyInfo =
-    {
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .pNext = nullptr,
-        .memoryBarrierCount         = Stage->EndGlobalMemoryBarrierCount,
-        .pMemoryBarriers            = Stage->EndGlobalMemoryBarriers,
-        .bufferMemoryBarrierCount   = Stage->EndBufferMemoryBarrierCount,
-        .pBufferMemoryBarriers      = Stage->EndBufferMemoryBarriers,
-        .imageMemoryBarrierCount    = Stage->EndImageMemoryBarrierCount,
-        .pImageMemoryBarriers       = Stage->EndImageMemoryBarriers,
-    };
-    vkCmdPipelineBarrier2(CmdBuffer, &DependencyInfo);
     vkCmdEndDebugUtilsLabelEXT(CmdBuffer);
 }
 
 internal b32 PushBeginBarrier(frame_stage* Stage, const VkImageMemoryBarrier2* Barrier)
 {
     b32 Result = false;
-    if (Stage->BeginImageMemoryBarrierCount < Stage->MaxBarrierCountPerType)
+    if (Stage->ImageMemoryBarrierCount < Stage->MaxImageMemoryBarrierCount)
     {
-        Stage->BeginImageMemoryBarriers[Stage->BeginImageMemoryBarrierCount++] = *Barrier;
+        Stage->ImageMemoryBarriers[Stage->ImageMemoryBarrierCount++] = *Barrier;
         Result = true;
     }
     return(Result);
@@ -1995,9 +1983,20 @@ internal b32 PushBeginBarrier(frame_stage* Stage, const VkImageMemoryBarrier2* B
 internal b32 PushBeginBarrier(frame_stage* Stage, const VkBufferMemoryBarrier2* Barrier)
 {
     b32 Result = false;
-    if (Stage->BeginBufferMemoryBarrierCount < Stage->MaxBarrierCountPerType)
+    if (Stage->BufferMemoryBarrierCount < Stage->MaxBufferMemoryBarrierCount)
     {
-        Stage->BeginBufferMemoryBarriers[Stage->BeginBufferMemoryBarrierCount++] = *Barrier;
+        Stage->BufferMemoryBarriers[Stage->BufferMemoryBarrierCount++] = *Barrier;
+        Result = true;
+    }
+    return(Result);
+}
+
+internal b32 PushBeginBarrier(frame_stage* Stage, const VkMemoryBarrier2* Barrier)
+{
+    b32 Result = false;
+    if (Stage->GlobalMemoryBarrierCount < Stage->MaxGlobalMemoryBarrierCount)
+    {
+        Stage->GlobalMemoryBarriers[Stage->GlobalMemoryBarrierCount++] = *Barrier;
         Result = true;
     }
     return(Result);
@@ -2303,12 +2302,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     frame_stage* FrameStages = PushArray(Frame->Arena, 0, frame_stage, FrameStage_Count);
     for (u32 FrameStageIndex = 0; FrameStageIndex < FrameStage_Count; FrameStageIndex++)
     {
-        FrameStages[FrameStageIndex].BeginGlobalMemoryBarrierCount = 0;
-        FrameStages[FrameStageIndex].BeginBufferMemoryBarrierCount = 0;
-        FrameStages[FrameStageIndex].BeginImageMemoryBarrierCount = 0;
-        FrameStages[FrameStageIndex].EndGlobalMemoryBarrierCount = 0;
-        FrameStages[FrameStageIndex].EndBufferMemoryBarrierCount = 0;
-        FrameStages[FrameStageIndex].EndImageMemoryBarrierCount = 0;
+        FrameStages[FrameStageIndex].GlobalMemoryBarrierCount = 0;
+        FrameStages[FrameStageIndex].BufferMemoryBarrierCount = 0;
+        FrameStages[FrameStageIndex].ImageMemoryBarrierCount = 0;
     }
 
     // NOTE(boti): This is currently also the initial transfer and skinning cmd buffer
@@ -2733,11 +2729,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     };
 
     u64 PerFrameBufferAt = 0;
-    auto PushPerFrame = [&PerFrameBufferAt, Renderer](u64 ByteCount) -> gpu_buffer_range
+    auto PushPerFrame = [&PerFrameBufferAt, Renderer](u64 ByteCount, u64 Alignment = 256) -> gpu_buffer_range
     {
         gpu_buffer_range Result = {};
 
-        u64 EffectiveAt = Align(PerFrameBufferAt, 256);
+        u64 EffectiveAt = Alignment ? Align(PerFrameBufferAt, Alignment) : PerFrameBufferAt;
         if (EffectiveAt + ByteCount <= Renderer->PerFrameBufferSize)
         {
             Result.Address = Renderer->PerFrameBufferAddress + EffectiveAt;
@@ -2817,8 +2813,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         { (u32)BlitViewport.width, (u32)BlitViewport.height }
     };
 
-    u32 SkinnedVertexCount = 0;
-    gpu_buffer_range SkinnedVertexBufferRange = {};
     VkCommandBuffer SkinningCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_None);
     vkCmdBindPipeline(SkinningCB, VK_PIPELINE_BIND_POINT_COMPUTE, Renderer->Pipelines[Pipeline_Skinning].Pipeline);
 
@@ -3251,58 +3245,58 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     u32 ID = DrawGroupOffsets[Draw->Group]++;
                     BoundingBoxes[ID] = Draw->BoundingBox;
                     Transforms[ID] = Draw->Transform;
+
+                    u64 SourceByteOffset = Draw->Geometry.VertexBlock->Offset * sizeof(vertex);
+                    u64 SourceVertexBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.VertexMemory.Buffer) + SourceByteOffset;
+                    u64 DrawVertexBufferAddress = SourceVertexBufferAddress;
+
+                    if (Draw->Flags & Draw_Skinned)
+                    {
+                        u32 VertexCount = Draw->Geometry.VertexBlock->Count;
+                        gpu_buffer_range VertexBufferRange = PushPerFrame(VertexCount * sizeof(vertex), 16);
+                        DrawVertexBufferAddress = VertexBufferRange.Address;
+                        
+                        struct skinning_constants
+                        {
+                            VkDeviceAddress SkinAddress;
+                            VkDeviceAddress SrcAddress;
+                            VkDeviceAddress DstAddress;
+                            u32 VertexCount;
+                        } Push;
+                        Push.SkinAddress = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt;
+                        Push.SrcAddress = SourceVertexBufferAddress;
+                        Push.DstAddress = VertexBufferRange.Address;
+                        Push.VertexCount = VertexCount;
+                        vkCmdPushConstants(SkinningCB, Renderer->Pipelines[Pipeline_Skinning].Layout, VK_SHADER_STAGE_ALL,
+                                           0, sizeof(Push), &Push);
+                        vkCmdDispatch(SkinningCB, CeilDiv(VertexCount, Skin_GroupSizeX), 1, 1);
+
+                        // HACK(boti): We'd either need to generate the bboxes when skinning (which requires GPU culling),
+                        // or have some guarantee that the bbox from the mesh is conservative enough to accomodate
+                        // all animations, neither of which we currently have,
+                        // so instead we massively overestimate the bbox, essentially turning frustum culling off for skinned meshes.
+                        BoundingBoxes[ID] = 
+                        {
+                            .Min = { -1000000.0f, -1000000.0f, -1000000.0f },
+                            .Max = { +1000000.0f, +1000000.0f, +1000000.0f }, 
+                        };
+                    }
+
+                    IndirectCommands[ID] = 
+                    {
+                        .indexCount = Draw->Geometry.IndexBlock->Count,
+                        .instanceCount = 1,
+                        .firstIndex = Draw->Geometry.IndexBlock->Offset,
+                        .vertexOffset = 0,
+                        .firstInstance = ID,
+                    };
+
                     Instances[ID] = 
                     {
                         .Transform = Draw->Transform,
+                        .VertexBufferAddress = DrawVertexBufferAddress,
                         .Material = Draw->Material,
                     };
-                    switch (Draw->Group)
-                    {
-                        case DrawGroup_Opaque:
-                        case DrawGroup_AlphaTest:
-                        case DrawGroup_Transparent:
-                        {
-                            IndirectCommands[ID] = 
-                            {
-                                .indexCount = Draw->Geometry.IndexBlock->Count,
-                                .instanceCount = 1,
-                                .firstIndex = Draw->Geometry.IndexBlock->Offset,
-                                .vertexOffset = (s32)Draw->Geometry.VertexBlock->Offset,
-                                .firstInstance = ID,
-                            };
-                        } break;
-                        case DrawGroup_Skinned:
-                        {
-                            u32 VertexCount = Draw->Geometry.VertexBlock->Count;
-                            struct skinning_constants
-                            {
-                                VkDeviceAddress Address;
-                                u32 SrcVertexOffset;
-                                u32 DstVertexOffset;
-                                u32 VertexCount;
-                            };
-                            skinning_constants Push =
-                            {
-                                .Address = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt,
-                                .SrcVertexOffset = Draw->Geometry.VertexBlock->Offset,
-                                .DstVertexOffset = SkinnedVertexCount,
-                                .VertexCount = VertexCount,
-                            };
-                            vkCmdPushConstants(SkinningCB, Renderer->Pipelines[Pipeline_Skinning].Layout, VK_SHADER_STAGE_ALL,
-                                               0, sizeof(Push), &Push);
-                            vkCmdDispatch(SkinningCB, CeilDiv(VertexCount, Skin_GroupSizeX), 1, 1);
-                            IndirectCommands[ID] = 
-                            {
-                                .indexCount = Draw->Geometry.IndexBlock->Count,
-                                .instanceCount = 1,
-                                .firstIndex = Draw->Geometry.IndexBlock->Offset,
-                                .vertexOffset = (s32)SkinnedVertexCount,
-                                .firstInstance = ID,
-                            };
-                            SkinnedVertexCount += VertexCount;
-                        } break;
-                        InvalidDefaultCase;
-                    }
                 } break;
                 case RenderCommand_ParticleBatch:
                 {
@@ -3354,9 +3348,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 InvalidDefaultCase;
             }
         }
-
-        SkinnedVertexBufferRange = PushPerFrame(SkinnedVertexCount * sizeof(vertex));
-        Frame->Uniforms.SkinningBufferAddress = SkinnedVertexBufferRange.Address;
 
         // Upload lights
         gpu_buffer_range LightBufferRange = PushPerFrame(Frame->Uniforms.LightCount * sizeof(light));
@@ -3544,10 +3535,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 b32 IsVisible = true;
                 if (Frustum)
                 {
-                    if (InstanceIndex < DrawGroupOffsets[DrawGroup_Skinned])
-                    {
-                        IsVisible = IntersectFrustumBox(Frustum, BoundingBoxes[InstanceIndex], Transforms[InstanceIndex]);
-                    }
+                    IsVisible = IntersectFrustumBox(Frustum, BoundingBoxes[InstanceIndex], Transforms[InstanceIndex]);
                 }
 
                 if (IsVisible)
@@ -3707,23 +3695,17 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     // Skinning
     //
     BeginFrameStage(PrepassCmd, &FrameStages[FrameStage_Skinning], "Skinning");
-    if (SkinnedVertexBufferRange.ByteCount)
     {
         vkCmdExecuteCommands(PrepassCmd, 1, &SkinningCB);
 
-        VkBufferMemoryBarrier2 EndBarrier =
+        VkMemoryBarrier2 EndBarrier =
         {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
             .pNext = nullptr,
             .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
             .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
             .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = Renderer->PerFrameBuffer,
-            .offset = SkinnedVertexBufferRange.ByteOffset,
-            .size = SkinnedVertexBufferRange.ByteCount,
         };
         PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
     }
@@ -3890,6 +3872,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
     BeginFrameStage(PrepassCmd, &FrameStages[FrameStage_Prepass], "Prepass");
     {
+
         VkRenderingAttachmentInfo ColorAttachments[] = 
         {
             // Visibility buffer
@@ -3955,7 +3938,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             [DrawGroup_Opaque]      = Pipeline_Prepass,
             [DrawGroup_AlphaTest]   = Pipeline_Prepass_AlphaTest,
             [DrawGroup_Transparent] = Pipeline_None,
-            [DrawGroup_Skinned]     = Pipeline_Prepass,
         };
         DrawList(Frame, PrepassCmd, Pipelines, &PrimaryDrawList);
 
@@ -4347,7 +4329,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 [DrawGroup_Opaque]      = Pipeline_ShadowCascade,
                 [DrawGroup_AlphaTest]   = Pipeline_ShadowCascade_AlphaTest,
                 [DrawGroup_Transparent] = Pipeline_None,
-                [DrawGroup_Skinned]     = Pipeline_ShadowCascade,
             };
             DrawList(Frame, ShadowCmd, Pipelines, CascadeDrawLists + CascadeIndex);
 
@@ -4493,7 +4474,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     [DrawGroup_Opaque]      = Pipeline_Shadow,
                     [DrawGroup_AlphaTest]   = Pipeline_Shadow_AlphaTest,
                     [DrawGroup_Transparent] = Pipeline_None,
-                    [DrawGroup_Skinned]     = Pipeline_Shadow,
                 };
                 u32 Index = 6*ShadowIndex + LayerIndex;
                 DrawList(Frame, ShadowCmd, Pipelines, ShadowDrawLists + Index);
@@ -4732,7 +4712,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     [DrawGroup_Opaque]      = Pipeline_ShadingForward,
                     [DrawGroup_AlphaTest]   = Pipeline_ShadingForward_AlphaTest,
                     [DrawGroup_Transparent] = Pipeline_None,
-                    [DrawGroup_Skinned]     = Pipeline_ShadingForward,
                 };
                 DrawList(Frame, RenderCmd, Pipelines, &PrimaryDrawList);
             } break;
@@ -4757,7 +4736,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             [DrawGroup_Opaque]      = Pipeline_None,
             [DrawGroup_AlphaTest]   = Pipeline_None,
             [DrawGroup_Transparent] = Pipeline_ShadingForward_Transparent,
-            [DrawGroup_Skinned]     = Pipeline_None,
         };
         DrawList(Frame, RenderCmd, Pipelines, &PrimaryDrawList);
     }

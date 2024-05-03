@@ -2,42 +2,36 @@
 
 LayoutGroupSize(Skin);
 
-SetBindingLayout(PerFrame, Constants, scalar) 
-uniform PerFrameBlock
-{
-    per_frame PerFrame;
-};
-
 layout(push_constant) 
 uniform PushConstants
 {
     u64 SkinAddress;
-    uint SrcOffset;
-    uint DstOffset;
+    u64 SrcAddress;
+    u64 DstAddress;
     uint Count;
 };
 
 void main()
 {
     skin_r Skin = skin_r(SkinAddress);
-    vertex_buffer_w DstVB = vertex_buffer_w(PerFrame.SkinningBufferAddress);
-    vertex_buffer_r SrcVB = vertex_buffer_r(PerFrame.VertexBufferAddress);
+    vertex_buffer_r SrcVB = vertex_buffer_r(SrcAddress);
+    vertex_buffer_w DstVB = vertex_buffer_w(DstAddress);
 
     uint Index = gl_GlobalInvocationID.x;
 
     if (Index < Count)
     {
-        v3 InP = SrcVB.Data[SrcOffset + Index].P;
-        v3 InN = SrcVB.Data[SrcOffset + Index].N;
-        v4 InT = SrcVB.Data[SrcOffset + Index].T;
-        v4 Weights = SrcVB.Data[SrcOffset + Index].Weights;
-        uvec4 JointIndices = uvec4(SrcVB.Data[SrcOffset + Index].Joints);
+        v3 InP = SrcVB.Data[Index].P;
+        v3 InN = SrcVB.Data[Index].N;
+        v4 InT = SrcVB.Data[Index].T;
+        v4 Weights = SrcVB.Data[Index].Weights;
+        uvec4 JointIndices = uvec4(SrcVB.Data[Index].Joints);
 
         m4 J0 = Skin.Data[JointIndices[0]];
         m4 J1 = Skin.Data[JointIndices[1]];
         m4 J2 = Skin.Data[JointIndices[2]];
         m4 J3 = Skin.Data[JointIndices[3]];
-
+        
         v3 P = 
             Weights[0] * TransformPoint(J0, InP) +
             Weights[1] * TransformPoint(J1, InP) + 
@@ -59,12 +53,12 @@ void main()
             Weights[3] * TransformDirection(J3, InT.xyz);
         T = normalize(T);
 
-        DstVB.Data[DstOffset + Index].P         = P;
-        DstVB.Data[DstOffset + Index].N         = N;
-        DstVB.Data[DstOffset + Index].T         = vec4(T, InT.w);
-        DstVB.Data[DstOffset + Index].TexCoord  = SrcVB.Data[SrcOffset + Index].TexCoord;
-        DstVB.Data[DstOffset + Index].Weights   = SrcVB.Data[SrcOffset + Index].Weights;
-        DstVB.Data[DstOffset + Index].Joints    = SrcVB.Data[SrcOffset + Index].Joints;
-        DstVB.Data[DstOffset + Index].Color     = SrcVB.Data[SrcOffset + Index].Color;
+        DstVB.Data[Index].P         = P;
+        DstVB.Data[Index].N         = N;
+        DstVB.Data[Index].T         = vec4(T, InT.w);
+        DstVB.Data[Index].TexCoord  = SrcVB.Data[Index].TexCoord;
+        DstVB.Data[Index].Weights   = SrcVB.Data[Index].Weights;
+        DstVB.Data[Index].Joints    = SrcVB.Data[Index].Joints;
+        DstVB.Data[Index].Color     = SrcVB.Data[Index].Color;
     }
 }

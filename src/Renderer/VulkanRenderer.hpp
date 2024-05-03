@@ -134,22 +134,20 @@ enum frame_stage_type : u32
     FrameStage_Count,
 };
 
+// NOTE(boti): Stage barriers are executed at the beginning of a stage
 struct frame_stage
 {
-    static constexpr u32 MaxBarrierCountPerType = 512;
-    u32 BeginGlobalMemoryBarrierCount;
-    u32 BeginBufferMemoryBarrierCount;
-    u32 BeginImageMemoryBarrierCount;
-    u32 EndGlobalMemoryBarrierCount;
-    u32 EndBufferMemoryBarrierCount;
-    u32 EndImageMemoryBarrierCount;
+    static constexpr u32 MaxGlobalMemoryBarrierCount    = 8;
+    static constexpr u32 MaxBufferMemoryBarrierCount    = 64;
+    static constexpr u32 MaxImageMemoryBarrierCount     = 64;
+    
+    u32 GlobalMemoryBarrierCount;
+    u32 BufferMemoryBarrierCount;
+    u32 ImageMemoryBarrierCount;
 
-    VkMemoryBarrier2        BeginGlobalMemoryBarriers[MaxBarrierCountPerType];
-    VkBufferMemoryBarrier2  BeginBufferMemoryBarriers[MaxBarrierCountPerType];
-    VkImageMemoryBarrier2   BeginImageMemoryBarriers[MaxBarrierCountPerType];
-    VkMemoryBarrier2        EndGlobalMemoryBarriers[MaxBarrierCountPerType];
-    VkBufferMemoryBarrier2  EndBufferMemoryBarriers[MaxBarrierCountPerType];
-    VkImageMemoryBarrier2   EndImageMemoryBarriers[MaxBarrierCountPerType];
+    VkMemoryBarrier2        GlobalMemoryBarriers[MaxGlobalMemoryBarrierCount];
+    VkBufferMemoryBarrier2  BufferMemoryBarriers[MaxBufferMemoryBarrierCount];
+    VkImageMemoryBarrier2   ImageMemoryBarriers[MaxImageMemoryBarrierCount];
 };
 
 internal void BeginFrameStage(VkCommandBuffer CmdBuffer, frame_stage* Stage, const char* Name);
@@ -157,6 +155,7 @@ internal void EndFrameStage(VkCommandBuffer CmdBuffer, frame_stage* Stage);
 
 internal b32 PushBeginBarrier(frame_stage* Stage, const VkImageMemoryBarrier2* Barrier);
 internal b32 PushBeginBarrier(frame_stage* Stage, const VkBufferMemoryBarrier2* Barrier);
+internal b32 PushBeginBarrier(frame_stage* Stage, const VkMemoryBarrier2* Barrier);
 
 struct draw_list
 {
