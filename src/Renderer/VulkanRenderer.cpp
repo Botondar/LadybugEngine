@@ -3354,58 +3354,13 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         Frame->Uniforms.LightBufferAddress = LightBufferRange.Address;
         if (LightBufferRange.ByteCount)
         {
-            VkBufferMemoryBarrier2 BeginBarriers[] = 
-            {
-                {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-                    .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .buffer = Renderer->PerFrameBuffer,
-                    .offset = LightBufferRange.ByteOffset,
-                    .size = LightBufferRange.ByteCount,
-                },
-            };
-            VkDependencyInfo BeginDependency = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .pNext = nullptr,
-                .dependencyFlags = 0,
-                .bufferMemoryBarrierCount = CountOf(BeginBarriers),
-                .pBufferMemoryBarriers = BeginBarriers,
-            };
-            vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
-
             VkBufferCopy LightBufferCopy = 
             {
                 .srcOffset = LightDataOffset,
                 .dstOffset = LightBufferRange.ByteOffset,
                 .size = LightBufferRange.ByteCount,
             };
-            if (LightBufferCopy.size > 0)
-            {
-                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &LightBufferCopy);
-            }
-
-            VkBufferMemoryBarrier2 EndBarrier = 
-            {
-                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Renderer->PerFrameBuffer,
-                .offset = LightBufferRange.ByteOffset,
-                .size = LightBufferRange.ByteCount,
-            };
-            PushBeginBarrier(&FrameStages[FrameStage_LightBinning], &EndBarrier);
+            vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &LightBufferCopy);
         }
 
         // Upload instance data
@@ -3425,23 +3380,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 };
                 vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &Copy);
 
-                VkBufferMemoryBarrier2 EndBarrier = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .buffer = Renderer->PerFrameBuffer,
-                    .offset = InstanceBufferRange.ByteOffset,
-                    .size = InstanceBufferRange.ByteCount,
-                };
-                PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
                 Frame->StagingBuffer.At += InstanceBufferRange.ByteCount;
-                
             }
             else
             {
@@ -3466,21 +3405,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 };
                 vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &Copy);
 
-                VkBufferMemoryBarrier2 EndBarrier = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .buffer = Renderer->PerFrameBuffer,
-                    .offset = GlobalDrawBufferRange.ByteOffset,
-                    .size = GlobalDrawBufferRange.ByteCount,
-                };
-                PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
                 Frame->StagingBuffer.At += GlobalDrawBufferRange.ByteCount;
             }
             else
@@ -3559,33 +3483,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     .size = DrawBufferRange.ByteCount,
                 };
 
-                VkDependencyInfo BeginDependency = 
-                {
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .dependencyFlags = 0,
-                    .bufferMemoryBarrierCount = 0,
-                    .pBufferMemoryBarriers = nullptr,
-                };
-                vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
-
                 vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], DrawList->DrawBuffer, 1, &Copy);
-
-                VkBufferMemoryBarrier2 EndBarrier
-                {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .buffer = DrawList->DrawBuffer,
-                    .offset = DrawBufferRange.ByteOffset,
-                    .size = DrawBufferRange.ByteCount,
-                };
-                PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
             }
 
             Frame->StagingBuffer.At += DrawBufferRange.ByteCount;
@@ -3698,14 +3596,16 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     {
         vkCmdExecuteCommands(PrepassCmd, 1, &SkinningCB);
 
+        // NOTE(boti): This isn't the clearest place to handle both the upload and skinning barriers,
+        // the skinning doesn't overlap with the upload, so this is where that should happen
         VkMemoryBarrier2 EndBarrier =
         {
             .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
             .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT|VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT|VK_ACCESS_2_SHADER_READ_BIT,
         };
         PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
     }
