@@ -624,8 +624,7 @@ inline b32 IntersectFrustumSphere(const frustum* Frustum, v3 P, f32 r);
 // Render API
 //
 
-constexpr renderer_texture_id InvalidRendererTextureID = { U32_MAX };
-inline bool IsValid(renderer_texture_id ID) { return ID.Value != InvalidRendererTextureID.Value; }
+inline bool IsValid(renderer_texture_id ID) { return ID.Value != 0; }
 
 inline f32 GetLuminance(v3 RGB);
 inline v3 SetLuminance(v3 RGB, f32 Luminance);

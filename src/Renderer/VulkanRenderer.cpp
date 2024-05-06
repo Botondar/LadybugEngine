@@ -2125,7 +2125,7 @@ extern "C" Signature_AllocateGeometry(AllocateGeometry)
 
 extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
 {
-    u32 FrameID = (u32)(Renderer->CurrentFrameID++ % R_MaxFramesInFlight);
+    u32 FrameID = (u32)(Renderer->CurrentFrameID % R_MaxFramesInFlight);
     render_frame* Frame = Renderer->Frames + FrameID;
     Frame->Renderer = Renderer;
     Frame->Arena = Arena;
@@ -2402,6 +2402,81 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     VkCommandBuffer UploadCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_None);
 
+    // HACK(boti): Kind of a hacky way of doing init time stuff
+    // The reason we're doing it this way is so that we don't allocate a command buffer/pool at init time
+    if (Renderer->CurrentFrameID == 0)
+    {
+        // Clear null texture
+        VkImageMemoryBarrier2 BeginBarrier =
+        {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask = VK_ACCESS_2_NONE,
+            .dstStageMask = VK_PIPELINE_STAGE_2_CLEAR_BIT,
+            .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = Renderer->TextureManager.Textures[0].ImageHandle,
+            .subresourceRange =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = VK_REMAINING_MIP_LEVELS,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        };
+
+        VkDependencyInfo BeginDependency =
+        {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &BeginBarrier,
+        };
+        vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
+
+        VkClearColorValue ClearColor = {};
+        vkCmdClearColorImage(UploadCB, BeginBarrier.image, BeginBarrier.newLayout, &ClearColor, 1, &BeginBarrier.subresourceRange);
+
+        VkImageMemoryBarrier2 EndBarrier = 
+        {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext = nullptr,
+            .srcStageMask = VK_PIPELINE_STAGE_2_CLEAR_BIT,
+            .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+            .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = Renderer->TextureManager.Textures[0].ImageHandle,
+            .subresourceRange =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = VK_REMAINING_MIP_LEVELS,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            },
+        };
+
+        VkDependencyInfo EndDependency = 
+        {
+            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext = nullptr,
+            .dependencyFlags = 0,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers = &EndBarrier,
+        };
+        vkCmdPipelineBarrier2(UploadCB, &EndDependency);
+    }
+
     //
     // Discard unused mip levels
     //
@@ -2433,60 +2508,49 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     u32 MipCountToDiscard = CountSetBits(DiscardMips);
                     if (CurrentMipCount == MipCountToDiscard)
                     {
-                        if (IsValid(Texture->PlaceholderID))
+                        renderer_texture* Placeholder = GetTexture(Manager, Texture->PlaceholderID);
+                        umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
+                        if ((Frame->StagingBuffer.At + DescriptorSize) <= Frame->StagingBuffer.Size)
                         {
-                            renderer_texture* Placeholder = GetTexture(Manager, Texture->PlaceholderID);
-                            umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
-                            if ((Frame->StagingBuffer.At + DescriptorSize) <= Frame->StagingBuffer.Size)
+                            VkDescriptorImageInfo DescriptorImage = 
                             {
-                                VkDescriptorImageInfo DescriptorImage = 
-                                {
-                                    .sampler = VK_NULL_HANDLE,
-                                    .imageView = Placeholder->ViewHandle,
-                                    .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
-                                };
-                                VkDescriptorGetInfoEXT DescriptorInfo = 
-                                {
-                                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-                                    .pNext = nullptr,
-                                    .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                                    .data = { .pSampledImage = &DescriptorImage },
-                                };
-                                vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At));
-                                
-                                umm DescriptorOffset = Manager->TextureTableOffset + TextureIndex*DescriptorSize;
-                                VkBufferCopy DescriptorCopy = 
-                                {
-                                    .srcOffset = Frame->StagingBuffer.At,
-                                    .dstOffset = DescriptorOffset,
-                                    .size = DescriptorSize,
-                                };
-                                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
-                                
-                                Frame->StagingBuffer.At += DescriptorSize;
-                                
-                                MarkPagesAsFree(&Manager->Cache, Texture->PageIndex, Texture->PageCount);
-                                Texture->PageIndex = 0;
-                                Texture->PageCount = 0;
-                                Texture->MipResidencyMask = 0;
-                                PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, Texture->ImageHandle);
-                                PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, Texture->ViewHandle);
-                                Texture->ImageHandle = VK_NULL_HANDLE;
-                                Texture->ViewHandle = VK_NULL_HANDLE;
-                            }
-                            else
+                                .sampler = VK_NULL_HANDLE,
+                                .imageView = Placeholder->ViewHandle,
+                                .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                            };
+                            VkDescriptorGetInfoEXT DescriptorInfo = 
                             {
-                                UnhandledError("Out of staging memory (for texture descriptor)");
-                            }
+                                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                                .pNext = nullptr,
+                                .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                .data = { .pSampledImage = &DescriptorImage },
+                            };
+                            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At));
+                                
+                            umm DescriptorOffset = Manager->TextureTableOffset + TextureIndex*DescriptorSize;
+                            VkBufferCopy DescriptorCopy = 
+                            {
+                                .srcOffset = Frame->StagingBuffer.At,
+                                .dstOffset = DescriptorOffset,
+                                .size = DescriptorSize,
+                            };
+                            vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
+                                
+                            Frame->StagingBuffer.At += DescriptorSize;
+                                
+                            MarkPagesAsFree(&Manager->Cache, Texture->PageIndex, Texture->PageCount);
+                            Texture->PageIndex = 0;
+                            Texture->PageCount = 0;
+                            Texture->MipResidencyMask = 0;
+                            PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, Texture->ImageHandle);
+                            PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, Texture->ViewHandle);
+                            Texture->ImageHandle = VK_NULL_HANDLE;
+                            Texture->ViewHandle = VK_NULL_HANDLE;
                         }
                         else
                         {
-                            // TODO(boti): We should either require all streamed textures to have a placeholder,
-                            // or change the invalid texture to ID 0 
-                            // so that we can still use that as a placeholder if the user doesn't provide one
-                            InvalidCodePath;
+                            UnhandledError("Out of staging memory (for texture descriptor)");
                         }
-
                     }
                     else
                     {
@@ -2821,7 +2885,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     vkCmdSetViewport(ParticleCB, 0, 1, &PrimaryViewport);
     vkCmdSetScissor(ParticleCB, 0, 1, &PrimaryScissor);
     vkCmdBindPipeline(ParticleCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->Pipelines[Pipeline_Quad].Pipeline);
-
         
     VkCommandBuffer Widget3DCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_Gizmo);
     {
@@ -2891,6 +2954,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     {
                         case TransferOp_Texture:
                         {
+                            if (!IsValid(Op->Texture.TargetID))
+                            {
+                                break;
+                            }
+
                             texture_info* Info = &Op->Texture.Info;
                             texture_subresource_range* Range = &Op->Texture.SubresourceRange;
                             if (Info->Extent.Z > 1)
@@ -5427,6 +5495,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         AddGPUArenaEntry("Shadow", &Renderer->ShadowArena);
         AddEntry("Staging", Frame->StagingBuffer.At, Frame->StagingBuffer.Size);
     }
+
+    Renderer->CurrentFrameID++;
 }
 
 extern "C" Signature_AllocateTexture(AllocateTexture)

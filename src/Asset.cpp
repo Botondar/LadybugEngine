@@ -895,7 +895,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         Assets->WhitenessID = Assets->TextureCount++;
         texture* Whiteness = Assets->Textures + Assets->WhitenessID;
 
-        Whiteness->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, &Info, InvalidRendererTextureID);
+        Whiteness->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, &Info, {});
         Assets->DefaultTextures[TextureType_Albedo]         = Assets->WhitenessID;
         Assets->DefaultTextures[TextureType_RoMe]           = Assets->WhitenessID;
         Assets->DefaultTextures[TextureType_Occlusion]      = Assets->WhitenessID;
@@ -918,7 +918,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 
         Assets->DefaultTextures[TextureType_Normal] = Assets->TextureCount++;
         texture* DefaultNormalTexture = Assets->Textures + Assets->DefaultTextures[TextureType_Normal];
-        DefaultNormalTexture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, &Info, InvalidRendererTextureID);
+        DefaultNormalTexture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, &Info, {});
         u16 Texel = 0x8080u;
         TransferTexture(Frame, DefaultNormalTexture->RendererID, Info, AllTextureSubresourceRange(), &Texel);
         DefaultNormalTexture->IsLoaded = true;
@@ -956,7 +956,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
     {
         Assets->ParticleArrayID = Assets->TextureCount++;
         texture* ParticleArray = Assets->Textures + Assets->ParticleArrayID;
-        ParticleArray->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, nullptr, InvalidRendererTextureID);
+        ParticleArray->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, nullptr, {});
         // TODO(boti): For now we know that the texture pack we're using is 512x512, 
         // but we may want to figure out some way for the user code to pack texture arrays/atlases dynamically
         texture_info Info =
@@ -1100,7 +1100,7 @@ static void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Fra
 
             Assets->DefaultFontTextureID = Assets->TextureCount++;
             texture* DefaultFontTexture = Assets->Textures + Assets->DefaultFontTextureID;
-            DefaultFontTexture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, nullptr, InvalidRendererTextureID);
+            DefaultFontTexture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, nullptr, {});
 
             texture_info Info = 
             {

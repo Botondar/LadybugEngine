@@ -1,11 +1,24 @@
 #include "TextureManager.hpp"
 
-// TODO(boti): We probably don't need this once the 0-texture will be the invalid id
-internal u32 GetTextureIndex(renderer_texture_id ID)
+internal void 
+WriteDescriptorDirect(texture_manager* Manager, u32 SrcIndex, u32 DstIndex)
 {
-    Assert(IsValid(ID));
-    u32 Result = ID.Value;
-    return(Result);
+    umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
+    VkDescriptorImageInfo DescriptorImage = 
+    {
+        .sampler = VK_NULL_HANDLE,
+        .imageView = Manager->Textures[SrcIndex].ViewHandle,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    VkDescriptorGetInfoEXT DescriptorInfo = 
+    {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+        .pNext = nullptr,
+        .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+        .data = { .pSampledImage = &DescriptorImage },
+    };
+    umm DescriptorOffset = Manager->TextureTableOffset + DstIndex*DescriptorSize;
+    vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Manager->DescriptorMapping, DescriptorOffset));
 }
 
 // TODO(boti): rewrite cache usage with bit ops
@@ -179,6 +192,7 @@ internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena
                            &Manager->DescriptorBuffer, &Manager->DescriptorMapping))
             {
                 Manager->DescriptorAddress = GetBufferDeviceAddress(VK.Device, Manager->DescriptorBuffer);
+
             }
             else
             {
@@ -198,27 +212,85 @@ internal bool CreateTextureManager(texture_manager* Manager, memory_arena* Arena
         Result = VK_ERROR_UNKNOWN;
     }
 
+    // Create null texture
+    if (Result == VK_SUCCESS)
+    {
+        texture_info TextureInfo =
+        {
+            .Extent = { 1, 1, 1 },
+            .MipCount = 1,
+            .ArrayCount = 1,
+            .Format = Format_R8G8B8A8_UNorm,
+            .Swizzle = {},
+        };
+        VkImageCreateInfo ImageInfo = TextureInfoToVulkan(TextureInfo);
+        VkImage NullImage = VK_NULL_HANDLE;
+        Result = vkCreateImage(VK.Device, &ImageInfo, nullptr, &NullImage);
+        if (Result == VK_SUCCESS)
+        {
+            if (PushImage(&Manager->PersistentArena, NullImage))
+            {
+                VkImageViewCreateInfo ViewInfo =
+                {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .image = NullImage,
+                    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                    .format = ImageInfo.format,
+                    .components = {},
+                    .subresourceRange = 
+                    {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = VK_REMAINING_MIP_LEVELS,
+                        .baseArrayLayer = 0,
+                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    },
+                };
+
+                VkImageView NullView = VK_NULL_HANDLE;
+                Result = vkCreateImageView(VK.Device, &ViewInfo, nullptr, &NullView);
+                if (Result == VK_SUCCESS)
+                {
+                    Manager->Textures[Manager->TextureCount++] =
+                    {
+                        .ImageHandle = NullImage,
+                        .ViewHandle = NullView,
+                        .Flags = TextureFlag_PersistentMemory,
+                        .PlaceholderID = {},
+                        .Info = TextureInfo,
+                        .MipResidencyMask = 1,
+                        .LastMipAccess = 0,
+                    };
+
+                    WriteDescriptorDirect(Manager, 0, 0);
+                }
+            }
+            else
+            {
+                Result = VK_ERROR_UNKNOWN;
+            }
+        }
+    }
+
     return (Result == VK_SUCCESS);
 }
 
 internal renderer_texture* GetTexture(texture_manager* Manager, renderer_texture_id ID)
 {
     renderer_texture* Result = nullptr;
-
-    if (IsValid(ID))
+    if (ID.Value < Manager->TextureCount)
     {
-        u32 Index = GetTextureIndex(ID);
-        Assert(Index < R_MaxTextureCount);
-        Result = Manager->Textures + Index;
+        Result = Manager->Textures + ID.Value;
     }
-
     return(Result);
 }
 
 internal renderer_texture_id 
 AllocateNextID(texture_manager* Manager, texture_flags Flags)
 {
-    renderer_texture_id Result = InvalidRendererTextureID;
+    renderer_texture_id Result = {};
     if (Manager->TextureCount < R_MaxTextureCount)
     {
         Result = { Manager->TextureCount++ };
@@ -246,35 +318,9 @@ AllocateTexture(texture_manager* Manager, texture_flags Flags, const texture_inf
             if (AllocateTexture(Manager, Result, Texture->Info))
             {
             }
-            else
-            {
-                // TODO(boti): Check for placeholder here - if there's one we can ignore this case and keep using the placeholder
-            }
         }
 
-        // TODO(boti): We can always use the placeholder once we make 0 the invalid texture
-        if (IsValid(Placeholder))
-        {
-            renderer_texture* PlaceholderTex = GetTexture(Manager, Placeholder);
-            Assert(PlaceholderTex);
-
-            umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
-            VkDescriptorImageInfo DescriptorImage = 
-            {
-                .sampler = VK_NULL_HANDLE,
-                .imageView = PlaceholderTex->ViewHandle,
-                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            };
-            VkDescriptorGetInfoEXT DescriptorInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-                .pNext = nullptr,
-                .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .data = { .pSampledImage = &DescriptorImage },
-            };
-            umm DescriptorOffset = Manager->TextureTableOffset + Result.Value*DescriptorSize;
-            vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Manager->DescriptorMapping, DescriptorOffset));
-        }
+        WriteDescriptorDirect(Manager, Placeholder.Value, Result.Value);
     }
     else
     {
@@ -291,7 +337,6 @@ AllocateTexture(texture_manager* Manager, renderer_texture_id ID, texture_info I
 
     if (IsValid(ID))
     {
-        u32 Index = GetTextureIndex(ID);
         renderer_texture* Texture = GetTexture(Manager, ID);
 
         VkImageCreateInfo ImageInfo = 
