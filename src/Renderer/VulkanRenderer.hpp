@@ -250,17 +250,19 @@ struct renderer
     u32 CmdBufferAt;
     u32 SecondaryCmdBufferAt;
 
-    VkCommandPool CmdPools[R_MaxFramesInFlight];
-    static constexpr u32 MaxCmdBufferCountPerFrame = 16;
-    VkCommandBuffer CmdBuffers[R_MaxFramesInFlight][MaxCmdBufferCountPerFrame];
-    static constexpr u32 MaxSecondaryCmdBufferCountPerFrame = 32;
-    VkCommandBuffer SecondaryCmdBuffers[R_MaxFramesInFlight][MaxSecondaryCmdBufferCountPerFrame];
+    static constexpr u32    MaxCmdBufferCountPerFrame           = 16;
+    static constexpr u32    MaxSecondaryCmdBufferCountPerFrame  = 32;
+    VkCommandPool           CmdPools[R_MaxFramesInFlight];
+    VkCommandBuffer         CmdBuffers[R_MaxFramesInFlight][MaxCmdBufferCountPerFrame];
+    VkCommandBuffer         SecondaryCmdBuffers[R_MaxFramesInFlight][MaxSecondaryCmdBufferCountPerFrame];
 
     VkCommandPool   ComputeCmdPools[R_MaxFramesInFlight];
     VkCommandBuffer ComputeCmdBuffers[R_MaxFramesInFlight];
 
     VkSemaphore     ImageAcquiredSemaphores[R_MaxFramesInFlight];
     VkFence         ImageAcquiredFences[R_MaxFramesInFlight];
+    // TODO(boti): It's kind of ridiculous that we can't just use the timeline semaphore to sync w/ present...
+    VkSemaphore     RenderFinishedSemaphores[R_MaxFramesInFlight];
     VkSemaphore     TimelineSemaphore;
     u64             TimelineSemaphoreCounter;
     VkSemaphore     ComputeTimelineSemaphore;

@@ -1454,6 +1454,9 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         Result.ErrorCode = vkCreateSemaphore(VK.Device, &SemaphoreInfo, nullptr, &Renderer->ImageAcquiredSemaphores[FrameIndex]);
         ReturnOnFailure("Failed to create image acquire semaphore");
 
+        Result.ErrorCode = vkCreateSemaphore(VK.Device, &SemaphoreInfo, nullptr, &Renderer->RenderFinishedSemaphores[FrameIndex]);
+        ReturnOnFailure("Failed to render finished semaphore");
+
         VkSemaphoreTypeCreateInfo SemaphoreTypeInfo = 
         {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
@@ -4514,15 +4517,15 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     };
     VkSubmitInfo2 SubmitShadow = 
     {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .pNext = nullptr,
-        .flags = 0,
-        .waitSemaphoreInfoCount = CountOf(ShadowWaits),
-        .pWaitSemaphoreInfos = ShadowWaits,
-        .commandBufferInfoCount = CountOf(ShadowCmdBuffers),
-        .pCommandBufferInfos = ShadowCmdBuffers,
-        .signalSemaphoreInfoCount = CountOf(ShadowSignals),
-        .pSignalSemaphoreInfos = ShadowSignals,
+        .sType                      = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .pNext                      = nullptr,
+        .flags                      = 0,
+        .waitSemaphoreInfoCount     = CountOf(ShadowWaits),
+        .pWaitSemaphoreInfos        = ShadowWaits,
+        .commandBufferInfoCount     = CountOf(ShadowCmdBuffers),
+        .pCommandBufferInfos        = ShadowCmdBuffers,
+        .signalSemaphoreInfoCount   = CountOf(ShadowSignals),
+        .pSignalSemaphoreInfos      = ShadowSignals,
     };
     vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitShadow, nullptr);
     
@@ -5328,35 +5331,42 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         VkSemaphoreSubmitInfo RenderWaits[] = 
         {
             {
-                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .pNext = nullptr,
-                .semaphore = Renderer->TimelineSemaphore,
-                .value = ShadowCounter,
-                .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                .sType      = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext      = nullptr,
+                .semaphore  = Renderer->TimelineSemaphore,
+                .value      = ShadowCounter,
+                .stageMask  = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
             },
             {
-                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .pNext = nullptr,
-                .semaphore = Renderer->ComputeTimelineSemaphore,
-                .value = PreLightCounter,
-                .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                .sType      = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext      = nullptr,
+                .semaphore  = Renderer->ComputeTimelineSemaphore,
+                .value      = PreLightCounter,
+                .stageMask  = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
             },
             {
-                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .pNext = nullptr,
-                .semaphore = Renderer->ImageAcquiredSemaphores[Frame->FrameID],
-                .value = 0,
-                .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                .sType      = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext      = nullptr,
+                .semaphore  = Renderer->ImageAcquiredSemaphores[Frame->FrameID],
+                .value      = 0,
+                .stageMask  = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
             },
         };
         VkSemaphoreSubmitInfo RenderSignals[] = 
         {
             {
-                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-                .pNext = nullptr,
-                .semaphore = Renderer->TimelineSemaphore,
-                .value = RenderCounter,
-                .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+                .sType      = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext      = nullptr,
+                .semaphore  = Renderer->TimelineSemaphore,
+                .value      = RenderCounter,
+                .stageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            },
+            {
+                .sType      = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext      = nullptr,
+                .semaphore  = Renderer->RenderFinishedSemaphores[Frame->FrameID],
+                .value      = 0,
+                .stageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
             },
         };
         VkSubmitInfo2 SubmitRender = 
@@ -5364,25 +5374,25 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
             .pNext = nullptr,
             .flags = 0,
-            .waitSemaphoreInfoCount = CountOf(RenderWaits),
-            .pWaitSemaphoreInfos = RenderWaits,
-            .commandBufferInfoCount = CountOf(RenderCmdBuffers),
-            .pCommandBufferInfos = RenderCmdBuffers,
-            .signalSemaphoreInfoCount = CountOf(RenderSignals),
-            .pSignalSemaphoreInfos = RenderSignals,
+            .waitSemaphoreInfoCount     = CountOf(RenderWaits),
+            .pWaitSemaphoreInfos        = RenderWaits,
+            .commandBufferInfoCount     = CountOf(RenderCmdBuffers),
+            .pCommandBufferInfos        = RenderCmdBuffers,
+            .signalSemaphoreInfoCount   = CountOf(RenderSignals),
+            .pSignalSemaphoreInfos      = RenderSignals,
         };
         vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitRender, nullptr);
 
         VkPresentInfoKHR PresentInfo = 
         {
-            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-            .pNext = nullptr,
-            .waitSemaphoreCount = 0,
-            .pWaitSemaphores = nullptr,
-            .swapchainCount = 1,
-            .pSwapchains = &Renderer->Swapchain,
-            .pImageIndices = &SwapchainImageIndex,
-            .pResults = nullptr,
+            .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .pNext              = nullptr,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores    = &Renderer->RenderFinishedSemaphores[Frame->FrameID],
+            .swapchainCount     = 1,
+            .pSwapchains        = &Renderer->Swapchain,
+            .pImageIndices      = &SwapchainImageIndex,
+            .pResults           = nullptr,
         };
         vkQueuePresentKHR(VK.GraphicsQueue, &PresentInfo);
     }
