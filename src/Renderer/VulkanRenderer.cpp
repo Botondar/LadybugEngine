@@ -940,15 +940,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
             ReturnWithFailure(VK_ERROR_UNKNOWN, "Failed to push PerFrame buffer");
         }
         Renderer->PerFrameBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->PerFrameBuffer);
-        VkDebugUtilsObjectNameInfoEXT Name =
-        {
-            .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-            .pNext = nullptr,
-            .objectType = VK_OBJECT_TYPE_BUFFER,
-            .objectHandle = (u64)Renderer->PerFrameBuffer,
-            .pObjectName = "PerFrameBuffer",
-        };
-        vkSetDebugUtilsObjectNameEXT(VK.Device, &Name);
+        SetObjectName(VK.Device, Renderer->PerFrameBuffer, "PerFrameBuffer");
     }
 
     // Shadow storage
@@ -1811,6 +1803,8 @@ internal VkResult ResizeSwapchain(renderer* Renderer, u32 FrameID, b32 Forced)
                 {
                     for (u32 i = 0; i < Renderer->SwapchainImageCount; i++)
                     {
+                        SetObjectName(VK.Device, Renderer->SwapchainImages[i], "SwapchainImage");
+
                         VkImageViewCreateInfo ViewInfo = 
                         {
                             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -1859,6 +1853,8 @@ internal VkResult ResizeSwapchain(renderer* Renderer, u32 FrameID, b32 Forced)
                     Result = vkCreateImage(VK.Device, &DepthImageInfo, nullptr, &Renderer->SwapchainDepthImage);
                     if (Result == VK_SUCCESS)
                     {
+                        SetObjectName(VK.Device, Renderer->SwapchainDepthImage, "SwapchainDepthImage");
+
                         VkMemoryRequirements MemoryRequirements = {};
                         vkGetImageMemoryRequirements(VK.Device, Renderer->SwapchainDepthImage, &MemoryRequirements);
                         u32 MemoryTypes = MemoryRequirements.memoryTypeBits & VK.GPUMemTypes;
@@ -1938,15 +1934,15 @@ DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, pipeline* Pipelines, dr
             continue;
         }
 
+        umm DrawBufferOffset = List->DrawBufferOffset + CurrentOffset;
+        CurrentOffset += DrawCount * sizeof(VkDrawIndexedIndirectCommand);
         if (Pipelines[Group] == Pipeline_None)
         {
-            CurrentOffset += DrawCount * sizeof(VkDrawIndexedIndirectCommand);
             continue;
         }
 
         vkCmdBindPipeline(CmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Frame->Renderer->Pipelines[Pipelines[Group]].Pipeline);
-        vkCmdDrawIndexedIndirect(CmdBuffer, List->DrawBuffer, List->DrawBufferOffset + CurrentOffset, DrawCount, sizeof(VkDrawIndexedIndirectCommand));
-        CurrentOffset += DrawCount * sizeof(VkDrawIndexedIndirectCommand);
+        vkCmdDrawIndexedIndirect(CmdBuffer, List->DrawBuffer, DrawBufferOffset, DrawCount, sizeof(VkDrawIndexedIndirectCommand));
     }
 }
 
@@ -2433,15 +2429,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             },
         };
 
-        VkDependencyInfo BeginDependency =
-        {
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .pNext = nullptr,
-            .dependencyFlags = 0,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &BeginBarrier,
-        };
-        vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
+        PushBeginBarrier(&FrameStages[FrameStage_Upload], &BeginBarrier);
 
         VkClearColorValue ClearColor = {};
         vkCmdClearColorImage(UploadCB, BeginBarrier.image, BeginBarrier.newLayout, &ClearColor, 1, &BeginBarrier.subresourceRange);
@@ -2469,15 +2457,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             },
         };
 
-        VkDependencyInfo EndDependency = 
-        {
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .pNext = nullptr,
-            .dependencyFlags = 0,
-            .imageMemoryBarrierCount = 1,
-            .pImageMemoryBarriers = &EndBarrier,
-        };
-        vkCmdPipelineBarrier2(UploadCB, &EndDependency);
+        PushBeginBarrier(&FrameStages[FrameStage_Upload + 1], &EndBarrier);
     }
 
     //
@@ -3568,53 +3548,23 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     EndCommandBuffer(GuiCB);
     EndCommandBuffer(SkinningCB);
 
+    // Clear mip feedback buffer
     {
-        vkCmdFillBuffer(UploadCB, Renderer->MipFeedbackBuffer, 0, VK_WHOLE_SIZE, 0);
-
-        VkBufferMemoryBarrier2 MipFeedbackClearBarrier = 
+        // NOTE(boti): This barrier is here because of a false positive,
+        // currently we're also waiting for the previous frame render to finish w/ a semaphore
+        VkMemoryBarrier2 BeginBarrier =
         {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-            .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_SHADER_WRITE_BIT_KHR,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = Renderer->MipFeedbackBuffer,
-            .offset = 0,
-            .size = VK_WHOLE_SIZE,
+            .sType          = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+            .pNext          = nullptr,
+            .srcStageMask   = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+            .srcAccessMask  = VK_ACCESS_2_TRANSFER_READ_BIT,
+            .dstStageMask   = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT,
+            .dstAccessMask  = VK_ACCESS_2_TRANSFER_WRITE_BIT,
         };
-        PushBeginBarrier(&FrameStages[FrameStage_Prepass], &MipFeedbackClearBarrier);
+        PushBeginBarrier(&FrameStages[FrameStage_Upload], &BeginBarrier);
+
+        vkCmdFillBuffer(UploadCB, Renderer->MipFeedbackBuffer, 0, VK_WHOLE_SIZE, 0);
     }
-
-    VkBufferMemoryBarrier2 EndTransferStageBufferMemoryBarriers[] = 
-    {
-        // Texture descriptor buffer
-        {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-            .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_DESCRIPTOR_BUFFER_READ_BIT_EXT,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = Renderer->TextureManager.DescriptorBuffer,
-            .offset = 0,
-            .size = VK_WHOLE_SIZE,
-        },
-    };
-
-    VkDependencyInfo EndTransferStageDependency = 
-    {
-        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .pNext = nullptr,
-        .dependencyFlags = 0,
-        .bufferMemoryBarrierCount = CountOf(EndTransferStageBufferMemoryBarriers),
-        .pBufferMemoryBarriers = EndTransferStageBufferMemoryBarriers,
-    };
-    vkCmdPipelineBarrier2(UploadCB, &EndTransferStageDependency);
 
     EndCommandBuffer(UploadCB);
 
@@ -3671,12 +3621,12 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         // the skinning doesn't overlap with the upload, so this is where that should happen
         VkMemoryBarrier2 EndBarrier =
         {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT|VK_ACCESS_2_TRANSFER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT|VK_ACCESS_2_SHADER_READ_BIT,
+            .sType          = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+            .pNext          = nullptr,
+            .srcStageMask   = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+            .srcAccessMask  = VK_ACCESS_2_SHADER_WRITE_BIT|VK_ACCESS_2_TRANSFER_WRITE_BIT,
+            .dstStageMask   = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask  = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT|VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_DESCRIPTOR_BUFFER_READ_BIT_EXT,
         };
         PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
     }
@@ -3771,68 +3721,83 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         {
             // Visibility buffer
             {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                .srcAccessMask = VK_ACCESS_2_NONE,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Renderer->VisibilityBuffer->Image,
+                .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext                  = nullptr,
+                #if 1
+                .srcStageMask           = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .srcAccessMask          = VK_ACCESS_2_SHADER_READ_BIT,
+                #else
+                .srcStageMask           = VK_PIPELINE_STAGE_2_NONE,
+                .srcAccessMask          = VK_ACCESS_2_NONE,
+                #endif
+                .dstStageMask           = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .dstAccessMask          = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                .oldLayout              = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout              = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .image                  = Renderer->VisibilityBuffer->Image,
                 .subresourceRange = 
                 {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
+                    .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel   = 0,
+                    .levelCount     = 1,
                     .baseArrayLayer = 0,
-                    .layerCount = 1,
+                    .layerCount     = 1,
                 },
             },
             // Structure buffer
             {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                .srcAccessMask = VK_ACCESS_2_NONE,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Renderer->StructureBuffer->Image,
+                .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext                  = nullptr,
+                #if 1
+                .srcStageMask           = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .srcAccessMask          = VK_ACCESS_2_SHADER_READ_BIT,
+                #else
+                .srcStageMask           = VK_PIPELINE_STAGE_2_NONE,
+                .srcAccessMask          = VK_ACCESS_2_NONE,
+                #endif
+                .dstStageMask           = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .dstAccessMask          = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                .oldLayout              = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout              = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .image                  = Renderer->StructureBuffer->Image,
                 .subresourceRange = 
                 {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
+                    .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel   = 0,
+                    .levelCount     = 1,
                     .baseArrayLayer = 0,
-                    .layerCount = 1,
+                    .layerCount     = 1,
                 },
             },
             // Depth buffer
             {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                .srcAccessMask = VK_ACCESS_2_NONE,
-                .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
-                .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Renderer->DepthBuffer->Image,
+                .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext                  = nullptr,
+                #if 1
+                .srcStageMask           = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+                .srcAccessMask          = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+                #else
+                .srcStageMask           = VK_PIPELINE_STAGE_2_NONE,
+                .srcAccessMask          = VK_ACCESS_2_NONE,
+                #endif
+                .dstStageMask           = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                .dstAccessMask          = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+                .oldLayout              = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout              = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .image                  = Renderer->DepthBuffer->Image,
                 .subresourceRange = 
                 {
-                    .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
+                    .aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT,
+                    .baseMipLevel   = 0,
+                    .levelCount     = 1,
                     .baseArrayLayer = 0,
-                    .layerCount = 1,
+                    .layerCount     = 1,
                 },
             },
         };
@@ -3843,7 +3808,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
     BeginFrameStage(PrepassCmd, &FrameStages[FrameStage_Prepass], "Prepass");
     {
-
         VkRenderingAttachmentInfo ColorAttachments[] = 
         {
             // Visibility buffer
@@ -3916,47 +3880,47 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         VkImageMemoryBarrier2 StructureImageBarrier =
         {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK.GraphicsQueueIdx,
-            .dstQueueFamilyIndex = VK.ComputeQueueIdx,
-            .image = Renderer->StructureBuffer->Image,
+            .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext                  = nullptr,
+            .srcStageMask           = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .srcAccessMask          = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            .dstAccessMask          = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+            .oldLayout              = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .newLayout              = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex    = VK.GraphicsQueueIdx,
+            .dstQueueFamilyIndex    = VK.ComputeQueueIdx,
+            .image                  = Renderer->StructureBuffer->Image,
             .subresourceRange = 
             {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
+                .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel   = 0,
+                .levelCount     = 1,
                 .baseArrayLayer = 0,
-                .layerCount = 1,
+                .layerCount     = 1,
             },
         };
         
         VkImageMemoryBarrier2 VisibilityImageBarrier =
         {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Renderer->VisibilityBuffer->Image,
+            .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext                  = nullptr,
+            .srcStageMask           = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .srcAccessMask          = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask          = VK_ACCESS_2_SHADER_READ_BIT,
+            .oldLayout              = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .newLayout              = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+            .image                  = Renderer->VisibilityBuffer->Image,
             .subresourceRange = 
             {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
+                .aspectMask         = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel       = 0,
+                .levelCount         = 1,
+                .baseArrayLayer     = 0,
+                .layerCount         = 1,
             },
         };
         PushBeginBarrier(&FrameStages[FrameStage_SSAO], &StructureImageBarrier);
@@ -3966,36 +3930,47 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     EndCommandBuffer(PrepassCmd);
 
+    VkSemaphoreSubmitInfo PrepassWaits[] =
+    {
+        {
+            .sType      = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .pNext      = nullptr,
+            .semaphore  = Renderer->TimelineSemaphore,
+            .value      = Renderer->FrameFinishedCounters[(Frame->FrameID + 1) % R_MaxFramesInFlight],
+            .stageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+        },
+    };
+
     u64 PrepassCounter = ++Renderer->TimelineSemaphoreCounter;
     VkCommandBufferSubmitInfo PrepassCmdBuffers[] = 
     {
         {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-            .pNext = nullptr,
-            .commandBuffer = PrepassCmd,
-            .deviceMask = 0,
+            .sType          = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+            .pNext          = nullptr,
+            .commandBuffer  = PrepassCmd,
+            .deviceMask     = 0,
         },
     };
     VkSemaphoreSubmitInfo PrepassSignals[] = 
     {
         {
-            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-            .pNext = nullptr,
-            .semaphore = Renderer->TimelineSemaphore,
-            .value = PrepassCounter,
-            .stageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            .sType      = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            .pNext      = nullptr,
+            .semaphore  = Renderer->TimelineSemaphore,
+            .value      = PrepassCounter,
+            .stageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
         },
     };
     VkSubmitInfo2 SubmitPrepass = 
     {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .pNext = nullptr,
-        .waitSemaphoreInfoCount = 0,
-        .pWaitSemaphoreInfos = nullptr,
-        .commandBufferInfoCount = CountOf(PrepassCmdBuffers),
-        .pCommandBufferInfos = PrepassCmdBuffers,
-        .signalSemaphoreInfoCount = CountOf(PrepassSignals),
-        .pSignalSemaphoreInfos = PrepassSignals,
+        .sType                      = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .pNext                      = nullptr,
+        .waitSemaphoreInfoCount     = CountOf(PrepassWaits),
+        .pWaitSemaphoreInfos        = PrepassWaits,
+        .commandBufferInfoCount     = CountOf(PrepassCmdBuffers),
+        .pCommandBufferInfos        = PrepassCmdBuffers,
+        .signalSemaphoreInfoCount   = CountOf(PrepassSignals),
+        .pSignalSemaphoreInfos      = PrepassSignals,
     };
     vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitPrepass, nullptr);
 
@@ -4046,46 +4021,46 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 // Raw SSAO
                 {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = Renderer->OcclusionBuffers[0]->Image,
+                    .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext                  = nullptr,
+                    .srcStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    .srcAccessMask          = VK_ACCESS_2_SHADER_WRITE_BIT,
+                    .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    .dstAccessMask          = VK_ACCESS_2_SHADER_READ_BIT,
+                    .oldLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                    .newLayout              = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .image                  = Renderer->OcclusionBuffers[0]->Image,
                     .subresourceRange = 
                     {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
+                        .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel   = 0,
+                        .levelCount     = 1,
                         .baseArrayLayer = 0,
-                        .layerCount = 1,
+                        .layerCount     = 1,
                     },
                 },
                 // Filtered SSAO
                 {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                    .srcAccessMask = VK_ACCESS_2_NONE,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                    .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                    .srcQueueFamilyIndex = VK.GraphicsQueueIdx,
-                    .dstQueueFamilyIndex = VK.ComputeQueueIdx,
-                    .image = Renderer->OcclusionBuffers[1]->Image,
+                    .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext                  = nullptr,
+                    .srcStageMask           = VK_PIPELINE_STAGE_2_NONE,
+                    .srcAccessMask          = VK_ACCESS_2_NONE,
+                    .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    .dstAccessMask          = VK_ACCESS_2_SHADER_WRITE_BIT,
+                    .oldLayout              = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .newLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                    .srcQueueFamilyIndex    = VK.GraphicsQueueIdx,
+                    .dstQueueFamilyIndex    = VK.ComputeQueueIdx,
+                    .image                  = Renderer->OcclusionBuffers[1]->Image,
                     .subresourceRange = 
                     {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = 1,
+                        .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel   = 0,
+                        .levelCount     = 1,
                         .baseArrayLayer = 0,
-                        .layerCount = 1,
+                        .layerCount     = 1,
                     },
                 },
             };
@@ -4109,24 +4084,24 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         VkImageMemoryBarrier2 EndBarrier =
         {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK.ComputeQueueIdx,
-            .dstQueueFamilyIndex = VK.GraphicsQueueIdx,
-            .image = Renderer->OcclusionBuffers[1]->Image,
+            .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext                  = nullptr,
+            .srcStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask          = VK_ACCESS_2_SHADER_WRITE_BIT,
+            .dstStageMask           = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask          = VK_ACCESS_2_SHADER_READ_BIT,
+            .oldLayout              = VK_IMAGE_LAYOUT_GENERAL,
+            .newLayout              = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex    = VK.ComputeQueueIdx,
+            .dstQueueFamilyIndex    = VK.GraphicsQueueIdx,
+            .image                  = Renderer->OcclusionBuffers[1]->Image,
             .subresourceRange = 
             {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
+                .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel   = 0,
+                .levelCount     = 1,
                 .baseArrayLayer = 0,
-                .layerCount = 1,
+                .layerCount     = 1,
             },
         };
         PushBeginBarrier(&FrameStages[FrameStage_Shading], &EndBarrier);
@@ -4198,15 +4173,15 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     };
     VkSubmitInfo2 SubmitPreLight = 
     {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .pNext = nullptr,
-        .flags = 0,
-        .waitSemaphoreInfoCount = CountOf(PreLightWaits),
-        .pWaitSemaphoreInfos = PreLightWaits,
-        .commandBufferInfoCount = CountOf(PreLightCmdBuffers),
-        .pCommandBufferInfos = PreLightCmdBuffers,
-        .signalSemaphoreInfoCount = CountOf(PreLightSignals),
-        .pSignalSemaphoreInfos = PreLightSignals,
+        .sType                      = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+        .pNext                      = nullptr,
+        .flags                      = 0,
+        .waitSemaphoreInfoCount     = CountOf(PreLightWaits),
+        .pWaitSemaphoreInfos        = PreLightWaits,
+        .commandBufferInfoCount     = CountOf(PreLightCmdBuffers),
+        .pCommandBufferInfos        = PreLightCmdBuffers,
+        .signalSemaphoreInfoCount   = CountOf(PreLightSignals),
+        .pSignalSemaphoreInfos      = PreLightSignals,
     };
     vkQueueSubmit2(VK.ComputeQueue, 1, &SubmitPreLight, nullptr);
 
@@ -4350,24 +4325,24 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;
         VkImageMemoryBarrier2 Barrier = 
         {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-            .srcAccessMask = VK_ACCESS_2_NONE,
-            .dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-            .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = ShadowMap->Image,
+            .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext                  = nullptr,
+            .srcStageMask           = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask          = VK_ACCESS_2_NONE,
+            .dstStageMask           = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+            .dstAccessMask          = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+            .oldLayout              = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout              = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+            .image                  = ShadowMap->Image,
             .subresourceRange = 
             {
-                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
+                .aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .baseMipLevel   = 0,
+                .levelCount     = 1,
                 .baseArrayLayer = 0,
-                .layerCount = 6,
+                .layerCount     = 6,
             },
         };
         PushBeginBarrier(&FrameStages[FrameStage_Shadows], &Barrier);
@@ -4458,24 +4433,24 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             point_shadow_map* ShadowMap = Renderer->PointShadowMaps + ShadowIndex;
             VkImageMemoryBarrier2 Barrier =
             {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-                .srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-                .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = ShadowMap->Image,
+                .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext                  = nullptr,
+                .srcStageMask           = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+                .srcAccessMask          = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+                .dstStageMask           = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                .dstAccessMask          = VK_ACCESS_2_SHADER_READ_BIT,
+                .oldLayout              = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+                .newLayout              = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .image                  = ShadowMap->Image,
                 .subresourceRange = 
                 {
-                    .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
+                    .aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT,
+                    .baseMipLevel   = 0,
+                    .levelCount     = 1,
                     .baseArrayLayer = 0,
-                    .layerCount = 6,
+                    .layerCount     = 6,
                 },
             };
             PushBeginBarrier(&FrameStages[FrameStage_Shading], &Barrier);
@@ -4537,29 +4512,28 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     //
     {
         // HDR Color
+        // NOTE(boti): Synchronization validation complains about a WAW hazard on subsequent frames from the previous frame's bloom pass,
+        // but that can't be correct, since the bloom pass only ever _reads_ mip 0.
         VkImageMemoryBarrier2 HDRColorBarrier =
         {
             .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
             .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-            .srcAccessMask = VK_ACCESS_2_NONE,
-            .dstStageMask = (Frame->Config.ShadingMode == ShadingMode_Forward)
-                ? VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .dstAccessMask = (Frame->Config.ShadingMode == ShadingMode_Forward)
-                ? VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT : VK_ACCESS_2_SHADER_WRITE_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = (Frame->Config.ShadingMode == ShadingMode_Forward) 
-                ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Renderer->HDRRenderTarget->Image,
+            .srcStageMask           = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+            .srcAccessMask          = VK_ACCESS_2_SHADER_READ_BIT,
+            .dstStageMask           = (Frame->Config.ShadingMode == ShadingMode_Forward) ? VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT : VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .dstAccessMask          = (Frame->Config.ShadingMode == ShadingMode_Forward) ? VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT : VK_ACCESS_2_SHADER_WRITE_BIT,
+            .oldLayout              = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout              = (Frame->Config.ShadingMode == ShadingMode_Forward) ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL,
+            .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+            .image                  = Renderer->HDRRenderTarget->Image,
             .subresourceRange = 
             {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
+                .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel   = 0,
+                .levelCount     = 1,
                 .baseArrayLayer = 0,
-                .layerCount = 1,
+                .layerCount     = 1,
             },
         };
         PushBeginBarrier(&FrameStages[FrameStage_Shading], &HDRColorBarrier);
@@ -4568,44 +4542,44 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     VkRenderingAttachmentInfo ShadingColorAttachments[] = 
     {
         {
-            .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-            .pNext = nullptr,
-            .imageView = Renderer->HDRRenderTarget->View,
-            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .resolveMode = VK_RESOLVE_MODE_NONE,
-            .resolveImageView = VK_NULL_HANDLE,
+            .sType              = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .pNext              = nullptr,
+            .imageView          = Renderer->HDRRenderTarget->View,
+            .imageLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .resolveMode        = VK_RESOLVE_MODE_NONE,
+            .resolveImageView   = VK_NULL_HANDLE,
             .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-            .clearValue = {},
+            .loadOp             = VK_ATTACHMENT_LOAD_OP_LOAD,
+            .storeOp            = VK_ATTACHMENT_STORE_OP_STORE,
+            .clearValue         = {},
         },
     };
     
     VkRenderingAttachmentInfo ShadingDepthAttachment = 
     {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .pNext = nullptr,
-        .imageView = Renderer->DepthBuffer->View,
-        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-        .resolveMode = VK_RESOLVE_MODE_NONE,
-        .resolveImageView = VK_NULL_HANDLE,
+        .sType              = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .pNext              = nullptr,
+        .imageView          = Renderer->DepthBuffer->View,
+        .imageLayout        = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .resolveMode        = VK_RESOLVE_MODE_NONE,
+        .resolveImageView   = VK_NULL_HANDLE,
         .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue = {},
+        .loadOp             = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp            = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue         = {},
     };
     VkRenderingInfo ShadingRenderingInfo = 
     {
-        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .pNext = nullptr,
-        .flags = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT,
-        .renderArea = { { 0, 0 }, { Frame->RenderExtent.X, Frame->RenderExtent.Y } },
-        .layerCount = 1,
-        .viewMask = 0,
-        .colorAttachmentCount = CountOf(ShadingColorAttachments),
-        .pColorAttachments = ShadingColorAttachments,
-        .pDepthAttachment = &ShadingDepthAttachment,
-        .pStencilAttachment = nullptr,
+        .sType                  = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .pNext                  = nullptr,
+        .flags                  = VK_RENDERING_CONTENTS_SECONDARY_COMMAND_BUFFERS_BIT,
+        .renderArea             = { { 0, 0 }, { Frame->RenderExtent.X, Frame->RenderExtent.Y } },
+        .layerCount             = 1,
+        .viewMask               = 0,
+        .colorAttachmentCount   = CountOf(ShadingColorAttachments),
+        .pColorAttachments      = ShadingColorAttachments,
+        .pDepthAttachment       = &ShadingDepthAttachment,
+        .pStencilAttachment     = nullptr,
     };
 
     BeginFrameStage(RenderCmd, &FrameStages[FrameStage_Shading], "Shading");
@@ -4642,34 +4616,34 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 VkImageMemoryBarrier2 EndBarriers[] = 
                 {
                     {
-                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                        .pNext = nullptr,
-                        .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                        .srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-                        .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                        .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                        .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-                        .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .image = Renderer->HDRRenderTarget->Image,
+                        .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                        .pNext                  = nullptr,
+                        .srcStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                        .srcAccessMask          = VK_ACCESS_2_SHADER_WRITE_BIT,
+                        .dstStageMask           = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        .dstAccessMask          = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
+                        .oldLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                        .newLayout              = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                        .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                        .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                        .image                  = Renderer->HDRRenderTarget->Image,
                         .subresourceRange = 
                         {
-                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = 1,
+                            .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .baseMipLevel   = 0,
+                            .levelCount     = 1,
                             .baseArrayLayer = 0,
-                            .layerCount = 1,
+                            .layerCount     = 1,
                         },
                     },
                 };
                 VkDependencyInfo EndDependency = 
                 {
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .dependencyFlags = 0,
-                    .imageMemoryBarrierCount = CountOf(EndBarriers),
-                    .pImageMemoryBarriers = EndBarriers,
+                    .sType                      = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext                      = nullptr,
+                    .dependencyFlags            = 0,
+                    .imageMemoryBarrierCount    = CountOf(EndBarriers),
+                    .pImageMemoryBarriers       = EndBarriers,
                 };
                 vkCmdPipelineBarrier2(RenderCmd, &EndDependency);
 
@@ -4725,26 +4699,26 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         VkBufferMemoryBarrier2 BeginBarriers[] = 
         {
             {
-                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                .srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_SHADER_WRITE_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .buffer = Renderer->MipFeedbackBuffer,
-                .offset = 0,
-                .size = VK_WHOLE_SIZE,
+                .sType                  = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext                  = nullptr,
+                .srcStageMask           = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .srcAccessMask          = VK_ACCESS_2_SHADER_READ_BIT|VK_ACCESS_2_SHADER_WRITE_BIT,
+                .dstStageMask           = VK_PIPELINE_STAGE_2_COPY_BIT,
+                .dstAccessMask          = VK_ACCESS_2_TRANSFER_READ_BIT,
+                .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .buffer                 = Renderer->MipFeedbackBuffer,
+                .offset                 = 0,
+                .size                   = VK_WHOLE_SIZE,
             },
         };
         VkDependencyInfo BeginDependency = 
         {
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .pNext = nullptr,
-            .dependencyFlags = 0,
-            .bufferMemoryBarrierCount = CountOf(BeginBarriers),
-            .pBufferMemoryBarriers = BeginBarriers,
+            .sType                      = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext                      = nullptr,
+            .dependencyFlags            = 0,
+            .bufferMemoryBarrierCount   = CountOf(BeginBarriers),
+            .pBufferMemoryBarriers      = BeginBarriers,
         };
         vkCmdPipelineBarrier2(RenderCmd, &BeginDependency);
 
@@ -4762,8 +4736,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     //
     BeginFrameStage(RenderCmd, &FrameStages[FrameStage_Bloom], "Bloom");
     {
-        u32 Width = Frame->RenderExtent.X;
-        u32 Height = Frame->RenderExtent.Y;
+        v2u Extent = Frame->RenderExtent;
 
         pipeline_with_layout DownsamplePipeline = Renderer->Pipelines[Pipeline_BloomDownsample];
         pipeline_with_layout UpsamplePipeline = Renderer->Pipelines[Pipeline_BloomUpsample];
@@ -4774,69 +4747,65 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         {
             // HDR Mip 0
             {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Renderer->HDRRenderTarget->Image,
+                .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext                  = nullptr,
+                .srcStageMask           = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .srcAccessMask          = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
+                .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask          = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                .oldLayout              = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .newLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .image                  = Renderer->HDRRenderTarget->Image,
                 .subresourceRange = 
                 {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
+                    .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel   = 0,
+                    .levelCount     = 1,
                     .baseArrayLayer = 0,
-                    .layerCount = 1,
+                    .layerCount     = 1,
                 },
             },
 
             // HDR mips
             {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .pNext = nullptr,
+                .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext                  = nullptr,
                 // NOTE(boti): Synchronization validation w/ version 1.3.280 complains that the rest of
                 // the mips don't have the src stage/access masks set, but that seems like a false positive?
                 #if 1
-                .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
+                .srcStageMask           = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .srcAccessMask          = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
                 #else
-                .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                .srcAccessMask = VK_ACCESS_2_NONE,
+                .srcStageMask           = VK_PIPELINE_STAGE_2_NONE,
+                .srcAccessMask          = VK_ACCESS_2_NONE,
                 #endif
-                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                .dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Renderer->HDRRenderTarget->Image,
+                .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask          = VK_ACCESS_2_SHADER_WRITE_BIT,
+                .oldLayout              = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .image                  = Renderer->HDRRenderTarget->Image,
                 .subresourceRange = 
                 {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 1,
-                    .levelCount = VK_REMAINING_MIP_LEVELS,
+                    .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel   = 1,
+                    .levelCount     = VK_REMAINING_MIP_LEVELS,
                     .baseArrayLayer = 0,
-                    .layerCount = 1,
+                    .layerCount     = 1,
                 },
             },
         };
 
         VkDependencyInfo BeginDependencyInfo = 
         {
-            .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-            .pNext = nullptr,
-            .dependencyFlags = 0,
-            .memoryBarrierCount = 0,
-            .pMemoryBarriers = nullptr,
-            .bufferMemoryBarrierCount = 0,
-            .pBufferMemoryBarriers = nullptr,
-            .imageMemoryBarrierCount = CountOf(BeginBarriers),
-            .pImageMemoryBarriers = BeginBarriers,
+            .sType                      = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .pNext                      = nullptr,
+            .dependencyFlags            = 0,
+            .imageMemoryBarrierCount    = CountOf(BeginBarriers),
+            .pImageMemoryBarriers       = BeginBarriers,
         };
         vkCmdPipelineBarrier2(RenderCmd, &BeginDependencyInfo); 
 
@@ -4847,46 +4816,42 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             vkCmdPushConstants(RenderCmd, DownsamplePipeline.Layout, VK_SHADER_STAGE_ALL, 
                                0, sizeof(Mip), &Mip);
 
-            u32 DispatchX = CeilDiv(Width, BloomDownsample_GroupSizeX);
-            u32 DispatchY = CeilDiv(Height, BloomDownsample_GroupSizeY);
+            u32 DispatchX = CeilDiv(Extent.X, BloomDownsample_GroupSizeX);
+            u32 DispatchY = CeilDiv(Extent.Y, BloomDownsample_GroupSizeY);
             vkCmdDispatch(RenderCmd, DispatchX, DispatchY, 1);
 
-            Width = Max(Width >> 1, 1u);
-            Height = Max(Height >> 1, 1u);
+            Extent.X = Max(Extent.X >> 1, 1u);
+            Extent.Y = Max(Extent.Y >> 1, 1u);
 
             VkImageMemoryBarrier2 MipBarrier = 
             {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Renderer->HDRRenderTarget->Image,
+                .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext                  = nullptr,
+                .srcStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .srcAccessMask          = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .dstAccessMask          = VK_ACCESS_2_SHADER_READ_BIT,
+                .oldLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                .newLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .image                  = Renderer->HDRRenderTarget->Image,
                 .subresourceRange = 
                 {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = Mip,
-                    .levelCount = 1,
+                    .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel   = Mip,
+                    .levelCount     = 1,
                     .baseArrayLayer = 0,
-                    .layerCount = 1,
+                    .layerCount     = 1,
                 },
             };
             VkDependencyInfo Barrier = 
             {
-                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                .pNext = nullptr,
-                .dependencyFlags = 0,
-                .memoryBarrierCount = 0,
-                .pMemoryBarriers = nullptr,
-                .bufferMemoryBarrierCount = 0,
-                .pBufferMemoryBarriers = nullptr,
-                .imageMemoryBarrierCount = 1,
-                .pImageMemoryBarriers = &MipBarrier,
+                .sType                      = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext                      = nullptr,
+                .dependencyFlags            = 0,
+                .imageMemoryBarrierCount    = 1,
+                .pImageMemoryBarriers       = &MipBarrier,
             };
 
             vkCmdPipelineBarrier2(RenderCmd, &Barrier);
@@ -4899,45 +4864,45 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             VkImageMemoryBarrier2 CopyBeginImageBarriers[] = 
             {
                 {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                    .srcAccessMask = VK_ACCESS_2_NONE,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-                    .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = Renderer->HDRRenderTarget->Image,
+                    .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext                  = nullptr,
+                    .srcStageMask           = VK_PIPELINE_STAGE_2_NONE,
+                    .srcAccessMask          = VK_ACCESS_2_NONE,
+                    .dstStageMask           = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .dstAccessMask          = VK_ACCESS_2_TRANSFER_READ_BIT,
+                    .oldLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                    .newLayout              = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .image                  = Renderer->HDRRenderTarget->Image,
                     .subresourceRange = 
                     {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = MipIndex,
-                        .levelCount = 1,
+                        .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel   = MipIndex,
+                        .levelCount     = 1,
                         .baseArrayLayer = 0,
-                        .layerCount = 1,
+                        .layerCount     = 1,
                     },
                 },
                 {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                    .srcAccessMask = VK_ACCESS_2_NONE,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                    .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = Renderer->BloomTarget->Image,
+                    .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext                  = nullptr,
+                    .srcStageMask           = VK_PIPELINE_STAGE_2_NONE,
+                    .srcAccessMask          = VK_ACCESS_2_NONE,
+                    .dstStageMask           = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .dstAccessMask          = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .oldLayout              = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .newLayout              = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .image                  = Renderer->BloomTarget->Image,
                     .subresourceRange = 
                     {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = MipIndex,
-                        .levelCount = 1,
+                        .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel   = MipIndex,
+                        .levelCount     = 1,
                         .baseArrayLayer = 0,
-                        .layerCount = 1,
+                        .layerCount     = 1,
                     },
                 },
             };
@@ -4955,25 +4920,25 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             {
                 .srcSubresource = 
                 {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .mipLevel = MipIndex,
+                    .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel       = MipIndex,
                     .baseArrayLayer = 0,
-                    .layerCount = 1,
+                    .layerCount     = 1,
                 },
                 .srcOffset = { 0, 0, 0 },
                 .dstSubresource = 
                 {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .mipLevel = MipIndex,
+                    .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel       = MipIndex,
                     .baseArrayLayer = 0,
-                    .layerCount = 1,
+                    .layerCount     = 1,
                 },
                 .dstOffset = { 0, 0, 0 },
                 .extent = 
                 {
-                    .width = Max(Frame->RenderExtent.X >> MipIndex, 1u),
+                    .width  = Max(Frame->RenderExtent.X >> MipIndex, 1u),
                     .height = Max(Frame->RenderExtent.Y >> MipIndex, 1u),
-                    .depth = 1,
+                    .depth  = 1,
                 },
             };
 
@@ -4985,87 +4950,87 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             VkImageMemoryBarrier2 CopyEndImageBarriers[] = 
             {
                 {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = Renderer->HDRRenderTarget->Image,
+                    .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext                  = nullptr,
+                    .srcStageMask           = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .srcAccessMask          = VK_ACCESS_2_TRANSFER_READ_BIT,
+                    .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+                    .dstAccessMask          = VK_ACCESS_2_SHADER_READ_BIT,
+                    .oldLayout              = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    .newLayout              = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .image                  = Renderer->HDRRenderTarget->Image,
                     .subresourceRange = 
                     {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = MipIndex,
-                        .levelCount = 1,
+                        .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel   = MipIndex,
+                        .levelCount     = 1,
                         .baseArrayLayer = 0,
-                        .layerCount = 1,
+                        .layerCount     = 1,
                     },
                 },
                 {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                    .srcAccessMask = VK_ACCESS_2_NONE,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = Renderer->HDRRenderTarget->Image,
+                    .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext                  = nullptr,
+                    .srcStageMask           = VK_PIPELINE_STAGE_2_NONE,
+                    .srcAccessMask          = VK_ACCESS_2_NONE,
+                    .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+                    .dstAccessMask          = VK_ACCESS_2_SHADER_READ_BIT,
+                    .oldLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                    .newLayout              = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .image                  = Renderer->HDRRenderTarget->Image,
                     .subresourceRange = 
                     {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = MipIndex,
+                        .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel   = 0,
+                        .levelCount     = MipIndex,
                         .baseArrayLayer = 0,
-                        .layerCount = 1,
+                        .layerCount     = 1,
                     },
                 },
                 {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = Renderer->BloomTarget->Image,
+                    .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext                  = nullptr,
+                    .srcStageMask           = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .srcAccessMask          = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    .dstAccessMask          = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                    .oldLayout              = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    .newLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                    .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .image                  = Renderer->BloomTarget->Image,
                     .subresourceRange = 
                     {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = MipIndex,
-                        .levelCount = 1,
+                        .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel   = MipIndex,
+                        .levelCount     = 1,
                         .baseArrayLayer = 0,
-                        .layerCount = 1,
+                        .layerCount     = 1,
                     },
                 },
                 {
-                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                    .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                    .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                    .image = Renderer->BloomTarget->Image,
+                    .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext                  = nullptr,
+                    .srcStageMask           = VK_PIPELINE_STAGE_2_COPY_BIT,
+                    .srcAccessMask          = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                    .dstAccessMask          = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                    .oldLayout              = VK_IMAGE_LAYOUT_UNDEFINED,
+                    .newLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                    .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                    .image                  = Renderer->BloomTarget->Image,
                     .subresourceRange = 
                     {
-                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                        .baseMipLevel = 0,
-                        .levelCount = MipIndex,
+                        .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel   = 0,
+                        .levelCount     = MipIndex,
                         .baseArrayLayer = 0,
-                        .layerCount = 1,
+                        .layerCount     = 1,
                     },
                 },
             };
@@ -5086,33 +5051,33 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             u32 Mip = BloomMipCount - Index - 1;
             vkCmdPushConstants(RenderCmd, UpsamplePipeline.Layout, VK_SHADER_STAGE_ALL,
                                0, sizeof(Mip), &Mip);
-            Width = Max(Frame->RenderExtent.X >> Mip, 1u);
-            Height = Max(Frame->RenderExtent.Y >> Mip, 1u);
+            Extent.X = Max(Frame->RenderExtent.X >> Mip, 1u);
+            Extent.Y = Max(Frame->RenderExtent.Y >> Mip, 1u);
 
-            u32 DispatchX = CeilDiv(Width, BloomUpsample_GroupSizeX);
-            u32 DispatchY = CeilDiv(Height, BloomUpsample_GroupSizeY);
+            u32 DispatchX = CeilDiv(Extent.X, BloomUpsample_GroupSizeX);
+            u32 DispatchY = CeilDiv(Extent.Y, BloomUpsample_GroupSizeY);
             vkCmdDispatch(RenderCmd, DispatchX, DispatchY, 1);
 
             VkImageMemoryBarrier2 End = 
             {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                .pNext = nullptr,
-                .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-                .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT|VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-                .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-                .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-                .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                .image = Renderer->BloomTarget->Image,
+                .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext                  = nullptr,
+                .srcStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+                .srcAccessMask          = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT|VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+                .dstAccessMask          = VK_ACCESS_2_SHADER_READ_BIT,
+                .oldLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                .newLayout              = VK_IMAGE_LAYOUT_GENERAL,
+                .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+                .image                  = Renderer->BloomTarget->Image,
                 .subresourceRange = 
                 {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = Mip,
-                    .levelCount = 1,
+                    .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel   = Mip,
+                    .levelCount     = 1,
                     .baseArrayLayer = 0,
-                    .layerCount = 1,
+                    .layerCount     = 1,
                 },
             };
     
@@ -5121,10 +5086,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
                 .pNext = nullptr,
                 .dependencyFlags = 0,
-                .memoryBarrierCount = 0,
-                .pMemoryBarriers = nullptr,
-                .bufferMemoryBarrierCount = 0,
-                .pBufferMemoryBarriers = nullptr,
                 .imageMemoryBarrierCount = 1,
                 .pImageMemoryBarriers = &End,
             };
@@ -5133,24 +5094,24 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         VkImageMemoryBarrier2 End = 
         {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-            .srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT|VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
-            .dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_GENERAL,
-            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Renderer->BloomTarget->Image,
+            .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext                  = nullptr,
+            .srcStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+            .srcAccessMask          = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT|VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+            .dstStageMask           = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT|VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+            .dstAccessMask          = VK_ACCESS_2_SHADER_READ_BIT,
+            .oldLayout              = VK_IMAGE_LAYOUT_GENERAL,
+            .newLayout              = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+            .image                  = Renderer->BloomTarget->Image,
             .subresourceRange = 
             {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = VK_REMAINING_MIP_LEVELS,
+                .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel   = 0,
+                .levelCount     = VK_REMAINING_MIP_LEVELS,
                 .baseArrayLayer = 0,
-                .layerCount = 1,
+                .layerCount     = 1,
             },
         };
         PushBeginBarrier(&FrameStages[FrameStage_BlitAndGUI], &End);
@@ -5163,46 +5124,51 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     {
         VkImageMemoryBarrier2 SwapchainBarrier =
         {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-            .srcAccessMask = VK_ACCESS_2_NONE,
-            .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Renderer->SwapchainImages[SwapchainImageIndex],
+            .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext                  = nullptr,
+            .srcStageMask           = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask          = VK_ACCESS_2_NONE,
+            .dstStageMask           = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstAccessMask          = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            .oldLayout              = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout              = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+            .image                  = Renderer->SwapchainImages[SwapchainImageIndex],
             .subresourceRange = 
             {
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
+                .aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel   = 0,
+                .levelCount     = 1,
                 .baseArrayLayer = 0,
-                .layerCount = 1,
+                .layerCount     = 1,
             },
         };
         VkImageMemoryBarrier2 SwapchainDepthBarrier = 
         {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-            .pNext = nullptr,
-            .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-            .srcAccessMask = VK_ACCESS_2_NONE,
-            .dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
-            .dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .newLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .image = Renderer->SwapchainDepthImage,
+            .sType                  = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext                  = nullptr,
+            #if 1
+            .srcStageMask           = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+            .srcAccessMask          = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+            #else
+            .srcStageMask           = VK_PIPELINE_STAGE_2_NONE,
+            .srcAccessMask          = VK_ACCESS_2_NONE,
+            #endif
+            .dstStageMask           = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+            .dstAccessMask          = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT|VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+            .oldLayout              = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout              = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+            .srcQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex    = VK_QUEUE_FAMILY_IGNORED,
+            .image                  = Renderer->SwapchainDepthImage,
             .subresourceRange = 
             {
-                .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
+                .aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT,
+                .baseMipLevel   = 0,
+                .levelCount     = 1,
                 .baseArrayLayer = 0,
-                .layerCount = 1,
+                .layerCount     = 1,
             },
         };
         PushBeginBarrier(&FrameStages[FrameStage_BlitAndGUI], &SwapchainBarrier);

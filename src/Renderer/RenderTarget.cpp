@@ -231,16 +231,7 @@ ResizeRenderTargets(render_target_heap* Heap, gpu_deletion_queue* DeletionQueue,
 
                 if (vkCreateImageView(VK.Device, &ViewInfo, nullptr, &RT->View) == VK_SUCCESS)
                 {
-                    VkDebugUtilsObjectNameInfoEXT NameInfo = 
-                    {
-                        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-                        .pNext = nullptr,
-                        .objectType = VK_OBJECT_TYPE_IMAGE,
-                        .objectHandle = (u64)RT->Image,
-                        .pObjectName = RT->Name,
-
-                    };
-                    vkSetDebugUtilsObjectNameEXT(VK.Device, &NameInfo);
+                    SetObjectName(VK.Device, RT->Image, RT->Name);
                 }
                 else
                 {

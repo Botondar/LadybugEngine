@@ -17,6 +17,9 @@ inline void vkCmdBeginDebugUtilsLabelEXT(VkCommandBuffer CmdBuffer, const char* 
 
 static VkResult SetObjectName(VkDevice Device, VkObjectType Type, u64 Handle, const char* Name);
 inline VkResult SetObjectName(VkDevice Device, VkDeviceMemory Memory, const char* Name);
+inline VkResult SetObjectName(VkDevice Device, VkPipeline Pipeline, const char* Name);
+inline VkResult SetObjectName(VkDevice Device, VkImage Image, const char* Name);
+inline VkResult SetObjectName(VkDevice Device, VkBuffer Buffer, const char* Name);
 
 //
 // VK_EXT_descriptor_buffer
@@ -152,4 +155,14 @@ inline VkResult SetObjectName(VkDevice Device, VkDeviceMemory Memory, const char
 inline VkResult SetObjectName(VkDevice Device, VkPipeline Pipeline, const char* Name)
 {
     return SetObjectName(Device, VK_OBJECT_TYPE_PIPELINE, (u64)Pipeline, Name);
+}
+
+inline VkResult SetObjectName(VkDevice Device, VkImage Image, const char* Name)
+{
+    return SetObjectName(Device, VK_OBJECT_TYPE_IMAGE, (u64)Image, Name);
+}
+
+inline VkResult SetObjectName(VkDevice Device, VkBuffer Buffer, const char* Name)
+{
+    return SetObjectName(Device, VK_OBJECT_TYPE_BUFFER, (u64)Buffer, Name);
 }
