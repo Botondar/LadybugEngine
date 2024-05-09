@@ -656,7 +656,9 @@ struct render_config
 {
     shading_mode ShadingMode;
     debug_view_mode DebugViewMode;
+    
     f32 Exposure;
+    f32 ParallaxScale;
 
     f32 SSAOIntensity;
     f32 SSAOMaxDistance;
@@ -665,6 +667,8 @@ struct render_config
     f32 BloomFilterRadius;
     f32 BloomInternalStrength;
     f32 BloomStrength;
+
+    static constexpr f32 DefaultParallaxScale = 0.01f;
 
     static constexpr f32 DefaultSSAOIntensity = 8.0f;
     static constexpr f32 DefaultSSAOMaxDistance = 0.5f;

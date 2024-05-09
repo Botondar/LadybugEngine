@@ -93,7 +93,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     {
         ResetArena(&GameState->TransientArena);
         v2u Resolution = { 0, 0 };
-        //Resolution = { 1366, 768 };
+        Resolution = { 1366, 768 };
         RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, Resolution);
     }
     RenderFrame->ImmediateTextureID = GameState->Assets->Textures[GameState->Assets->DefaultFontTextureID].RendererID;
@@ -124,6 +124,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     }
     
     UpdateEditor(GameState, GameIO, RenderFrame);
+    RenderFrame->Config.ShadingMode = ShadingMode_Visibility;
     RenderFrame->Config = GameState->RenderConfig;
     RenderFrame->Config.DebugViewMode = DebugView_None;
     RenderFrame->ConstantFogDensity = GameState->ConstantFogDensity;

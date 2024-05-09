@@ -196,6 +196,10 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
                   "Exposure", &Game->RenderConfig.Exposure,
                   Game->DefaultExposure, 1e-3f, 10.0f, 1e-3f);
 
+        F32Slider(&Context, TextSize,
+                  "ParallaxScale", &Game->RenderConfig.ParallaxScale,
+                  Game->RenderConfig.DefaultParallaxScale, 0.0f, 2.0f, 1e-3f);
+
         F32Slider(&Context, TextSize, 
                   "Bloom filter radius", &Game->RenderConfig.BloomFilterRadius, 
                   Game->RenderConfig.DefaultBloomFilterRadius, 0.0f, 1.0f, 1e-4f);

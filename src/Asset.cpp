@@ -696,9 +696,31 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
                 }
             } break;
 
+            case TextureType_Height:
             case TextureType_Occlusion:
             {
-                UnimplementedCodePath;
+                loaded_image SourceImage = LoadImage(Scratch, ImageFile);
+                Assert(SourceImage.Data);
+
+                Image.Extent = SourceImage.Extent;
+                Image.ChannelCount = 1;
+                Image.BitDepthPerChannel = 8;
+                Image.Data = PushSize_(Scratch, 0, Image.Extent.X * Image.Extent.Y * Image.ChannelCount * (Image.BitDepthPerChannel / 8), 64);
+                Assert(Image.Data);
+                
+                Entry->Info.Format = Format_BC4_UNorm;
+
+                u8* SrcAt = (u8*)SourceImage.Data;
+                u8* DstAt = (u8*)Image.Data;
+                for (u32 Y = 0; Y < SourceImage.Extent.Y; Y++)
+                {
+                    for (u32 X = 0; X < SourceImage.Extent.X; X++)
+                    {
+                        *DstAt++ = *SrcAt;
+                        SrcAt += SourceImage.ChannelCount;
+                    }
+                }
+                
             } break;
 
             case TextureType_Transmission:
@@ -881,47 +903,55 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 
     // Default textures
     {
-        texture_info Info =
-        {
-            .Extent = { 1, 1, 1 },
-            .MipCount = 1,
-            .ArrayCount = 1,
-            .Format = Format_R8G8B8A8_SRGB,
-            .Swizzle = {},
-        };
-
         // NOTE(boti): We want the the null texture to be some sensible default
-        Assert(Assets->TextureCount == 0);
-        Assets->WhitenessID = Assets->TextureCount++;
-        texture* Whiteness = Assets->Textures + Assets->WhitenessID;
+        {
+            Assert(Assets->TextureCount == 0);
 
-        Whiteness->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, &Info, {});
+            texture_info Info =
+            {
+                .Extent = { 1, 1, 1 },
+                .MipCount = 1,
+                .ArrayCount = 1,
+                .Format = Format_R8G8B8A8_SRGB,
+                .Swizzle = {},
+            };
+            Assets->WhitenessID = Assets->TextureCount++;
+            texture* Whiteness = Assets->Textures + Assets->WhitenessID;
+            Whiteness->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, &Info, {});
+
+            u32 Texel = 0xFFFFFFFFu;
+            TransferTexture(Frame, Whiteness->RendererID, Info, AllTextureSubresourceRange(), &Texel);
+            Whiteness->IsLoaded = true;
+        }
+
+        {
+            texture_info Info =
+            {
+                .Extent = { 1, 1, 1 },
+                .MipCount = 1,
+                .ArrayCount = 1,
+                .Format = Format_R8G8B8A8_UNorm,
+                .Swizzle = {},
+            };
+
+            Assets->HalfGrayID = Assets->TextureCount++;
+            texture* HalfGray = Assets->Textures + Assets->HalfGrayID;
+            HalfGray->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, &Info, {});
+
+            u32 Texel = 0x80808080u;
+            TransferTexture(Frame, HalfGray->RendererID, Info, AllTextureSubresourceRange(), &Texel);
+            HalfGray->IsLoaded = true;
+        }
+
         Assets->DefaultTextures[TextureType_Albedo]         = Assets->WhitenessID;
+        Assets->DefaultTextures[TextureType_Normal]         = Assets->HalfGrayID;
         Assets->DefaultTextures[TextureType_RoMe]           = Assets->WhitenessID;
         Assets->DefaultTextures[TextureType_Occlusion]      = Assets->WhitenessID;
+        Assets->DefaultTextures[TextureType_Height]         = Assets->HalfGrayID;
         Assets->DefaultTextures[TextureType_Transmission]   = Assets->WhitenessID;
-
-        u32 Texel = 0xFFFFFFFFu;
-        TransferTexture(Frame, Whiteness->RendererID, Info, AllTextureSubresourceRange(), &Texel);
-        Whiteness->IsLoaded = true;
     }
 
     {
-        texture_info Info =
-        {
-            .Extent = { 1, 1, 1 },
-            .MipCount = 1,
-            .ArrayCount = 1,
-            .Format = Format_R8G8_UNorm,
-            .Swizzle = {},
-        };
-
-        Assets->DefaultTextures[TextureType_Normal] = Assets->TextureCount++;
-        texture* DefaultNormalTexture = Assets->Textures + Assets->DefaultTextures[TextureType_Normal];
-        DefaultNormalTexture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, &Info, {});
-        u16 Texel = 0x8080u;
-        TransferTexture(Frame, DefaultNormalTexture->RendererID, Info, AllTextureSubresourceRange(), &Texel);
-        DefaultNormalTexture->IsLoaded = true;
     }
 
     // Null skin
@@ -1154,6 +1184,10 @@ lbfn texture_set DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, textur
                 Op.RoughnessMetallic.MetallicChannel = Entry->MetallicChannel;
 
                 AddEntry(&Assets->TextureQueue, Texture, Op);
+            }
+            else
+            {
+                UnhandledError("Out of asset texture pool");
             }
         }
     }

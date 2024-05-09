@@ -118,12 +118,16 @@ enum texture_data_type : u32
 };
 static_assert(TextureData_Count < 32);
 
+// TODO(boti): Occlusion and height could be packed into the same BC5 texture,
+// but right now that would greatly complicate texture loader interface.
+// Really mip generation/BC compression should be done as a preprocess step, not at runtime...
 enum texture_type : u32
 {
     TextureType_Albedo, // NOTE(boti): Also includes coverage when alpha is present
     TextureType_Normal,
     TextureType_RoMe,
     TextureType_Occlusion,
+    TextureType_Height,
     TextureType_Transmission,
 
     TextureType_Count,
@@ -211,6 +215,8 @@ struct material
     u32 AlbedoID;
     u32 NormalID;
     u32 MetallicRoughnessID;
+    u32 OcclusionID;
+    u32 HeightID;
     material_sampler_id AlbedoSamplerID;
     material_sampler_id NormalSamplerID;
     material_sampler_id MetallicRoughnessSamplerID;
@@ -246,6 +252,7 @@ struct assets
     texture_queue TextureQueue;
 
     u32 WhitenessID;
+    u32 HalfGrayID;
     u32 DefaultTextures[TextureType_Count];
 
     u32 ParticleArrayID;

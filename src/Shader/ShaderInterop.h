@@ -285,6 +285,7 @@ struct per_frame
     debug_view_mode DebugViewMode;
 
     f32 Exposure;
+    f32 ParallaxScale;
     f32 SSAOIntensity;
     f32 SSAOInverseMaxDistance;
     f32 SSAOTangentTau;
@@ -304,14 +305,17 @@ struct renderer_material
     v3 Emissive;
     f32 AlphaThreshold;
     f32 Transmission;
-    rgba8 DiffuseColor;
+    rgba8 BaseAlbedo;
     rgba8 BaseMaterial;
-    renderer_texture_id DiffuseID;
+    renderer_texture_id AlbedoID;
     renderer_texture_id NormalID;
     renderer_texture_id MetallicRoughnessID;
+    // HACK(boti): Occlusion and height are currently just using the albedo sampler
+    renderer_texture_id OcclusionID; 
+    renderer_texture_id HeightID;
     renderer_texture_id TransmissionID;
     // TODO(boti): These sampler IDs could just be packed into a single u32
-    material_sampler_id DiffuseSamplerID;
+    material_sampler_id AlbedoSamplerID;
     material_sampler_id NormalSamplerID;
     material_sampler_id MetallicRoughnessSamplerID;
     material_sampler_id TransmissionSamplerID;

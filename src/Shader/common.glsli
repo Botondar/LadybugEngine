@@ -126,6 +126,16 @@ v3 SetLuminance(in v3 Color, f32 TargetLuminance)
     return Result;
 }
 
+f32 GetLodFromDerivatives(texture2D Texture, v2 dXdUV, v2 dYdUV)
+{
+    v2s Extent = textureSize(Texture, 0);
+    v2 dX = f32(Extent.x) * dXdUV;
+    v2 dY = f32(Extent.y) * dYdUV;
+    f32 Slope = max(dot(dX, dX), dot(dY, dY));
+    f32 Result = 0.5 * log2(Slope);
+    return(Result);
+}
+
 uint GetMipBucketFromDerivatives(v2 dXdUV, v2 dYdUV)
 {
     uint Result;

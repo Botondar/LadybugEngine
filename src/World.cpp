@@ -307,7 +307,7 @@ DEBUGInitializeWorld(
                         u32 Index = X + Y*World->HeightField.TexelCountX;
 
                         f32 BaseFrequency = 1.0f / 256.0f;
-                        f32 BaseAmplitude = 32.0f;
+                        f32 BaseAmplitude = 0.0;//32.0f;
                         v2 P = (1.0f / World->HeightField.TexelsPerMeter) * v2{ (f32)X, (f32)Y };
                         f32 Height = 0.0f;
 
@@ -329,7 +329,8 @@ DEBUGInitializeWorld(
                 [TextureType_Albedo]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_albedo.tif" },
                 [TextureType_Normal]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_normal.tif" },
                 [TextureType_RoMe]          = { "data/texture/TCom_Sand_Muddy2_2x2_4K_roughness.tif", TextureChannel_R, TextureChannel_Undefined },
-                [TextureType_Occlusion]     = {},
+                [TextureType_Occlusion]     = { "data/texture/TCom_Sand_Muddy2_2x2_4K_ao.tif" },
+                [TextureType_Height]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_height.tif" },
                 [TextureType_Transmission]  = {},
             };
             #else
@@ -338,7 +339,8 @@ DEBUGInitializeWorld(
                 [TextureType_Albedo]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_albedo.tif" },
                 [TextureType_Normal]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_normal.tif" },
                 [TextureType_RoMe]          = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_roughness.tif", TextureChannel_R, TextureChannel_Undefined },
-                [TextureType_Occlusion]     = {},
+                [TextureType_Occlusion]     = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_ao.tif" },
+                [TextureType_Height]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_height.tif" },
                 [TextureType_Transmission]  = {},
             };
             #endif
@@ -349,6 +351,8 @@ DEBUGInitializeWorld(
             TerrainMaterial->AlbedoID                   = TextureSet.IDs[TextureType_Albedo];
             TerrainMaterial->NormalID                   = TextureSet.IDs[TextureType_Normal];
             TerrainMaterial->MetallicRoughnessID        = TextureSet.IDs[TextureType_RoMe];
+            TerrainMaterial->OcclusionID                = TextureSet.IDs[TextureType_Occlusion];
+            TerrainMaterial->HeightID                   = TextureSet.IDs[TextureType_Height];
             TerrainMaterial->AlbedoSamplerID            = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
             TerrainMaterial->NormalSamplerID            = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
             TerrainMaterial->MetallicRoughnessSamplerID = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
@@ -676,21 +680,24 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 texture* AlbedoTexture              = Assets->Textures + Material->AlbedoID;
                 texture* NormalTexture              = Assets->Textures + Material->NormalID;
                 texture* MetallicRoughnessTexture   = Assets->Textures + Material->MetallicRoughnessID;
+                texture* OcclusionTexture           = Assets->Textures + Material->OcclusionID;
+                texture* HeightTexture              = Assets->Textures + Material->HeightID;
                 texture* TransmissionTexture        = (Material->TransmissionID != U32_MAX) ? Assets->Textures + Material->TransmissionID : nullptr;
-
 
                 renderer_material RenderMaterial = 
                 {
                     .Emissive                   = Material->Emission,
                     .AlphaThreshold             = Material->AlphaThreshold,
                     .Transmission               = Material->Transmission,
-                    .DiffuseColor               = Material->Albedo,
+                    .BaseAlbedo                 = Material->Albedo,
                     .BaseMaterial               = Material->MetallicRoughness,
-                    .DiffuseID                  = AlbedoTexture->RendererID,
+                    .AlbedoID                   = AlbedoTexture->RendererID,
                     .NormalID                   = NormalTexture->RendererID,
                     .MetallicRoughnessID        = MetallicRoughnessTexture->RendererID,
-                    .TransmissionID             = TransmissionTexture ? TransmissionTexture->RendererID : InvalidRendererTextureID,
-                    .DiffuseSamplerID           = Material->AlbedoSamplerID,
+                    .OcclusionID                = OcclusionTexture->RendererID,
+                    .HeightID                   = HeightTexture->RendererID,
+                    .TransmissionID             = TransmissionTexture ? TransmissionTexture->RendererID : renderer_texture_id{},
+                    .AlbedoSamplerID            = Material->AlbedoSamplerID,
                     .NormalSamplerID            = Material->NormalSamplerID,
                     .MetallicRoughnessSamplerID = Material->MetallicRoughnessSamplerID,
                     .TransmissionSamplerID      = Material->TransmissionSamplerID,

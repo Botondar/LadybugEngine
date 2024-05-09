@@ -94,26 +94,44 @@ void main()
     {
         instance_data Instance = InstanceBuffer.Data[InstanceIndex];
 
+        v2 UV = TexCoord;
+        // Parallax
+        {
+            const uint StepCount = 4;
+            v3 TangentV = normalize(v3(dot(TriT, V), dot(TriB, V), dot(TriN, V)));
+            v2 ParallaxV = PerFrame.ParallaxScale * (1.0 / StepCount) * TangentV.xy;
+            for (uint Step = 0; Step < StepCount; Step++)
+            {
+                f32 Height = 2.0 * texture(sampler2D(Textures[Instance.Material.HeightID], Samplers[Instance.Material.AlbedoSamplerID]), UV).r - 1.0;
+                v3 N = UnpackSurfaceNormal01(texture(sampler2D(Textures[Instance.Material.NormalID], MatSamplers[Instance.Material.NormalSamplerID]), UV).xy);
+                v2 dUV = N.z * Height * ParallaxV;
+                UV += dUV;
+            }
+        }
+
+
 #if ShaderVariant_Transmission
-        f32 Transmission = Instance.Material.Transmission * texture(sampler2D(Textures[Instance.Material.TransmissionID], MatSamplers[Instance.Material.TransmissionSamplerID]), TexCoord).r;
+        f32 Transmission = Instance.Material.Transmission * texture(sampler2D(Textures[Instance.Material.TransmissionID], MatSamplers[Instance.Material.TransmissionSamplerID]), UV).r;
 #endif
-        v4 BaseColor = UnpackRGBA8(Instance.Material.DiffuseColor);
+        v4 BaseAlbedo = UnpackRGBA8(Instance.Material.BaseAlbedo);
         v4 BaseMetallicRoughness = UnpackRGBA8(Instance.Material.BaseMaterial);
-        v4 Albedo = BaseColor * texture(sampler2D(Textures[Instance.Material.DiffuseID], MatSamplers[Instance.Material.DiffuseSamplerID]), TexCoord);
-        v4 MetallicRoughness = texture(sampler2D(Textures[Instance.Material.MetallicRoughnessID], MatSamplers[Instance.Material.MetallicRoughnessSamplerID]), TexCoord);
+        v4 Albedo = BaseAlbedo * texture(sampler2D(Textures[Instance.Material.AlbedoID], MatSamplers[Instance.Material.AlbedoSamplerID]), UV);
+        v4 MetallicRoughness = texture(sampler2D(Textures[Instance.Material.MetallicRoughnessID], MatSamplers[Instance.Material.MetallicRoughnessSamplerID]), UV);
         f32 Roughness = MetallicRoughness.g * BaseMetallicRoughness.g;
         f32 Metallic = MetallicRoughness.b * BaseMetallicRoughness.b;
-        v3 N = UnpackSurfaceNormal01(texture(sampler2D(Textures[Instance.Material.NormalID], MatSamplers[Instance.Material.NormalSamplerID]), TexCoord).xy);
+        v3 N = UnpackSurfaceNormal01(texture(sampler2D(Textures[Instance.Material.NormalID], MatSamplers[Instance.Material.NormalSamplerID]), UV).xy);
         N = normalize(TriT) * N.x + normalize(TriB) * N.y + normalize(TriN) * N.z;
 
         Alpha = Albedo.a;
 
         // Desired mip level feedback
         {
-            uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdyFine(TexCoord));
-            atomicOr(MipFeedbacks[Instance.Material.DiffuseID], MipBucket);
+            uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(UV), dFdyFine(UV));
+            atomicOr(MipFeedbacks[Instance.Material.AlbedoID], MipBucket);
             atomicOr(MipFeedbacks[Instance.Material.NormalID], MipBucket);
             atomicOr(MipFeedbacks[Instance.Material.MetallicRoughnessID], MipBucket);
+            atomicOr(MipFeedbacks[Instance.Material.OcclusionID], MipBucket);
+            atomicOr(MipFeedbacks[Instance.Material.HeightID], MipBucket);
 #if ShaderVariant_Transmission
             atomicOr(MipFeedbacks[Instance.Material.TransmissionID], MipBucket);
 #endif

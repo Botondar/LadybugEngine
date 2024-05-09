@@ -178,20 +178,25 @@ void main()
         //
         // Material and normal fetch
         //
+        f32 Height = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.HeightID)], Samplers[nonuniformEXT(Instance.Material.AlbedoSamplerID)]), UV, dXdUV, dYdUV).r;
+
         v3 N = UnpackSurfaceNormal01(textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.NormalID)], MatSamplers[nonuniformEXT(Instance.Material.NormalSamplerID)]), UV, dXdUV, dYdUV).xy);
         N = TriT * N.x + TriB * N.y + TriN * N.z;
 
-        v4 Albedo = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.DiffuseID)], MatSamplers[nonuniformEXT(Instance.Material.DiffuseSamplerID)]), UV, dXdUV, dYdUV);
-        Albedo *= UnpackRGBA8(Instance.Material.DiffuseColor);
+        v4 Albedo = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.AlbedoID)], MatSamplers[nonuniformEXT(Instance.Material.AlbedoSamplerID)]), UV, dXdUV, dYdUV);
+        Albedo *= UnpackRGBA8(Instance.Material.BaseAlbedo);
         v4 MetallicRoughness = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.MetallicRoughnessID)], MatSamplers[nonuniformEXT(Instance.Material.MetallicRoughnessSamplerID)]), UV, dXdUV, dYdUV);
         MetallicRoughness *= UnpackRGBA8(Instance.Material.BaseMaterial);
+        f32 Occlusion = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.OcclusionID)], Samplers[nonuniformEXT(Instance.Material.AlbedoSamplerID)]), UV, dXdUV, dYdUV).r;
 
         // Desired mip level feedback
         {
             uint MipBucket = GetMipBucketFromDerivatives(dXdUV, dYdUV);
-            atomicOr(MipFeedbacks[Instance.Material.DiffuseID], MipBucket);
+            atomicOr(MipFeedbacks[Instance.Material.AlbedoID], MipBucket);
             atomicOr(MipFeedbacks[Instance.Material.NormalID], MipBucket);
             atomicOr(MipFeedbacks[Instance.Material.MetallicRoughnessID], MipBucket);
+            atomicOr(MipFeedbacks[Instance.Material.OcclusionID], MipBucket);
+            atomicOr(MipFeedbacks[Instance.Material.HeightID], MipBucket);
         }
 
         //
@@ -203,9 +208,9 @@ void main()
 
         Lo += Instance.Material.Emissive;
         {
-            f32 Occlusion = texelFetch(OcclusionImage, TexelID, 0).r;
+            f32 ScreenOcclusion = texelFetch(OcclusionImage, TexelID, 0).r;
             v2 EnvBRDF = textureLod(sampler2D(BRDFLut, Samplers[Sampler_LinearEdgeClamp]), v2(MetallicRoughness.g, Clamp01(dot(N, V))), 0.0).rg;
-            Lo += Occlusion * PerFrame.Ambience * (DiffuseBase + F0 * EnvBRDF.x + EnvBRDF.y);
+            Lo += Occlusion * ScreenOcclusion * PerFrame.Ambience * (DiffuseBase + F0 * EnvBRDF.x + EnvBRDF.y);
         }
 
         // Sun
