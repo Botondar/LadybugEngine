@@ -511,7 +511,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         World->Camera.Yaw = 0.5f * Pi;
 
         // Load debug scene
-        #if 0
+        #if 1
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
                              DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);
@@ -715,7 +715,9 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 {
                     Group = DrawGroup_Transparent;
                 }
-                DrawMesh(Frame, Group, Mesh->Allocation, Entity->Transform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
+                m4 PieceTransform = Entity->Transform;
+                PieceTransform.P.XYZ += Piece->OffsetP;
+                DrawMesh(Frame, Group, Mesh->Allocation, PieceTransform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
             }
         }
 

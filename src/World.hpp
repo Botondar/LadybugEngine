@@ -20,6 +20,7 @@ enum entity_flag_bits : entity_flags
 struct entity_piece
 {
     u32 MeshID;
+    v3 OffsetP;
 };
 
 struct entity
