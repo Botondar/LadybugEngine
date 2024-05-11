@@ -307,7 +307,7 @@ DEBUGInitializeWorld(
                         u32 Index = X + Y*World->HeightField.TexelCountX;
 
                         f32 BaseFrequency = 1.0f / 256.0f;
-                        f32 BaseAmplitude = 0.0;//32.0f;
+                        f32 BaseAmplitude = 32.0f;
                         v2 P = (1.0f / World->HeightField.TexelsPerMeter) * v2{ (f32)X, (f32)Y };
                         f32 Height = 0.0f;
 
@@ -506,12 +506,12 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
         World->Camera.P = { 0.0f, 0.0f, 0.0f };
         World->Camera.FieldOfView = ToRadians(80.0f);
-        World->Camera.NearZ = 0.1f;
+        World->Camera.NearZ = 0.03125f;
         World->Camera.FarZ = 250.0f;
         World->Camera.Yaw = 0.5f * Pi;
 
         // Load debug scene
-        #if 1
+        #if 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
                              DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);
@@ -519,7 +519,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_TransmissionTest, 
                              0);
-        #elif 1
+        #elif 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Terrain,
                              DebugSceneFlag_None);
