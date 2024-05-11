@@ -5523,7 +5523,7 @@ internal void SetupSceneRendering(render_frame* Frame, frustum* CascadeFrustums)
         m4 CameraToSun = SunView * Frame->CameraTransform;
     
         f32 SplitFactor = 0.1f;
-        f32 Splits[] = { 2.0f, 4.0f, 8.0f, 16.0f };
+        f32 Splits[] = { 2.0f, 4.0f, 8.0f, 32.0f };
         f32 NdTable[] = 
         { 
             0.0f,
