@@ -658,7 +658,7 @@ struct render_config
     debug_view_mode DebugViewMode;
     
     f32 Exposure;
-    f32 ParallaxScale;
+    f32 ParallaxScale; // TODO(boti): Move parallax scale to material
 
     f32 SSAOIntensity;
     f32 SSAOMaxDistance;
@@ -668,7 +668,7 @@ struct render_config
     f32 BloomInternalStrength;
     f32 BloomStrength;
 
-    static constexpr f32 DefaultParallaxScale = 0.01f;
+    static constexpr f32 DefaultParallaxScale = 0.1f;
 
     static constexpr f32 DefaultSSAOIntensity = 8.0f;
     static constexpr f32 DefaultSSAOMaxDistance = 0.5f;
