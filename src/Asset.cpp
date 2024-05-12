@@ -2150,7 +2150,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 MeshOffset += GLTF.Meshes[i].PrimitiveCount;
             }
 
-            if (World->EntityCount <= World->MaxEntityCount)
+            if (World->EntityCount < World->MaxEntityCount)
             {
                 entity* Entity = World->Entities + World->EntityCount++;
                 Entity->Flags = EntityFlag_Mesh;
