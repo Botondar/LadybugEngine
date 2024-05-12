@@ -206,7 +206,11 @@ void main()
         v3 F0 = mix(v3(0.04), Albedo.rgb, MetallicRoughness.b);
         v3 DiffuseBase = (1.0 - MetallicRoughness.b) * (v3(1.0) - F0) * Albedo.rgb;
 
+        // TODO(boti): For some reason the parallax mapping commit (tag: bug.vbuffer-nan) seems to
+        // have broken emissive materials w/ visibility shading.
+        #if 0
         Lo += Instance.Material.Emissive;
+        #endif
         {
             f32 ScreenOcclusion = texelFetch(OcclusionImage, TexelID, 0).r;
             v2 EnvBRDF = textureLod(sampler2D(BRDFLut, Samplers[Sampler_LinearEdgeClamp]), v2(MetallicRoughness.g, Clamp01(dot(N, V))), 0.0).rg;
