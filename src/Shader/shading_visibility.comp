@@ -178,7 +178,7 @@ void main()
         //
         // Material and normal fetch
         //
-        f32 Height = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.HeightID)], Samplers[nonuniformEXT(Instance.Material.AlbedoSamplerID)]), UV, dXdUV, dYdUV).r;
+        f32 Height = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.HeightID)], MatSamplers[nonuniformEXT(Instance.Material.AlbedoSamplerID)]), UV, dXdUV, dYdUV).r;
 
         v3 N = UnpackSurfaceNormal01(textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.NormalID)], MatSamplers[nonuniformEXT(Instance.Material.NormalSamplerID)]), UV, dXdUV, dYdUV).xy);
         N = TriT * N.x + TriB * N.y + TriN * N.z;
@@ -187,7 +187,7 @@ void main()
         Albedo *= UnpackRGBA8(Instance.Material.BaseAlbedo);
         v4 MetallicRoughness = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.MetallicRoughnessID)], MatSamplers[nonuniformEXT(Instance.Material.MetallicRoughnessSamplerID)]), UV, dXdUV, dYdUV);
         MetallicRoughness *= UnpackRGBA8(Instance.Material.BaseMaterial);
-        f32 Occlusion = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.OcclusionID)], Samplers[nonuniformEXT(Instance.Material.AlbedoSamplerID)]), UV, dXdUV, dYdUV).r;
+        f32 Occlusion = textureGrad(sampler2D(Textures[nonuniformEXT(Instance.Material.OcclusionID)], MatSamplers[nonuniformEXT(Instance.Material.AlbedoSamplerID)]), UV, dXdUV, dYdUV).r;
 
         // Desired mip level feedback
         {

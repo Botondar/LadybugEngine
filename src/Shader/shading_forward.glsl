@@ -102,7 +102,7 @@ void main()
             v2 ParallaxV = PerFrame.ParallaxScale * (1.0 / StepCount) * TangentV.xy;
             for (uint Step = 0; Step < StepCount; Step++)
             {
-                f32 Height = 2.0 * texture(sampler2D(Textures[Instance.Material.HeightID], Samplers[Instance.Material.AlbedoSamplerID]), UV).r - 1.0;
+                f32 Height = 2.0 * texture(sampler2D(Textures[Instance.Material.HeightID], MatSamplers[Instance.Material.AlbedoSamplerID]), UV).r - 1.0;
                 v3 N = UnpackSurfaceNormal01(texture(sampler2D(Textures[Instance.Material.NormalID], MatSamplers[Instance.Material.NormalSamplerID]), UV).xy);
                 v2 dUV = N.z * Height * ParallaxV;
                 UV += dUV;
