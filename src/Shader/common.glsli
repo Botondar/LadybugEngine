@@ -325,7 +325,7 @@ v3 CalculateOutgoingLuminance(v3 Li, v3 L, v3 N, v3 V,
     // TODO(boti): N.V is independent of the light source, should we just precalculate and pass it in?
     float NdotV = dot(N, V);
     float NdotL = dot(L, N);
-    vec3 Diffuse = Albedo;
+    vec3 Diffuse = OneOverPi * Albedo;
 
     vec3 H = normalize(L + V);
     float VdotH = max(dot(V, H), 0.0);
@@ -348,8 +348,7 @@ v3 CalculateOutgoingLuminanceTransmission(
     // TODO(boti): N.V is independent of the light source, should we just precalculate and pass it in?
     float NdotV = dot(N, V);
     float NdotL = dot(L, N);
-
-    vec3 Diffuse = Albedo;
+    vec3 Diffuse = OneOverPi * Albedo;
 
     vec3 H = normalize(L + V);
     float VdotH = max(dot(V, H), 0.0);

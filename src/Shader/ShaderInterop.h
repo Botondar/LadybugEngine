@@ -16,7 +16,8 @@ struct v4u8
 #   define StaticAssert(expr)
 
 
-#   define PI 3.14159265359
+#   define PI           3.14159265359
+#   define OneOverPi    0.31830988618
 
 #   define flags32  uint
 #   define u32      uint
