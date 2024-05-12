@@ -589,7 +589,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     //
     // Entity update
     //
-    for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
+    for (u32 EntityIndex = 1; EntityIndex < World->EntityCount; EntityIndex++)
     {
         entity* Entity = World->Entities + EntityIndex;
         if (Entity->Flags & EntityFlag_Mesh)
