@@ -51,8 +51,8 @@ void main()
     instance_buffer_r InstanceBuffer = instance_buffer_r(PerFrame.InstanceBufferAddress);
     instance_data Instance = InstanceBuffer.Data[InstanceIndex];
     v4 Albedo = texture(sampler2D(Textures[Instance.Material.AlbedoID], MatSamplers[Instance.Material.AlbedoSamplerID]), TexCoord);
-    uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdyFine(TexCoord));
-    atomicOr(MipFeedbacks[Instance.Material.AlbedoID], MipBucket);
+    //uint MipBucket = GetMipBucketFromDerivatives(dFdxFine(TexCoord), dFdyFine(TexCoord));
+    //atomicOr(MipFeedbacks[Instance.Material.AlbedoID], MipBucket);
     if (Albedo.a < Instance.Material.AlphaThreshold)
     {
         discard;

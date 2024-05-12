@@ -9,6 +9,8 @@
 
 #define LB_INLINE __forceinline
 
+LB_INLINE u64 ReadTSC();
+
 //
 // Bit
 //
@@ -37,6 +39,12 @@ LB_INLINE u32 AtomicLoadAndIncrement(volatile u32* Value);
 //
 // Implementation
 //
+
+LB_INLINE u64 ReadTSC()
+{
+    return __rdtsc();
+}
+
 LB_INLINE u16 EndianFlip16(u16 Value)
 {
     u16 Result = (Value << 8) | (Value >> 8);

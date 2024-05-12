@@ -488,6 +488,8 @@ DEBUGInitializeWorld(
 
 lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* Frame, game_io* IO, memory_arena* Scratch, b32 DrawLights)
 {
+    TimedFunction(Platform.Profiler);
+
     if (!World->IsLoaded)
     {
         World->LightProxyScale = 1e-1f;
@@ -589,150 +591,154 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     //
     // Entity update
     //
-    for (u32 EntityIndex = 1; EntityIndex < World->EntityCount; EntityIndex++)
     {
-        entity* Entity = World->Entities + EntityIndex;
-        if (Entity->Flags & EntityFlag_Mesh)
+        TimedBlock(Platform.Profiler, "UpdateAndRenderEntities");
+
+        for (u32 EntityIndex = 1; EntityIndex < World->EntityCount; EntityIndex++)
         {
-            u32 JointCount = 0;
-            m4 Pose[R_MaxJointCount] = {};
-
-            if (Entity->Flags & EntityFlag_Skin)
+            entity* Entity = World->Entities + EntityIndex;
+            if (Entity->Flags & EntityFlag_Mesh)
             {
-                Assert(Entity->SkinID < Assets->SkinCount);
-                skin* Skin = Assets->Skins + Entity->SkinID;
-                JointCount = Skin->JointCount;
-                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
-                {
-                    Pose[JointIndex] = TRSToM4(Skin->BindPose[JointIndex]);
-                }
+                u32 JointCount = 0;
+                m4 Pose[R_MaxJointCount] = {};
 
-                Assert(Entity->CurrentAnimationID < Assets->AnimationCount);
-                animation* Animation = Assets->Animations + Entity->CurrentAnimationID;
-                if (Entity->DoAnimation)
+                if (Entity->Flags & EntityFlag_Skin)
                 {
-                    Entity->AnimationCounter += dt;
-                    f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
-                    Entity->AnimationCounter = Modulo0(Entity->AnimationCounter, LastKeyFrameTimestamp);
-                }
-                
-                u32 KeyFrameIndex = 0;
-                {
-                    u32 MinIndex = 0;
-                    u32 MaxIndex = Animation->KeyFrameCount - 1;
-                    while (MinIndex <= MaxIndex)
+                    Assert(Entity->SkinID < Assets->SkinCount);
+                    skin* Skin = Assets->Skins + Entity->SkinID;
+                    JointCount = Skin->JointCount;
+                    for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
                     {
-                        u32 Index = (MinIndex + MaxIndex) / 2;
-                        f32 t = Animation->KeyFrameTimestamps[Index];
-                        if      (Entity->AnimationCounter < t) MaxIndex = Index - 1;
-                        else if (Entity->AnimationCounter > t) MinIndex = Index + 1;
-                        else break; 
+                        Pose[JointIndex] = TRSToM4(Skin->BindPose[JointIndex]);
                     }
-                    KeyFrameIndex = MinIndex == 0 ? 0 : MinIndex - 1;
-                }
-                
-                u32 NextKeyFrameIndex = (KeyFrameIndex + 1) % Animation->KeyFrameCount;
-                f32 Timestamp0 = Animation->KeyFrameTimestamps[KeyFrameIndex];
-                f32 Timestamp1 = Animation->KeyFrameTimestamps[NextKeyFrameIndex];
-                f32 KeyFrameDelta = Timestamp1 - Timestamp0;
-                f32 BlendStart = Entity->AnimationCounter - Timestamp0;
-                f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
-                
-                animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
-                animation_key_frame* NextFrame = Animation->KeyFrames + NextKeyFrameIndex;
-                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
-                {
-                    if (IsJointActive(Animation, JointIndex))
+
+                    Assert(Entity->CurrentAnimationID < Assets->AnimationCount);
+                    animation* Animation = Assets->Animations + Entity->CurrentAnimationID;
+                    if (Entity->DoAnimation)
                     {
-                        trs_transform* CurrentTransform = CurrentFrame->JointTransforms + JointIndex;
-                        trs_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
-                        trs_transform Transform = 
+                        Entity->AnimationCounter += dt;
+                        f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
+                        Entity->AnimationCounter = Modulo0(Entity->AnimationCounter, LastKeyFrameTimestamp);
+                    }
+                
+                    u32 KeyFrameIndex = 0;
+                    {
+                        u32 MinIndex = 0;
+                        u32 MaxIndex = Animation->KeyFrameCount - 1;
+                        while (MinIndex <= MaxIndex)
                         {
-                            .Rotation = QLerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor),
-                            .Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor),
-                            .Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor),
-                        };
-                
-                        Pose[JointIndex] = TRSToM4(Transform);
+                            u32 Index = (MinIndex + MaxIndex) / 2;
+                            f32 t = Animation->KeyFrameTimestamps[Index];
+                            if      (Entity->AnimationCounter < t) MaxIndex = Index - 1;
+                            else if (Entity->AnimationCounter > t) MinIndex = Index + 1;
+                            else break; 
+                        }
+                        KeyFrameIndex = MinIndex == 0 ? 0 : MinIndex - 1;
                     }
                 
-                    u32 ParentIndex = Skin->JointParents[JointIndex];
-                    if (ParentIndex != JointIndex)
+                    u32 NextKeyFrameIndex = (KeyFrameIndex + 1) % Animation->KeyFrameCount;
+                    f32 Timestamp0 = Animation->KeyFrameTimestamps[KeyFrameIndex];
+                    f32 Timestamp1 = Animation->KeyFrameTimestamps[NextKeyFrameIndex];
+                    f32 KeyFrameDelta = Timestamp1 - Timestamp0;
+                    f32 BlendStart = Entity->AnimationCounter - Timestamp0;
+                    f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
+                
+                    animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
+                    animation_key_frame* NextFrame = Animation->KeyFrames + NextKeyFrameIndex;
+                    for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
                     {
-                        Pose[JointIndex] = Pose[ParentIndex] * Pose[JointIndex];
+                        if (IsJointActive(Animation, JointIndex))
+                        {
+                            trs_transform* CurrentTransform = CurrentFrame->JointTransforms + JointIndex;
+                            trs_transform* NextTransform = NextFrame->JointTransforms + JointIndex;
+                            trs_transform Transform = 
+                            {
+                                .Rotation = QLerp(CurrentTransform->Rotation, NextTransform->Rotation, BlendFactor),
+                                .Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor),
+                                .Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor),
+                            };
+                
+                            Pose[JointIndex] = TRSToM4(Transform);
+                        }
+                
+                        u32 ParentIndex = Skin->JointParents[JointIndex];
+                        if (ParentIndex != JointIndex)
+                        {
+                            Pose[JointIndex] = Pose[ParentIndex] * Pose[JointIndex];
+                        }
+                    }
+                
+                    // NOTE(boti): This _cannot_ be folded into the above loop, because the parent transforms must not contain
+                    // the inverse bind transform when propagating the transforms down the hierarchy
+                    for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                    {
+                        Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
                     }
                 }
-                
-                // NOTE(boti): This _cannot_ be folded into the above loop, because the parent transforms must not contain
-                // the inverse bind transform when propagating the transforms down the hierarchy
-                for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+
+                for (u32 PieceIndex = 0; PieceIndex < Entity->PieceCount; PieceIndex++)
                 {
-                    Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
+                    entity_piece* Piece = Entity->Pieces + PieceIndex;
+                    mesh* Mesh = Assets->Meshes + Piece->MeshID;
+
+                    material* Material = Assets->Materials + Mesh->MaterialID;
+                    texture* AlbedoTexture              = Assets->Textures + Material->AlbedoID;
+                    texture* NormalTexture              = Assets->Textures + Material->NormalID;
+                    texture* MetallicRoughnessTexture   = Assets->Textures + Material->MetallicRoughnessID;
+                    texture* OcclusionTexture           = Assets->Textures + Material->OcclusionID;
+                    texture* HeightTexture              = Assets->Textures + Material->HeightID;
+                    texture* TransmissionTexture        = (Material->TransmissionID != U32_MAX) ? Assets->Textures + Material->TransmissionID : nullptr;
+
+                    renderer_material RenderMaterial = 
+                    {
+                        .Emissive                   = Material->Emission,
+                        .AlphaThreshold             = Material->AlphaThreshold,
+                        .Transmission               = Material->Transmission,
+                        .BaseAlbedo                 = Material->Albedo,
+                        .BaseMaterial               = Material->MetallicRoughness,
+                        .AlbedoID                   = AlbedoTexture->RendererID,
+                        .NormalID                   = NormalTexture->RendererID,
+                        .MetallicRoughnessID        = MetallicRoughnessTexture->RendererID,
+                        .OcclusionID                = OcclusionTexture->RendererID,
+                        .HeightID                   = HeightTexture->RendererID,
+                        .TransmissionID             = TransmissionTexture ? TransmissionTexture->RendererID : renderer_texture_id{},
+                        .AlbedoSamplerID            = Material->AlbedoSamplerID,
+                        .NormalSamplerID            = Material->NormalSamplerID,
+                        .MetallicRoughnessSamplerID = Material->MetallicRoughnessSamplerID,
+                        .TransmissionSamplerID      = Material->TransmissionSamplerID,
+                    };
+
+                    draw_group TransparencyToDrawGroupTable[Transparency_Count] =
+                    {
+                        [Transparency_Opaque] = DrawGroup_Opaque,
+                        [Transparency_AlphaTest] = DrawGroup_AlphaTest,
+                        [Transparency_AlphaBlend] = DrawGroup_AlphaTest,
+                    };
+
+                    draw_group Group = TransparencyToDrawGroupTable[Material->Transparency];
+                    if (Material->TransmissionEnabled)
+                    {
+                        Group = DrawGroup_Transparent;
+                    }
+                    m4 PieceTransform = Entity->Transform;
+                    PieceTransform.P.XYZ += Piece->OffsetP;
+                    DrawMesh(Frame, Group, Mesh->Allocation, PieceTransform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
                 }
             }
 
-            for (u32 PieceIndex = 0; PieceIndex < Entity->PieceCount; PieceIndex++)
+            if (Entity->Flags & EntityFlag_LightSource)
             {
-                entity_piece* Piece = Entity->Pieces + PieceIndex;
-                mesh* Mesh = Assets->Meshes + Piece->MeshID;
-
-                material* Material = Assets->Materials + Mesh->MaterialID;
-                texture* AlbedoTexture              = Assets->Textures + Material->AlbedoID;
-                texture* NormalTexture              = Assets->Textures + Material->NormalID;
-                texture* MetallicRoughnessTexture   = Assets->Textures + Material->MetallicRoughnessID;
-                texture* OcclusionTexture           = Assets->Textures + Material->OcclusionID;
-                texture* HeightTexture              = Assets->Textures + Material->HeightID;
-                texture* TransmissionTexture        = (Material->TransmissionID != U32_MAX) ? Assets->Textures + Material->TransmissionID : nullptr;
-
-                renderer_material RenderMaterial = 
+                AddLight(Frame, Entity->Transform.P.XYZ, Entity->LightEmission, LightFlag_ShadowCaster);
+                if (DrawLights)
                 {
-                    .Emissive                   = Material->Emission,
-                    .AlphaThreshold             = Material->AlphaThreshold,
-                    .Transmission               = Material->Transmission,
-                    .BaseAlbedo                 = Material->Albedo,
-                    .BaseMaterial               = Material->MetallicRoughness,
-                    .AlbedoID                   = AlbedoTexture->RendererID,
-                    .NormalID                   = NormalTexture->RendererID,
-                    .MetallicRoughnessID        = MetallicRoughnessTexture->RendererID,
-                    .OcclusionID                = OcclusionTexture->RendererID,
-                    .HeightID                   = HeightTexture->RendererID,
-                    .TransmissionID             = TransmissionTexture ? TransmissionTexture->RendererID : renderer_texture_id{},
-                    .AlbedoSamplerID            = Material->AlbedoSamplerID,
-                    .NormalSamplerID            = Material->NormalSamplerID,
-                    .MetallicRoughnessSamplerID = Material->MetallicRoughnessSamplerID,
-                    .TransmissionSamplerID      = Material->TransmissionSamplerID,
-                };
-
-                draw_group TransparencyToDrawGroupTable[Transparency_Count] =
-                {
-                    [Transparency_Opaque] = DrawGroup_Opaque,
-                    [Transparency_AlphaTest] = DrawGroup_AlphaTest,
-                    [Transparency_AlphaBlend] = DrawGroup_AlphaTest,
-                };
-
-                draw_group Group = TransparencyToDrawGroupTable[Material->Transparency];
-                if (Material->TransmissionEnabled)
-                {
-                    Group = DrawGroup_Transparent;
+                    mesh* Mesh = Assets->Meshes + Assets->SphereMeshID;
+                    f32 S = World->LightProxyScale;
+                    m4 Transform = Entity->Transform * M4(S, 0.0f, 0.0f, 0.0f,
+                                                          0.0f, S, 0.0f, 0.0f,
+                                                          0.0f, 0.0f, S, 0.0f,
+                                                          0.0f, 0.0f, 0.0f, 1.0f);
+                    DrawWidget3D(Frame, Mesh->Allocation, Transform, PackRGBA(NOZ(Entity->LightEmission)));
                 }
-                m4 PieceTransform = Entity->Transform;
-                PieceTransform.P.XYZ += Piece->OffsetP;
-                DrawMesh(Frame, Group, Mesh->Allocation, PieceTransform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
-            }
-        }
-
-        if (Entity->Flags & EntityFlag_LightSource)
-        {
-            AddLight(Frame, Entity->Transform.P.XYZ, Entity->LightEmission, LightFlag_ShadowCaster);
-            if (DrawLights)
-            {
-                mesh* Mesh = Assets->Meshes + Assets->SphereMeshID;
-                f32 S = World->LightProxyScale;
-                m4 Transform = Entity->Transform * M4(S, 0.0f, 0.0f, 0.0f,
-                                                      0.0f, S, 0.0f, 0.0f,
-                                                      0.0f, 0.0f, S, 0.0f,
-                                                      0.0f, 0.0f, 0.0f, 1.0f);
-                DrawWidget3D(Frame, Mesh->Allocation, Transform, PackRGBA(NOZ(Entity->LightEmission)));
             }
         }
     }
@@ -740,125 +746,129 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     //
     // Particle system update
     //
-    for (u32 ParticleSystemIndex = 0; ParticleSystemIndex < World->ParticleSystemCount; ParticleSystemIndex++)
     {
-        particle_system* ParticleSystem = World->ParticleSystems + ParticleSystemIndex;
-        v2 ParticleSize = { 1.0f, 1.0f };
+        TimedBlock(Platform.Profiler, "UpdateAndRenderParticleSystems");
 
-        // TODO(boti): we should probably just pull in the entire parent transform
-        v3 BaseP = { 0.0f, 0.0f, 0.0f };
-        v3 Color = { 1.0f, 1.0f, 1.0f };
-        if (IsValid(ParticleSystem->ParentID))
+        for (u32 ParticleSystemIndex = 0; ParticleSystemIndex < World->ParticleSystemCount; ParticleSystemIndex++)
         {
-            entity* Parent = World->Entities + ParticleSystem->ParentID.Value;
-            BaseP = Parent->Transform.P.XYZ;
-            if (Parent->Flags & EntityFlag_LightSource)
+            particle_system* ParticleSystem = World->ParticleSystems + ParticleSystemIndex;
+            v2 ParticleSize = { 1.0f, 1.0f };
+
+            // TODO(boti): we should probably just pull in the entire parent transform
+            v3 BaseP = { 0.0f, 0.0f, 0.0f };
+            v3 Color = { 1.0f, 1.0f, 1.0f };
+            if (IsValid(ParticleSystem->ParentID))
             {
-                Color = Parent->LightEmission;
-            }
-        }
-
-        mmbox Bounds = ParticleSystem->Bounds;
-        mmbox CullBounds = 
-        {
-            .Min = Bounds.Min + BaseP,
-            .Max = Bounds.Max + BaseP,
-        };
-        if (ParticleSystem->EmissionRate > 0.0f)
-        {
-            ParticleSystem->Counter += dt;
-            while (ParticleSystem->Counter > ParticleSystem->EmissionRate)
-            {
-                ParticleSystem->Counter -= ParticleSystem->EmissionRate;
-                if (++ParticleSystem->NextParticle >= ParticleSystem->ParticleCount)
+                entity* Parent = World->Entities + ParticleSystem->ParentID.Value;
+                BaseP = Parent->Transform.P.XYZ;
+                if (Parent->Flags & EntityFlag_LightSource)
                 {
-                    ParticleSystem->NextParticle -= ParticleSystem->ParticleCount;
-                }
-
-                switch (ParticleSystem->Type)
-                {
-                    case ParticleSystem_Undefined:
-                    {
-                        // Ignored
-                    } break;
-                    case ParticleSystem_Magic:
-                    {
-                        v2 XY = 0.5f * Hadamard((Bounds.Max.XY - Bounds.Min.XY), RandInUnitCircle(&World->EffectEntropy));
-                        v3 ParticleP = { XY.X, XY.Y, 0.0f };
-                        ParticleSystem->Particles[ParticleSystem->NextParticle] = 
-                        {
-                            .P = BaseP + ParticleSystem->EmitterOffset + ParticleP,
-                            .dP = { 0.0f, 0.0f, RandBetween(&World->EffectEntropy, 0.25f, 2.25f) },
-                            .Color = Color,
-                            .dColor = { 0.0f, 0.0f, 0.0f },
-                            .TextureIndex = Particle_Trace02,
-                        };
-                    } break;
-                    case ParticleSystem_Fire:
-                    {
-                        u32 FirstTexture = Particle_Flame01;
-                        u32 OnePastLastTexture = Particle_Flame04 + 1;
-                        u32 TextureCount = OnePastLastTexture - FirstTexture;
-
-                        v3 ParticleP = { 0.0f, 0.0f, 0.0f };
-                        ParticleSystem->Particles[ParticleSystem->NextParticle] = 
-                        {
-                            .P = ParticleP + ParticleSystem->EmitterOffset + BaseP,
-                            .dP = 
-                            { 
-                                0.3f * RandBilateral(&World->EffectEntropy),
-                                0.3f * RandBilateral(&World->EffectEntropy),
-                                RandBetween(&World->EffectEntropy, 0.25f, 1.20f) 
-                            },
-                            .ddP = { 0.5f, 0.2f, 0.0f },
-                            .Color = Color,
-                            .dColor = 6.0f * v3{ -1.00f, -1.25f, -1.00f },
-                            .TextureIndex = FirstTexture + (RandU32(&World->EffectEntropy) % TextureCount),
-                        };
-                    } break;
-                    InvalidDefaultCase;
+                    Color = Parent->LightEmission;
                 }
             }
-        }
 
-        render_command* Cmd = MakeParticleBatch(Frame, 0);
-        if (Cmd)
-        {
-            Cmd->ParticleBatch.Mode = ParticleSystem->Mode;
-        }
-
-        for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
-        {
-            particle* Particle = ParticleSystem->Particles + It;
-            Particle->P += Particle->dP * dt;
-            Particle->dP += Particle->ddP * dt;
-            Particle->Color += Particle->dColor * dt;
-
-            b32 CullParticle = false;
-            if (ParticleSystem->CullOutOfBoundsParticles)
+            mmbox Bounds = ParticleSystem->Bounds;
+            mmbox CullBounds = 
             {
-                CullParticle = 
-                    Particle->P.X < CullBounds.Min.X || Particle->P.X >= CullBounds.Max.X ||
-                    Particle->P.Y < CullBounds.Min.Y || Particle->P.Y >= CullBounds.Max.Y ||
-                    Particle->P.Z < CullBounds.Min.Z || Particle->P.Z >= CullBounds.Max.Z;
+                .Min = Bounds.Min + BaseP,
+                .Max = Bounds.Max + BaseP,
+            };
+            if (ParticleSystem->EmissionRate > 0.0f)
+            {
+                ParticleSystem->Counter += dt;
+                while (ParticleSystem->Counter > ParticleSystem->EmissionRate)
+                {
+                    ParticleSystem->Counter -= ParticleSystem->EmissionRate;
+                    if (++ParticleSystem->NextParticle >= ParticleSystem->ParticleCount)
+                    {
+                        ParticleSystem->NextParticle -= ParticleSystem->ParticleCount;
+                    }
+
+                    switch (ParticleSystem->Type)
+                    {
+                        case ParticleSystem_Undefined:
+                        {
+                            // Ignored
+                        } break;
+                        case ParticleSystem_Magic:
+                        {
+                            v2 XY = 0.5f * Hadamard((Bounds.Max.XY - Bounds.Min.XY), RandInUnitCircle(&World->EffectEntropy));
+                            v3 ParticleP = { XY.X, XY.Y, 0.0f };
+                            ParticleSystem->Particles[ParticleSystem->NextParticle] = 
+                            {
+                                .P = BaseP + ParticleSystem->EmitterOffset + ParticleP,
+                                .dP = { 0.0f, 0.0f, RandBetween(&World->EffectEntropy, 0.25f, 2.25f) },
+                                .Color = Color,
+                                .dColor = { 0.0f, 0.0f, 0.0f },
+                                .TextureIndex = Particle_Trace02,
+                            };
+                        } break;
+                        case ParticleSystem_Fire:
+                        {
+                            u32 FirstTexture = Particle_Flame01;
+                            u32 OnePastLastTexture = Particle_Flame04 + 1;
+                            u32 TextureCount = OnePastLastTexture - FirstTexture;
+
+                            v3 ParticleP = { 0.0f, 0.0f, 0.0f };
+                            ParticleSystem->Particles[ParticleSystem->NextParticle] = 
+                            {
+                                .P = ParticleP + ParticleSystem->EmitterOffset + BaseP,
+                                .dP = 
+                                { 
+                                    0.3f * RandBilateral(&World->EffectEntropy),
+                                    0.3f * RandBilateral(&World->EffectEntropy),
+                                    RandBetween(&World->EffectEntropy, 0.25f, 1.20f) 
+                                },
+                                .ddP = { 0.5f, 0.2f, 0.0f },
+                                .Color = Color,
+                                .dColor = 6.0f * v3{ -1.00f, -1.25f, -1.00f },
+                                .TextureIndex = FirstTexture + (RandU32(&World->EffectEntropy) % TextureCount),
+                            };
+                        } break;
+                        InvalidDefaultCase;
+                    }
+                }
             }
 
-            if (!CullParticle)
+            render_command* Cmd = MakeParticleBatch(Frame, 0);
+            if (Cmd)
             {
-                v4 PColor = 
+                Cmd->ParticleBatch.Mode = ParticleSystem->Mode;
+            }
+
+            for (u32 It = 0; It < ParticleSystem->ParticleCount; It++)
+            {
+                particle* Particle = ParticleSystem->Particles + It;
+                Particle->P += Particle->dP * dt;
+                Particle->dP += Particle->ddP * dt;
+                Particle->Color += Particle->dColor * dt;
+
+                b32 CullParticle = false;
+                if (ParticleSystem->CullOutOfBoundsParticles)
                 {
-                    Max(Particle->Color.X, 0.0f),
-                    Max(Particle->Color.Y, 0.0f),
-                    Max(Particle->Color.Z, 0.0f),
-                    1.0,
-                };
-                Cmd = PushParticle(Frame, Cmd, 
-                                   {
-                                       .P = Particle->P,
-                                       .TextureIndex = Particle->TextureIndex,
-                                       .Color = PColor,
-                                       .HalfExtent = ParticleSystem->ParticleHalfExtent,
-                                   });
+                    CullParticle = 
+                        Particle->P.X < CullBounds.Min.X || Particle->P.X >= CullBounds.Max.X ||
+                        Particle->P.Y < CullBounds.Min.Y || Particle->P.Y >= CullBounds.Max.Y ||
+                        Particle->P.Z < CullBounds.Min.Z || Particle->P.Z >= CullBounds.Max.Z;
+                }
+
+                if (!CullParticle)
+                {
+                    v4 PColor = 
+                    {
+                        Max(Particle->Color.X, 0.0f),
+                        Max(Particle->Color.Y, 0.0f),
+                        Max(Particle->Color.Z, 0.0f),
+                        1.0,
+                    };
+                    Cmd = PushParticle(Frame, Cmd, 
+                                       {
+                                           .P = Particle->P,
+                                           .TextureIndex = Particle->TextureIndex,
+                                           .Color = PColor,
+                                           .HalfExtent = ParticleSystem->ParticleHalfExtent,
+                                       });
+                }
             }
         }
     }
@@ -866,6 +876,8 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     // Ad-hoc lights
     if (1)
     {
+        TimedBlock(Platform.Profiler, "UpdateAndRenderAdHocLights");
+
         render_command* Cmd = MakeParticleBatch(Frame, World->AdHocLightCount);
         if (Cmd)
         {

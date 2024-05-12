@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LadybugLib/Core.hpp"
+#include "profiler.hpp"
 #include "Renderer/Renderer.hpp"
 //#include <vulkan/vulkan.h>
 
@@ -36,6 +37,11 @@ typedef b32                 protect_page            (void* Address, umm Size, b3
 
 struct platform_api
 {
+    profiler* Profiler;
+
+    //
+    // Dispatch table
+    //
     debug_print*            DebugPrint;
     get_counter*            GetCounter;
     elapsed_seconds*        ElapsedSeconds;

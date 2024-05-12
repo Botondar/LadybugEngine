@@ -6,6 +6,7 @@
 #include "Asset.cpp"
 #include "World.cpp"
 #include "Editor.cpp"
+#include "profiler.cpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
@@ -28,6 +29,9 @@ extern "C"
 void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 {
     Platform = Memory->PlatformAPI;
+
+    TimedFunction(Platform.Profiler);
+
     if (GameIO->bQuitRequested)
     {
         // NOTE(boti): This is where handling game quit should be happening (saving the game, cleaning up if needed, etc.)
@@ -93,7 +97,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     {
         ResetArena(&GameState->TransientArena);
         v2u Resolution = { 0, 0 };
-        Resolution = { 1366, 768 };
+        //Resolution = { 1366, 768 };
         RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, Resolution);
     }
     RenderFrame->ImmediateTextureID = GameState->Assets->Textures[GameState->Assets->DefaultFontTextureID].RendererID;
@@ -106,12 +110,12 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             0.0f, 0.0f, -1.0f, 0.0f,
             0.0f, 1.0f, 0.0f, 0.0f,
             0.0f, 0.0f, 0.0f, 1.0f);
-#if 1
+#if 0
         m4 Transform = YUpToZUp;
 #else
-        m4 Transform = M4(1e-2f, 0.0f, 0.0f, 0.0f,
-                          0.0f, 1e-2f, 0.0f, 0.0f,
-                          0.0f, 0.0f, 1e-2f, 0.0f,
+        m4 Transform = M4(1e-1f, 0.0f, 0.0f, 0.0f,
+                          0.0f, 1e-1f, 0.0f, 0.0f,
+                          0.0f, 0.0f, 1e-1f, 0.0f,
                           0.0f, 0.0f, 0.0f, 1.0f) * YUpToZUp;
 #endif
         DEBUGLoadTestScene(&GameState->TransientArena, GameState->Assets, GameState->World, RenderFrame, GameIO->DroppedFilename, Transform);
@@ -234,3 +238,5 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
 
     GameState->FrameID++;
 }
+
+ProfilerOverflowGuard;

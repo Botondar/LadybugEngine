@@ -38,6 +38,8 @@
 #error Unsupported target architecture
 #endif
 
+#define LB_Concat_(A, B) A##B
+#define LB_Concat(A, B) LB_Concat_(A, B)
 
 #include <cstdint>
 #include <cstddef>

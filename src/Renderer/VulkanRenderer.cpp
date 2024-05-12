@@ -3,6 +3,8 @@
 vulkan VK;
 platform_api Platform;
 
+#include "profiler.cpp"
+
 #include "RenderDevice.cpp"
 #include "Geometry.cpp"
 #include "RenderTarget.cpp"
@@ -1923,6 +1925,8 @@ internal VkResult ResizeSwapchain(renderer* Renderer, u32 FrameID, b32 Forced)
 internal void 
 DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, pipeline* Pipelines, draw_list* List)
 {
+    TimedFunction(Platform.Profiler);
+
     vkCmdBindIndexBuffer(CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, 0, VK_INDEX_TYPE_UINT32);
 
     umm CurrentOffset = 0;
@@ -1948,6 +1952,8 @@ DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, pipeline* Pipelines, dr
 
 internal void BeginFrameStage(VkCommandBuffer CmdBuffer, frame_stage* Stage, const char* Name)
 {
+    TimedFunction(Platform.Profiler);
+
     vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, Name);
 
     VkDependencyInfo DependencyInfo =
@@ -2124,6 +2130,8 @@ extern "C" Signature_AllocateGeometry(AllocateGeometry)
 
 extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
 {
+    TimedFunction(Platform.Profiler);
+
     u32 FrameID = (u32)(Renderer->CurrentFrameID % R_MaxFramesInFlight);
     render_frame* Frame = Renderer->Frames + FrameID;
     Frame->Renderer = Renderer;
@@ -2162,24 +2170,28 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
     
     Frame->Uniforms = {};
 
-    VkSemaphoreWaitInfo WaitInfo = 
     {
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .semaphoreCount = 1,
-        .pSemaphores = &Renderer->TimelineSemaphore,
-        .pValues = &Renderer->FrameFinishedCounters[FrameID],
-    };
-    vkWaitSemaphores(VK.Device, &WaitInfo, U64_MAX);
+        TimedBlock(Platform.Profiler, "Wait for GPU previous frame");
+        VkSemaphoreWaitInfo WaitInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .semaphoreCount = 1,
+            .pSemaphores = &Renderer->TimelineSemaphore,
+            .pValues = &Renderer->FrameFinishedCounters[FrameID],
+        };
+        vkWaitSemaphores(VK.Device, &WaitInfo, U64_MAX);
 
-    vkResetCommandPool(VK.Device, Renderer->CmdPools[FrameID], 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
-    vkResetCommandPool(VK.Device, Renderer->ComputeCmdPools[FrameID], 0);
-
+        vkResetCommandPool(VK.Device, Renderer->CmdPools[FrameID], 0/*|VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT*/);
+        vkResetCommandPool(VK.Device, Renderer->ComputeCmdPools[FrameID], 0);
+    }
     ProcessDeletionEntries(&Renderer->DeletionQueue, FrameID);
 
     // Mip readback
     {
+        TimedBlock(Platform.Profiler, "MipReadback");
+
         texture_manager* Manager = &Renderer->TextureManager;
         
         u32 SampledTextureCount = 0;
@@ -2232,6 +2244,8 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
 
 extern "C" Signature_EndRenderFrame(EndRenderFrame)
 {
+    TimedFunction(Platform.Profiler);
+
     renderer* Renderer = Frame->Renderer;
     if (Frame->ReloadShaders)
     {
@@ -2242,6 +2256,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     // Acquire image
     u32 SwapchainImageIndex = U32_MAX;
     {
+        TimedBlock(Platform.Profiler, "Acquire swapchain image");
+
         vkWaitForFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID], VK_TRUE, UINT64_MAX);
         vkResetFences(VK.Device, 1, &Renderer->ImageAcquiredFences[Frame->FrameID]);
         ResizeSwapchain(Renderer, Frame->FrameID, false);
@@ -2468,6 +2484,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     umm PageUsageLimit = Renderer->TextureManager.Cache.PageCount - (Renderer->TextureManager.Cache.PageCount / 8);
     if (Renderer->TextureManager.Cache.UsedPageCount > PageUsageLimit)
     {
+        TimedBlock(Platform.Profiler, "Mip discard");
+
         texture_manager* Manager = &Renderer->TextureManager;
         for (u32 TextureIndex = 0; TextureIndex < Manager->TextureCount; TextureIndex++)
         {
@@ -2926,542 +2944,549 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             }
         }
 
-        for (u32 CommandIndex = 0; CommandIndex < Frame->CommandCount; CommandIndex++)
         {
-            render_command* Command = Frame->Commands + CommandIndex;
-            switch (Command->Type)
+            TimedBlock(Platform.Profiler, "ProcessRenderCommands");
+            for (u32 CommandIndex = 0; CommandIndex < Frame->CommandCount; CommandIndex++)
             {
-                case RenderCommand_Transfer:
+                render_command* Command = Frame->Commands + CommandIndex;
+                switch (Command->Type)
                 {
-                    transfer_op* Op = &Command->Transfer;
-                    switch (Op->Type)
+                    case RenderCommand_Transfer:
                     {
-                        case TransferOp_Texture:
+                        transfer_op* Op = &Command->Transfer;
+                        switch (Op->Type)
                         {
-                            if (!IsValid(Op->Texture.TargetID))
+                            case TransferOp_Texture:
                             {
-                                break;
-                            }
-
-                            texture_info* Info = &Op->Texture.Info;
-                            texture_subresource_range* Range = &Op->Texture.SubresourceRange;
-                            if (Info->Extent.Z > 1)
-                            {
-                                UnimplementedCodePath;
-                            }
-
-                            format_byterate ByteRate = FormatByterateTable[Info->Format];
-                            umm TotalSize = GetMipChainSize(Info->Extent.X, Info->Extent.Y, Info->MipCount, Info->ArrayCount, ByteRate);
-
-                            u32 CopyCount = Info->MipCount * Info->ArrayCount;
-                            VkBufferImageCopy* Copies = PushArray(Frame->Arena, 0, VkBufferImageCopy, CopyCount);
-                            VkBufferImageCopy* CopyAt = Copies;
-
-                            umm Offset = Command->StagingBufferAt;
-                            for (u32 ArrayIndex = 0; ArrayIndex < Info->ArrayCount; ArrayIndex++)
-                            {
-                                for (u32 MipIndex = 0; MipIndex < Info->MipCount; MipIndex++)
+                                if (!IsValid(Op->Texture.TargetID))
                                 {
-                                    v2u Extent = 
-                                    {
-                                        Max(Info->Extent.X >> MipIndex, 1u),
-                                        Max(Info->Extent.Y >> MipIndex, 1u),
-                                    };
-
-                                    u32 RowLength = 0;
-                                    u32 ImageHeight = 0;
-                                    u64 TexelCount;
-                                    if (ByteRate.Flags & FormatFlag_BlockCompressed)
-                                    {
-                                        RowLength = Align(Extent.X, 4u);
-                                        ImageHeight = Align(Extent.Y, 4u);
-
-                                        TexelCount = (u64)RowLength * ImageHeight;
-                                    }
-                                    else
-                                    {
-                                        TexelCount = Extent.X * Extent.Y;
-                                    }
-                                    u64 MipSize = TexelCount * ByteRate.Numerator / ByteRate.Denominator;
-
-                                    CopyAt->bufferOffset = Offset,
-                                    CopyAt->bufferRowLength = RowLength,
-                                    CopyAt->bufferImageHeight = ImageHeight,
-                                    CopyAt->imageSubresource = 
-                                    {
-                                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                        .mipLevel = MipIndex,
-                                        .baseArrayLayer = ArrayIndex,
-                                        .layerCount = 1,
-                                    },
-                                    CopyAt->imageOffset = { 0, 0, 0 },
-                                    CopyAt->imageExtent = { Extent.X, Extent.Y, 1 },
-
-                                    Offset += MipSize;
-                                    CopyAt++;
+                                    break;
                                 }
-                            }
 
-                            b32 IsAllocated = false;
-                            renderer_texture* Texture = GetTexture(&Renderer->TextureManager, Op->Texture.TargetID);
-                            Assert(Texture);
-                            if (Texture->ImageHandle == VK_NULL_HANDLE)
-                            {
-                                IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
-                            }
-                            else if (AreTextureInfosSameFormat(Op->Texture.Info, Texture->Info))
-                            {
-                                // NOTE(boti): Nothing to do here, although in the future we might want to allocate memory here
-                                // (currently that's always already done in this case)
-                                IsAllocated = true;
-                            }
-                            else
-                            {
-                                // TODO(boti): Move the deletion entry push to the texture manager
-                                VkImage OldImageHandle = Texture->ImageHandle;
-                                VkImageView OldViewHandle = Texture->ViewHandle;
-                                IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
-                                if (IsAllocated)
-                                {
-                                    PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, OldImageHandle);
-                                    PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, OldViewHandle);
-                                }
-                            }
-
-                            if (IsAllocated)
-                            {
-                                umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
-                                if ((Frame->StagingBuffer.At + DescriptorSize) <= Frame->StagingBuffer.Size)
-                                {
-                                    VkDescriptorImageInfo DescriptorImage = 
-                                    {
-                                        .sampler = VK_NULL_HANDLE,
-                                        .imageView = Texture->ViewHandle,
-                                        .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
-                                    };
-                                    VkDescriptorGetInfoEXT DescriptorInfo = 
-                                    {
-                                        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
-                                        .pNext = nullptr,
-                                        .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                                        .data = { .pSampledImage = &DescriptorImage },
-                                    };
-                                    vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At));
-                                
-                                    umm DescriptorOffset = Renderer->TextureManager.TextureTableOffset + Op->Texture.TargetID.Value*DescriptorSize; // TODO(boti): standardize this
-                                    VkBufferCopy DescriptorCopy = 
-                                    {
-                                        .srcOffset = Frame->StagingBuffer.At,
-                                        .dstOffset = DescriptorOffset,
-                                        .size = DescriptorSize,
-                                    };
-                                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
-                                
-                                    Frame->StagingBuffer.At += DescriptorSize;
-                                
-                                    u32 MipBucket;
-                                    BitScanReverse(&MipBucket, Max(Info->Extent.X, Info->Extent.Y));
-                                    u32 MipMask = (1 << (MipBucket + 1)) - 1;
-                                    Texture->MipResidencyMask = MipMask;
-                                    Texture->Info = Op->Texture.Info;
-                                }
-                                else
+                                texture_info* Info = &Op->Texture.Info;
+                                texture_subresource_range* Range = &Op->Texture.SubresourceRange;
+                                if (Info->Extent.Z > 1)
                                 {
                                     UnimplementedCodePath;
                                 }
 
-                                VkImageMemoryBarrier2 BeginBarrier = 
+                                format_byterate ByteRate = FormatByterateTable[Info->Format];
+                                umm TotalSize = GetMipChainSize(Info->Extent.X, Info->Extent.Y, Info->MipCount, Info->ArrayCount, ByteRate);
+
+                                u32 CopyCount = Info->MipCount * Info->ArrayCount;
+                                VkBufferImageCopy* Copies = PushArray(Frame->Arena, 0, VkBufferImageCopy, CopyCount);
+                                VkBufferImageCopy* CopyAt = Copies;
+
+                                umm Offset = Command->StagingBufferAt;
+                                for (u32 ArrayIndex = 0; ArrayIndex < Info->ArrayCount; ArrayIndex++)
                                 {
-                                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                    for (u32 MipIndex = 0; MipIndex < Info->MipCount; MipIndex++)
+                                    {
+                                        v2u Extent = 
+                                        {
+                                            Max(Info->Extent.X >> MipIndex, 1u),
+                                            Max(Info->Extent.Y >> MipIndex, 1u),
+                                        };
+
+                                        u32 RowLength = 0;
+                                        u32 ImageHeight = 0;
+                                        u64 TexelCount;
+                                        if (ByteRate.Flags & FormatFlag_BlockCompressed)
+                                        {
+                                            RowLength = Align(Extent.X, 4u);
+                                            ImageHeight = Align(Extent.Y, 4u);
+
+                                            TexelCount = (u64)RowLength * ImageHeight;
+                                        }
+                                        else
+                                        {
+                                            TexelCount = Extent.X * Extent.Y;
+                                        }
+                                        u64 MipSize = TexelCount * ByteRate.Numerator / ByteRate.Denominator;
+
+                                        CopyAt->bufferOffset = Offset,
+                                        CopyAt->bufferRowLength = RowLength,
+                                        CopyAt->bufferImageHeight = ImageHeight,
+                                        CopyAt->imageSubresource = 
+                                        {
+                                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                            .mipLevel = MipIndex,
+                                            .baseArrayLayer = ArrayIndex,
+                                            .layerCount = 1,
+                                        },
+                                        CopyAt->imageOffset = { 0, 0, 0 },
+                                        CopyAt->imageExtent = { Extent.X, Extent.Y, 1 },
+
+                                        Offset += MipSize;
+                                        CopyAt++;
+                                    }
+                                }
+
+                                b32 IsAllocated = false;
+                                renderer_texture* Texture = GetTexture(&Renderer->TextureManager, Op->Texture.TargetID);
+                                Assert(Texture);
+                                if (Texture->ImageHandle == VK_NULL_HANDLE)
+                                {
+                                    IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
+                                }
+                                else if (AreTextureInfosSameFormat(Op->Texture.Info, Texture->Info))
+                                {
+                                    // NOTE(boti): Nothing to do here, although in the future we might want to allocate memory here
+                                    // (currently that's always already done in this case)
+                                    IsAllocated = true;
+                                }
+                                else
+                                {
+                                    // TODO(boti): Move the deletion entry push to the texture manager
+                                    VkImage OldImageHandle = Texture->ImageHandle;
+                                    VkImageView OldViewHandle = Texture->ViewHandle;
+                                    IsAllocated = AllocateTexture(&Renderer->TextureManager, Op->Texture.TargetID, *Info);
+                                    if (IsAllocated)
+                                    {
+                                        PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, OldImageHandle);
+                                        PushDeletionEntry(&Renderer->DeletionQueue, Frame->FrameID, OldViewHandle);
+                                    }
+                                }
+
+                                if (IsAllocated)
+                                {
+                                    umm DescriptorSize = VK.DescriptorBufferProps.sampledImageDescriptorSize;
+                                    if ((Frame->StagingBuffer.At + DescriptorSize) <= Frame->StagingBuffer.Size)
+                                    {
+                                        VkDescriptorImageInfo DescriptorImage = 
+                                        {
+                                            .sampler = VK_NULL_HANDLE,
+                                            .imageView = Texture->ViewHandle,
+                                            .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                                        };
+                                        VkDescriptorGetInfoEXT DescriptorInfo = 
+                                        {
+                                            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT,
+                                            .pNext = nullptr,
+                                            .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                                            .data = { .pSampledImage = &DescriptorImage },
+                                        };
+                                        vkGetDescriptorEXT(VK.Device, &DescriptorInfo, DescriptorSize, OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At));
+                                
+                                        umm DescriptorOffset = Renderer->TextureManager.TextureTableOffset + Op->Texture.TargetID.Value*DescriptorSize; // TODO(boti): standardize this
+                                        VkBufferCopy DescriptorCopy = 
+                                        {
+                                            .srcOffset = Frame->StagingBuffer.At,
+                                            .dstOffset = DescriptorOffset,
+                                            .size = DescriptorSize,
+                                        };
+                                        vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->TextureManager.DescriptorBuffer, 1, &DescriptorCopy);
+                                
+                                        Frame->StagingBuffer.At += DescriptorSize;
+                                
+                                        u32 MipBucket;
+                                        BitScanReverse(&MipBucket, Max(Info->Extent.X, Info->Extent.Y));
+                                        u32 MipMask = (1 << (MipBucket + 1)) - 1;
+                                        Texture->MipResidencyMask = MipMask;
+                                        Texture->Info = Op->Texture.Info;
+                                    }
+                                    else
+                                    {
+                                        UnimplementedCodePath;
+                                    }
+
+                                    VkImageMemoryBarrier2 BeginBarrier = 
+                                    {
+                                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                        .pNext = nullptr,
+                                        .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
+                                        .srcAccessMask = VK_ACCESS_2_NONE,
+                                        .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                                        .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                        .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                                        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                        .image = Texture->ImageHandle,
+                                        .subresourceRange = 
+                                        {
+                                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                            .baseMipLevel = 0,
+                                            .levelCount = VK_REMAINING_MIP_LEVELS,
+                                            .baseArrayLayer = 0,
+                                            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                                        },
+                                    };
+                                    VkDependencyInfo BeginDependency = 
+                                    {
+                                        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                                        .pNext = nullptr,
+                                        .dependencyFlags = 0,
+                                        .imageMemoryBarrierCount = 1,
+                                        .pImageMemoryBarriers = &BeginBarrier,
+                                    };
+                                    vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
+                                    vkCmdCopyBufferToImage(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Texture->ImageHandle, 
+                                                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                                           CopyCount, Copies);
+
+                                    VkImageMemoryBarrier2 EndBarrier = 
+                                    {
+                                        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                                        .pNext = nullptr,
+                                        .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
+                                        .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                        .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                                        .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                                        .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                        .image = Texture->ImageHandle,
+                                        .subresourceRange = 
+                                        {
+                                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                            .baseMipLevel = 0,
+                                            .levelCount = VK_REMAINING_MIP_LEVELS,
+                                            .baseArrayLayer = 0,
+                                            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                                        },
+                                    };
+                                    PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
+                                }
+                                else
+                                {
+                                    // TODO(boti): Logging
+                                    //UnimplementedCodePath;
+                                }
+                            } break;
+
+                            case TransferOp_Geometry:
+                            {
+                                umm VertexByteCount = Op->Geometry.Dest.VertexBlock->Count * sizeof(vertex);
+                                umm VertexByteOffset = Op->Geometry.Dest.VertexBlock->Offset * sizeof(vertex);
+                                umm IndexByteCount = Op->Geometry.Dest.IndexBlock->Count * sizeof(vert_index);
+                                umm IndexByteOffset = Op->Geometry.Dest.IndexBlock->Offset * sizeof(vert_index);
+                                VkBuffer VertexBuffer = Renderer->GeometryBuffer.VertexMemory.Buffer;
+                                VkBuffer IndexBuffer = Renderer->GeometryBuffer.IndexMemory.Buffer;
+
+                                VkBufferMemoryBarrier2 Barrier = 
+                                {
+                                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                                     .pNext = nullptr,
-                                    .srcStageMask = VK_PIPELINE_STAGE_2_NONE,
-                                    .srcAccessMask = VK_ACCESS_2_NONE,
-                                    .dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                                    .dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                                    .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                                    .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                    .srcStageMask = 0,
+                                    .srcAccessMask = 0,
+                                    .dstStageMask = 0,
+                                    .dstAccessMask = 0,
                                     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                                     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                    .image = Texture->ImageHandle,
-                                    .subresourceRange = 
-                                    {
-                                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                        .baseMipLevel = 0,
-                                        .levelCount = VK_REMAINING_MIP_LEVELS,
-                                        .baseArrayLayer = 0,
-                                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                                    },
+                                    .buffer = VK_NULL_HANDLE,
+                                    .offset = 0,
+                                    .size = 0,
                                 };
-                                VkDependencyInfo BeginDependency = 
+                                VkDependencyInfo Dependency = 
                                 {
                                     .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
                                     .pNext = nullptr,
                                     .dependencyFlags = 0,
-                                    .imageMemoryBarrierCount = 1,
-                                    .pImageMemoryBarriers = &BeginBarrier,
+                                    .bufferMemoryBarrierCount = 1,
+                                    .pBufferMemoryBarriers = &Barrier,
                                 };
-                                vkCmdPipelineBarrier2(UploadCB, &BeginDependency);
-                                vkCmdCopyBufferToImage(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Texture->ImageHandle, 
-                                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                                       CopyCount, Copies);
 
-                                VkImageMemoryBarrier2 EndBarrier = 
+                                if (VertexByteCount)
                                 {
-                                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-                                    .pNext = nullptr,
-                                    .srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT,
-                                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                                    .dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                                    .dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                                    .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                    .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                    .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                    .image = Texture->ImageHandle,
-                                    .subresourceRange = 
+                                    Barrier.buffer = VertexBuffer;
+                                    Barrier.offset = VertexByteOffset;
+                                    Barrier.size = VertexByteCount;
+
+                                    Barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+                                    Barrier.srcAccessMask = VK_ACCESS_2_NONE;
+                                    Barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                                    Barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                                    vkCmdPipelineBarrier2(UploadCB, &Dependency);
+
+                                    VkBufferCopy Copy = 
                                     {
-                                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                        .baseMipLevel = 0,
-                                        .levelCount = VK_REMAINING_MIP_LEVELS,
-                                        .baseArrayLayer = 0,
-                                        .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                                    },
-                                };
-                                PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
-                            }
-                            else
-                            {
-                                // TODO(boti): Logging
-                                //UnimplementedCodePath;
-                            }
-                        } break;
+                                        .srcOffset = Command->StagingBufferAt,
+                                        .dstOffset = VertexByteOffset,
+                                        .size = VertexByteCount,
+                                    };
+                                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], VertexBuffer, 1, &Copy);
 
-                        case TransferOp_Geometry:
-                        {
-                            umm VertexByteCount = Op->Geometry.Dest.VertexBlock->Count * sizeof(vertex);
-                            umm VertexByteOffset = Op->Geometry.Dest.VertexBlock->Offset * sizeof(vertex);
-                            umm IndexByteCount = Op->Geometry.Dest.IndexBlock->Count * sizeof(vert_index);
-                            umm IndexByteOffset = Op->Geometry.Dest.IndexBlock->Offset * sizeof(vert_index);
-                            VkBuffer VertexBuffer = Renderer->GeometryBuffer.VertexMemory.Buffer;
-                            VkBuffer IndexBuffer = Renderer->GeometryBuffer.IndexMemory.Buffer;
+                                    Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                                    Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                                    Barrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+                                    Barrier.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
+                                    PushBeginBarrier(&FrameStages[FrameStage_Skinning], &Barrier);
+                                }
 
-                            VkBufferMemoryBarrier2 Barrier = 
-                            {
-                                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                                .pNext = nullptr,
-                                .srcStageMask = 0,
-                                .srcAccessMask = 0,
-                                .dstStageMask = 0,
-                                .dstAccessMask = 0,
-                                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                .buffer = VK_NULL_HANDLE,
-                                .offset = 0,
-                                .size = 0,
-                            };
-                            VkDependencyInfo Dependency = 
-                            {
-                                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                                .pNext = nullptr,
-                                .dependencyFlags = 0,
-                                .bufferMemoryBarrierCount = 1,
-                                .pBufferMemoryBarriers = &Barrier,
-                            };
-
-                            if (VertexByteCount)
-                            {
-                                Barrier.buffer = VertexBuffer;
-                                Barrier.offset = VertexByteOffset;
-                                Barrier.size = VertexByteCount;
-
-                                Barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-                                Barrier.srcAccessMask = VK_ACCESS_2_NONE;
-                                Barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-                                Barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                                vkCmdPipelineBarrier2(UploadCB, &Dependency);
-
-                                VkBufferCopy Copy = 
+                                if (IndexByteCount)
                                 {
-                                    .srcOffset = Command->StagingBufferAt,
-                                    .dstOffset = VertexByteOffset,
-                                    .size = VertexByteCount,
-                                };
-                                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], VertexBuffer, 1, &Copy);
+                                    Barrier.buffer = IndexBuffer;
+                                    Barrier.offset = IndexByteOffset;
+                                    Barrier.size = IndexByteCount;
 
-                                Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-                                Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                                Barrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-                                Barrier.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT;
-                                PushBeginBarrier(&FrameStages[FrameStage_Skinning], &Barrier);
-                            }
+                                    Barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+                                    Barrier.srcAccessMask = VK_ACCESS_2_NONE;
+                                    Barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                                    Barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                                    vkCmdPipelineBarrier2(UploadCB, &Dependency);
+                                    VkBufferCopy Copy = 
+                                    {
+                                        .srcOffset = Command->StagingBufferAt + VertexByteCount,
+                                        .dstOffset = IndexByteOffset,
+                                        .size = IndexByteCount,
+                                    };
+                                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], IndexBuffer, 1, &Copy);
 
-                            if (IndexByteCount)
-                            {
-                                Barrier.buffer = IndexBuffer;
-                                Barrier.offset = IndexByteOffset;
-                                Barrier.size = IndexByteCount;
+                                    Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+                                    Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+                                    Barrier.dstStageMask = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+                                    Barrier.dstAccessMask = VK_ACCESS_2_INDEX_READ_BIT|VK_ACCESS_2_SHADER_READ_BIT;
+                                    PushBeginBarrier(&FrameStages[FrameStage_Prepass], &Barrier);
+                                }
+                            } break;
+                            InvalidDefaultCase;
+                        }
+                    } break;
 
-                                Barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-                                Barrier.srcAccessMask = VK_ACCESS_2_NONE;
-                                Barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-                                Barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                                vkCmdPipelineBarrier2(UploadCB, &Dependency);
-                                VkBufferCopy Copy = 
-                                {
-                                    .srcOffset = Command->StagingBufferAt + VertexByteCount,
-                                    .dstOffset = IndexByteOffset,
-                                    .size = IndexByteCount,
-                                };
-                                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], IndexBuffer, 1, &Copy);
-
-                                Barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-                                Barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-                                Barrier.dstStageMask = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT|VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-                                Barrier.dstAccessMask = VK_ACCESS_2_INDEX_READ_BIT|VK_ACCESS_2_SHADER_READ_BIT;
-                                PushBeginBarrier(&FrameStages[FrameStage_Prepass], &Barrier);
-                            }
-                        } break;
-                        InvalidDefaultCase;
-                    }
-                } break;
-
-                case RenderCommand_Light:
-                {
-                    light* Light = &Command->Light;
-
-                    f32 L = GetLuminance(Light->E);
-                    f32 R = Sqrt(Max(L / R_LuminanceThreshold, 0.0f));
-
-                    if (LightDataAt <= R_MaxLightCount /*&& IntersectFrustumSphere(&Frame->CameraFrustum, Light->P, R)*/)
+                    case RenderCommand_Light:
                     {
-                        Frame->Uniforms.LightCount++;
-                        u32 ShadowIndex = 0xFFFFFFFFu;
-                        if ((Light->Flags & LightFlag_ShadowCaster) && ShadowCount <= R_MaxShadowCount)
+                        light* Light = &Command->Light;
+
+                        f32 L = GetLuminance(Light->E);
+                        f32 R = Sqrt(Max(L / R_LuminanceThreshold, 0.0f));
+
+                        if (LightDataAt <= R_MaxLightCount /*&& IntersectFrustumSphere(&Frame->CameraFrustum, Light->P, R)*/)
                         {
-                            ShadowIndex = ShadowCount++;
-                            point_shadow_data* Shadow = Frame->Uniforms.PointShadows + ShadowIndex;
-
-                            f32 n = 0.05f;
-                            f32 f = R + 1e-6f;
-                            f32 r = 1.0f / (f - n);
-                            m4 Projection = M4(1.0f, 0.0f, 0.0f, 0.0f,
-                                               0.0f, 1.0f, 0.0f, 0.0f,
-                                               0.0f, 0.0f, f*r, -f*n*r,
-                                               0.0f, 0.0f, 1.0f, 0.0f);
-                            m4 InverseProjection = M4(1.0f, 0.0f, 0.0f, 0.0f,
-                                                      0.0f, 1.0f, 0.0f, 0.0f,
-                                                      0.0f, 0.0f, 0.0f, 1.0f,
-                                                      0.0f, 0.0f, -1.0f / (f*n*r), 1.0f / n);
-                            Shadow->Near = n;
-                            Shadow->Far = f;
-                            DrawListCount += 6;
-                            for (u32 LayerIndex = 0; LayerIndex < CubeLayer_Count; LayerIndex++)
+                            Frame->Uniforms.LightCount++;
+                            u32 ShadowIndex = 0xFFFFFFFFu;
+                            if ((Light->Flags & LightFlag_ShadowCaster) && ShadowCount <= R_MaxShadowCount)
                             {
-                                m3 M = GlobalCubeFaceBases[LayerIndex];
-                                m4 InverseView = M4(M.X.X, M.Y.X, M.Z.X, Light->P.X,
-                                                    M.X.Y, M.Y.Y, M.Z.Y, Light->P.Y,
-                                                    M.X.Z, M.Y.Z, M.Z.Z, Light->P.Z,
-                                                    0.0f, 0.0f, 0.0f ,1.0f);
-                                m4 View = M4(M.X.X, M.X.Y, M.X.Z, -Dot(M.X, Light->P),
-                                             M.Y.X, M.Y.Y, M.Y.Z, -Dot(M.Y, Light->P),
-                                             M.Z.X, M.Z.Y, M.Z.Z, -Dot(M.Z, Light->P),
-                                             0.0f, 0.0f, 0.0f, 1.0f);
-                                m4 ViewProjection = Projection * View;
-                                Shadow->ViewProjections[LayerIndex] = ViewProjection;
+                                ShadowIndex = ShadowCount++;
+                                point_shadow_data* Shadow = Frame->Uniforms.PointShadows + ShadowIndex;
 
-                                frustum ClipSpaceFrustum = GetClipSpaceFrustum();
-                                frustum* Frustum = &ShadowFrustums[6 * ShadowIndex + LayerIndex];
-                                for (u32 PlaneIndex = 0; PlaneIndex < CountOf(Frustum->Planes); PlaneIndex++)
+                                f32 n = 0.05f;
+                                f32 f = R + 1e-6f;
+                                f32 r = 1.0f / (f - n);
+                                m4 Projection = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                                                   0.0f, 1.0f, 0.0f, 0.0f,
+                                                   0.0f, 0.0f, f*r, -f*n*r,
+                                                   0.0f, 0.0f, 1.0f, 0.0f);
+                                m4 InverseProjection = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                                                          0.0f, 1.0f, 0.0f, 0.0f,
+                                                          0.0f, 0.0f, 0.0f, 1.0f,
+                                                          0.0f, 0.0f, -1.0f / (f*n*r), 1.0f / n);
+                                Shadow->Near = n;
+                                Shadow->Far = f;
+                                DrawListCount += 6;
+                                for (u32 LayerIndex = 0; LayerIndex < CubeLayer_Count; LayerIndex++)
                                 {
-                                    // TODO(boti): Try mul w/ ViewProjection after porting
-                                    Frustum->Planes[PlaneIndex] = ClipSpaceFrustum.Planes[PlaneIndex] * Projection * View;
+                                    m3 M = GlobalCubeFaceBases[LayerIndex];
+                                    m4 InverseView = M4(M.X.X, M.Y.X, M.Z.X, Light->P.X,
+                                                        M.X.Y, M.Y.Y, M.Z.Y, Light->P.Y,
+                                                        M.X.Z, M.Y.Z, M.Z.Z, Light->P.Z,
+                                                        0.0f, 0.0f, 0.0f ,1.0f);
+                                    m4 View = M4(M.X.X, M.X.Y, M.X.Z, -Dot(M.X, Light->P),
+                                                 M.Y.X, M.Y.Y, M.Y.Z, -Dot(M.Y, Light->P),
+                                                 M.Z.X, M.Z.Y, M.Z.Z, -Dot(M.Z, Light->P),
+                                                 0.0f, 0.0f, 0.0f, 1.0f);
+                                    m4 ViewProjection = Projection * View;
+                                    Shadow->ViewProjections[LayerIndex] = ViewProjection;
+
+                                    frustum ClipSpaceFrustum = GetClipSpaceFrustum();
+                                    frustum* Frustum = &ShadowFrustums[6 * ShadowIndex + LayerIndex];
+                                    for (u32 PlaneIndex = 0; PlaneIndex < CountOf(Frustum->Planes); PlaneIndex++)
+                                    {
+                                        // TODO(boti): Try mul w/ ViewProjection after porting
+                                        Frustum->Planes[PlaneIndex] = ClipSpaceFrustum.Planes[PlaneIndex] * Projection * View;
+                                    }
                                 }
                             }
+
+                            v3 P = TransformPoint(Frame->Uniforms.ViewTransform, Light->P);
+                            LightData[LightDataAt++] =
+                            {
+                                .P = P,
+                                .ShadowIndex = ShadowIndex,
+                                .E = Light->E,
+                                .Flags = Light->Flags,
+                            };
+                        }
+                    } break;
+
+                    case RenderCommand_Draw:
+                    {
+                        draw_command* Draw = &Command->Draw;
+
+                        u32 ID = DrawGroupOffsets[Draw->Group]++;
+                        BoundingBoxes[ID] = Draw->BoundingBox;
+                        Transforms[ID] = Draw->Transform;
+
+                        u64 SourceByteOffset = Draw->Geometry.VertexBlock->Offset * sizeof(vertex);
+                        u64 SourceVertexBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.VertexMemory.Buffer) + SourceByteOffset;
+                        u64 DrawVertexBufferAddress = SourceVertexBufferAddress;
+
+                        if (Draw->Flags & Draw_Skinned)
+                        {
+                            u32 VertexCount = Draw->Geometry.VertexBlock->Count;
+                            gpu_buffer_range VertexBufferRange = PushPerFrame(VertexCount * sizeof(vertex), 16);
+                            DrawVertexBufferAddress = VertexBufferRange.Address;
+                        
+                            struct skinning_constants
+                            {
+                                VkDeviceAddress SkinAddress;
+                                VkDeviceAddress SrcAddress;
+                                VkDeviceAddress DstAddress;
+                                u32 VertexCount;
+                            } Push;
+                            Push.SkinAddress = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt;
+                            Push.SrcAddress = SourceVertexBufferAddress;
+                            Push.DstAddress = VertexBufferRange.Address;
+                            Push.VertexCount = VertexCount;
+                            vkCmdPushConstants(SkinningCB, Renderer->Pipelines[Pipeline_Skinning].Layout, VK_SHADER_STAGE_ALL,
+                                               0, sizeof(Push), &Push);
+                            vkCmdDispatch(SkinningCB, CeilDiv(VertexCount, Skin_GroupSizeX), 1, 1);
+
+                            // HACK(boti): We'd either need to generate the bboxes when skinning (which requires GPU culling),
+                            // or have some guarantee that the bbox from the mesh is conservative enough to accomodate
+                            // all animations, neither of which we currently have,
+                            // so instead we massively overestimate the bbox, essentially turning frustum culling off for skinned meshes.
+                            BoundingBoxes[ID] = 
+                            {
+                                .Min = { -1000000.0f, -1000000.0f, -1000000.0f },
+                                .Max = { +1000000.0f, +1000000.0f, +1000000.0f }, 
+                            };
                         }
 
-                        v3 P = TransformPoint(Frame->Uniforms.ViewTransform, Light->P);
-                        LightData[LightDataAt++] =
+                        IndirectCommands[ID] = 
                         {
-                            .P = P,
-                            .ShadowIndex = ShadowIndex,
-                            .E = Light->E,
-                            .Flags = Light->Flags,
+                            .indexCount = Draw->Geometry.IndexBlock->Count,
+                            .instanceCount = 1,
+                            .firstIndex = Draw->Geometry.IndexBlock->Offset,
+                            .vertexOffset = 0,
+                            .firstInstance = ID,
                         };
-                    }
-                } break;
 
-                case RenderCommand_Draw:
-                {
-                    draw_command* Draw = &Command->Draw;
-
-                    u32 ID = DrawGroupOffsets[Draw->Group]++;
-                    BoundingBoxes[ID] = Draw->BoundingBox;
-                    Transforms[ID] = Draw->Transform;
-
-                    u64 SourceByteOffset = Draw->Geometry.VertexBlock->Offset * sizeof(vertex);
-                    u64 SourceVertexBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.VertexMemory.Buffer) + SourceByteOffset;
-                    u64 DrawVertexBufferAddress = SourceVertexBufferAddress;
-
-                    if (Draw->Flags & Draw_Skinned)
-                    {
-                        u32 VertexCount = Draw->Geometry.VertexBlock->Count;
-                        gpu_buffer_range VertexBufferRange = PushPerFrame(VertexCount * sizeof(vertex), 16);
-                        DrawVertexBufferAddress = VertexBufferRange.Address;
-                        
-                        struct skinning_constants
+                        Instances[ID] = 
                         {
-                            VkDeviceAddress SkinAddress;
-                            VkDeviceAddress SrcAddress;
-                            VkDeviceAddress DstAddress;
-                            u32 VertexCount;
+                            .Transform = Draw->Transform,
+                            .VertexBufferAddress = DrawVertexBufferAddress,
+                            .Material = Draw->Material,
+                        };
+                    } break;
+                    case RenderCommand_ParticleBatch:
+                    {
+                        struct
+                        {
+                            VkDeviceAddress ParticleAddress;
+                            billboard_mode Mode;
+                            renderer_texture_id TextureID;
                         } Push;
-                        Push.SkinAddress = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt;
-                        Push.SrcAddress = SourceVertexBufferAddress;
-                        Push.DstAddress = VertexBufferRange.Address;
-                        Push.VertexCount = VertexCount;
-                        vkCmdPushConstants(SkinningCB, Renderer->Pipelines[Pipeline_Skinning].Layout, VK_SHADER_STAGE_ALL,
+                        Push.ParticleAddress = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt;
+                        Push.Mode = Command->ParticleBatch.Mode;
+                        Push.TextureID = Frame->ParticleTextureID;
+                        vkCmdPushConstants(ParticleCB, Renderer->Pipelines[Pipeline_Quad].Layout, VK_SHADER_STAGE_ALL, 
                                            0, sizeof(Push), &Push);
-                        vkCmdDispatch(SkinningCB, CeilDiv(VertexCount, Skin_GroupSizeX), 1, 1);
-
-                        // HACK(boti): We'd either need to generate the bboxes when skinning (which requires GPU culling),
-                        // or have some guarantee that the bbox from the mesh is conservative enough to accomodate
-                        // all animations, neither of which we currently have,
-                        // so instead we massively overestimate the bbox, essentially turning frustum culling off for skinned meshes.
-                        BoundingBoxes[ID] = 
+                        vkCmdDraw(ParticleCB, 6 * Command->ParticleBatch.Count, 1, 0, 0);
+                    } break;
+                    case RenderCommand_Widget3D:
+                    {
+                        struct
                         {
-                            .Min = { -1000000.0f, -1000000.0f, -1000000.0f },
-                            .Max = { +1000000.0f, +1000000.0f, +1000000.0f }, 
-                        };
-                    }
-
-                    IndirectCommands[ID] = 
+                            m4 Transform;
+                            rgba8 Color;
+                        } Push;
+                        Push.Transform = Command->Widget3D.Transform;
+                        Push.Color = Command->Widget3D.Color;
+                        vkCmdPushConstants(Widget3DCB, Renderer->Pipelines[Pipeline_Gizmo].Layout, VK_SHADER_STAGE_ALL,
+                                           0, sizeof(Push), &Push);
+                        geometry_buffer_allocation* Geometry = &Command->Widget3D.Geometry;
+                        vkCmdDrawIndexed(Widget3DCB, Geometry->IndexBlock->Count, 1, Geometry->IndexBlock->Offset, Geometry->VertexBlock->Offset, 0);
+                    } break;
+                    case RenderCommand_Batch2D:
                     {
-                        .indexCount = Draw->Geometry.IndexBlock->Count,
-                        .instanceCount = 1,
-                        .firstIndex = Draw->Geometry.IndexBlock->Offset,
-                        .vertexOffset = 0,
-                        .firstInstance = ID,
-                    };
-
-                    Instances[ID] = 
-                    {
-                        .Transform = Draw->Transform,
-                        .VertexBufferAddress = DrawVertexBufferAddress,
-                        .Material = Draw->Material,
-                    };
-                } break;
-                case RenderCommand_ParticleBatch:
-                {
-                    struct
-                    {
-                        VkDeviceAddress ParticleAddress;
-                        billboard_mode Mode;
-                        renderer_texture_id TextureID;
-                    } Push;
-                    Push.ParticleAddress = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt;
-                    Push.Mode = Command->ParticleBatch.Mode;
-                    Push.TextureID = Frame->ParticleTextureID;
-                    vkCmdPushConstants(ParticleCB, Renderer->Pipelines[Pipeline_Quad].Layout, VK_SHADER_STAGE_ALL, 
-                                       0, sizeof(Push), &Push);
-                    vkCmdDraw(ParticleCB, 6 * Command->ParticleBatch.Count, 1, 0, 0);
-                } break;
-                case RenderCommand_Widget3D:
-                {
-                    struct
-                    {
-                        m4 Transform;
-                        rgba8 Color;
-                    } Push;
-                    Push.Transform = Command->Widget3D.Transform;
-                    Push.Color = Command->Widget3D.Color;
-                    vkCmdPushConstants(Widget3DCB, Renderer->Pipelines[Pipeline_Gizmo].Layout, VK_SHADER_STAGE_ALL,
-                                       0, sizeof(Push), &Push);
-                    geometry_buffer_allocation* Geometry = &Command->Widget3D.Geometry;
-                    vkCmdDrawIndexed(Widget3DCB, Geometry->IndexBlock->Count, 1, Geometry->IndexBlock->Offset, Geometry->VertexBlock->Offset, 0);
-                } break;
-                case RenderCommand_Batch2D:
-                {
-                    struct
-                    {
-                        m4 Transform;
-                        u64 VertexBufferAddress;
-                        renderer_texture_id TextureID;
-                    } Push;
-                    Push.Transform = M4(
-                        2.0f / Frame->OutputExtent.X, 0.0f, 0.0f, -1.0f,
-                        0.0f, 2.0f / Frame->OutputExtent.Y, 0.0f, -1.0f,
-                        0.0f, 0.0f, 1.0f, 0.0f,
-                        0.0f, 0.0f, 0.0f, 1.0f);
-                    Push.VertexBufferAddress    = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt;
-                    Push.TextureID              = Frame->ImmediateTextureID;
-                    vkCmdPushConstants(GuiCB, Renderer->Pipelines[Pipeline_UI].Layout, VK_SHADER_STAGE_ALL, 0, sizeof(Push), &Push);
-                    vkCmdDraw(GuiCB, Command->Batch2D.VertexCount, 1, 0, 0);
-                } break;
-                InvalidDefaultCase;
+                        struct
+                        {
+                            m4 Transform;
+                            u64 VertexBufferAddress;
+                            renderer_texture_id TextureID;
+                        } Push;
+                        Push.Transform = M4(
+                            2.0f / Frame->OutputExtent.X, 0.0f, 0.0f, -1.0f,
+                            0.0f, 2.0f / Frame->OutputExtent.Y, 0.0f, -1.0f,
+                            0.0f, 0.0f, 1.0f, 0.0f,
+                            0.0f, 0.0f, 0.0f, 1.0f);
+                        Push.VertexBufferAddress    = Renderer->BARBufferAddresses[Frame->FrameID] + Command->BARBufferAt;
+                        Push.TextureID              = Frame->ImmediateTextureID;
+                        vkCmdPushConstants(GuiCB, Renderer->Pipelines[Pipeline_UI].Layout, VK_SHADER_STAGE_ALL, 0, sizeof(Push), &Push);
+                        vkCmdDraw(GuiCB, Command->Batch2D.VertexCount, 1, 0, 0);
+                    } break;
+                    InvalidDefaultCase;
+                }
             }
         }
 
-        // Upload lights
-        gpu_buffer_range LightBufferRange = PushPerFrame(Frame->Uniforms.LightCount * sizeof(light));
-        Frame->Uniforms.LightBufferAddress = LightBufferRange.Address;
-        if (LightBufferRange.ByteCount)
         {
-            VkBufferCopy LightBufferCopy = 
-            {
-                .srcOffset = LightDataOffset,
-                .dstOffset = LightBufferRange.ByteOffset,
-                .size = LightBufferRange.ByteCount,
-            };
-            vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &LightBufferCopy);
-        }
+            TimedBlock(Platform.Profiler, "Upload");
 
-        // Upload instance data
-        gpu_buffer_range InstanceBufferRange = PushPerFrame(InstanceCount * sizeof(instance_data));
-        Frame->Uniforms.InstanceBufferAddress = InstanceBufferRange.Address;
-        if (InstanceBufferRange.ByteCount)
-        {
-            Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(instance_data));
-            if (Frame->StagingBuffer.At + InstanceBufferRange.ByteCount <= Frame->StagingBuffer.Size)
+            // Upload lights
+            gpu_buffer_range LightBufferRange = PushPerFrame(Frame->Uniforms.LightCount * sizeof(light));
+            Frame->Uniforms.LightBufferAddress = LightBufferRange.Address;
+            if (LightBufferRange.ByteCount)
             {
-                memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At), Instances, InstanceBufferRange.ByteCount);
-                VkBufferCopy Copy = 
+                VkBufferCopy LightBufferCopy = 
                 {
-                    .srcOffset = Frame->StagingBuffer.At,
-                    .dstOffset = InstanceBufferRange.ByteOffset,
-                    .size = InstanceBufferRange.ByteCount,
+                    .srcOffset = LightDataOffset,
+                    .dstOffset = LightBufferRange.ByteOffset,
+                    .size = LightBufferRange.ByteCount,
                 };
-                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &Copy);
-
-                Frame->StagingBuffer.At += InstanceBufferRange.ByteCount;
+                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &LightBufferCopy);
             }
-            else
-            {
-                UnhandledError("Out of staging memory when uploading instance data");
-            }
-        }
 
-        // Upload (global) draw data
-        gpu_buffer_range GlobalDrawBufferRange = PushPerFrame(InstanceCount * sizeof(VkDrawIndexedIndirectCommand));
-        Frame->Uniforms.DrawBufferAddress = GlobalDrawBufferRange.Address;
-        if (GlobalDrawBufferRange.ByteCount)
-        {
-            Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(VkDrawIndexedIndirectCommand));
-            if (Frame->StagingBuffer.At + GlobalDrawBufferRange.ByteCount <= Frame->StagingBuffer.Size)
+            // Upload instance data
+            gpu_buffer_range InstanceBufferRange = PushPerFrame(InstanceCount * sizeof(instance_data));
+            Frame->Uniforms.InstanceBufferAddress = InstanceBufferRange.Address;
+            if (InstanceBufferRange.ByteCount)
             {
-                memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At), IndirectCommands, GlobalDrawBufferRange.ByteCount);
-                VkBufferCopy Copy = 
+                Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(instance_data));
+                if (Frame->StagingBuffer.At + InstanceBufferRange.ByteCount <= Frame->StagingBuffer.Size)
                 {
-                    .srcOffset = Frame->StagingBuffer.At,
-                    .dstOffset = GlobalDrawBufferRange.ByteOffset,
-                    .size = GlobalDrawBufferRange.ByteCount,
-                };
-                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &Copy);
+                    memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At), Instances, InstanceBufferRange.ByteCount);
+                    VkBufferCopy Copy = 
+                    {
+                        .srcOffset = Frame->StagingBuffer.At,
+                        .dstOffset = InstanceBufferRange.ByteOffset,
+                        .size = InstanceBufferRange.ByteCount,
+                    };
+                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &Copy);
 
-                Frame->StagingBuffer.At += GlobalDrawBufferRange.ByteCount;
+                    Frame->StagingBuffer.At += InstanceBufferRange.ByteCount;
+                }
+                else
+                {
+                    UnhandledError("Out of staging memory when uploading instance data");
+                }
             }
-            else
+
+            // Upload (global) draw data
+            gpu_buffer_range GlobalDrawBufferRange = PushPerFrame(InstanceCount * sizeof(VkDrawIndexedIndirectCommand));
+            Frame->Uniforms.DrawBufferAddress = GlobalDrawBufferRange.Address;
+            if (GlobalDrawBufferRange.ByteCount)
             {
-                UnhandledError("Out of staging memory when uploading draw data");
+                Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(VkDrawIndexedIndirectCommand));
+                if (Frame->StagingBuffer.At + GlobalDrawBufferRange.ByteCount <= Frame->StagingBuffer.Size)
+                {
+                    memcpy(OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At), IndirectCommands, GlobalDrawBufferRange.ByteCount);
+                    VkBufferCopy Copy = 
+                    {
+                        .srcOffset = Frame->StagingBuffer.At,
+                        .dstOffset = GlobalDrawBufferRange.ByteOffset,
+                        .size = GlobalDrawBufferRange.ByteCount,
+                    };
+                    vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Renderer->PerFrameBuffer, 1, &Copy);
+
+                    Frame->StagingBuffer.At += GlobalDrawBufferRange.ByteCount;
+                }
+                else
+                {
+                    UnhandledError("Out of staging memory when uploading draw data");
+                }
             }
         }
 
@@ -3471,6 +3496,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         umm CopySrcAt = Frame->StagingBuffer.At;
         for (u32 DrawListIndex = 0; DrawListIndex < DrawListCount; DrawListIndex++)
         {
+            TimedBlock(Platform.Profiler, "FrustumCull DrawList");
+
             frustum* Frustum = nullptr;
             draw_list* DrawList = nullptr;
             if (DrawListIndex == 0)
@@ -3931,49 +3958,52 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     EndCommandBuffer(PrepassCmd);
 
-    VkSemaphoreSubmitInfo PrepassWaits[] =
-    {
-        {
-            .sType      = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-            .pNext      = nullptr,
-            .semaphore  = Renderer->TimelineSemaphore,
-            .value      = Renderer->FrameFinishedCounters[(Frame->FrameID + 1) % R_MaxFramesInFlight],
-            .stageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-        },
-    };
-
     u64 PrepassCounter = ++Renderer->TimelineSemaphoreCounter;
-    VkCommandBufferSubmitInfo PrepassCmdBuffers[] = 
     {
+        TimedBlock(Platform.Profiler, "Submit Prepass");
+        VkSemaphoreSubmitInfo PrepassWaits[] =
         {
-            .sType          = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-            .pNext          = nullptr,
-            .commandBuffer  = PrepassCmd,
-            .deviceMask     = 0,
-        },
-    };
-    VkSemaphoreSubmitInfo PrepassSignals[] = 
-    {
+            {
+                .sType      = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext      = nullptr,
+                .semaphore  = Renderer->TimelineSemaphore,
+                .value      = Renderer->FrameFinishedCounters[(Frame->FrameID + 1) % R_MaxFramesInFlight],
+                .stageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            },
+        };
+
+        VkCommandBufferSubmitInfo PrepassCmdBuffers[] = 
         {
-            .sType      = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
-            .pNext      = nullptr,
-            .semaphore  = Renderer->TimelineSemaphore,
-            .value      = PrepassCounter,
-            .stageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-        },
-    };
-    VkSubmitInfo2 SubmitPrepass = 
-    {
-        .sType                      = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
-        .pNext                      = nullptr,
-        .waitSemaphoreInfoCount     = CountOf(PrepassWaits),
-        .pWaitSemaphoreInfos        = PrepassWaits,
-        .commandBufferInfoCount     = CountOf(PrepassCmdBuffers),
-        .pCommandBufferInfos        = PrepassCmdBuffers,
-        .signalSemaphoreInfoCount   = CountOf(PrepassSignals),
-        .pSignalSemaphoreInfos      = PrepassSignals,
-    };
-    vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitPrepass, nullptr);
+            {
+                .sType          = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                .pNext          = nullptr,
+                .commandBuffer  = PrepassCmd,
+                .deviceMask     = 0,
+            },
+        };
+        VkSemaphoreSubmitInfo PrepassSignals[] = 
+        {
+            {
+                .sType      = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                .pNext      = nullptr,
+                .semaphore  = Renderer->TimelineSemaphore,
+                .value      = PrepassCounter,
+                .stageMask  = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+            },
+        };
+        VkSubmitInfo2 SubmitPrepass = 
+        {
+            .sType                      = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+            .pNext                      = nullptr,
+            .waitSemaphoreInfoCount     = CountOf(PrepassWaits),
+            .pWaitSemaphoreInfos        = PrepassWaits,
+            .commandBufferInfoCount     = CountOf(PrepassCmdBuffers),
+            .pCommandBufferInfos        = PrepassCmdBuffers,
+            .signalSemaphoreInfoCount   = CountOf(PrepassSignals),
+            .pSignalSemaphoreInfos      = PrepassSignals,
+        };
+        vkQueueSubmit2(VK.GraphicsQueue, 1, &SubmitPrepass, nullptr);
+    }
 
     //
     // SSAO
@@ -5284,6 +5314,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     // Submit + Present
     {
+        TimedBlock(Platform.Profiler, "SubmitAndPresent");
+
         u64 RenderCounter = ++Renderer->TimelineSemaphoreCounter;
         Renderer->FrameFinishedCounters[Frame->FrameID] = RenderCounter;
         VkCommandBufferSubmitInfo RenderCmdBuffers[] = 
@@ -5671,3 +5703,5 @@ internal void SetupSceneRendering(render_frame* Frame, frustum* CascadeFrustums)
         }
     }
 }
+
+ProfilerOverflowGuard;
