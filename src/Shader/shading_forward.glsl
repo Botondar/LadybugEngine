@@ -96,6 +96,7 @@ void main()
 
         v2 UV = TexCoord;
         // Parallax
+        #if 0
         {
             const uint StepCount = 4;
             v3 TangentV = normalize(v3(dot(TriT, V), dot(TriB, V), dot(TriN, V)));
@@ -108,6 +109,7 @@ void main()
                 UV += dUV;
             }
         }
+        #endif
 
 
 #if ShaderVariant_Transmission
