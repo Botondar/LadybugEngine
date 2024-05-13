@@ -303,11 +303,6 @@ StaticAssert(sizeof(per_frame) <= KiB(64));
 
 struct renderer_material
 {
-    v3 Emissive;
-    f32 AlphaThreshold;
-    f32 Transmission;
-    rgba8 BaseAlbedo;
-    rgba8 BaseMaterial;
     renderer_texture_id AlbedoID;
     renderer_texture_id NormalID;
     renderer_texture_id MetallicRoughnessID;
@@ -320,6 +315,12 @@ struct renderer_material
     material_sampler_id NormalSamplerID;
     material_sampler_id MetallicRoughnessSamplerID;
     material_sampler_id TransmissionSamplerID;
+
+    f32 AlphaThreshold;
+    f32 Transmission;
+    rgba8 BaseAlbedo;
+    rgba8 BaseMaterial;
+    v3 Emissive;
 };
 
 struct instance_data

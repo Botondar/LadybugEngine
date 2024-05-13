@@ -691,11 +691,6 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
 
                     renderer_material RenderMaterial = 
                     {
-                        .Emissive                   = Material->Emission,
-                        .AlphaThreshold             = Material->AlphaThreshold,
-                        .Transmission               = Material->Transmission,
-                        .BaseAlbedo                 = Material->Albedo,
-                        .BaseMaterial               = Material->MetallicRoughness,
                         .AlbedoID                   = AlbedoTexture->RendererID,
                         .NormalID                   = NormalTexture->RendererID,
                         .MetallicRoughnessID        = MetallicRoughnessTexture->RendererID,
@@ -706,6 +701,11 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                         .NormalSamplerID            = Material->NormalSamplerID,
                         .MetallicRoughnessSamplerID = Material->MetallicRoughnessSamplerID,
                         .TransmissionSamplerID      = Material->TransmissionSamplerID,
+                        .AlphaThreshold             = Material->AlphaThreshold,
+                        .Transmission               = Material->Transmission,
+                        .BaseAlbedo                 = Material->Albedo,
+                        .BaseMaterial               = Material->MetallicRoughness,
+                        .Emissive                   = Material->Emission,
                     };
 
                     draw_group TransparencyToDrawGroupTable[Transparency_Count] =

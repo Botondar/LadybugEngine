@@ -206,11 +206,15 @@ void main()
         v3 F0 = mix(v3(0.04), Albedo.rgb, MetallicRoughness.b);
         v3 DiffuseBase = (1.0 - MetallicRoughness.b) * (v3(1.0) - F0) * Albedo.rgb;
 
-        // TODO(boti): For some reason the parallax mapping commit (tag: bug.vbuffer-nan) seems to
-        // have broken emissive materials w/ visibility shading.
-        #if 0
+        // TODO(boti): There's something clearly wrong here in terms of packing or indexing.
+        // In the original renderer_material ordering (introduced with parallax mapping/bug.vbuffer-nan tag)
+        // adding _all 3_ emissive components resulted in huge negative values in Lo when rendering skinned meshes,
+        // but the same behaviour didn't occur when only adding 1 or 2
+        // components (regardless of which components those were).
+        // Moreover this didn't happen _at all_ when the program was launched through NSight.
+        // The issue seems to have been "fixed" by reordering renderer_material, 
+        // but I really have no idea what's actually going on here.
         Lo += Instance.Material.Emissive;
-        #endif
         {
             f32 ScreenOcclusion = texelFetch(OcclusionImage, TexelID, 0).r;
             v2 EnvBRDF = textureLod(sampler2D(BRDFLut, Samplers[Sampler_LinearEdgeClamp]), v2(MetallicRoughness.g, Clamp01(dot(N, V))), 0.0).rg;
