@@ -735,6 +735,35 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
         // but if we ever support higher bit depths, this function will need to get updated as well
         Assert(Image.BitDepthPerChannel == 8);
 
+        v2u AlignedExtent = { CeilPowerOf2(Image.Extent.X), CeilPowerOf2(Image.Extent.Y) };
+        if (AlignedExtent.X != Image.Extent.X || AlignedExtent.Y != Image.Extent.Y)
+        {
+            loaded_image OldImage = Image;
+            Image.Extent = AlignedExtent;
+            umm ImageSize = (umm)AlignedExtent.X * AlignedExtent.Y * Image.ChannelCount * (Image.BitDepthPerChannel / 8);
+            Image.Data = PushSize_(Scratch, 0, ImageSize, 64);
+
+            switch (Op->Type)
+            {
+                case TextureType_Albedo:
+                {
+                    stbir_pixel_layout PixelLayout = (Image.ChannelCount == 4) ? STBIR_RGBA_PM : STBIR_RGB;
+                    stbir_resize_uint8_srgb(
+                        (u8*)OldImage.Data, OldImage.Extent.X, OldImage.Extent.Y, 0, 
+                        (u8*)Image.Data, AlignedExtent.X, AlignedExtent.Y, 0,
+                        PixelLayout);
+                } break;
+            
+                default:
+                {
+                    stbir_resize_uint8_linear(
+                        (u8*)OldImage.Data, OldImage.Extent.X, OldImage.Extent.Y, 0,
+                        (u8*)Image.Data, AlignedExtent.X, AlignedExtent.Y, 0,
+                        (stbir_pixel_layout)Image.ChannelCount);
+                } break;
+            }
+        }
+
         u8* SrcImage = (u8*)Image.Data;
         Entry->Info.Extent = { Image.Extent.X, Image.Extent.Y, 1 };
         Entry->Info.ArrayCount = 1;
@@ -759,16 +788,16 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
             u8* DstAt = MipChain;
             for (u32 MipIndex = 0; MipIndex < Entry->Info.MipCount; MipIndex++)
             {
-                u32 ExtentX = Max(Entry->Info.Extent.X >> MipIndex, 1u);
-                u32 ExtentY = Max(Entry->Info.Extent.Y >> MipIndex, 1u);
+                u32 ExtentX = Max(Entry->Info.Extent.X >> MipIndex, 4u);
+                u32 ExtentY = Max(Entry->Info.Extent.Y >> MipIndex, 4u);
 
                 //
                 // Mip generation
                 //
                 if (MipIndex != 0)
                 {
-                    u32 PrevExtentX = Max(Entry->Info.Extent.X >> (MipIndex - 1), 1u);
-                    u32 PrevExtentY = Max(Entry->Info.Extent.Y >> (MipIndex - 1), 1u);
+                    u32 PrevExtentX = Max(Entry->Info.Extent.X >> (MipIndex - 1), 4u);
+                    u32 PrevExtentY = Max(Entry->Info.Extent.Y >> (MipIndex - 1), 4u);
 
                     switch (Op->Type)
                     {

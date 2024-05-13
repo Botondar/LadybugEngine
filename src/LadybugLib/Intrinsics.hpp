@@ -7,7 +7,11 @@
 
 #include "Core.hpp"
 
+#if DEVELOPER
+#define LB_INLINE inline
+#else
 #define LB_INLINE __forceinline
+#endif
 
 LB_INLINE u64 ReadTSC();
 
@@ -29,6 +33,8 @@ LB_INLINE u8 BitScanForward(u32* Result, u64 Value);
 LB_INLINE u8 BitScanReverse(u32* Result, u64 Value);
 
 LB_INLINE u32 SetBitsBelowHighInclusive(u32 Value);
+
+LB_INLINE u32 CeilPowerOf2(u32 Value);
 
 //
 // Atomic
@@ -147,6 +153,21 @@ LB_INLINE u32 SetBitsBelowHighInclusive(u32 Value)
     {
         // NOTE(boti): Shifting by (HighBit + 1) can result in UB
         Result = ((1u << HighBit) << 1) - 1;
+    }
+
+    return(Result);
+}
+
+LB_INLINE u32 CeilPowerOf2(u32 Value)
+{
+    u32 Result = Value;
+
+    if (CountSetBits(Value) > 1)
+    {
+        u32 HighBit;
+        BitScanReverse(&HighBit, Value);
+        // NOTE(boti): Shifting by (HighBit + 1) can result in UB
+        Result = ((1u << HighBit) << 1);
     }
 
     return(Result);
