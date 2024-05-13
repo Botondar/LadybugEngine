@@ -687,7 +687,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     texture* MetallicRoughnessTexture   = Assets->Textures + Material->MetallicRoughnessID;
                     texture* OcclusionTexture           = Assets->Textures + Material->OcclusionID;
                     texture* HeightTexture              = Assets->Textures + Material->HeightID;
-                    texture* TransmissionTexture        = (Material->TransmissionID != U32_MAX) ? Assets->Textures + Material->TransmissionID : nullptr;
+                    texture* TransmissionTexture        = Assets->Textures + Material->TransmissionID;
 
                     renderer_material RenderMaterial = 
                     {
@@ -696,7 +696,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                         .MetallicRoughnessID        = MetallicRoughnessTexture->RendererID,
                         .OcclusionID                = OcclusionTexture->RendererID,
                         .HeightID                   = HeightTexture->RendererID,
-                        .TransmissionID             = TransmissionTexture ? TransmissionTexture->RendererID : renderer_texture_id{},
+                        .TransmissionID             = TransmissionTexture->RendererID,
                         .AlbedoSamplerID            = Material->AlbedoSamplerID,
                         .NormalSamplerID            = Material->NormalSamplerID,
                         .MetallicRoughnessSamplerID = Material->MetallicRoughnessSamplerID,

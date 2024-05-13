@@ -1276,9 +1276,12 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         {
             material* Material = Assets->Materials + Assets->MaterialCount++;
 
-            Material->AlbedoID = Assets->DefaultTextures[TextureType_Albedo];
-            Material->NormalID = Assets->DefaultTextures[TextureType_Normal];
-            Material->MetallicRoughnessID = Assets->DefaultTextures[TextureType_RoMe];
+            Material->AlbedoID              = Assets->DefaultTextures[TextureType_Albedo];
+            Material->NormalID              = Assets->DefaultTextures[TextureType_Normal];
+            Material->MetallicRoughnessID   = Assets->DefaultTextures[TextureType_RoMe];
+            Material->OcclusionID           = Assets->DefaultTextures[TextureType_Occlusion];
+            Material->HeightID              = Assets->DefaultTextures[TextureType_Height];
+            Material->TransmissionID        = Assets->DefaultTextures[TextureType_Transmission];
             Material->AlbedoSamplerID = { 0 };
             Material->NormalSamplerID = { 0 };
             Material->MetallicRoughnessSamplerID = { 0 };
