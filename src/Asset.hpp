@@ -241,6 +241,13 @@ struct mesh
     u32 MaterialID;
 };
 
+struct model
+{
+    static constexpr u32 MaxMeshCount = 256;
+    u32 MeshCount;
+    u32 Meshes[MaxMeshCount];
+};
+
 //
 // Assets
 //
@@ -266,17 +273,20 @@ struct assets
 
     static constexpr u32 MaxTextureCount = 1u << 20;
     static constexpr u32 MaxMeshCount = 1u << 16;
+    static constexpr u32 MaxModelCount = 1u << 16;
     static constexpr u32 MaxMaterialCount = 1u << 14;
     static constexpr u32 MaxSkinCount = 1u << 14;
     static constexpr u32 MaxAnimationCount = 1u << 16;
     u32 TextureCount;
     u32 MeshCount;
+    u32 ModelCount;
     u32 MaterialCount;
     u32 SkinCount;
     u32 AnimationCount;
 
     texture Textures[MaxTextureCount];
     mesh Meshes[MaxMeshCount];
+    model Models[MaxModelCount];
     material Materials[MaxMaterialCount];
     skin Skins[MaxSkinCount];
     animation Animations[MaxAnimationCount];
@@ -299,9 +309,22 @@ lbfn texture_set DEBUGLoadTextureSet(assets* Assets, texture_set_entry Entries[T
 lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scratch);
 
 lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Frame, const char* Path);
-lbfn void DEBUGLoadTestScene(memory_arena* Scratch, 
-                             assets* Assets, struct game_world* World, render_frame* Frame,
-                             const char* ScenePath, m4 BaseTransform);
+
+typedef flags32 debug_load_flags;
+enum debug_load_flag_bits : debug_load_flags
+{
+    DEBUGLoad_None                  = 0,
+
+    DEBUGLoad_AddNodesAsEntities    = (1u << 0),
+};
+
+lbfn void DEBUGLoadTestScene(memory_arena* Scratch,
+                             assets* Assets, 
+                             struct game_world* World, 
+                             render_frame* Frame,
+                             debug_load_flags LoadFlags,
+                             const char* ScenePath, 
+                             m4 BaseTransform);
 
 lbfn void AssetThread(void* Param);
 

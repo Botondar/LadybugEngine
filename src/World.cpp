@@ -281,12 +281,14 @@ DEBUGInitializeWorld(
         {
             m4 Transform = YUpToZUp;
             DEBUGLoadTestScene(Scratch, Assets, World, Frame,
+                               DEBUGLoad_AddNodesAsEntities,
                                "data/glTF-Sample-Assets/Models/TransmissionTest/glTF/TransmissionTest.gltf", Transform);
         } break;
         case DebugScene_Sponza:
         {
             m4 Transform = YUpToZUp;
             DEBUGLoadTestScene(Scratch, Assets, World, Frame,
+                               DEBUGLoad_AddNodesAsEntities,
                                "data/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf", Transform);
         } break;
         case DebugScene_Terrain:
@@ -474,7 +476,8 @@ DEBUGInitializeWorld(
                                      0.0f, 1e-2f, 0.0f, 0.0f,
                                      0.0f, 0.0f, 1e-2f, 0.0f,
                                      0.0f, 0.0f, 0.0f, 1.0f);
-        DEBUGLoadTestScene(Scratch, Assets, World, Frame, 
+        DEBUGLoadTestScene(Scratch, Assets, World, Frame,
+                           DEBUGLoad_AddNodesAsEntities,
                            "data/glTF-Sample-Assets/Models/Fox/glTF/Fox.gltf", Transform);
     }
 
@@ -482,6 +485,7 @@ DEBUGInitializeWorld(
     {
         m4 Transform = YUpToZUp;
         DEBUGLoadTestScene(Scratch, Assets, World, Frame,
+                           DEBUGLoad_AddNodesAsEntities,
                            "data/glTF-Sample-Assets/Models/DragonAttenuation/glTF/DragonAttenuation.gltf", Transform);
     }
 }

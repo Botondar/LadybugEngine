@@ -913,7 +913,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 
     // Texture cache
     {
-        umm CacheSize = GiB(4);
+        umm CacheSize = GiB(3);
         Assets->TextureCache = InitializeArena(CacheSize, PushSize_(&Assets->Arena, 0, CacheSize, KiB(4)));
     }
 
@@ -1225,7 +1225,14 @@ lbfn texture_set DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, textur
 }
 
 // TODO(boti): There seem to be multiple places in here that might not handle the case where the buffer view stride is 0
-internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_world* World, render_frame* Frame, const char* ScenePath, m4 BaseTransform)
+internal void DEBUGLoadTestScene(
+    memory_arena* Scratch, 
+    assets* Assets, 
+    game_world* World, 
+    render_frame* Frame, 
+    debug_load_flags LoadFlags,
+    const char* ScenePath, 
+    m4 BaseTransform)
 {
     filepath Filepath = {};
     b32 FilepathResult = MakeFilepathFromZ(&Filepath, ScenePath);
@@ -1261,6 +1268,7 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
     }
 
     // NOTE(boti): Store the initial indices in the game so that we know what to offset the glTF indices by
+    u32 BaseModelIndex      = Assets->ModelCount;
     u32 BaseMeshIndex       = Assets->MeshCount;
     u32 BaseMaterialIndex   = Assets->MaterialCount;
     u32 BaseSkinIndex       = Assets->SkinCount;
@@ -1465,6 +1473,12 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
 
     for (u32 MeshIndex = 0; MeshIndex < GLTF.MeshCount; MeshIndex++)
     {
+        if (Assets->ModelCount >= Assets->MaxModelCount)
+        {
+            UnhandledError("Out of model pool memory");
+        }
+        model* Model = Assets->Models + Assets->ModelCount++;
+
         gltf_mesh* Mesh = GLTF.Meshes + MeshIndex;
         for (u32 PrimitiveIndex = 0; PrimitiveIndex < Mesh->PrimitiveCount; PrimitiveIndex++)
         {
@@ -1724,6 +1738,15 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
                 DstMesh->BoundingBox = Box;
                 DstMesh->MaterialID = Primitive->MaterialIndex + BaseMaterialIndex;
                 TransferGeometry(Frame, DstMesh->Allocation, VertexData, IndexData);
+
+                if (Model->MeshCount < Model->MaxMeshCount)
+                {
+                    Model->Meshes[Model->MeshCount++] = MeshID;
+                }
+                else
+                {
+                    UnhandledError("Too many meshes per model");
+                }
             }
             else
             {
@@ -2122,90 +2145,87 @@ internal void DEBUGLoadTestScene(memory_arena* Scratch, assets* Assets, game_wor
         }
     }
 
-    if (GLTF.DefaultSceneIndex >= GLTF.SceneCount)
+    if (LoadFlags & DEBUGLoad_AddNodesAsEntities)
     {
-        UnhandledError("glTF default scene index out of bounds");
-    }
-
-    gltf_scene* Scene = GLTF.Scenes + GLTF.DefaultSceneIndex;
-
-    m4* ParentTransforms = PushArray(Scratch, 0, m4, GLTF.NodeCount);
-    u32* NodeParents = PushArray(Scratch, 0, u32, GLTF.NodeCount);
-
-    u32 NodeQueueCount = 0;
-    u32* NodeQueue = PushArray(Scratch, 0, u32, GLTF.NodeCount);
-    for (u32 It = 0; It < Scene->RootNodeCount; It++)
-    {
-        u32 NodeIndex = Scene->RootNodes[It];
-        NodeParents[NodeIndex] = U32_MAX;
-        ParentTransforms[NodeIndex] = BaseTransform;
-        NodeQueue[NodeQueueCount++] = NodeIndex;
-    }
-
-    for (u32 It = 0; It < NodeQueueCount; It++)
-    {
-        u32 NodeIndex = NodeQueue[It];
-        gltf_node* Node = GLTF.Nodes + NodeIndex;
-        u32 Parent = NodeParents[NodeIndex];
-
-        m4 LocalTransform = Node->Transform;
-        if (Node->IsTRS)
+        if (GLTF.DefaultSceneIndex >= GLTF.SceneCount)
         {
-            trs_transform TRS
-            {
-                .Rotation = Node->Rotation,
-                .Position = Node->Translation,
-                .Scale = Node->Scale,
-            };
-            LocalTransform = TRSToM4(TRS);
+            UnhandledError("glTF default scene index out of bounds");
         }
 
-        m4 ParentTransform = ParentTransforms[NodeIndex];
-        m4 NodeTransform = ParentTransform * LocalTransform;
-        for (u32 ChildIt = 0; ChildIt < Node->ChildrenCount; ChildIt++)
+        gltf_scene* Scene = GLTF.Scenes + GLTF.DefaultSceneIndex;
+
+        m4* ParentTransforms = PushArray(Scratch, 0, m4, GLTF.NodeCount);
+        u32* NodeParents = PushArray(Scratch, 0, u32, GLTF.NodeCount);
+
+        u32 NodeQueueCount = 0;
+        u32* NodeQueue = PushArray(Scratch, 0, u32, GLTF.NodeCount);
+        for (u32 It = 0; It < Scene->RootNodeCount; It++)
         {
-            u32 ChildIndex = Node->Children[ChildIt];
-            ParentTransforms[ChildIndex] = NodeTransform;
-            NodeQueue[NodeQueueCount++] = ChildIndex;
+            u32 NodeIndex = Scene->RootNodes[It];
+            NodeParents[NodeIndex] = U32_MAX;
+            ParentTransforms[NodeIndex] = BaseTransform;
+            NodeQueue[NodeQueueCount++] = NodeIndex;
         }
 
-        if (Node->MeshIndex != U32_MAX)
+        for (u32 It = 0; It < NodeQueueCount; It++)
         {
-            Assert(Node->MeshIndex < GLTF.MeshCount);
-            gltf_mesh* Mesh = GLTF.Meshes + Node->MeshIndex;
+            u32 NodeIndex = NodeQueue[It];
+            gltf_node* Node = GLTF.Nodes + NodeIndex;
+            u32 Parent = NodeParents[NodeIndex];
 
-            // NOTE(boti): Because we treat each primitive as a mesh, we manually
-            // have to figure out what the base ID of said mesh is going to be in the asset storage
-            u32 MeshOffset = 0;
-            for (u32 i = 0; i < Node->MeshIndex; i++)
+            m4 LocalTransform = Node->Transform;
+            if (Node->IsTRS)
             {
-                MeshOffset += GLTF.Meshes[i].PrimitiveCount;
+                trs_transform TRS
+                {
+                    .Rotation = Node->Rotation,
+                    .Position = Node->Translation,
+                    .Scale = Node->Scale,
+                };
+                LocalTransform = TRSToM4(TRS);
             }
 
-            if (World->EntityCount < World->MaxEntityCount)
+            m4 ParentTransform = ParentTransforms[NodeIndex];
+            m4 NodeTransform = ParentTransform * LocalTransform;
+            for (u32 ChildIt = 0; ChildIt < Node->ChildrenCount; ChildIt++)
             {
-                entity* Entity = World->Entities + World->EntityCount++;
-                Entity->Flags = EntityFlag_Mesh;
-                Entity->Transform = NodeTransform;
+                u32 ChildIndex = Node->Children[ChildIt];
+                ParentTransforms[ChildIndex] = NodeTransform;
+                NodeQueue[NodeQueueCount++] = ChildIndex;
+            }
 
-                Assert(Mesh->PrimitiveCount <= Entity->MaxPieceCount);
-                for (u32 PrimitiveIndex = 0; PrimitiveIndex < Mesh->PrimitiveCount; PrimitiveIndex++)
-                {
-                    Entity->Pieces[Entity->PieceCount++] = 
-                    { 
-                        .MeshID = BaseMeshIndex + MeshOffset + PrimitiveIndex 
-                    };
-                }
+            if (Node->MeshIndex != U32_MAX)
+            {
+                Assert(Node->MeshIndex < GLTF.MeshCount);
+                gltf_mesh* Mesh = GLTF.Meshes + Node->MeshIndex;
 
-                if (Node->SkinIndex != U32_MAX)
+                model* Model = Assets->Models + BaseModelIndex + Node->MeshIndex;
+
+                if (World->EntityCount < World->MaxEntityCount)
                 {
-                    Entity->Flags |= EntityFlag_Skin;
-                    Entity->SkinID = BaseSkinIndex + Node->SkinIndex;
-                    Entity->CurrentAnimationID = 0;
-                    Entity->DoAnimation = false;
-                    Entity->AnimationCounter = 0.0f;
+                    entity* Entity = World->Entities + World->EntityCount++;
+                    Entity->Flags = EntityFlag_Mesh;
+                    Entity->Transform = NodeTransform;
+
+                    Assert(Model->MeshCount <= Entity->MaxPieceCount);
+                    for (u32 MeshIndex = 0; MeshIndex < Model->MeshCount; MeshIndex++)
+                    {
+                        Entity->Pieces[Entity->PieceCount++] = 
+                        { 
+                            .MeshID = Model->Meshes[MeshIndex],
+                        };
+                    }
+
+                    if (Node->SkinIndex != U32_MAX)
+                    {
+                        Entity->Flags |= EntityFlag_Skin;
+                        Entity->SkinID = BaseSkinIndex + Node->SkinIndex;
+                        Entity->CurrentAnimationID = 0;
+                        Entity->DoAnimation = false;
+                        Entity->AnimationCounter = 0.0f;
+                    }
+                    Entity->LightEmission = {};
                 }
-                Entity->LightEmission = {};
             }
         }
     }
