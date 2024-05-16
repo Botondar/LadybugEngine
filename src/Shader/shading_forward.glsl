@@ -10,10 +10,11 @@ interpolant(0) vec3 P;
 interpolant(1) vec2 TexCoord;
 interpolant(2) vec3 TriN;
 interpolant(3) vec3 TriT;
-interpolant(4) vec3 TriB;
+interpolant(4) f32 TangentSign;
 interpolant(5) vec3 ShadowP;
 interpolant(6) vec3 CascadeBlends;
 interpolant(7) flat uint InstanceIndex;
+
 
 #if defined(VS)
 
@@ -31,7 +32,7 @@ void main()
     TriN                = normalize(mat3(PerFrame.ViewTransform) * (VertexBuffer.Data[gl_VertexIndex].N * inverse(mat3(Instance.Transform))));
     v4 Tangent          = VertexBuffer.Data[gl_VertexIndex].T;
     TriT                = normalize((mat3(PerFrame.ViewTransform) * (mat3(Instance.Transform) * Tangent.xyz)));
-    TriB                = normalize(cross(TriN, TriT)) * Tangent.w;
+    TangentSign         = Tangent.w;
 
     P = TransformPoint(PerFrame.ViewTransform, WorldP);
 
@@ -116,12 +117,11 @@ void main()
         f32 Transmission = Instance.Material.Transmission * texture(sampler2D(Textures[Instance.Material.TransmissionID], MatSamplers[Instance.Material.TransmissionSamplerID]), UV).r;
 #endif
         v4 BaseAlbedo = UnpackRGBA8(Instance.Material.BaseAlbedo);
-        v4 BaseMetallicRoughness = UnpackRGBA8(Instance.Material.BaseMaterial);
         v4 Albedo = BaseAlbedo * texture(sampler2D(Textures[Instance.Material.AlbedoID], MatSamplers[Instance.Material.AlbedoSamplerID]), UV);
         v4 MetallicRoughness = texture(sampler2D(Textures[Instance.Material.MetallicRoughnessID], MatSamplers[Instance.Material.MetallicRoughnessSamplerID]), UV);
-        f32 Roughness = MetallicRoughness.g * BaseMetallicRoughness.g;
-        f32 Metallic = MetallicRoughness.b * BaseMetallicRoughness.b;
+        MetallicRoughness *= UnpackRGBA8(Instance.Material.BaseMaterial);
         v3 N = UnpackSurfaceNormal01(texture(sampler2D(Textures[Instance.Material.NormalID], MatSamplers[Instance.Material.NormalSamplerID]), UV).xy);
+        v3 TriB = cross(TriN, TriT) * TangentSign;
         N = normalize(TriT) * N.x + normalize(TriB) * N.y + normalize(TriN) * N.z;
 
         Alpha = Albedo.a;
@@ -139,8 +139,8 @@ void main()
 #endif
         }
 
-        vec3 F0 = mix(vec3(0.04), Albedo.rgb, Metallic);
-        vec3 DiffuseBase = (1.0 - Metallic) * (vec3(1.0) - F0) * Albedo.rgb;
+        vec3 F0 = mix(vec3(0.04), Albedo.rgb, MetallicRoughness.b);
+        vec3 DiffuseBase = (1.0 - MetallicRoughness.b) * (vec3(1.0) - F0) * Albedo.rgb;
 
         Lo += Instance.Material.Emissive;
         {
@@ -148,6 +148,7 @@ void main()
             v2 EnvBRDF = textureLod(sampler2D(BRDFLut, Samplers[Sampler_LinearEdgeClamp]), v2(MetallicRoughness.g, Clamp01(dot(N, V))), 0.0).rg;
             Lo += Occlusion * PerFrame.Ambience * (DiffuseBase + F0 * EnvBRDF.x + EnvBRDF.y);
         }
+
         f32 SunShadow = CalculateCascadedShadow(
             CascadedShadow, Samplers[Sampler_Shadow], 
             ShadowP, CascadeBlends,
@@ -155,13 +156,13 @@ void main()
 #if ShaderVariant_Transmission
         Lo += CalculateOutgoingLuminanceTransmission(
             SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
-            DiffuseBase, F0, Roughness, Transmission);
+            DiffuseBase, F0, MetallicRoughness.g, Transmission);
 
         SourceTransmission = v4(mix(v3(1.0), Transmission * DiffuseBase, Albedo.a), 1.0);
 #else
         Lo += CalculateOutgoingLuminance(
             SunShadow * PerFrame.SunL, PerFrame.SunV, N, V,
-            DiffuseBase, F0, Roughness);
+            DiffuseBase, F0, MetallicRoughness.g);
 #endif
 
         for (uint LightIndex = 0; LightIndex < TileBuffer.Data[TileIndex].LightCount; LightIndex++)
@@ -182,11 +183,11 @@ void main()
 #if ShaderVariant_Transmission
             Lo += CalculateOutgoingLuminanceTransmission(
                 Shadow * E, normalize(dP), N, V,
-                DiffuseBase, F0, Roughness, Transmission);
+                DiffuseBase, F0, MetallicRoughness.g, Transmission);
 #else
             Lo += CalculateOutgoingLuminance(
                 Shadow * E, normalize(dP), N, V,
-                DiffuseBase, F0, Roughness);
+                DiffuseBase, F0, MetallicRoughness.g);
 #endif
         }
     }

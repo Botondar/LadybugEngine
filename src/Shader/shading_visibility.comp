@@ -91,6 +91,7 @@ void main()
     v2u InstanceTriangleID = texelFetch(VisibilityImage, TexelID, 0).rg;
 
     v2 TexelOffset = v2(0.5);
+    v2 FragCoord = v2(TexelID) + TexelOffset;
     v2 Pixel = 2.0 * ((v2(TexelID) + TexelOffset) / v2(OutputExtent)) - v2(1.0);
 
     v3 Lo = v3(0.0);
@@ -206,17 +207,6 @@ void main()
         v3 F0 = mix(v3(0.04), Albedo.rgb, MetallicRoughness.b);
         v3 DiffuseBase = (1.0 - MetallicRoughness.b) * (v3(1.0) - F0) * Albedo.rgb;
 
-        // TODO(boti): There's something clearly wrong here in terms of packing or indexing.
-        // In the original renderer_material ordering (introduced with parallax mapping/bug.vbuffer-nan tag)
-        // adding _all 3_ emissive components resulted in huge negative values in Lo when rendering skinned meshes,
-        // but the same behaviour didn't occur when only adding 1 or 2
-        // components (regardless of which components those were).
-        // Moreover this didn't happen _at all_ when the program was launched through NSight.
-        // The issue seems to have been "fixed" by reordering renderer_material, 
-        // but I really have no idea what's actually going on here.
-        //
-        // UPDATE: We may have shifted the issue around? Now it looks like we're getting incorrect
-        // roughness values, but not limited to skinned meshes? Or maybe that's a different issue?
         Lo += Instance.Material.Emissive;
         {
             f32 ScreenOcclusion = texelFetch(OcclusionImage, TexelID, 0).r;
@@ -262,7 +252,7 @@ void main()
         //
         {
             f32 Atmosphere = CalculateAtmosphere(
-                Pixel, 
+                FragCoord,
                 P, 
                 PerFrame.SunV,
                 PerFrame.CascadeViewProjections[0] * PerFrame.CameraTransform,
