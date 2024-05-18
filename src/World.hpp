@@ -113,6 +113,8 @@ struct height_field
     f32* HeightData;
 };
 
+inline f32 SampleHeight(height_field* Field, v2 Height);
+
 struct game_world
 {
     memory_arena* Arena;
@@ -125,6 +127,7 @@ struct game_world
 
     entropy32 EffectEntropy; // NOTE(boti): for visual effects only
 
+    entropy32 GeneratorEntropy;
     noise2 TerrainNoise;
     u32 TerrainMaterialID;
     height_field HeightField;
@@ -189,5 +192,17 @@ DEBUGInitializeWorld(
 inline b32 IsValid(entity_id ID)
 {
     b32 Result = (ID.Value != 0);
+    return(Result);
+}
+
+inline f32 SampleHeight(height_field* Field, v2 UV)
+{
+    v2u Coord = 
+    {
+        (u32)Floor(Field->TexelCountX * UV.X),
+        (u32)Floor(Field->TexelCountY * UV.Y),
+    };
+
+    f32 Result = Field->HeightData[Coord.X + Coord.Y * Field->TexelCountX];
     return(Result);
 }

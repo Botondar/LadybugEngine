@@ -270,6 +270,9 @@ struct assets
     u32 ArrowMeshID;
     u32 SphereMeshID;
     u32 CubeMeshID;
+    static constexpr u32 MaxTreeModelCount = 16;
+    u32 TreeModelCount;
+    u32 TreeModels[MaxTreeModelCount];
 
     static constexpr u32 MaxTextureCount = 1u << 20;
     static constexpr u32 MaxMeshCount = 1u << 16;

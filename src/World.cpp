@@ -293,6 +293,39 @@ DEBUGInitializeWorld(
         } break;
         case DebugScene_Terrain:
         {
+            // Load trees
+            {
+                const char* TreeFiles[] = 
+                {
+                    "data/orca/SpeedTree/european-linden/european-linden.gltf",
+                    "data/orca/SpeedTree/japanese-maple/japanese-maple.gltf",
+                    "data/orca/SpeedTree/red-maple-young/red-maple-young.gltf",
+                    "data/orca/SpeedTree/white-oak/white-oak.gltf",
+                };
+
+                for (u32 FileIndex = 0; FileIndex < CountOf(TreeFiles); FileIndex++)
+                {
+                    u32 BaseTreeIndex = Assets->ModelCount;
+                    DEBUGLoadTestScene(Frame->Arena, Assets, World, Frame, 
+                                       DEBUGLoad_None,
+                                       TreeFiles[FileIndex],
+                                       Identity4());
+
+                    u32 TreeCount = Assets->ModelCount - BaseTreeIndex;
+                    for (u32 TreeIndex = 0; TreeIndex < TreeCount; TreeIndex++)
+                    {
+                        if (Assets->TreeModelCount < Assets->MaxTreeModelCount)
+                        {
+                            Assets->TreeModels[Assets->TreeModelCount++] = BaseTreeIndex + TreeIndex;
+                        }
+                        else
+                        {
+                            Platform.DebugPrint("Too many trees!");
+                        }
+                    }
+                }
+            }
+
             // Height field
             {
                 World->TerrainNoise = { 0 };
@@ -325,7 +358,7 @@ DEBUGInitializeWorld(
                 }
             }
 
-            #if 1
+            #if 0
             texture_set_entry TextureSetEntries[TextureType_Count] =
             {
                 [TextureType_Albedo]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_albedo.tif" },
@@ -335,7 +368,7 @@ DEBUGInitializeWorld(
                 [TextureType_Height]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_height.tif" },
                 [TextureType_Transmission]  = {},
             };
-            #else
+            #elif 0
             texture_set_entry TextureSetEntries[TextureType_Count] =
             {
                 [TextureType_Albedo]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_albedo.tif" },
@@ -343,6 +376,26 @@ DEBUGInitializeWorld(
                 [TextureType_RoMe]          = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_roughness.tif", TextureChannel_R, TextureChannel_Undefined },
                 [TextureType_Occlusion]     = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_ao.tif" },
                 [TextureType_Height]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_height.tif" },
+                [TextureType_Transmission]  = {},
+            };
+            #elif 0
+            texture_set_entry TextureSetEntries[TextureType_Count] =
+            {
+                [TextureType_Albedo]        = { "data/texture/leafy-grass2-ue/leafy-grass2-albedo.png" },
+                [TextureType_Normal]        = { "data/texture/leafy-grass2-ue/leafy-grass2-normal-dx.png" },
+                [TextureType_RoMe]          = { "data/texture/leafy-grass2-ue/leafy-grass2-roughness.png", TextureChannel_R, TextureChannel_Undefined },
+                [TextureType_Occlusion]     = { "data/texture/leafy-grass2-ue/leafy-grass2-ao.png" },
+                [TextureType_Height]        = { "data/texture/leafy-grass2-ue/leafy-grass2-height.png" },
+                [TextureType_Transmission]  = {},
+            };
+            #elif 1
+            texture_set_entry TextureSetEntries[TextureType_Count] =
+            {
+                [TextureType_Albedo]        = { "data/texture/mixedmoss-ue4/mixedmoss-albedo2.png" },
+                [TextureType_Normal]        = { "data/texture/mixedmoss-ue4/mixedmoss-normal2.png" },
+                [TextureType_RoMe]          = { "data/texture/mixedmoss-ue4/mixedmoss-roughness.png", TextureChannel_R, TextureChannel_Undefined },
+                [TextureType_Occlusion]     = { "data/texture/mixedmoss-ue4/mixedmoss-ao2.png" },
+                [TextureType_Height]        = { "data/texture/mixedmoss-ue4/mixedmoss-height.png" },
                 [TextureType_Transmission]  = {},
             };
             #endif
@@ -386,6 +439,70 @@ DEBUGInitializeWorld(
             TerrainEntity->PieceCount = 1;
             TerrainEntity->Pieces[0].MeshID = ChunkMeshID;
             
+            // Plant trees
+            if (Assets->TreeModelCount)
+            {
+                v2 MinBounds = 
+                {
+                    TerrainEntity->Transform.P.X + TerrainMesh.Box.Min.X,
+                    TerrainEntity->Transform.P.Y + TerrainMesh.Box.Min.Y,
+                };
+
+                v2 MaxBounds = 
+                {
+                    TerrainEntity->Transform.P.X + TerrainMesh.Box.Max.X,
+                    TerrainEntity->Transform.P.Y + TerrainMesh.Box.Max.Y,
+                };
+
+                u32 TreeCountToGenerate = 2048;
+                for (u32 TreeIndex = 0; TreeIndex < TreeCountToGenerate; TreeIndex++)
+                {
+                    u32 ModelIndex = RandU32(&World->GeneratorEntropy) % Assets->TreeModelCount;
+                    model* Model = Assets->Models + Assets->TreeModels[ModelIndex];
+                    v3 TreeMinP = { +F32_MAX_NORMAL, +F32_MAX_NORMAL, +F32_MAX_NORMAL };
+                    v3 TreeMaxP = { -F32_MAX_NORMAL, -F32_MAX_NORMAL, -F32_MAX_NORMAL };
+                    for (u32 MeshIndex = 0; MeshIndex < Model->MeshCount; MeshIndex++)
+                    {
+                        mesh* TreeMesh = Assets->Meshes + Model->Meshes[MeshIndex];
+                        TreeMinP = Min(TreeMinP, TreeMesh->BoundingBox.Min);
+                        TreeMaxP = Max(TreeMaxP, TreeMesh->BoundingBox.Max);
+                    }
+
+                    if (World->EntityCount < World->MaxEntityCount)
+                    {
+                        entity* Entity = World->Entities + World->EntityCount++;
+                        memset(Entity, 0, sizeof(*Entity));
+                        Entity->Flags = EntityFlag_Mesh;
+
+                        v2 UV = { RandUnilateral(&World->GeneratorEntropy), RandUnilateral(&World->GeneratorEntropy) };
+                        v3 P = 
+                        { 
+                            UV.X * (MaxBounds.X - MinBounds.X)  + MinBounds.X,
+                            UV.Y * (MaxBounds.Y - MinBounds.Y)  + MinBounds.Y,
+                            SampleHeight(&World->HeightField, UV) - 0.25f,
+                        };
+
+                        constexpr f32 S = 1.0f;
+                        Entity->Transform = M4(
+                            S, 0.0f, 0.0f, P.X,
+                            0.0f, S, 0.0f, P.Y,
+                            0.0f, 0.0f, S, P.Z,
+                            0.0f, 0.0f, 0.0f, 1.0f);
+
+                        for (u32 MeshIndex = 0; MeshIndex < Model->MeshCount; MeshIndex++)
+                        {
+                            if (Entity->PieceCount < Entity->MaxPieceCount)
+                            {
+                                Entity->Pieces[Entity->PieceCount++] = 
+                                {
+                                    .MeshID = Model->Meshes[MeshIndex],
+                                    .OffsetP = { 0.0f, 0.0f, 0.0f },
+                                };
+                            }
+                        }
+                    }
+                }
+            }
         } break;
         InvalidDefaultCase;
     }
@@ -498,6 +615,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
     {
         World->LightProxyScale = 1e-1f;
         World->EffectEntropy = { 0x13370420 };
+        World->GeneratorEntropy = { 0x13370420 };
 
         Assert(World->EntityCount == 0);
         // Null entity
@@ -517,7 +635,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         World->Camera.Yaw = 0.5f * Pi;
 
         // Load debug scene
-        #if 1
+        #if 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
                              DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);
@@ -525,7 +643,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_TransmissionTest, 
                              0);
-        #elif 0
+        #elif 1
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Terrain,
                              DebugSceneFlag_None);
@@ -586,7 +704,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
         #if 1
         World->SunV = Normalize(v3{ +4.25f, -1.0f, 8.0f });
         #else
-        World->SunV = Normalize(v3{ +4.25f, -0.5f, 10.0f });
+        World->SunV = Normalize(v3{ +4.25f, -0.5f, 3.5f });
         #endif
         Frame->SunL = World->SunL;
         Frame->SunV = World->SunV;
