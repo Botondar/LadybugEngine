@@ -675,16 +675,6 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
         counter FrameEndCounter = Win_GetCounter();
         GameIO.dt = Win_ElapsedSeconds(FrameStartCounter, FrameEndCounter);
 
-        {
-            TimedBlock(&GlobalProfiler, "Window title update");
-
-            constexpr size_t BuffSize = 64;
-            wchar_t Buff[BuffSize];
-            _snwprintf(Buff, BuffSize, L"%s [%5.1f FPS | %5.2f ms]\n", Win_WindowTitle, 1.0f / GameIO.dt, 1000.0f * GameIO.dt);
-
-            SetWindowTextW(WinWindow, Buff);
-        }
-
         EndProfiler(&GlobalProfiler);
 
         // Debug profiler output
