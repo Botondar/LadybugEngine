@@ -295,6 +295,12 @@ DEBUGInitializeWorld(
         {
             // Load trees
             {
+                #if 0
+                const char* TreeFiles[] =
+                {
+                    "data/mighty_oak_trees/oaks.gltf",
+                };
+                #else
                 const char* TreeFiles[] = 
                 {
                     "data/orca/SpeedTree/european-linden/european-linden.gltf",
@@ -302,6 +308,7 @@ DEBUGInitializeWorld(
                     "data/orca/SpeedTree/red-maple-young/red-maple-young.gltf",
                     "data/orca/SpeedTree/white-oak/white-oak.gltf",
                 };
+                #endif
 
                 for (u32 FileIndex = 0; FileIndex < CountOf(TreeFiles); FileIndex++)
                 {
@@ -482,11 +489,13 @@ DEBUGInitializeWorld(
                             SampleHeight(&World->HeightField, UV) - 0.25f,
                         };
 
-                        constexpr f32 S = 1.0f;
+                        f32 Angle = 2.0f * Pi * RandUnilateral(&World->GeneratorEntropy);
+                        f32 C = Cos(Angle);
+                        f32 S = Sin(Angle);
                         Entity->Transform = M4(
-                            S, 0.0f, 0.0f, P.X,
-                            0.0f, S, 0.0f, P.Y,
-                            0.0f, 0.0f, S, P.Z,
+                            +C,     -S, 0.0f, P.X,
+                            +S,     +C, 0.0f, P.Y,
+                            0.0f, 0.0f, 1.0f, P.Z,
                             0.0f, 0.0f, 0.0f, 1.0f);
 
                         for (u32 MeshIndex = 0; MeshIndex < Model->MeshCount; MeshIndex++)
