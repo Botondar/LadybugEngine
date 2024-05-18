@@ -2360,6 +2360,18 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         Frame->ViewTransform = AffineOrthonormalInverse(Frame->CameraTransform);
 
         #if 1
+        // Infinite Reverse Z
+        Frame->ProjectionTransform = M4(
+            g / s,  0.0f,   0.0f, 0.0f,
+            0.0f,   g,      0.0f, 0.0f,
+            0.0f,   0.0f,   0.0f, n,
+            0.0f,   0.0f,   1.0f, 0.0f);
+        Frame->InverseProjectionTransform = M4(
+            s / g,  0.0f,       0.0f,           0.0f,
+            0.0f,   1.0f / g,   0.0f,           0.0f,
+            0.0f,   0.0f,       0.0f,           1.0f,
+            0.0f,   0.0f,       1.0f / n,       0.0f);
+        #elif
         // Reverse Z
         Frame->ProjectionTransform = M4(
             g / s, 0.0f, 0.0f, 0.0f,
@@ -2398,7 +2410,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             .Top    = v4{ 0.0f, -gmy,  my, 0.0f } * Frame->ViewTransform,
             .Bottom = v4{ 0.0f, +gmy,  my, 0.0f } * Frame->ViewTransform,
             .Near   = v4{ 0.0f, 0.0f, +1.0f, -n } * Frame->ViewTransform,
-            .Far    = v4{ 0.0f, 0.0f, -1.0f, +f } * Frame->ViewTransform,
+            .Far    = v4{ 0.0f, 0.0f,  0.0f, 0.0f } * Frame->ViewTransform,
         };
 
         Frame->Uniforms.CameraTransform = Frame->CameraTransform;
@@ -5555,7 +5567,7 @@ internal void SetupSceneRendering(render_frame* Frame, frustum* CascadeFrustums)
         m4 CameraToSun = SunView * Frame->CameraTransform;
     
         f32 SplitFactor = 0.1f;
-        f32 Splits[] = { 2.0f, 4.0f, 8.0f, 32.0f };
+        f32 Splits[] = { 8.0f, 16.0f, 32.0f, 64.0f };
         f32 NdTable[] = 
         { 
             0.0f,
