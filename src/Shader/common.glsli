@@ -647,7 +647,7 @@ v3 CIEClearSky(v3 V, v3 Up, v3 SunV, v3 SunL, bool DoSun)
 
     float SunLuminance = GetLuminance(SunL);
 
-    v3 SkyColor = 0.1 * SunLuminance * vec3(0.2, 0.5, 1.0);
+    v3 SkyColor = SetLuminance(vec3(0.2, 0.5, 1.0), 5e-2 * SunLuminance);
     float SunWidth = 0.015;
 
     v3 Result = max(SkyColor * Luminance, vec3(0.0));
