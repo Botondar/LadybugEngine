@@ -7,6 +7,74 @@ internal mesh_data CreateArrowMesh(memory_arena* Arena);
 
 internal loaded_image LoadTIFF(memory_arena* Arena, buffer File);
 
+// Alpha test mipmap generation as described by Ignacio Castano
+// NOTE(boti): Image must be RGBA8
+internal f32 CalculateAlphaCoverage(v2u Extent, u8* Texels, f32 AlphaThreshold, f32 AlphaScale);
+internal f32 CalculateAlphaScaleForCoverage(v2u Extent, u8* Texels, f32 AlphaThreshold, f32 TargetCoverage);
+// NOTE(boti): Returns the scale used
+internal f32 RescaleAlphaForCoverage(v2u Extent, u8* Texels, f32 AlphaThreshold, f32 TargetCoverage);
+
+internal f32 CalculateAlphaCoverage(v2u Extent, u8* Texels, f32 AlphaThreshold, f32 AlphaScale)
+{
+    f32 Coverage = 0.0f;
+
+    u32 Count = Extent.X * Extent.Y;
+    f32 Norm = 1.0f / (f32)Count;
+
+    u8* At = Texels + 3;
+    while (Count--)
+    {
+        f32 Alpha = Clamp(AlphaScale * (f32)(*At) / 255.0f, 0.0f, 1.0f);
+        At += 4;
+
+        if (Alpha >= AlphaThreshold)
+        {
+            Coverage += 1.0f;
+        }
+    }
+
+    Coverage *= Norm;
+    return(Coverage);
+}
+
+internal f32 CalculateAlphaScaleForCoverage(v2u Extent, u8* Texels, f32 AlphaThreshold, f32 TargetCoverage)
+{
+    f32 MinScale = 0.0f;
+    f32 MaxScale = 4.0f;
+    f32 Scale = 1.0f;
+
+    for (u32 Step = 0; Step < 8; Step++)
+    {
+        f32 CurrentCoverage = CalculateAlphaCoverage(Extent, Texels, AlphaThreshold, Scale);
+
+        if      (CurrentCoverage < TargetCoverage) MinScale = Scale;
+        else if (CurrentCoverage > TargetCoverage) MaxScale = Scale;
+        else    break;
+
+        Scale = 0.5f * (MinScale + MaxScale);
+    }
+
+    return(Scale);
+}
+
+internal f32 ScaleAlphaForCoverage(v2u Extent, u8* Texels, f32 AlphaThreshold, f32 TargetCoverage)
+{
+    f32 Scale = CalculateAlphaScaleForCoverage(Extent, Texels, AlphaThreshold, TargetCoverage);
+
+    u32 Count = Extent.X * Extent.Y;
+    u8* At = Texels + 3;
+    while (Count--)
+    {
+        f32 Alpha = (f32)(*At) / 255.0f;
+        Alpha = Clamp(Scale * Alpha, 0.0f, 1.0f);
+        u8 Alpha8 = (u8)Round(255.0f * Alpha);
+        *At = Alpha8;
+        At += 4;
+    }
+
+    return(Scale);
+}
+
 //
 // Utility
 //
@@ -735,6 +803,17 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
         // but if we ever support higher bit depths, this function will need to get updated as well
         Assert(Image.BitDepthPerChannel == 8);
 
+        // TODO(boti): We'll want these to be part of the Op, alpha rescale should only be done on alpha tested textures
+        b32 DoAlphaCoverageRescale = (Op->Type == TextureType_Albedo) && (Image.ChannelCount == 4);
+        f32 AlphaThreshold = 1.0f;
+
+        // NOTE(boti): Calculate initial alpha coverage
+        f32 AlphaCoverage = 0.0f;
+        if (DoAlphaCoverageRescale)
+        {
+            AlphaCoverage = CalculateAlphaCoverage(Image.Extent, (u8*)Image.Data, AlphaThreshold, 1.0f);
+        }
+
         v2u AlignedExtent = { CeilPowerOf2(Image.Extent.X), CeilPowerOf2(Image.Extent.Y) };
         if (AlignedExtent.X != Image.Extent.X || AlignedExtent.Y != Image.Extent.Y)
         {
@@ -752,6 +831,11 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
                         (u8*)OldImage.Data, OldImage.Extent.X, OldImage.Extent.Y, 0, 
                         (u8*)Image.Data, AlignedExtent.X, AlignedExtent.Y, 0,
                         PixelLayout);
+
+                    if (DoAlphaCoverageRescale)
+                    {
+                        ScaleAlphaForCoverage(AlignedExtent, (u8*)Image.Data, AlphaThreshold, AlphaCoverage);
+                    }
                 } break;
             
                 default:
@@ -808,6 +892,11 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
                                 (u8*)SrcAt, PrevExtentX, PrevExtentY, 0, 
                                 (u8*)DownscaleBuffer, ExtentX, ExtentY, 0,
                                 PixelLayout);
+
+                            if (DoAlphaCoverageRescale)
+                            {
+                                ScaleAlphaForCoverage({ ExtentX, ExtentY }, (u8*)DownscaleBuffer, AlphaThreshold, AlphaCoverage);
+                            }
                         } break;
 
                         default:
