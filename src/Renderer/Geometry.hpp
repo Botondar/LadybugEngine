@@ -1,19 +1,7 @@
-#pragma once
-
-// NOTE(boti): RenderDoc can't handle sparse buffers, 
-//             so this option is here for debugging.
-//             Note that allocations will fail once you exceed the 256MiB limit.
-#define VB_DISABLE_SPARSE 1
-
 struct geometry_memory
 {
-#if VB_DISABLE_SPARSE
     static constexpr u32 MaxGPUAllocationCount = 1;
     static constexpr u64 GPUBlockSize = MiB(256);
-#else
-    static constexpr u32 MaxGPUAllocationCount = 96;
-    static constexpr u64 GPUBlockSize = MiB(16);
-#endif
 
     u32 MemoryTypeIndex;
     u32 AllocationCount;

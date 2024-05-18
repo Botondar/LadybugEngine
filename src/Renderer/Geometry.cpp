@@ -28,11 +28,7 @@ internal bool CreateGeometryMemory(geometry_memory* Memory, geometry_buffer_type
     {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext = nullptr,
-#if VB_DISABLE_SPARSE
         .flags = 0,
-#else
-        .flags = VK_BUFFER_CREATE_SPARSE_BINDING_BIT|VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT,
-#endif
         .size = geometry_memory::GPUBlockSize * geometry_memory::MaxGPUAllocationCount,
         .usage = Usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
@@ -136,7 +132,6 @@ internal bool AllocateGPUBlocks(geometry_memory* Memory, geometry_buffer_block*&
         VkResult AllocResult = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &DeviceMemory);
         if (AllocResult == VK_SUCCESS)
         {
-#if VB_DISABLE_SPARSE
             if (vkBindBufferMemory(VK.Device, Memory->Buffer, DeviceMemory, 0) == VK_SUCCESS)
             {
                 geometry_buffer_block* FreeBlock = BlockPool;
@@ -153,78 +148,6 @@ internal bool AllocateGPUBlocks(geometry_memory* Memory, geometry_buffer_block*&
 
                 Result = true;
             }
-#else
-            VkSparseMemoryBind MemoryBind = 
-            {
-                .resourceOffset = Memory->MemorySize,
-                .size = Memory->GPUBlockSize,
-                .memory = DeviceMemory,
-                .memoryOffset = 0,
-                .flags = 0,
-            };
-            VkSparseBufferMemoryBindInfo BufferBind = 
-            {
-                .buffer = Memory->Buffer,
-                .bindCount = 1,
-                .pBinds = &MemoryBind,
-            };
-            VkBindSparseInfo BindInfo = 
-            {
-                .sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO,
-                .pNext = nullptr,
-                .waitSemaphoreCount = 0,
-                .pWaitSemaphores = nullptr,
-                .bufferBindCount = 1,
-                .pBufferBinds = &BufferBind,
-                .imageOpaqueBindCount = 0,
-                .pImageOpaqueBinds = nullptr,
-                .imageBindCount = 0,
-                .pImageBinds = nullptr,
-                .signalSemaphoreCount = 0,
-                .pSignalSemaphores = nullptr,
-            };
-            VkResult BindResult = vkQueueBindSparse(VK.GraphicsQueue, 1, &BindInfo, VK_NULL_HANDLE);
-            if (BindResult == VK_SUCCESS)
-            {
-                geometry_buffer_block* Block = nullptr;
-
-                geometry_buffer_block* FreeBlock = Memory->FreeBlocks.Next;
-                if ((FreeBlock != &Memory->FreeBlocks) && 
-                    Memory->MemorySize == (FreeBlock->ByteOffset + FreeBlock->ByteSize))
-                {
-                    Block = FreeBlock;
-                }
-                else
-                {
-                    Block = FreeListAllocate(BlockPool);
-                    *Block = {};
-                    Block->ByteOffset = Memory->MemorySize;
-                    DListInsert(&Memory->FreeBlocks, Block);
-                }
-
-                if (Block) 
-                {
-                    Block->ByteSize += Memory->GPUBlockSize;
-
-                    Memory->MemorySize += Memory->GPUBlockSize;
-                    Memory->MemoryBlocks[Memory->AllocationCount++] = DeviceMemory;
-                    DeviceMemory = VK_NULL_HANDLE;
-
-                    Result = true;
-                }
-                else
-                {
-                    UnhandledError("Out of vertex buffer block pool");
-                }
-            }
-            else
-            {
-                UnhandledError("Failed to bind GPU vertex memory");
-            }
-            vkQueueWaitIdle(VK.GraphicsQueue);
-
-            vkFreeMemory(VK.Device, DeviceMemory, nullptr);
-#endif
         }
         else
         {
