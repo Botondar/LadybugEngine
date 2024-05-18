@@ -303,10 +303,12 @@ template<typename T> inline constexpr
 T Min(T a, T b);
 template<typename T> inline constexpr 
 T Max(T a, T b);
-template<>inline constexpr 
-v2 Min<v2>(v2 a, v2 b);
-template<> inline constexpr 
-v2 Max<v2>(v2 a, v2 b);
+
+inline constexpr v2 Min(v2 a, v2 b);
+inline constexpr v2 Max(v2 a, v2 b);
+inline constexpr v3 Min(v3 A, v3 B);
+inline constexpr v3 Max(v3 A, v3 B);
+
 template<typename T> inline constexpr 
 T Clamp(T x, T e0, T e1);
 
@@ -647,17 +649,26 @@ inline constexpr T Max(T a, T b)
     return (a < b) ? b : a;
 }
 
-template<>
-inline constexpr v2 Min<v2>(v2 A, v2 B)
+inline constexpr v2 Min(v2 A, v2 B)
 {
     v2 Result = { Min(A.X, B.X), Min(A.Y, B.Y) };
     return(Result);
 }
 
-template<>
-inline constexpr v2 Max<v2>(v2 A, v2 B)
+inline constexpr v2 Max(v2 A, v2 B)
 {
     v2 Result = { Max(A.X, B.X), Max(A.Y, B.Y) };
+    return(Result);
+}
+
+inline constexpr v3 Min(v3 A, v3 B)
+{
+    v3 Result = { Min(A.X, B.X), Min(A.Y, B.Y), Min(A.Z, B.Z) };
+    return(Result);
+}
+inline constexpr v3 Max(v3 A, v3 B)
+{
+    v3 Result = { Max(A.X, B.X), Max(A.Y, B.Y), Max(A.Z, B.Z) };
     return(Result);
 }
 
