@@ -21,6 +21,9 @@ struct platform_semaphore
     void* Handle;
 };
 
+struct work_queue;
+
+typedef void                work_procedure           (void* Data);
 typedef void                thread_procedure        (void* Data);
 
 typedef void                debug_print             (const char* Format, ...);
@@ -34,10 +37,15 @@ typedef void                wait_for_semaphore      (platform_semaphore Semaphor
 typedef void                release_semaphore       (platform_semaphore Semaphore, u32 ReleaseCount, u32* PrevCount);
 // TODO(boti): This is a temporary API, DoProtect=true will deny RWX to the page, false will allow RW
 typedef b32                 protect_page            (void* Address, umm Size, b32 DoProtect);
+typedef void                add_work_entry          (work_queue* Queue, work_procedure* Proc, void* Data);
+typedef void                complete_all_work       (work_queue* Queue);
+
 
 struct platform_api
 {
     profiler* Profiler;
+
+    work_queue* Queue;
 
     //
     // Dispatch table
@@ -52,6 +60,8 @@ struct platform_api
     wait_for_semaphore*     WaitForSemaphore;
     release_semaphore*      ReleaseSemaphore;
     protect_page*           ProtectPage;
+    add_work_entry*         AddWorkEntry;
+    complete_all_work*      CompleteAllWork;
 
     // Renderer
     create_renderer*    CreateRenderer;

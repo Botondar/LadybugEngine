@@ -125,6 +125,117 @@ Win_ThreadEntry(void* Data)
     return(0);
 }
 
+struct work_entry
+{
+    work_procedure* Proc;
+    void*           Data;
+};
+
+struct work_queue
+{
+    static constexpr u32 MaxEntryCount = 4096;
+    u32         ReadAt;
+    u32         WriteAt;
+    u32         Completion;
+    u32         CompletionGoal;
+    work_entry  Entries[MaxEntryCount];
+
+    win_ticket_mutex Mutex;
+    HANDLE WorkerSemaphore;
+};
+
+internal b32 Win_IsWorkQueueEmpty(work_queue* Queue)
+{
+    u32 Goal = AtomicLoad(&Queue->CompletionGoal);
+    b32 Result = (Goal == AtomicLoad(&Queue->Completion));
+    return(Result);
+}
+
+internal void Win_AddWorkEntry(work_queue* Queue, work_procedure* Proc, void* Data)
+{
+    BeginTicketMutex(&Queue->Mutex);
+
+    u32 EntryID = Queue->WriteAt++;
+    Assert(EntryID - Queue->ReadAt < Queue->MaxEntryCount);
+
+    u32 Index = EntryID % Queue->MaxEntryCount;
+    Queue->Entries[Index] = { Proc, Data };
+    Queue->CompletionGoal++;
+
+    ReleaseSemaphore(Queue->WorkerSemaphore, 1, nullptr);
+
+    EndTicketMutex(&Queue->Mutex);
+}
+
+internal b32 Win_GetNextWorkEntry(work_queue* Queue, work_entry* Entry)
+{
+    b32 Result = true;
+    BeginTicketMutex(&Queue->Mutex);
+
+    if (Queue->ReadAt < Queue->WriteAt)
+    {
+        u32 EntryID = Queue->ReadAt++;
+        u32 EntryIndex = EntryID % Queue->MaxEntryCount;
+        memcpy(Entry, Queue->Entries + EntryIndex, sizeof(*Entry));
+    }
+    else
+    {
+        Result = false;
+    }
+
+    EndTicketMutex(&Queue->Mutex);
+    return(Result);
+}
+
+internal void Win_CompleteAllWork(work_queue* Queue)
+{
+    for (;;)
+    {
+        work_entry Entry;
+        b32 EntryResult = Win_GetNextWorkEntry(Queue, &Entry);
+        if (EntryResult)
+        {
+            if (Entry.Proc)
+            {
+                Entry.Proc(Entry.Data);
+            }
+            AtomicLoadAndIncrement(&Queue->Completion);
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    while (!Win_IsWorkQueueEmpty(Queue))
+    {
+        SpinWait;
+    }
+}
+
+internal DWORD Win_WorkerThread(void* Params)
+{
+    work_queue* Queue = (work_queue*)Params;
+    SetThreadDescription(GetCurrentThread(), L"Worker");
+    for (;;)
+    {
+        work_entry Entry;
+        b32 EntryResult = Win_GetNextWorkEntry(Queue, &Entry);
+        if (EntryResult)
+        {
+            if (Entry.Proc)
+            {
+                Entry.Proc(Entry.Data);
+            }
+            AtomicLoadAndIncrement(&Queue->Completion);
+        }
+        else
+        {
+            WaitForSingleObject(Queue->WorkerSemaphore, INFINITE);
+        }
+    }
+}
+
 // NOTE(boti): Because we need to maintain 2 parameters per thread entry,
 // and because we want to avoid the race condition of WinCreateThread returning before WinThreadEntry
 // could read the data, we maintain all thread starting parameters here.
@@ -165,6 +276,20 @@ internal void
 Win_ReleaseSemaphore(platform_semaphore Semaphore, u32 ReleaseCount, u32* PrevCount)
 {
     ReleaseSemaphore((HANDLE)Semaphore.Handle, (LONG)ReleaseCount, (LONG*)PrevCount);
+}
+
+inline void BeginTicketMutex(win_ticket_mutex* Mutex)
+{
+    TimedFunction(&GlobalProfiler);
+    u64 TicketValue = AtomicLoadAndIncrement(&Mutex->LastTicket);
+    while (TicketValue != AtomicLoad(&Mutex->CurrentTicket))
+    {
+        SpinWait;
+    }
+}
+inline void EndTicketMutex(win_ticket_mutex* Mutex)
+{
+    AtomicLoadAndIncrement(&Mutex->CurrentTicket);
 }
 
 //
@@ -417,7 +542,25 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     GameMemory.Size = GiB(8);
     GameMemory.Memory = VirtualAlloc(nullptr, GameMemory.Size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 
+    constexpr u32 WorkerCount = 3;
+    work_queue WorkQueue = {};
+    WorkQueue.WorkerSemaphore = CreateSemaphoreA(nullptr, 0, WorkerCount, nullptr);
+
+    struct worker_info
+    {
+        HANDLE Handle;
+        DWORD ThreadID;
+    };
+    worker_info Workers[WorkerCount];
+
+    for (u32 WorkerIndex = 0; WorkerIndex < WorkerCount; WorkerIndex++)
+    {
+        worker_info* Worker = Workers + WorkerIndex;
+        Worker->Handle = CreateThread(nullptr, 0, &Win_WorkerThread, &WorkQueue, 0, &Worker->ThreadID);
+    }
+    
     GameMemory.PlatformAPI.Profiler             = &GlobalProfiler;
+    GameMemory.PlatformAPI.Queue                = &WorkQueue;
     GameMemory.PlatformAPI.DebugPrint           = &Win_DebugPrint;
     GameMemory.PlatformAPI.GetCounter           = &Win_GetCounter;
     GameMemory.PlatformAPI.ElapsedSeconds       = &Win_ElapsedSeconds;
@@ -428,6 +571,8 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     GameMemory.PlatformAPI.WaitForSemaphore     = &Win_WaitForSemaphore;
     GameMemory.PlatformAPI.ReleaseSemaphore     = &Win_ReleaseSemaphore;
     GameMemory.PlatformAPI.ProtectPage          = &Win_ProtectPage;
+    GameMemory.PlatformAPI.AddWorkEntry         = &Win_AddWorkEntry;
+    GameMemory.PlatformAPI.CompleteAllWork      = &Win_CompleteAllWork;
 
     HMODULE RendererDLL = LoadLibraryA("vulkan_renderer.dll");
     if (RendererDLL)
@@ -714,6 +859,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
         MessageBoxA(nullptr, GameIO.QuitMessage, "LadybugEngine", MB_OK|MB_ICONERROR);
     }
 
+    Win_CompleteAllWork(&WorkQueue);
     return(0);
 }
 

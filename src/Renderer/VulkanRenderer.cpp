@@ -3502,32 +3502,86 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             }
         }
 
-        Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(VkDrawIndexedIndirectCommand));
-        Assert(Frame->StagingBuffer.At <= Frame->StagingBuffer.Size);
-        umm MaxMemorySizePerDrawList = InstanceCount * sizeof(VkDrawIndexedIndirectCommand);
-        umm CopySrcAt = Frame->StagingBuffer.At;
-        for (u32 DrawListIndex = 0; DrawListIndex < DrawListCount; DrawListIndex++)
+        struct draw_list_work_params
+        {
+            draw_list*                      DrawList;
+            VkDrawIndexedIndirectCommand*   CopyDst;
+            umm                             CopyDstOffset;
+            frustum*                        Frustum;
+            
+            // Scene info
+            u32*                            DrawGroupOffsets;
+            mmbox*                          BoundingBoxes;
+            m4*                             Transforms;
+            VkDrawIndexedIndirectCommand*   IndirectCommands;
+            u32                             InstanceCount;
+            
+            // NOTE(boti): Filled by worker
+            u32 TotalDrawCount;
+
+            u32 Padding[14];
+        };
+        static_assert(sizeof(draw_list_work_params) % 64 == 0);
+
+        draw_list_work_params* WorkParams = (draw_list_work_params*)PushSize_(Frame->Arena, MemPush_Clear, sizeof(draw_list_work_params) * DrawListCount, 64);
+        auto FrustumCullDrawList = [](void* Params_)
         {
             TimedBlock(Platform.Profiler, "FrustumCull DrawList");
 
-            frustum* Frustum = nullptr;
-            draw_list* DrawList = nullptr;
+            draw_list_work_params* Params = (draw_list_work_params*)Params_;
+            VkDrawIndexedIndirectCommand* At = Params->CopyDst;
+
+            u32 CurrentGroupIndex = 0;
+            for (u32 InstanceIndex = 0; InstanceIndex < Params->InstanceCount; InstanceIndex++)
+            {
+                while (InstanceIndex >= Params->DrawGroupOffsets[CurrentGroupIndex])
+                {
+                    CurrentGroupIndex++;
+                }
+
+                b32 IsVisible = true;
+                if (Params->Frustum)
+                {
+                    IsVisible = IntersectFrustumBox(Params->Frustum, Params->BoundingBoxes[InstanceIndex], Params->Transforms[InstanceIndex]);
+                }
+
+                if (IsVisible)
+                {
+                    Params->TotalDrawCount++;
+                    Params->DrawList->DrawGroupDrawCounts[CurrentGroupIndex]++;
+                    *At++ = Params->IndirectCommands[InstanceIndex];
+                }
+            }
+        };
+
+        Frame->StagingBuffer.At = Align(Frame->StagingBuffer.At, alignof(VkDrawIndexedIndirectCommand));
+        Assert(Frame->StagingBuffer.At <= Frame->StagingBuffer.Size);
+        umm MaxMemorySizePerDrawList = InstanceCount * sizeof(VkDrawIndexedIndirectCommand);
+        for (u32 DrawListIndex = 0; DrawListIndex < DrawListCount; DrawListIndex++)
+        {
+            draw_list_work_params* Params = WorkParams + DrawListIndex;
+            Params->DrawGroupOffsets    = DrawGroupOffsets;
+            Params->BoundingBoxes       = BoundingBoxes;
+            Params->Transforms          = Transforms;
+            Params->IndirectCommands    = IndirectCommands;
+            Params->InstanceCount       = InstanceCount;
+
             if (DrawListIndex == 0)
             {
-                Frustum = &Frame->CameraFrustum;
-                DrawList = &PrimaryDrawList;
+                Params->Frustum = &Frame->CameraFrustum;
+                Params->DrawList = &PrimaryDrawList;
             }
             else if ((DrawListIndex - 1) < R_MaxShadowCascadeCount)
             {
                 u32 Index = DrawListIndex - 1;
-                Frustum = CascadeFrustums + Index;
-                DrawList = CascadeDrawLists + Index;
+                Params->Frustum = CascadeFrustums + Index;
+                Params->DrawList = CascadeDrawLists + Index;
             }
             else
             {
                 u32 Index = (DrawListIndex - 1 - R_MaxShadowCascadeCount);
-                Frustum = ShadowFrustums + Index;
-                DrawList = ShadowDrawLists + Index;
+                Params->Frustum = ShadowFrustums + Index;
+                Params->DrawList = ShadowDrawLists + Index;
             }
 
             if ((Frame->StagingBuffer.At + MaxMemorySizePerDrawList) > Frame->StagingBuffer.Size)
@@ -3536,48 +3590,33 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                 break;
             }
 
-            VkDrawIndexedIndirectCommand* DstAt = (VkDrawIndexedIndirectCommand*)OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At);
-            umm TotalDrawCountPerList = 0;
+            Params->CopyDstOffset   = Frame->StagingBuffer.At;
+            Params->CopyDst         = (VkDrawIndexedIndirectCommand*)OffsetPtr(Frame->StagingBuffer.Base, Frame->StagingBuffer.At);
+            Frame->StagingBuffer.At += MaxMemorySizePerDrawList;
 
-            u32 CurrentGroupIndex = 0;
-            for (u32 InstanceIndex = 0; InstanceIndex < InstanceCount; InstanceIndex++)
-            {
-                while (InstanceIndex >= DrawGroupOffsets[CurrentGroupIndex])
-                {
-                    CurrentGroupIndex++;
-                }
+            Platform.AddWorkEntry(Platform.Queue, FrustumCullDrawList, Params);
+        }
 
-                b32 IsVisible = true;
-                if (Frustum)
-                {
-                    IsVisible = IntersectFrustumBox(Frustum, BoundingBoxes[InstanceIndex], Transforms[InstanceIndex]);
-                }
+        Platform.CompleteAllWork(Platform.Queue);
 
-                if (IsVisible)
-                {
-                    TotalDrawCountPerList++;
-                    DrawList->DrawGroupDrawCounts[CurrentGroupIndex]++;
-                    *DstAt++ = IndirectCommands[InstanceIndex];
-                }
-            }
-
-            gpu_buffer_range DrawBufferRange = PushPerFrame(TotalDrawCountPerList * sizeof(VkDrawIndexedIndirectCommand));
+        for (u32 DrawListIndex = 0; DrawListIndex < DrawListCount; DrawListIndex++)
+        {
+            draw_list_work_params* Params = WorkParams + DrawListIndex;
+            gpu_buffer_range DrawBufferRange = PushPerFrame(Params->TotalDrawCount * sizeof(VkDrawIndexedIndirectCommand));
             if (DrawBufferRange.ByteCount)
             {
-                DrawList->DrawBuffer = Renderer->PerFrameBuffer;
-                DrawList->DrawBufferOffset = DrawBufferRange.ByteOffset;
+                Params->DrawList->DrawBuffer = Renderer->PerFrameBuffer;
+                Params->DrawList->DrawBufferOffset = DrawBufferRange.ByteOffset;
 
                 VkBufferCopy Copy =
                 {
-                    .srcOffset = Frame->StagingBuffer.At,
+                    .srcOffset = Params->CopyDstOffset,
                     .dstOffset = DrawBufferRange.ByteOffset,
                     .size = DrawBufferRange.ByteCount,
                 };
 
-                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], DrawList->DrawBuffer, 1, &Copy);
+                vkCmdCopyBuffer(UploadCB, Renderer->StagingBuffers[Frame->FrameID], Params->DrawList->DrawBuffer, 1, &Copy);
             }
-
-            Frame->StagingBuffer.At += DrawBufferRange.ByteCount;
         }
     }
     vkCmdEndDebugUtilsLabelEXT(ParticleCB);

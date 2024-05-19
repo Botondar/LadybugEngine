@@ -38,6 +38,16 @@ struct win_window_params
     LPVOID Param;
 };
 
+// TODO(boti): This could probably be cross-platform
+struct win_ticket_mutex
+{
+    u64 LastTicket;
+    u64 CurrentTicket;
+};
+
+inline void BeginTicketMutex(win_ticket_mutex* Mutex);
+inline void EndTicketMutex(win_ticket_mutex* Mutex);
+
 internal u32 Win_ScanCodeToKey(u32 ScanCode, bool bIsExtended);
 
 typedef DWORD WINAPI FN_XInputGetState(DWORD UserIndex, XINPUT_STATE* State);

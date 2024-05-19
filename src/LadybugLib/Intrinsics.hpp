@@ -40,6 +40,10 @@ LB_INLINE u32 CeilPowerOf2(u32 Value);
 // Atomic
 //
 #define SpinWait _mm_pause()
+
+LB_INLINE u32 AtomicLoad(const u32* Value);
+LB_INLINE u64 AtomicLoad(const u64* Value);
+
 LB_INLINE u32 AtomicLoadAndIncrement(volatile u32* Value);
 
 //
@@ -173,8 +177,23 @@ LB_INLINE u32 CeilPowerOf2(u32 Value)
     return(Result);
 }
 
+LB_INLINE u32 AtomicLoad(const u32* Value)
+{
+    return *(const volatile u32*)Value;
+}
+LB_INLINE u64 AtomicLoad(const u64* Value)
+{
+    return *(const volatile u64*)Value;
+}
+
 LB_INLINE u32 AtomicLoadAndIncrement(volatile u32* Value)
 {
     u32 Result = (u32)(_InterlockedIncrement((long*)Value) - 1);
+    return(Result);
+}
+
+LB_INLINE u64 AtomicLoadAndIncrement(volatile u64* Value)
+{
+    u64 Result = (u64)(_InterlockedIncrement64((long long*)Value) - 1);
     return(Result);
 }
