@@ -248,6 +248,15 @@ struct model
     u32 Meshes[MaxMeshCount];
 };
 
+enum default_mesh : u32
+{
+    DefaultMesh_Cube = 0,
+    DefaultMesh_Sphere,
+    DefaultMesh_Arrow,
+
+    DefaultMesh_Count,
+};
+
 //
 // Assets
 //
@@ -267,9 +276,7 @@ struct assets
     u32 DefaultFontTextureID;
     font DefaultFont;
 
-    u32 ArrowMeshID;
-    u32 SphereMeshID;
-    u32 CubeMeshID;
+    u32 DefaultMeshIDs[DefaultMesh_Count];
     static constexpr u32 MaxTreeModelCount = 16;
     u32 TreeModelCount;
     u32 TreeModels[MaxTreeModelCount];
@@ -294,6 +301,8 @@ struct assets
     skin Skins[MaxSkinCount];
     animation Animations[MaxAnimationCount];
 };
+
+inline mesh* GetDefaultMesh(assets* Assets, u32 Mesh);
 
 struct texture_set
 {
@@ -422,6 +431,14 @@ extern const char* ParticlePaths[Particle_COUNT];
 //
 // Implementation
 //
+
+inline mesh* GetDefaultMesh(assets* Assets, u32 Mesh)
+{
+    Assert(Mesh < DefaultMesh_Count);
+
+    mesh* Result = Assets->Meshes + Assets->DefaultMeshIDs[Mesh];
+    return(Result);
+}
 
 inline m4 TRSToM4(trs_transform Transform)
 {

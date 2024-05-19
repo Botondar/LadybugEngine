@@ -10,11 +10,12 @@ inline b32 IsValid(entity_id ID);
 typedef flags32 entity_flags;
 enum entity_flag_bits : entity_flags
 {
-    EntityFlag_None = 0,
+    EntityFlag_None         = 0,
 
-    EntityFlag_Mesh = (1u << 0),
-    EntityFlag_Skin = (1u << 1),
-    EntityFlag_LightSource = (1u << 2),
+    EntityFlag_Mesh         = (1u << 0),
+    EntityFlag_Skin         = (1u << 1),
+    EntityFlag_LightSource  = (1u << 2),
+    EntityFlag_Terrain      = (1u << 3),
 };
 
 struct entity_piece
@@ -131,6 +132,7 @@ struct game_world
     noise2 TerrainNoise;
     u32 TerrainMaterialID;
     height_field HeightField;
+    v2 TerrainP;
 
     static constexpr u32 MaxEntityCount = (1u << 18);
     u32 EntityCount;
@@ -149,6 +151,10 @@ struct game_world
     v3 AdHocLightdPs[MaxAdHocLightCount];
     light AdHocLights[MaxAdHocLightCount];
 };
+
+lbfn f32 SampleTerrainHeight(game_world* World, v2 P);
+// NOTE(boti): Returns tangent plane
+lbfn v4 SampleTerrain(game_world* World, v2 P);
 
 lbfn u32 
 MakeParticleSystem(game_world* World, particle_system_type Type, entity_id ParentID, 
@@ -204,5 +210,27 @@ inline f32 SampleHeight(height_field* Field, v2 UV)
     };
 
     f32 Result = Field->HeightData[Coord.X + Coord.Y * Field->TexelCountX];
+    return(Result);
+}
+
+lbfn v4 SampleTerrain(game_world* World, v2 P)
+{
+    v4 Result = {};
+    #if 0
+    v2 BaseP = P + World->TerrainP;
+
+    v2 UV = P; // TODO
+    f32 Height = SampleHeight(&World->HeightField, UV);
+    v3 PX0 = SampleHeight(&World->HeightField, { P.X - 1.0f, P.Y });
+    v3 PX1 = SampleHeight(&World->HeightField, { P.X + 1.0f, P.Y });
+    v3 PY0 = SampleHeight(&World->HeightField, { P.X, P.Y - 1.0f });
+    v3 PY1 = SampleHeight(&World->HeightField, { P.X, P.Y + 1.0f });
+
+    v3 T = NOZ(PX1 - PX0);
+    v3 B = NOZ(PY1 - PY0);
+    v3 N = NOZ(Cross(T, B));
+    v4 Result = { N.X, N.Y, N.Z, -Dot(N, v3{ P.X, P.Y, Height }) };
+    #endif
+
     return(Result);
 }

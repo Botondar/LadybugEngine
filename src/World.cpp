@@ -385,7 +385,7 @@ DEBUGInitializeWorld(
                 [TextureType_Height]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_height.tif" },
                 [TextureType_Transmission]  = {},
             };
-            #elif 0
+            #elif 1
             texture_set_entry TextureSetEntries[TextureType_Count] =
             {
                 [TextureType_Albedo]        = { "data/texture/leafy-grass2-ue/leafy-grass2-albedo.png" },
@@ -395,7 +395,7 @@ DEBUGInitializeWorld(
                 [TextureType_Height]        = { "data/texture/leafy-grass2-ue/leafy-grass2-height.png" },
                 [TextureType_Transmission]  = {},
             };
-            #elif 1
+            #elif 0
             texture_set_entry TextureSetEntries[TextureType_Count] =
             {
                 [TextureType_Albedo]        = { "data/texture/mixedmoss-ue4/mixedmoss-albedo2.png" },
@@ -436,7 +436,7 @@ DEBUGInitializeWorld(
 
             entity_id EntityID = { World->EntityCount++ };
             entity* TerrainEntity = World->Entities + EntityID.Value;
-            TerrainEntity->Flags = EntityFlag_Mesh;
+            TerrainEntity->Flags = EntityFlag_Mesh|EntityFlag_Terrain;
             f32 ExtentX = (f32)World->HeightField.TexelCountX / (f32)World->HeightField.TexelsPerMeter;
             f32 ExtentY = (f32)World->HeightField.TexelCountY / (f32)World->HeightField.TexelsPerMeter;
             TerrainEntity->Transform = M4(1.0f, 0.0f, 0.0f, -0.5f * ExtentX,
@@ -486,7 +486,7 @@ DEBUGInitializeWorld(
                         { 
                             UV.X * (MaxBounds.X - MinBounds.X)  + MinBounds.X,
                             UV.Y * (MaxBounds.Y - MinBounds.Y)  + MinBounds.Y,
-                            SampleHeight(&World->HeightField, UV) - 0.25f,
+                            SampleHeight(&World->HeightField, UV) - 0.1f,
                         };
 
                         f32 Angle = 2.0f * Pi * RandUnilateral(&World->GeneratorEntropy);
@@ -854,6 +854,59 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     m4 PieceTransform = Entity->Transform;
                     PieceTransform.P.XYZ += Piece->OffsetP;
                     DrawMesh(Frame, Group, Mesh->Allocation, PieceTransform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
+
+                    // Draw bounding box
+                    if (0 && !(Entity->Flags & EntityFlag_Terrain))
+                    {
+                        rgba8 Color = PackRGBA(v4{ 1.0f, 1.0f, 0.0f, 1.0f });
+                        v3 CenterP = 0.5f * (Mesh->BoundingBox.Max + Mesh->BoundingBox.Min);
+                        v3 HalfExtent = 0.5f * (Mesh->BoundingBox.Max - Mesh->BoundingBox.Min);
+                        m4 BoxTransform = M4(
+                            HalfExtent.X, 0.0f, 0.0f, CenterP.X,
+                            0.0f, HalfExtent.Y, 0.0f, CenterP.Y,
+                            0.0f, 0.0f, HalfExtent.Z, CenterP.Z,
+                            0.0f, 0.0f, 0.0f, 1.0f);
+                        m4 BaseTransform = PieceTransform * BoxTransform;
+
+                        mesh* CubeMesh = GetDefaultMesh(Assets, DefaultMesh_Cube);
+                        struct scale_offset_pair
+                        {
+                            v3 Scale;
+                            v3 Offset;
+                        };
+                        scale_offset_pair EdgeTransforms[] = 
+                        {
+                            // Side
+                            { { 1e-2f, 1e-2f, 1.0f }, { -1.0f, -1.0f, 0.0f } },
+                            { { 1e-2f, 1e-2f, 1.0f }, { +1.0f, -1.0f, 0.0f } },
+                            { { 1e-2f, 1e-2f, 1.0f }, { +1.0f, +1.0f, 0.0f } },
+                            { { 1e-2f, 1e-2f, 1.0f }, { -1.0f, +1.0f, 0.0f } },
+
+                            // Top
+                            { { 1e-2f, 1.0f, 1e-2f }, { -1.0f, 0.0f, +1.0f } },
+                            { { 1e-2f, 1.0f, 1e-2f }, { +1.0f, 0.0f, +1.0f } },
+                            { { 1.0f, 1e-2f, 1e-2f }, { 0.0f, -1.0f, +1.0f } },
+                            { { 1.0f, 1e-2f, 1e-2f }, { 0.0f, +1.0f, +1.0f } },
+
+                            // Bottom
+                            { { 1e-2f, 1.0f, 1e-2f }, { -1.0f, 0.0f, -1.0f } },
+                            { { 1e-2f, 1.0f, 1e-2f }, { +1.0f, 0.0f, -1.0f } },
+                            { { 1.0f, 1e-2f, 1e-2f }, { 0.0f, -1.0f, -1.0f } },
+                            { { 1.0f, 1e-2f, 1e-2f }, { 0.0f, +1.0f, -1.0f } },
+                        };
+                        for (u32 Edge = 0; Edge < CountOf(EdgeTransforms); Edge++)
+                        {
+                            v3 S = EdgeTransforms[Edge].Scale;
+                            v3 P = EdgeTransforms[Edge].Offset;
+                            m4 EdgeTransform = M4(
+                                S.X, 0.0f, 0.0f, P.X,
+                                0.0f, S.Y, 0.0f, P.Y,
+                                0.0f, 0.0f, S.Z, P.Z,
+                                0.0f, 0.0f, 0.0f, 1.0f);
+                            DrawWidget3D(Frame, CubeMesh->Allocation, BaseTransform * EdgeTransform, Color);
+                        }
+
+                    }
                 }
             }
 
@@ -862,7 +915,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                 AddLight(Frame, Entity->Transform.P.XYZ, Entity->LightEmission, LightFlag_ShadowCaster);
                 if (DrawLights)
                 {
-                    mesh* Mesh = Assets->Meshes + Assets->SphereMeshID;
+                    mesh* Mesh = GetDefaultMesh(Assets, DefaultMesh_Sphere);
                     f32 S = World->LightProxyScale;
                     m4 Transform = Entity->Transform * M4(S, 0.0f, 0.0f, 0.0f,
                                                           0.0f, S, 0.0f, 0.0f,

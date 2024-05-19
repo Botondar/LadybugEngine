@@ -1177,9 +1177,9 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
     };
 
     // Default meshes
-    Assets->ArrowMeshID = AddMesh(CreateArrowMesh(Scratch));
-    Assets->SphereMeshID = AddMesh(CreateSphereMesh(Scratch));
-    Assets->CubeMeshID = AddMesh(CreateCubeMesh(Scratch));
+    Assets->DefaultMeshIDs[DefaultMesh_Cube] = AddMesh(CreateCubeMesh(Scratch));
+    Assets->DefaultMeshIDs[DefaultMesh_Sphere] = AddMesh(CreateSphereMesh(Scratch));
+    Assets->DefaultMeshIDs[DefaultMesh_Arrow] = AddMesh(CreateArrowMesh(Scratch));
 
     return(Result);
 }

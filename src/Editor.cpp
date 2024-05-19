@@ -410,9 +410,9 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
             Transform.C[AxisIndex].Z = Axes[AxisIndex].Z;
         }
 
-        mmbox Box = Assets->Meshes[Assets->ArrowMeshID].BoundingBox;
-        v3 BoxP = 0.5f * (Box.Min + Box.Max);
-        v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
+        mesh* ArrowMesh = GetDefaultMesh(Assets, DefaultMesh_Arrow);
+        v3 BoxP = 0.5f * (ArrowMesh->BoundingBox.Min + ArrowMesh->BoundingBox.Max);
+        v3 HalfExtent = 0.5f * (ArrowMesh->BoundingBox.Max - ArrowMesh->BoundingBox.Min);
 
         m4 GizmoTransforms[3] = 
         {
@@ -498,10 +498,8 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
                                                       0.0f, 0.25f, 0.0f, 0.0f,
                                                       0.0f, 0.0f, 0.25f, 0.0f,
                                                       0.0f, 0.0f, 0.0f, 1.0f);
-            rgba8 Color = (GizmoIndex == Editor->Gizmo.Selection) ? 
-                SelectedColors[GizmoIndex] : Colors[GizmoIndex];
-            DrawWidget3D(Frame, Assets->Meshes[Assets->ArrowMeshID].Allocation,
-                         CurrentTransform, Color);
+            rgba8 Color = (GizmoIndex == Editor->Gizmo.Selection) ? SelectedColors[GizmoIndex] : Colors[GizmoIndex];
+            DrawWidget3D(Frame, ArrowMesh->Allocation, CurrentTransform, Color);
         }
     }
 
