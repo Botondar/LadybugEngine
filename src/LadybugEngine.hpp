@@ -17,6 +17,13 @@ TODO: list
 #include "Platform.hpp"
 #include "Renderer/Renderer.hpp"
 
+typedef flags32 debug_flags;
+enum debug_flag : debug_flags
+{
+    DebugFlag_DrawLights,
+    DebugFlag_DrawBoundingBoxes,
+};
+
 #include "Font.hpp"
 #include "Asset.hpp"
 #include "World.hpp"

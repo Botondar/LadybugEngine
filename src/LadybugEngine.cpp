@@ -234,7 +234,7 @@ void Game_UpdateAndRender(thread_context* ThreadContext, game_memory* Memory, ga
     }
     
     UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, 
-                         &GameState->TransientArena, GameState->Editor.DrawLights);
+                         &GameState->TransientArena, GameState->Editor.DebugFlags);
     Platform.EndRenderFrame(RenderFrame, ThreadContext);
 
     GameState->FrameID++;

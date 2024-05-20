@@ -40,7 +40,7 @@ struct editor_state
     entity_id SelectedEntityID;
     gizmo Gizmo;
 
-    b32 DrawLights;
+    debug_flags DebugFlags;
 };
 
 lbfn void InitEditor(struct game_state* Game, memory_arena* Arena);

@@ -115,7 +115,11 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
 
     if (WasPressed(IO->Keys[SC_L]))
     {
-        Editor->DrawLights = !Editor->DrawLights;
+        BitTestAndComplement(&Editor->DebugFlags, DebugFlag_DrawLights);
+    }
+    if (WasPressed(IO->Keys[SC_B]))
+    {
+        BitTestAndComplement(&Editor->DebugFlags, DebugFlag_DrawBoundingBoxes);
     }
 
     Context.Margin = 10.0f;

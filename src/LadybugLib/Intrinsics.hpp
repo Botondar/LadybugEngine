@@ -36,6 +36,9 @@ LB_INLINE u32 SetBitsBelowHighInclusive(u32 Value);
 
 LB_INLINE u32 CeilPowerOf2(u32 Value);
 
+LB_INLINE b32 BitTest(u32 Value, u32 Bit);
+LB_INLINE b32 BitTestAndComplement(u32* Value, u32 Bit);
+
 //
 // Atomic
 //
@@ -146,6 +149,16 @@ LB_INLINE u8 BitScanForward(u32* Result, u64 Value)
 LB_INLINE u8 BitScanReverse(u32* Result, u64 Value)
 {
     return _BitScanReverse64((unsigned long*)Result, Value);
+}
+
+LB_INLINE b32 BitTest(u32 Value, u32 Bit)
+{
+    return (b32)_bittest((long*)&Value, (long)Bit);
+}
+
+LB_INLINE b32 BitTestAndComplement(u32* Value, u32 Bit)
+{
+    return (b32)_bittestandcomplement((long*)Value, (long)Bit);
 }
 
 LB_INLINE u32 SetBitsBelowHighInclusive(u32 Value)

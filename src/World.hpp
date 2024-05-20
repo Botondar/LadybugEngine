@@ -160,7 +160,13 @@ lbfn u32
 MakeParticleSystem(game_world* World, particle_system_type Type, entity_id ParentID, 
                    v3 EmitterOffset, mmbox Bounds);
 
-lbfn void UpdateAndRenderWorld(game_world* World, struct assets* Assets, render_frame* Frame, game_io* IO, memory_arena* Scratch, b32 DrawLights);
+lbfn void UpdateAndRenderWorld(
+    game_world* World, 
+    struct assets* Assets, 
+    render_frame* Frame, 
+    game_io* IO, 
+    memory_arena* Scratch, 
+    debug_flags DebugFlags);
 
 internal mesh_data 
 GenerateTerrainChunk(height_field* Field, memory_arena* Arena);

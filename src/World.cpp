@@ -333,6 +333,69 @@ DEBUGInitializeWorld(
                 }
             }
 
+            material* TerrainMaterial = nullptr;
+
+            // Load textures and create terrain material
+            {
+                #if 0
+                texture_set_entry TextureSetEntries[TextureType_Count] =
+                {
+                    [TextureType_Albedo]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_albedo.tif" },
+                    [TextureType_Normal]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_normal.tif" },
+                    [TextureType_RoMe]          = { "data/texture/TCom_Sand_Muddy2_2x2_4K_roughness.tif", TextureChannel_R, TextureChannel_Undefined },
+                    [TextureType_Occlusion]     = { "data/texture/TCom_Sand_Muddy2_2x2_4K_ao.tif" },
+                    [TextureType_Height]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_height.tif" },
+                    [TextureType_Transmission]  = {},
+                };
+                #elif 0
+                texture_set_entry TextureSetEntries[TextureType_Count] =
+                {
+                    [TextureType_Albedo]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_albedo.tif" },
+                    [TextureType_Normal]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_normal.tif" },
+                    [TextureType_RoMe]          = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_roughness.tif", TextureChannel_R, TextureChannel_Undefined },
+                    [TextureType_Occlusion]     = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_ao.tif" },
+                    [TextureType_Height]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_height.tif" },
+                    [TextureType_Transmission]  = {},
+                };
+                #elif 1
+                texture_set_entry TextureSetEntries[TextureType_Count] =
+                {
+                    [TextureType_Albedo]        = { "data/texture/leafy-grass2-ue/leafy-grass2-albedo.png" },
+                    [TextureType_Normal]        = { "data/texture/leafy-grass2-ue/leafy-grass2-normal-dx.png" },
+                    [TextureType_RoMe]          = { "data/texture/leafy-grass2-ue/leafy-grass2-roughness.png", TextureChannel_R, TextureChannel_Undefined },
+                    [TextureType_Occlusion]     = { "data/texture/leafy-grass2-ue/leafy-grass2-ao.png" },
+                    [TextureType_Height]        = { "data/texture/leafy-grass2-ue/leafy-grass2-height.png" },
+                    [TextureType_Transmission]  = {},
+                };
+                #elif 0
+                texture_set_entry TextureSetEntries[TextureType_Count] =
+                {
+                    [TextureType_Albedo]        = { "data/texture/mixedmoss-ue4/mixedmoss-albedo2.png" },
+                    [TextureType_Normal]        = { "data/texture/mixedmoss-ue4/mixedmoss-normal2.png" },
+                    [TextureType_RoMe]          = { "data/texture/mixedmoss-ue4/mixedmoss-roughness.png", TextureChannel_R, TextureChannel_Undefined },
+                    [TextureType_Occlusion]     = { "data/texture/mixedmoss-ue4/mixedmoss-ao2.png" },
+                    [TextureType_Height]        = { "data/texture/mixedmoss-ue4/mixedmoss-height.png" },
+                    [TextureType_Transmission]  = {},
+                };
+                #endif
+                texture_set TextureSet = DEBUGLoadTextureSet(Assets, Frame, TextureSetEntries);
+
+                World->TerrainMaterialID = Assets->MaterialCount++;
+                TerrainMaterial = Assets->Materials + World->TerrainMaterialID;
+                TerrainMaterial->AlbedoID                   = TextureSet.IDs[TextureType_Albedo];
+                TerrainMaterial->NormalID                   = TextureSet.IDs[TextureType_Normal];
+                TerrainMaterial->MetallicRoughnessID        = TextureSet.IDs[TextureType_RoMe];
+                TerrainMaterial->OcclusionID                = TextureSet.IDs[TextureType_Occlusion];
+                TerrainMaterial->HeightID                   = TextureSet.IDs[TextureType_Height];
+                TerrainMaterial->AlbedoSamplerID            = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
+                TerrainMaterial->NormalSamplerID            = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
+                TerrainMaterial->MetallicRoughnessSamplerID = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
+                TerrainMaterial->Transparency               = Transparency_Opaque;
+                TerrainMaterial->Albedo                     = PackRGBA8(0xFF, 0xFF, 0xFF);
+                TerrainMaterial->MetallicRoughness          = PackRGBA8(0xFF, 0xFF, 0x00);
+                TerrainMaterial->Emission                   = { 0.0f, 0.0f, 0.0f };
+            }
+
             // Height field
             {
                 World->TerrainNoise = { 0 };
@@ -364,65 +427,6 @@ DEBUGInitializeWorld(
                     }
                 }
             }
-
-            #if 0
-            texture_set_entry TextureSetEntries[TextureType_Count] =
-            {
-                [TextureType_Albedo]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_albedo.tif" },
-                [TextureType_Normal]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_normal.tif" },
-                [TextureType_RoMe]          = { "data/texture/TCom_Sand_Muddy2_2x2_4K_roughness.tif", TextureChannel_R, TextureChannel_Undefined },
-                [TextureType_Occlusion]     = { "data/texture/TCom_Sand_Muddy2_2x2_4K_ao.tif" },
-                [TextureType_Height]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_height.tif" },
-                [TextureType_Transmission]  = {},
-            };
-            #elif 0
-            texture_set_entry TextureSetEntries[TextureType_Count] =
-            {
-                [TextureType_Albedo]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_albedo.tif" },
-                [TextureType_Normal]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_normal.tif" },
-                [TextureType_RoMe]          = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_roughness.tif", TextureChannel_R, TextureChannel_Undefined },
-                [TextureType_Occlusion]     = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_ao.tif" },
-                [TextureType_Height]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_height.tif" },
-                [TextureType_Transmission]  = {},
-            };
-            #elif 1
-            texture_set_entry TextureSetEntries[TextureType_Count] =
-            {
-                [TextureType_Albedo]        = { "data/texture/leafy-grass2-ue/leafy-grass2-albedo.png" },
-                [TextureType_Normal]        = { "data/texture/leafy-grass2-ue/leafy-grass2-normal-dx.png" },
-                [TextureType_RoMe]          = { "data/texture/leafy-grass2-ue/leafy-grass2-roughness.png", TextureChannel_R, TextureChannel_Undefined },
-                [TextureType_Occlusion]     = { "data/texture/leafy-grass2-ue/leafy-grass2-ao.png" },
-                [TextureType_Height]        = { "data/texture/leafy-grass2-ue/leafy-grass2-height.png" },
-                [TextureType_Transmission]  = {},
-            };
-            #elif 0
-            texture_set_entry TextureSetEntries[TextureType_Count] =
-            {
-                [TextureType_Albedo]        = { "data/texture/mixedmoss-ue4/mixedmoss-albedo2.png" },
-                [TextureType_Normal]        = { "data/texture/mixedmoss-ue4/mixedmoss-normal2.png" },
-                [TextureType_RoMe]          = { "data/texture/mixedmoss-ue4/mixedmoss-roughness.png", TextureChannel_R, TextureChannel_Undefined },
-                [TextureType_Occlusion]     = { "data/texture/mixedmoss-ue4/mixedmoss-ao2.png" },
-                [TextureType_Height]        = { "data/texture/mixedmoss-ue4/mixedmoss-height.png" },
-                [TextureType_Transmission]  = {},
-            };
-            #endif
-            texture_set TextureSet = DEBUGLoadTextureSet(Assets, Frame, TextureSetEntries);
-
-            World->TerrainMaterialID = Assets->MaterialCount++;
-            material* TerrainMaterial = Assets->Materials + World->TerrainMaterialID;
-            TerrainMaterial->AlbedoID                   = TextureSet.IDs[TextureType_Albedo];
-            TerrainMaterial->NormalID                   = TextureSet.IDs[TextureType_Normal];
-            TerrainMaterial->MetallicRoughnessID        = TextureSet.IDs[TextureType_RoMe];
-            TerrainMaterial->OcclusionID                = TextureSet.IDs[TextureType_Occlusion];
-            TerrainMaterial->HeightID                   = TextureSet.IDs[TextureType_Height];
-            TerrainMaterial->AlbedoSamplerID            = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
-            TerrainMaterial->NormalSamplerID            = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
-            TerrainMaterial->MetallicRoughnessSamplerID = GetMaterialSamplerID(Wrap_Repeat, Wrap_Repeat, Wrap_Repeat);
-            TerrainMaterial->Transparency               = Transparency_Opaque;
-            TerrainMaterial->Albedo                     = PackRGBA8(0xFF, 0xFF, 0xFF);
-            TerrainMaterial->MetallicRoughness          = PackRGBA8(0xFF, 0xFF, 0x00);
-            TerrainMaterial->Emission                   = { 0.0f, 0.0f, 0.0f };
-            
 
             mesh_data TerrainMesh = GenerateTerrainChunk(&World->HeightField, Scratch);
 
@@ -616,7 +620,13 @@ DEBUGInitializeWorld(
     }
 }
 
-lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* Frame, game_io* IO, memory_arena* Scratch, b32 DrawLights)
+lbfn void UpdateAndRenderWorld(
+    game_world* World, 
+    assets* Assets, 
+    render_frame* Frame, 
+    game_io* IO, 
+    memory_arena* Scratch, 
+    debug_flags DebugFlags)
 {
     TimedFunction(Platform.Profiler);
 
@@ -856,7 +866,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
                     DrawMesh(Frame, Group, Mesh->Allocation, PieceTransform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
 
                     // Draw bounding box
-                    if (0 && !(Entity->Flags & EntityFlag_Terrain))
+                    if (BitTest(DebugFlags, DebugFlag_DrawBoundingBoxes) && !(Entity->Flags & EntityFlag_Terrain))
                     {
                         rgba8 Color = PackRGBA(v4{ 1.0f, 1.0f, 0.0f, 1.0f });
                         v3 CenterP = 0.5f * (Mesh->BoundingBox.Max + Mesh->BoundingBox.Min);
@@ -913,7 +923,7 @@ lbfn void UpdateAndRenderWorld(game_world* World, assets* Assets, render_frame* 
             if (Entity->Flags & EntityFlag_LightSource)
             {
                 AddLight(Frame, Entity->Transform.P.XYZ, Entity->LightEmission, LightFlag_ShadowCaster);
-                if (DrawLights)
+                if (BitTest(DebugFlags, DebugFlag_DrawLights))
                 {
                     mesh* Mesh = GetDefaultMesh(Assets, DefaultMesh_Sphere);
                     f32 S = World->LightProxyScale;
