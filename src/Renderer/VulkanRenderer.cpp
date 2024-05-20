@@ -3524,9 +3524,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         static_assert(sizeof(draw_list_work_params) % 64 == 0);
 
         draw_list_work_params* WorkParams = (draw_list_work_params*)PushSize_(Frame->Arena, MemPush_Clear, sizeof(draw_list_work_params) * DrawListCount, 64);
-        auto FrustumCullDrawList = [](void* Params_)
+        auto FrustumCullDrawList = [](thread_context* ThreadContext, void* Params_)
         {
-            TimedBlock(Platform.Profiler, "FrustumCull DrawList");
+            TimedBlockMT(Platform.Profiler, ThreadContext->ThreadID, "FrustumCull DrawList");
 
             draw_list_work_params* Params = (draw_list_work_params*)Params_;
             VkDrawIndexedIndirectCommand* At = Params->CopyDst;
@@ -3597,7 +3597,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             Platform.AddWorkEntry(Platform.Queue, FrustumCullDrawList, Params);
         }
 
-        Platform.CompleteAllWork(Platform.Queue);
+        // HACK(boti): Actually pass down the thread context from the platform layer through the to here
+        thread_context ThreadContext = { 0 };
+        Platform.CompleteAllWork(Platform.Queue, &ThreadContext);
 
         for (u32 DrawListIndex = 0; DrawListIndex < DrawListCount; DrawListIndex++)
         {

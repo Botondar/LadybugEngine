@@ -4,6 +4,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cwchar>
 
 internal const wchar_t*     Win_WndClassName = L"lb_wndclass";
 internal const wchar_t*     Win_WindowTitle = L"LadybugEngine";
@@ -187,8 +188,10 @@ internal b32 Win_GetNextWorkEntry(work_queue* Queue, work_entry* Entry)
     return(Result);
 }
 
-internal void Win_CompleteAllWork(work_queue* Queue)
+internal void Win_CompleteAllWork(work_queue* Queue, thread_context* ThreadContext)
 {
+    TimedFunctionMT(&GlobalProfiler, ThreadContext->ThreadID);
+
     for (;;)
     {
         work_entry Entry;
@@ -197,7 +200,7 @@ internal void Win_CompleteAllWork(work_queue* Queue)
         {
             if (Entry.Proc)
             {
-                Entry.Proc(Entry.Data);
+                Entry.Proc(ThreadContext, Entry.Data);
             }
             AtomicLoadAndIncrement(&Queue->Completion);
         }
@@ -213,10 +216,25 @@ internal void Win_CompleteAllWork(work_queue* Queue)
     }
 }
 
+struct worker_init_info
+{
+    thread_context ThreadContext;
+
+    work_queue* Queue;
+};
+
 internal DWORD Win_WorkerThread(void* Params)
 {
-    work_queue* Queue = (work_queue*)Params;
-    SetThreadDescription(GetCurrentThread(), L"Worker");
+    worker_init_info* WorkerInfo = (worker_init_info*)Params;
+
+    thread_context ThreadContext = WorkerInfo->ThreadContext;
+    work_queue* Queue            = WorkerInfo->Queue;
+
+    {
+        wchar_t ThreadName[256];
+        _snwprintf(ThreadName, CountOf(ThreadName), L"LadybugWorker%03", ThreadContext.ThreadID);
+        SetThreadDescription(GetCurrentThread(), ThreadName);
+    }
     for (;;)
     {
         work_entry Entry;
@@ -225,7 +243,7 @@ internal DWORD Win_WorkerThread(void* Params)
         {
             if (Entry.Proc)
             {
-                Entry.Proc(Entry.Data);
+                Entry.Proc(&ThreadContext, Entry.Data);
             }
             AtomicLoadAndIncrement(&Queue->Completion);
         }
@@ -280,7 +298,6 @@ Win_ReleaseSemaphore(platform_semaphore Semaphore, u32 ReleaseCount, u32* PrevCo
 
 inline void BeginTicketMutex(win_ticket_mutex* Mutex)
 {
-    TimedFunction(&GlobalProfiler);
     u64 TicketValue = AtomicLoadAndIncrement(&Mutex->LastTicket);
     while (TicketValue != AtomicLoad(&Mutex->CurrentTicket))
     {
@@ -429,6 +446,10 @@ internal LRESULT CALLBACK MainWindowProc(HWND Window, UINT Message, WPARAM WPara
 
 internal DWORD WINAPI Win_MainThread(void* pParams)
 {
+    thread_context ThreadContext_ = {};
+    thread_context* ThreadContext = &ThreadContext_;
+    ThreadContext->ThreadID = 0;
+
     HWND ServiceWindow = (HWND)pParams;
 
     WNDCLASSEXW WindowClass = 
@@ -542,7 +563,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     GameMemory.Size = GiB(8);
     GameMemory.Memory = VirtualAlloc(nullptr, GameMemory.Size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 
-    constexpr u32 WorkerCount = 3;
+    constexpr u32 WorkerCount = 7;
     work_queue WorkQueue = {};
     WorkQueue.WorkerSemaphore = CreateSemaphoreA(nullptr, 0, WorkerCount, nullptr);
 
@@ -552,11 +573,15 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
         DWORD ThreadID;
     };
     worker_info Workers[WorkerCount];
+    worker_init_info WorkerInitInfos[WorkerCount];
 
     for (u32 WorkerIndex = 0; WorkerIndex < WorkerCount; WorkerIndex++)
     {
         worker_info* Worker = Workers + WorkerIndex;
-        Worker->Handle = CreateThread(nullptr, 0, &Win_WorkerThread, &WorkQueue, 0, &Worker->ThreadID);
+        worker_init_info* Init = WorkerInitInfos + WorkerIndex;
+        Init->ThreadContext.ThreadID = WorkerIndex + 1;
+        Init->Queue = &WorkQueue;
+        Worker->Handle = CreateThread(nullptr, 0, &Win_WorkerThread, Init, 0, &Worker->ThreadID);
     }
     
     GameMemory.PlatformAPI.Profiler             = &GlobalProfiler;
@@ -831,7 +856,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
             {
                 for (u32 EntryIndex = 0; EntryIndex < GlobalProfiler.MaxEntryCount; EntryIndex++)
                 {
-                    profile_entry* Entry = GlobalProfiler.Entries[TranslationUnit] + EntryIndex;
+                    profile_entry* Entry = GlobalProfiler.Entries[0][TranslationUnit] + EntryIndex;
                     if (Entry->HitCount)
                     {
                         f64 InclusivePercent = 100.0 * Entry->InclusiveDeltaTSC / TotalDelta;
@@ -859,7 +884,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
         MessageBoxA(nullptr, GameIO.QuitMessage, "LadybugEngine", MB_OK|MB_ICONERROR);
     }
 
-    Win_CompleteAllWork(&WorkQueue);
+    Win_CompleteAllWork(&WorkQueue, ThreadContext);
     return(0);
 }
 
