@@ -839,7 +839,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
             }
         }
 
-        Game_UpdateAndRender(&GameMemory, &GameIO);
+        Game_UpdateAndRender(ThreadContext, &GameMemory, &GameIO);
         if (GameIO.bQuitRequested) break;
 
         counter FrameEndCounter = Win_GetCounter();
@@ -849,14 +849,42 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
 
         // Debug profiler output
         {
-            Win_DebugPrint("===== Profiler =====\n");
+            struct processed_profile_entry
+            {
+                const char* Label;
+                u64 HitCount;
+                u64 InclusiveDeltaTSC;
+                u64 ExclusiveDeltaTSC;
+            };
+
+            processed_profile_entry CollatedEntries[LB_TranslationUnitCount][profiler::MaxEntryCount] = {};
 
             u64 TotalDelta = GlobalProfiler.EndTSC - GlobalProfiler.BeginTSC;
+            for (u32 ThreadIndex = 0; ThreadIndex < WorkerCount + 1; ThreadIndex++)
+            {
+                for (u32 TranslationUnit = 0; TranslationUnit < LB_TranslationUnitCount; TranslationUnit++)
+                {
+                    for (u32 EntryIndex = 0; EntryIndex < GlobalProfiler.MaxEntryCount; EntryIndex++)
+                    {
+                        profile_entry* Entry = GlobalProfiler.Entries[ThreadIndex][TranslationUnit] + EntryIndex;
+                        if (Entry->HitCount)
+                        {
+                            processed_profile_entry* ProcessedEntry = CollatedEntries[TranslationUnit] + EntryIndex;
+                            ProcessedEntry->Label = Entry->Label;
+                            ProcessedEntry->HitCount += Entry->HitCount;
+                            ProcessedEntry->InclusiveDeltaTSC += Entry->InclusiveDeltaTSC;
+                            ProcessedEntry->ExclusiveDeltaTSC += Entry->ExclusiveDeltaTSC;
+                        }
+                    }
+                }
+            }
+
+            Win_DebugPrint("===== Profiler =====\n");
             for (u32 TranslationUnit = 0; TranslationUnit < LB_TranslationUnitCount; TranslationUnit++)
             {
                 for (u32 EntryIndex = 0; EntryIndex < GlobalProfiler.MaxEntryCount; EntryIndex++)
                 {
-                    profile_entry* Entry = GlobalProfiler.Entries[0][TranslationUnit] + EntryIndex;
+                    processed_profile_entry* Entry = CollatedEntries[TranslationUnit] + EntryIndex;
                     if (Entry->HitCount)
                     {
                         f64 InclusivePercent = 100.0 * Entry->InclusiveDeltaTSC / TotalDelta;

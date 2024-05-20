@@ -1925,8 +1925,6 @@ internal VkResult ResizeSwapchain(renderer* Renderer, u32 FrameID, b32 Forced)
 internal void 
 DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, pipeline* Pipelines, draw_list* List)
 {
-    TimedFunction(Platform.Profiler);
-
     vkCmdBindIndexBuffer(CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, 0, VK_INDEX_TYPE_UINT32);
 
     umm CurrentOffset = 0;
@@ -3526,7 +3524,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         draw_list_work_params* WorkParams = (draw_list_work_params*)PushSize_(Frame->Arena, MemPush_Clear, sizeof(draw_list_work_params) * DrawListCount, 64);
         auto FrustumCullDrawList = [](thread_context* ThreadContext, void* Params_)
         {
-            TimedBlockMT(Platform.Profiler, ThreadContext->ThreadID, "FrustumCull DrawList");
+            TimedFunctionMT(Platform.Profiler, ThreadContext->ThreadID);
 
             draw_list_work_params* Params = (draw_list_work_params*)Params_;
             VkDrawIndexedIndirectCommand* At = Params->CopyDst;
@@ -3597,9 +3595,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             Platform.AddWorkEntry(Platform.Queue, FrustumCullDrawList, Params);
         }
 
-        // HACK(boti): Actually pass down the thread context from the platform layer through the to here
-        thread_context ThreadContext = { 0 };
-        Platform.CompleteAllWork(Platform.Queue, &ThreadContext);
+        Platform.CompleteAllWork(Platform.Queue, ThreadContext);
 
         for (u32 DrawListIndex = 0; DrawListIndex < DrawListCount; DrawListIndex++)
         {

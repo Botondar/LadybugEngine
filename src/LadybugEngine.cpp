@@ -26,7 +26,7 @@
 platform_api Platform;
 
 extern "C"
-void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
+void Game_UpdateAndRender(thread_context* ThreadContext, game_memory* Memory, game_io* GameIO)
 {
     Platform = Memory->PlatformAPI;
 
@@ -61,7 +61,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
             GameIO->QuitMessage = RendererInit.ErrorMessage;
             return;
         }
-        RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, GameIO->OutputExtent);
+        RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, ThreadContext, &GameState->TransientArena, GameIO->OutputExtent);
 
         constexpr umm AssetArenaSize = GiB(5);
         memory_arena AssetArena = InitializeArena(AssetArenaSize, PushSize_(&GameState->TotalArena, 0, AssetArenaSize, KiB(4)));
@@ -98,7 +98,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
         ResetArena(&GameState->TransientArena);
         v2u Resolution = { 0, 0 };
         //Resolution = { 1366, 768 };
-        RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, &GameState->TransientArena, Resolution);
+        RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, ThreadContext, &GameState->TransientArena, Resolution);
     }
     RenderFrame->ImmediateTextureID = GameState->Assets->Textures[GameState->Assets->DefaultFontTextureID].RendererID;
     RenderFrame->ParticleTextureID = GameState->Assets->Textures[GameState->Assets->ParticleArrayID].RendererID;
@@ -235,7 +235,7 @@ void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO)
     
     UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, 
                          &GameState->TransientArena, GameState->Editor.DrawLights);
-    Platform.EndRenderFrame(RenderFrame);
+    Platform.EndRenderFrame(RenderFrame, ThreadContext);
 
     GameState->FrameID++;
 }

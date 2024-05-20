@@ -930,14 +930,16 @@ struct render_frame
     per_frame Uniforms;
 };
 
+struct thread_context;
+
 #define Signature_CreateRenderer(name)      renderer_init_result        name(struct platform_api* PlatformAPI, memory_arena* Arena, memory_arena* Scratch)
 #define Signature_AllocateGeometry(name)    geometry_buffer_allocation  name(renderer* Renderer, u32 VertexCount, u32 IndexCount)
 /* NOTE(boti): Passing nullptr as Info is allowed as a way to allocate a texture _name_ only.
  * Such a name can't be used as a placeholder until it has been uploaded with some data (after a frame boundary).
  */ 
 #define Signature_AllocateTexture(name)     renderer_texture_id         name(renderer* Renderer, texture_flags Flags, const texture_info* Info, renderer_texture_id Placeholder)
-#define Signature_BeginRenderFrame(name)    render_frame*               name(renderer* Renderer, memory_arena* Arena, v2u RenderExtent)
-#define Signature_EndRenderFrame(name)      void                        name(render_frame* Frame)
+#define Signature_BeginRenderFrame(name)    render_frame*               name(renderer* Renderer, thread_context* ThreadContext, memory_arena* Arena, v2u RenderExtent)
+#define Signature_EndRenderFrame(name)      void                        name(render_frame* Frame, thread_context* ThreadContext)
 
 typedef Signature_CreateRenderer(create_renderer);
 typedef Signature_AllocateGeometry(allocate_geometry);
