@@ -15,6 +15,7 @@ struct string
 // Checks string with zero-terminated string for equality
 // Only returns true if the strings also have equal length
 inline bool StringEquals(string String, const char* ZString);
+inline b32 StartsWithZ(string String, const char* ZString);
 
 // TODO(boti): There's no need to have this separate from string
 struct string_view
@@ -143,6 +144,29 @@ inline bool StringEquals(string String, const char* ZString)
     }
 
     return Result;
+}
+
+inline b32 StartsWithZ(string String, const char* ZString)
+{
+    bool Result = true;
+    if (ZString)
+    {
+        for (u64 At = 0; At < String.Length; At++)
+        {
+            if (ZString[At] == 0)
+            {
+                break;
+            }
+
+            if (String.String[At] != ZString[At])
+            {
+                Result = false;
+                break;
+            }
+
+        }
+    }
+    return(Result);
 }
 
 inline char Peek(string_view* View)

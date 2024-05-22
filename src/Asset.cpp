@@ -4,6 +4,7 @@
 internal mesh_data CreateCubeMesh(memory_arena* Arena);
 internal mesh_data CreateSphereMesh(memory_arena* Arena);
 internal mesh_data CreateArrowMesh(memory_arena* Arena);
+internal mesh_data CreatePyramidMesh(memory_arena* Arena);
 
 internal loaded_image LoadTIFF(memory_arena* Arena, buffer File);
 
@@ -1177,9 +1178,10 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
     };
 
     // Default meshes
-    Assets->DefaultMeshIDs[DefaultMesh_Cube] = AddMesh(CreateCubeMesh(Scratch));
-    Assets->DefaultMeshIDs[DefaultMesh_Sphere] = AddMesh(CreateSphereMesh(Scratch));
-    Assets->DefaultMeshIDs[DefaultMesh_Arrow] = AddMesh(CreateArrowMesh(Scratch));
+    Assets->DefaultMeshIDs[DefaultMesh_Cube]    = AddMesh(CreateCubeMesh(Scratch));
+    Assets->DefaultMeshIDs[DefaultMesh_Sphere]  = AddMesh(CreateSphereMesh(Scratch));
+    Assets->DefaultMeshIDs[DefaultMesh_Arrow]   = AddMesh(CreateArrowMesh(Scratch));
+    Assets->DefaultMeshIDs[DefaultMesh_Pyramid] = AddMesh(CreatePyramidMesh(Scratch));
 
     return(Result);
 }
@@ -1884,6 +1886,7 @@ internal void DEBUGLoadTestScene(
             skin* SkinAsset = Assets->Skins + Assets->SkinCount++;
             if (Skin->JointCount <= R_MaxJointCount)
             {
+                SkinAsset->Type = Armature_Undefined;
                 SkinAsset->JointCount = Skin->JointCount;
                 u32 InverseBindMatrixStride = View->Stride ? View->Stride : sizeof(m4);
                 void* InverseBindMatrixAt = OffsetPtr(Buffer->Data, View->Offset + Accessor->ByteOffset);
@@ -1900,48 +1903,58 @@ internal void DEBUGLoadTestScene(
                     InverseBindMatrixAt = OffsetPtr(InverseBindMatrixAt, InverseBindMatrixStride);
                     SkinAsset->InverseBindMatrices[JointIndex] = InverseBindTransform;
                     u32 NodeIndex = Skin->JointIndices[JointIndex];
-                    if (NodeIndex < GLTF.NodeCount)
-                    {
-                        gltf_node* Node = GLTF.Nodes + NodeIndex;
-                        if (Node->IsTRS)
-                        {
-                            SkinAsset->BindPose[JointIndex] = 
-                            {
-                                .Rotation = Node->Rotation,
-                                .Position = Node->Translation,
-                                .Scale = Node->Scale,
-                            };
-                        }
-                        else
-                        {
-                            SkinAsset->BindPose[JointIndex] = M4ToTRS(Node->Transform);
-                        }
+                    Verify(NodeIndex < GLTF.NodeCount);
 
-                        // Build the joint hierarchy
-                        // TODO(boti): We need to handle the case where the joints don't form a closed hierarchy 
-                        // (i.e. bones are parented to nodes not part of the skeleton)
-                        for (u32 ChildIt = 0; ChildIt < Node->ChildrenCount; ChildIt++)
+                    gltf_node* Node = GLTF.Nodes + NodeIndex;
+
+                    if (JointIndex == 0)
+                    {
+                        if (StartsWithZ(Node->Name, MixamoJointNamePrefix))
                         {
-                            u32 ChildIndex = Node->Children[ChildIt];
-                            for (u32 JointIt = 0; JointIt < Skin->JointCount; JointIt++)
-                            {
-                                if (Skin->JointIndices[JointIt] == ChildIndex)
-                                {
-                                    if (JointIndex >= JointIt)
-                                    {
-                                        // TODO(boti): Reorder the joints so that children don't precede their parents
-                                        UnimplementedCodePath;
-                                    }
-                                    Verify(SkinAsset->JointParents[JointIt] == 0);
-                                    SkinAsset->JointParents[JointIt] = JointIndex;
-                                    break;
-                                }
-                            }
+                            SkinAsset->Type = Armature_Mixamo;
                         }
+                    }
+
+                    if (SkinAsset->Type == Armature_Mixamo)
+                    {
+                        Verify(JointIndex < Mixamo_Count);
+                        Verify(StringEquals(Node->Name, MixamoJointNames[JointIndex]));
+                    }
+                        
+                    if (Node->IsTRS)
+                    {
+                        SkinAsset->BindPose[JointIndex] = 
+                        {
+                            .Rotation = Node->Rotation,
+                            .Position = Node->Translation,
+                            .Scale = Node->Scale,
+                        };
                     }
                     else
                     {
-                        UnhandledError("Invalid joint node index in glTF skin");
+                        SkinAsset->BindPose[JointIndex] = M4ToTRS(Node->Transform);
+                    }
+
+                    // Build the joint hierarchy
+                    // TODO(boti): We need to handle the case where the joints don't form a closed hierarchy 
+                    // (i.e. bones are parented to nodes not part of the skeleton)
+                    for (u32 ChildIt = 0; ChildIt < Node->ChildrenCount; ChildIt++)
+                    {
+                        u32 ChildIndex = Node->Children[ChildIt];
+                        for (u32 JointIt = 0; JointIt < Skin->JointCount; JointIt++)
+                        {
+                            if (Skin->JointIndices[JointIt] == ChildIndex)
+                            {
+                                if (JointIndex >= JointIt)
+                                {
+                                    // TODO(boti): Reorder the joints so that children don't precede their parents
+                                    UnimplementedCodePath;
+                                }
+                                Verify(SkinAsset->JointParents[JointIt] == 0);
+                                SkinAsset->JointParents[JointIt] = JointIndex;
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -1985,7 +1998,10 @@ internal void DEBUGLoadTestScene(
             }
         }
         // Skip the current animation if it doesn't belong to any skin
-        if (SkinIndex == U32_MAX) continue;
+        if (SkinIndex == U32_MAX) 
+        {
+            continue;
+        }
         gltf_skin* Skin = GLTF.Skins + SkinIndex;
 
         // NOTE(boti): We start the count at 1 because even if the animation doesn't have an explicit 0t
@@ -1998,8 +2014,7 @@ internal void DEBUGLoadTestScene(
 
             gltf_accessor* TimestampAccessor = GLTF.Accessors + Sampler->InputAccessorIndex;
 
-            Verify((TimestampAccessor->ComponentType == GLTF_FLOAT) &&
-                   (TimestampAccessor->Type == GLTF_SCALAR));
+            Verify((TimestampAccessor->ComponentType == GLTF_FLOAT) && (TimestampAccessor->Type == GLTF_SCALAR));
 
             MaxKeyFrameCount += TimestampAccessor->Count;
         }
@@ -2057,10 +2072,10 @@ internal void DEBUGLoadTestScene(
         if (Assets->AnimationCount < Assets->MaxAnimationCount)
         {
             animation* AnimationAsset = Assets->Animations + Assets->AnimationCount++;
-            AnimationAsset->SkinID = BaseSkinIndex + SkinIndex;
-            AnimationAsset->KeyFrameCount = KeyFrameCount;
-            AnimationAsset->KeyFrameTimestamps = PushArray(&Assets->Arena, 0, f32, KeyFrameCount);
-            AnimationAsset->KeyFrames = PushArray(&Assets->Arena, 0, animation_key_frame, KeyFrameCount);
+            AnimationAsset->SkinID              = BaseSkinIndex + SkinIndex;
+            AnimationAsset->KeyFrameCount       = KeyFrameCount;
+            AnimationAsset->KeyFrameTimestamps  = PushArray(&Assets->Arena, 0, f32, KeyFrameCount);
+            AnimationAsset->KeyFrames           = PushArray(&Assets->Arena, 0, animation_key_frame, KeyFrameCount);
             memcpy(AnimationAsset->KeyFrameTimestamps, KeyFrameTimestamps, KeyFrameCount * sizeof(f32));
 
             memset(&AnimationAsset->ActiveJoints, 0x00, sizeof(AnimationAsset->ActiveJoints));
@@ -2152,9 +2167,9 @@ internal void DEBUGLoadTestScene(
                         trs_transform* Transform = AnimationAsset->KeyFrames[0].JointTransforms + JointIndex;
                         switch (Channel->Target.Path)
                         {
-                            case GLTF_Rotation: Transform->Rotation = *(v4*)SamplerTransformAt; break;
-                            case GLTF_Translation: Transform->Position = *(v3*)SamplerTransformAt; break;
-                            case GLTF_Scale: Transform->Scale = *(v3*)SamplerTransformAt; break;
+                            case GLTF_Rotation:     Transform->Rotation = *(v4*)SamplerTransformAt; break;
+                            case GLTF_Translation:  Transform->Position = *(v3*)SamplerTransformAt; break;
+                            case GLTF_Scale:        Transform->Scale    = *(v3*)SamplerTransformAt; break;
                             default:
                             {
                                 UnimplementedCodePath;
@@ -2586,6 +2601,56 @@ internal mesh_data CreateArrowMesh(memory_arena* Arena)
             *IndexAt++ = (2 * ((i + 1) % RadiusDivisionCount)) + 0 + BaseIndex;
             *IndexAt++ = 2 * i + 1 + BaseIndex;
         }
+    }
+
+    return(Result);
+}
+
+internal mesh_data CreatePyramidMesh(memory_arena* Arena)
+{
+    v3 VertexData[] =
+    {
+        { -1.0f, -1.0f, 0.0f }, 
+        { +1.0f, -1.0f, 0.0f }, 
+        { +1.0f, +1.0f, 0.0f }, 
+        { -1.0f, +1.0f, 0.0f }, 
+        {  0.0f,  0.0f, 1.0f },
+    };
+
+    u32 IndexData[] =
+    {
+        0, 1, 2, 0, 2, 3,
+        1, 0, 4,
+        2, 1, 4,
+        3, 2, 4,
+        0, 3, 4,
+    };
+
+    mesh_data Result = {};
+    Result.Box = { { -1.0f, -1.0f, 0.0f }, { +1.0f, +1.0f, +1.0f } };
+
+    Result.VertexCount  = CountOf(IndexData);
+    Result.VertexData   = PushArray(Arena, 0, vertex, Result.VertexCount);
+    Result.IndexCount   = CountOf(IndexData);
+    Result.IndexData    = PushArray(Arena, 0, vert_index, Result.IndexCount);
+
+    vertex* VertexAt = Result.VertexData;
+    vert_index* IndexAt = Result.IndexData;
+    for (u32 It = 0; It < CountOf(IndexData); It += 3)
+    {
+        *IndexAt++ = It + 0;
+        *IndexAt++ = It + 1;
+        *IndexAt++ = It + 2;
+
+        memset(VertexAt, 0, sizeof(*VertexAt));
+        v3 P0 = VertexData[IndexData[It + 0]];
+        v3 P1 = VertexData[IndexData[It + 1]];
+        v3 P2 = VertexData[IndexData[It + 2]];
+        v3 N = NOZ(Cross(P2 - P0, P1 - P0));
+
+        *VertexAt++ = { P0, N, {}, {}, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF) };
+        *VertexAt++ = { P1, N, {}, {}, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF) };
+        *VertexAt++ = { P2, N, {}, {}, {}, {}, PackRGBA8(0xFF, 0xFF, 0xFF) };
     }
 
     return(Result);

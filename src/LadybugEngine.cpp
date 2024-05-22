@@ -110,7 +110,7 @@ void Game_UpdateAndRender(thread_context* ThreadContext, game_memory* Memory, ga
             0.0f, 0.0f, -1.0f, 0.0f,
             0.0f, 1.0f, 0.0f, 0.0f,
             0.0f, 0.0f, 0.0f, 1.0f);
-#if 0
+#if 1
         m4 Transform = YUpToZUp;
 #else
         m4 Transform = M4(1e-1f, 0.0f, 0.0f, 0.0f,

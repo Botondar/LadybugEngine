@@ -594,6 +594,19 @@ lbfn bool ParseGLTF(gltf* GLTF, json_element* Root, memory_arena* Arena)
             {
                 UnimplementedCodePath;
             }
+
+            json_element* Name = GetElement(&Src->Object, "name");
+            if (Name)
+            {
+                if (Name->Type != json_element_type::String)
+                {
+                    UnhandledError("Invalid glTF node name");
+                }
+
+                // TODO(boti): We're tying the lifetime to the JSON file here, which is fine for now but might lead to bugs later
+                // Really this whole glTF parser should just use a JSON lexer, instead of pre-parsing the JSON.
+                Dst->Name = Name->String;
+            }
         }
     }
 

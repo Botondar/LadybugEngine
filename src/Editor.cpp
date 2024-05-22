@@ -113,14 +113,9 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         return;
     }
 
-    if (WasPressed(IO->Keys[SC_L]))
-    {
-        BitTestAndComplement(&Editor->DebugFlags, DebugFlag_DrawLights);
-    }
-    if (WasPressed(IO->Keys[SC_B]))
-    {
-        BitTestAndComplement(&Editor->DebugFlags, DebugFlag_DrawBoundingBoxes);
-    }
+    if (WasPressed(IO->Keys[SC_L])) BitTestAndComplement(&Editor->DebugFlags, DebugFlag_DrawLights);
+    if (WasPressed(IO->Keys[SC_B])) BitTestAndComplement(&Editor->DebugFlags, DebugFlag_DrawBoundingBoxes);
+    if (WasPressed(IO->Keys[SC_J])) BitTestAndComplement(&Editor->DebugFlags, DebugFlag_DrawJoints);
 
     Context.Margin = 10.0f;
     f32 TextSize = 32.0f;
@@ -273,16 +268,20 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
 
             if (HasFlag(Entity->Flags, EntityFlag_Mesh))
             {
-                mesh* Mesh = Assets->Meshes + Entity->Pieces[0].MeshID; // HACK(boti): we need to loop through all the pieces here
-                mmbox Box = Mesh->BoundingBox;
-                v3 BoxP = 0.5f * (Box.Min + Box.Max);
-                v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
-        
-                f32 t = 0.0f;
-                if (IntersectRayBox(Ray, BoxP, HalfExtent, Transform, tMax, &t))
+                for (u32 PieceIndex = 0; PieceIndex < Entity->PieceCount; PieceIndex++)
                 {
-                    SelectedEntityID.Value = EntityIndex;
-                    tMax = t;
+                    mesh* Mesh = Assets->Meshes + Entity->Pieces[PieceIndex].MeshID;
+                    mmbox Box = Mesh->BoundingBox;
+                    v3 BoxP = 0.5f * (Box.Min + Box.Max);
+                    v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
+        
+                    // TODO(boti): Apply piece offset to transform
+                    f32 t = 0.0f;
+                    if (IntersectRayBox(Ray, BoxP, HalfExtent, Transform, tMax, &t))
+                    {
+                        SelectedEntityID.Value = EntityIndex;
+                        tMax = t;
+                    }
                 }
             }
             else if (HasFlag(Entity->Flags, EntityFlag_LightSource))

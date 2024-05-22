@@ -224,6 +224,8 @@ struct gltf_animation
 
 struct gltf_node
 {
+    string Name;
+
     b32 IsTRS;
     m4 Transform;
     v4 Rotation;

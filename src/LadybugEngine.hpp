@@ -22,6 +22,7 @@ enum debug_flag : debug_flags
 {
     DebugFlag_DrawLights,
     DebugFlag_DrawBoundingBoxes,
+    DebugFlag_DrawJoints,
 };
 
 #include "Font.hpp"

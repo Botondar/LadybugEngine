@@ -662,7 +662,7 @@ lbfn void UpdateAndRenderWorld(
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_TransmissionTest, 
                              0);
-        #elif 1
+        #elif 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Terrain,
                              DebugSceneFlag_None);
@@ -798,22 +798,108 @@ lbfn void UpdateAndRenderWorld(
                                 .Position = Lerp(CurrentTransform->Position, NextTransform->Position, BlendFactor),
                                 .Scale = Lerp(CurrentTransform->Scale, NextTransform->Scale, BlendFactor),
                             };
-                
+
                             Pose[JointIndex] = TRSToM4(Transform);
                         }
-                
+
+                        #if 0
+                        if (Skin->Type == Armature_Mixamo)
+                        {
+                            if (JointIndex == Mixamo_RightFoot)
+                            {
+                                v3 X = v3{ 0.0f, 0.0f, 1.0f }; // NOTE(boti): Forward axis (in 2D)
+                                v3 Y = v3{ 0.0f, -1.0f, 0.0f }; // NOTE(boti): Up axis (in 2D)
+
+                                v3 A = Pose[Mixamo_RightUpLeg].P.XYZ;
+                                v3 B = Pose[Mixamo_RightLeg].P.XYZ;
+                                v3 C = Pose[Mixamo_RightFoot].P.XYZ;
+                                v3 DeltaP = 0.5 * Y + 0.25 * X;
+                                v3 TargetP = Pose[JointIndex].P.XYZ + DeltaP;
+
+                                v3 AB = B - A;
+                                v3 BC = C - B;
+                                v3 AC = C - A;
+                                v3 AT = TargetP - A;
+                                f32 ABLength = Sqrt(Dot(AB, AB));
+                                f32 BCLength = Sqrt(Dot(BC, BC));
+                                f32 ATLength = Sqrt(Dot(AT, AT));
+
+                                f32 HipAngle = ACos(Clamp(Dot(NOZ(AC), NOZ(AB)), -1.0f, +1.0f));
+                                f32 KneeAngle = ACos(Clamp(Dot(NOZ(-AB), NOZ(BC)), -1.0f, +1.0f));
+
+                                f32 AB2 = Square(ABLength);
+                                f32 AT2 = Square(ATLength);
+                                f32 BC2 = Square(BCLength);
+                                f32 DesiredHipAngle = ACos(Clamp((BC2 - AB2 - AT2) / (-2.0f * AB2), -1.0f, +1.0f));
+                                f32 DesiredKneeAngle = ACos(Clamp((AT2 - AB2 - BC2) / (-2.0f * ABLength * BCLength), -1.0f, +1.0f));
+
+                                v3 Axis = -NOZ(Cross(AC, X));
+
+                                f32 dHipAngle = DesiredHipAngle - HipAngle;
+                                f32 dKneeAngle = DesiredKneeAngle - KneeAngle;
+                                v2 HipCS = { Cos(0.5f * dHipAngle), Sin(0.5f * dHipAngle) };
+                                v2 KneeCS = { Cos(0.5f * dKneeAngle), Sin(0.5f * dKneeAngle) };
+                                v4 HipQ = { HipCS.Y * Axis.X, HipCS.Y * Axis.Y, HipCS.Y * Axis.Z, HipCS.X };
+                                v4 KneeQ = { KneeCS.Y * Axis.X, KneeCS.Y * Axis.Y, KneeCS.Y * Axis.Z, KneeCS.Y };
+
+                                Pose[Mixamo_RightUpLeg] = QuaternionToM4(HipQ) * Pose[Mixamo_RightUpLeg];
+                                Pose[Mixamo_RightLeg] = QuaternionToM4(KneeQ) * Pose[Mixamo_RightLeg];
+
+                                //Pose[Mixamo_RightFoot].P.XYZ = TargetP;
+                                //Pose[Mixamo_RightLeg].P.XYZ += DeltaP;
+                            }
+                        }
+                        #endif
+
                         u32 ParentIndex = Skin->JointParents[JointIndex];
                         if (ParentIndex != JointIndex)
                         {
                             Pose[JointIndex] = Pose[ParentIndex] * Pose[JointIndex];
                         }
                     }
-                
+
                     // NOTE(boti): This _cannot_ be folded into the above loop, because the parent transforms must not contain
                     // the inverse bind transform when propagating the transforms down the hierarchy
                     for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
                     {
                         Pose[JointIndex] = Pose[JointIndex] * Skin->InverseBindMatrices[JointIndex];
+                    }
+
+                    // Debug draw joints
+                    if (BitTest(DebugFlags, DebugFlag_DrawJoints))
+                    {
+                        mesh* SphereMesh = GetDefaultMesh(Assets, DefaultMesh_Sphere);
+                        mesh* PyramidMesh = GetDefaultMesh(Assets, DefaultMesh_Pyramid);
+                        rgba8 Color = PackRGBA8(0xFF, 0xFF, 0xFF);
+                        for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
+                        {
+                            constexpr f32 S = 1e-2f;
+                            m4 BaseScale = M4(S, 0.0f, 0.0f, 0.0f,
+                                              0.0f, S, 0.0f, 0.0f,
+                                              0.0f, 0.0f, S, 0.0f,
+                                              0.0f, 0.0f, 0.0f, 1.0f);
+                            m4 BindMatrix = AffineInverse(Skin->InverseBindMatrices[JointIndex]);
+                            m4 Transform = Entity->Transform * Pose[JointIndex] * BindMatrix * BaseScale;
+                            DrawWidget3D(Frame, SphereMesh->Allocation, Transform, Color);
+
+                            u32 ParentIndex = Skin->JointParents[JointIndex];
+                            if (ParentIndex != JointIndex)
+                            {
+                                m4 J = Pose[JointIndex] * BindMatrix;
+                                m4 JP = Pose[ParentIndex] * AffineInverse(Skin->InverseBindMatrices[ParentIndex]);
+
+                                m4 Basis = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                                              0.0f, 0.0f, 1.0f, 0.0f,
+                                              0.0f, -1.0f, 0.0f, 0.0f,
+                                              0.0f, 0.0f, 0.0f, 1.0f);
+
+                                v3 dP = J.P.XYZ - JP.P.XYZ;
+                                f32 d = Sqrt(Dot(dP, dP));
+                                BaseScale.E[2][2] = d;
+                                BaseScale.E[3][2] = S;
+                                DrawWidget3D(Frame, PyramidMesh->Allocation, Entity->Transform * JP * Basis * BaseScale, Color);
+                            }
+                        }
                     }
                 }
 

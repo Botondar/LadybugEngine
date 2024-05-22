@@ -54,9 +54,18 @@ LoadImage(memory_arena* Arena, buffer FileData);
 // Skin and animation
 //
 
+enum armature_type : u32
+{
+    Armature_Undefined = 0,
+
+    Armature_Mixamo,
+};
+
+// TODO(boti): Rename skin to armature
 // NOTE(boti): Skin joints must not precede their parents in the array
 struct skin
 {
+    armature_type Type;
     u32 JointCount;
     m4 InverseBindMatrices[R_MaxJointCount];
     // NOTE(boti): The bind-pose transforms are all parent-relative and not global
@@ -89,6 +98,153 @@ struct animation
 };
 
 inline b32 IsJointActive(animation* Animation, u32 JointIndex);
+
+enum mixamo_joint : u32
+{
+    Mixamo_Root = 0,
+
+    Mixamo_Hips = Mixamo_Root,
+    Mixamo_Spine,
+    Mixamo_Spine1,
+    Mixamo_Spine2,
+    Mixamo_Neck,
+    Mixamo_Head,
+    Mixamo_HeadTop,
+    Mixamo_LeftEye,
+    Mixamo_RightEye,
+    Mixamo_LeftShoulder,
+    Mixamo_LeftArm,
+    Mixamo_LeftForeArm,
+    Mixamo_LeftHand,
+    Mixamo_LeftHandThumb1,
+    Mixamo_LeftHandThumb2,
+    Mixamo_LeftHandThumb3,
+    Mixamo_LeftHandThumb4,
+    Mixamo_LeftHandIndex1,
+    Mixamo_LeftHandIndex2,
+    Mixamo_LeftHandIndex3,
+    Mixamo_LeftHandIndex4,
+    Mixamo_LeftHandMiddle1,
+    Mixamo_LeftHandMiddle2,
+    Mixamo_LeftHandMiddle3,
+    Mixamo_LeftHandMiddle4,
+    Mixamo_LeftHandRing1,
+    Mixamo_LeftHandRing2,
+    Mixamo_LeftHandRing3,
+    Mixamo_LeftHandRing4,
+    Mixamo_LeftHandPinky1,
+    Mixamo_LeftHandPinky2,
+    Mixamo_LeftHandPinky3,
+    Mixamo_LeftHandPinky4,
+    Mixamo_RightShoulder,
+    Mixamo_RightArm,
+    Mixamo_RightForeArm,
+    Mixamo_RightHand,
+    Mixamo_RightHandThumb1,
+    Mixamo_RightHandThumb2,
+    Mixamo_RightHandThumb3,
+    Mixamo_RightHandThumb4,
+    Mixamo_RightHandIndex1,
+    Mixamo_RightHandIndex2,
+    Mixamo_RightHandIndex3,
+    Mixamo_RightHandIndex4,
+    Mixamo_RightHandMiddle1,
+    Mixamo_RightHandMiddle2,
+    Mixamo_RightHandMiddle3,
+    Mixamo_RightHandMiddle4,
+    Mixamo_RightHandRing1,
+    Mixamo_RightHandRing2,
+    Mixamo_RightHandRing3,
+    Mixamo_RightHandRing4,
+    Mixamo_RightHandPinky1,
+    Mixamo_RightHandPinky2,
+    Mixamo_RightHandPinky3,
+    Mixamo_RightHandPinky4,
+    Mixamo_LeftUpLeg,
+    Mixamo_LeftLeg,
+    Mixamo_LeftFoot,
+    Mixamo_LeftToeBase,
+    Mixamo_LeftToeEnd,
+    Mixamo_RightUpLeg,
+    Mixamo_RightLeg,
+    Mixamo_RightFoot,
+    Mixamo_RightToeBase,
+    Mixamo_RightToeEnd,
+
+    Mixamo_Count,
+};
+
+internal const char* MixamoJointNamePrefix = "mixamorig:";
+internal const char* MixamoJointNames[Mixamo_Count] =
+{
+    [Mixamo_Hips]               = "mixamorig:Hips",
+    [Mixamo_Spine]              = "mixamorig:Spine",
+    [Mixamo_LeftUpLeg]          = "mixamorig:LeftUpLeg",
+    [Mixamo_RightUpLeg]         = "mixamorig:RightUpLeg",
+    [Mixamo_Spine1]             = "mixamorig:Spine1",
+    [Mixamo_LeftLeg]            = "mixamorig:LeftLeg",
+    [Mixamo_RightLeg]           = "mixamorig:RightLeg",
+    [Mixamo_Spine2]             = "mixamorig:Spine2",
+    [Mixamo_LeftFoot]           = "mixamorig:LeftFoot",
+    [Mixamo_RightFoot]          = "mixamorig:RightFoot",
+    [Mixamo_Neck]               = "mixamorig:Neck",
+    [Mixamo_LeftShoulder]       = "mixamorig:LeftShoulder",
+    [Mixamo_RightShoulder]      = "mixamorig:RightShoulder",
+    [Mixamo_LeftToeBase]        = "mixamorig:LeftToeBase",
+    [Mixamo_RightToeBase]       = "mixamorig:RightToeBase",
+    [Mixamo_Head]               = "mixamorig:Head",
+    [Mixamo_LeftArm]            = "mixamorig:LeftArm",
+    [Mixamo_RightArm]           = "mixamorig:RightArm",
+    [Mixamo_LeftToeEnd]         = "mixamorig:LeftToe_End",
+    [Mixamo_RightToeEnd]        = "mixamorig:RightToe_End",
+    [Mixamo_HeadTop]            = "mixamorig:HeadTop_End",
+    [Mixamo_LeftEye]            = "mixamorig:LeftEye",
+    [Mixamo_RightEye]           = "mixamorig:RightEye",
+    [Mixamo_LeftForeArm]        = "mixamorig:LeftForeArm",
+    [Mixamo_RightForeArm]       = "mixamorig:RightForeArm",
+    [Mixamo_LeftHand]           = "mixamorig:LeftHand",
+    [Mixamo_RightHand]          = "mixamorig:RightHand",
+    [Mixamo_LeftHandThumb1]     = "mixamorig:LeftHandThumb1",
+    [Mixamo_LeftHandIndex1]     = "mixamorig:LeftHandIndex1",
+    [Mixamo_LeftHandMiddle1]    = "mixamorig:LeftHandMiddle1",
+    [Mixamo_LeftHandRing1]      = "mixamorig:LeftHandRing1",
+    [Mixamo_LeftHandPinky1]     = "mixamorig:LeftHandPinky1",
+    [Mixamo_RightHandThumb1]    = "mixamorig:RightHandThumb1",
+    [Mixamo_RightHandIndex1]    = "mixamorig:RightHandIndex1",
+    [Mixamo_RightHandMiddle1]   = "mixamorig:RightHandMiddle1",
+    [Mixamo_RightHandRing1]     = "mixamorig:RightHandRing1",
+    [Mixamo_RightHandPinky1]    = "mixamorig:RightHandPinky1",
+    [Mixamo_LeftHandThumb2]     = "mixamorig:LeftHandThumb2",
+    [Mixamo_LeftHandIndex2]     = "mixamorig:LeftHandIndex2",
+    [Mixamo_LeftHandMiddle2]    = "mixamorig:LeftHandMiddle2",
+    [Mixamo_LeftHandRing2]      = "mixamorig:LeftHandRing2",
+    [Mixamo_LeftHandPinky2]     = "mixamorig:LeftHandPinky2",
+    [Mixamo_RightHandThumb2]    = "mixamorig:RightHandThumb2",
+    [Mixamo_RightHandIndex2]    = "mixamorig:RightHandIndex2",
+    [Mixamo_RightHandMiddle2]   = "mixamorig:RightHandMiddle2",
+    [Mixamo_RightHandRing2]     = "mixamorig:RightHandRing2",
+    [Mixamo_RightHandPinky2]    = "mixamorig:RightHandPinky2",
+    [Mixamo_LeftHandThumb3]     = "mixamorig:LeftHandThumb3",
+    [Mixamo_LeftHandIndex3]     = "mixamorig:LeftHandIndex3",
+    [Mixamo_LeftHandMiddle3]    = "mixamorig:LeftHandMiddle3",
+    [Mixamo_LeftHandRing3]      = "mixamorig:LeftHandRing3",
+    [Mixamo_LeftHandPinky3]     = "mixamorig:LeftHandPinky3",
+    [Mixamo_RightHandThumb3]    = "mixamorig:RightHandThumb3",
+    [Mixamo_RightHandIndex3]    = "mixamorig:RightHandIndex3",
+    [Mixamo_RightHandMiddle3]   = "mixamorig:RightHandMiddle3",
+    [Mixamo_RightHandRing3]     = "mixamorig:RightHandRing3",
+    [Mixamo_RightHandPinky3]    = "mixamorig:RightHandPinky3",
+    [Mixamo_LeftHandThumb4]     = "mixamorig:LeftHandThumb4",
+    [Mixamo_LeftHandIndex4]     = "mixamorig:LeftHandIndex4",
+    [Mixamo_LeftHandMiddle4]    = "mixamorig:LeftHandMiddle4",
+    [Mixamo_LeftHandRing4]      = "mixamorig:LeftHandRing4",
+    [Mixamo_LeftHandPinky4]     = "mixamorig:LeftHandPinky4",
+    [Mixamo_RightHandThumb4]    = "mixamorig:RightHandThumb4",
+    [Mixamo_RightHandIndex4]    = "mixamorig:RightHandIndex4",
+    [Mixamo_RightHandMiddle4]   = "mixamorig:RightHandMiddle4",
+    [Mixamo_RightHandRing4]     = "mixamorig:RightHandRing4",
+    [Mixamo_RightHandPinky4]    = "mixamorig:RightHandPinky4",
+};
 
 //
 // Texture
@@ -253,6 +409,7 @@ enum default_mesh : u32
     DefaultMesh_Cube = 0,
     DefaultMesh_Sphere,
     DefaultMesh_Arrow,
+    DefaultMesh_Pyramid,
 
     DefaultMesh_Count,
 };

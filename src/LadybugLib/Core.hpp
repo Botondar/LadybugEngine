@@ -284,6 +284,7 @@ inline f32 Floor(f32 x) { return floorf(x); }
 inline f32 Ceil(f32 x) { return ceilf(x); }
 inline f32 Round(f32 x) { return roundf(x); }
 
+inline f32 Square(f32 x) { return x*x; }
 inline f32 Sqrt(f32 x) { return sqrtf(x); }
 inline f32 Exp2(f32 x) { return exp2f(x); }
 inline f32 Log2(f32 x) { return log2f(x); }
@@ -435,6 +436,7 @@ inline v4 operator+(v4 a, v4 b);
 inline v4 operator-(v4 a, v4 b);
 inline v4& operator+=(v4& a, v4 b);
 inline v4& operator-=(v4& a, v4 b);
+inline v4& operator*=(v4& v, f32 s);
 
 inline f32 Dot(v4 a, v4 b);
 inline v4 Normalize(v4 V);
@@ -920,6 +922,12 @@ inline v4& operator-=(v4& a, v4 b)
 {
     a = a - b;
     return(a);
+}
+
+inline v4& operator*=(v4& v, f32 s)
+{
+    v = v * s;
+    return(v);
 }
 
 inline f32 Dot(v4 A, v4 B)
