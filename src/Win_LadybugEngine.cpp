@@ -563,7 +563,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     GameMemory.Size = GiB(8);
     GameMemory.Memory = VirtualAlloc(nullptr, GameMemory.Size, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 
-    constexpr u32 WorkerCount = 7;
+    constexpr u32 WorkerCount = 3;
     work_queue WorkQueue = {};
     WorkQueue.WorkerSemaphore = CreateSemaphoreA(nullptr, 0, WorkerCount, nullptr);
 
@@ -848,6 +848,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
         EndProfiler(&GlobalProfiler);
 
         // Debug profiler output
+        if (0)
         {
             struct processed_profile_entry
             {
