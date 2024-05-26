@@ -134,6 +134,8 @@ struct game_world
     height_field HeightField;
     v2 TerrainP;
 
+    entity_id IKControlID; // NOTE(boti): Dummy entity for IK testing
+
     static constexpr u32 MaxEntityCount = (1u << 18);
     u32 EntityCount;
     entity Entities[MaxEntityCount];

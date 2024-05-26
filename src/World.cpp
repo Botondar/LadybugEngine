@@ -668,6 +668,24 @@ lbfn void UpdateAndRenderWorld(
                              DebugSceneFlag_None);
         #endif
 
+        World->IKControlID = { World->EntityCount++ };
+        World->Entities[World->IKControlID.Value] =
+        {
+            .Flags = EntityFlag_Mesh,
+            .Transform = M4(5e-2f, 0.0f, 0.0f, 0.0f,
+                            0.0f, 5e-2f, 0.0f, 0.0f,
+                            0.0f, 0.0f, 5e-2f, 0.0f,
+                            0.0f, 0.0f, 0.0f, 1.0f),
+            .PieceCount = 1,
+            .Pieces = 
+            { 
+                {
+                    .MeshID = Assets->DefaultMeshIDs[DefaultMesh_Sphere],
+                    .OffsetP = { 0.0f, 0.0f, 0.0f },
+                }, 
+            },
+        };
+
         World->IsLoaded = true;
     }
 
@@ -783,7 +801,7 @@ lbfn void UpdateAndRenderWorld(
                     f32 KeyFrameDelta = Timestamp1 - Timestamp0;
                     f32 BlendStart = Entity->AnimationCounter - Timestamp0;
                     f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
-                
+
                     animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
                     animation_key_frame* NextFrame = Animation->KeyFrames + NextKeyFrameIndex;
                     for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
@@ -802,60 +820,82 @@ lbfn void UpdateAndRenderWorld(
                             Pose[JointIndex] = TRSToM4(Transform);
                         }
 
-                        #if 0
+                        u32 ParentIndex = Skin->JointParents[JointIndex];
+                        if (ParentIndex != JointIndex)
+                        {
+                            Pose[JointIndex] = Pose[ParentIndex] * Pose[JointIndex];
+                        }
+
+                        #if 1
                         if (Skin->Type == Armature_Mixamo)
                         {
                             if (JointIndex == Mixamo_RightFoot)
                             {
+                                entity* Control = World->Entities + World->IKControlID.Value;
+                                v3 ControlP = Control->Transform.P.XYZ;
+                                v3 TargetP = TransformPoint(AffineInverse(Entity->Transform), ControlP);
+
                                 v3 X = v3{ 0.0f, 0.0f, 1.0f }; // NOTE(boti): Forward axis (in 2D)
                                 v3 Y = v3{ 0.0f, -1.0f, 0.0f }; // NOTE(boti): Up axis (in 2D)
 
                                 v3 A = Pose[Mixamo_RightUpLeg].P.XYZ;
                                 v3 B = Pose[Mixamo_RightLeg].P.XYZ;
                                 v3 C = Pose[Mixamo_RightFoot].P.XYZ;
-                                v3 DeltaP = 0.5 * Y + 0.25 * X;
-                                v3 TargetP = Pose[JointIndex].P.XYZ + DeltaP;
 
                                 v3 AB = B - A;
+                                f32 a2 = Dot(AB, AB);
                                 v3 BC = C - B;
-                                v3 AC = C - A;
-                                v3 AT = TargetP - A;
-                                f32 ABLength = Sqrt(Dot(AB, AB));
-                                f32 BCLength = Sqrt(Dot(BC, BC));
-                                f32 ATLength = Sqrt(Dot(AT, AT));
+                                f32 b2 = Dot(BC, BC);
+                                v3 AC = TargetP - A;
+                                f32 c2 = Dot(AC, AC);
 
-                                f32 HipAngle = ACos(Clamp(Dot(NOZ(AC), NOZ(AB)), -1.0f, +1.0f));
-                                f32 KneeAngle = ACos(Clamp(Dot(NOZ(-AB), NOZ(BC)), -1.0f, +1.0f));
+                                v3 RotationAxis = NOZ(Cross(X, -Y));
 
-                                f32 AB2 = Square(ABLength);
-                                f32 AT2 = Square(ATLength);
-                                f32 BC2 = Square(BCLength);
-                                f32 DesiredHipAngle = ACos(Clamp((BC2 - AB2 - AT2) / (-2.0f * AB2), -1.0f, +1.0f));
-                                f32 DesiredKneeAngle = ACos(Clamp((AT2 - AB2 - BC2) / (-2.0f * ABLength * BCLength), -1.0f, +1.0f));
+                                f32 a = Sqrt(a2);
+                                f32 b = Sqrt(b2);
 
-                                v3 Axis = -NOZ(Cross(AC, X));
+                                f32 CosB = Clamp(0.5f * (a2 + b2 - c2) / (a * b), -1.0f, +1.0f);
+                                f32 BAngle = Pi - ACos(CosB);
 
-                                f32 dHipAngle = DesiredHipAngle - HipAngle;
-                                f32 dKneeAngle = DesiredKneeAngle - KneeAngle;
-                                v2 HipCS = { Cos(0.5f * dHipAngle), Sin(0.5f * dHipAngle) };
-                                v2 KneeCS = { Cos(0.5f * dKneeAngle), Sin(0.5f * dKneeAngle) };
-                                v4 HipQ = { HipCS.Y * Axis.X, HipCS.Y * Axis.Y, HipCS.Y * Axis.Z, HipCS.X };
-                                v4 KneeQ = { KneeCS.Y * Axis.X, KneeCS.Y * Axis.Y, KneeCS.Y * Axis.Z, KneeCS.Y };
+                                f32 CosAO = Clamp(0.5f * (a2 + c2 - b2) / (a * Sqrt(c2)), -1.0f, +1.0f);
+                                f32 AO = ACos(CosAO);
+                                f32 AAngle = ATan2(Dot(AC, X), Dot(AC, Y)) + AO;
+                                
+                                f32 CosAAngleHalf = Cos(0.5f * AAngle);
+                                f32 SinAAngleHalf = Sin(0.5f * AAngle);
 
-                                Pose[Mixamo_RightUpLeg] = QuaternionToM4(HipQ) * Pose[Mixamo_RightUpLeg];
-                                Pose[Mixamo_RightLeg] = QuaternionToM4(KneeQ) * Pose[Mixamo_RightLeg];
+                                m4 InvHip = AffineInverse(Pose[Mixamo_Hips]);
+                                m4 InvRightUpLeg = AffineInverse(Pose[Mixamo_RightUpLeg]);
+                                m4 InvRightLeg = AffineInverse(Pose[Mixamo_RightLeg]);
 
-                                //Pose[Mixamo_RightFoot].P.XYZ = TargetP;
-                                //Pose[Mixamo_RightLeg].P.XYZ += DeltaP;
+                                v4 HipQ = 
+                                {
+                                    SinAAngleHalf * RotationAxis.X,
+                                    SinAAngleHalf * RotationAxis.Y,
+                                    SinAAngleHalf * RotationAxis.Z,
+                                    CosAAngleHalf,
+                                };
+                                m4 HipRot = QuaternionToM4(HipQ);
+
+                                f32 CosBAngleHalf = Cos(0.5f * BAngle);
+                                f32 SinBAngleHalf = Sin(0.5f * BAngle);
+                                v4 KneeQ = 
+                                {
+                                    SinBAngleHalf * RotationAxis.X,
+                                    SinBAngleHalf * RotationAxis.Y,
+                                    SinBAngleHalf * RotationAxis.Z,
+                                    CosBAngleHalf,
+                                };
+                                trs_transform KneeTRS = M4ToTRS(InvRightUpLeg * Pose[Mixamo_RightLeg]);
+                                KneeTRS.Rotation = KneeQ;
+                                m4 KneeTransform = TRSToM4(KneeTRS);
+
+                                Pose[Mixamo_RightUpLeg] = Pose[Mixamo_Hips] * HipRot * InvHip * Pose[Mixamo_RightUpLeg];
+                                Pose[Mixamo_RightLeg] = Pose[Mixamo_RightUpLeg] * KneeTransform;
+                                Pose[Mixamo_RightFoot] = Pose[Mixamo_RightLeg] * InvRightLeg * Pose[Mixamo_RightFoot];
                             }
                         }
                         #endif
-
-                        u32 ParentIndex = Skin->JointParents[JointIndex];
-                        if (ParentIndex != JointIndex)
-                        {
-                            Pose[JointIndex] = Pose[ParentIndex] * Pose[JointIndex];
-                        }
                     }
 
                     // NOTE(boti): This _cannot_ be folded into the above loop, because the parent transforms must not contain
@@ -869,6 +909,7 @@ lbfn void UpdateAndRenderWorld(
                     if (BitTest(DebugFlags, DebugFlag_DrawJoints))
                     {
                         mesh* SphereMesh = GetDefaultMesh(Assets, DefaultMesh_Sphere);
+                        mesh* ArrowMesh = GetDefaultMesh(Assets, DefaultMesh_Arrow);
                         mesh* PyramidMesh = GetDefaultMesh(Assets, DefaultMesh_Pyramid);
                         rgba8 Color = PackRGBA8(0xFF, 0xFF, 0xFF);
                         for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
@@ -881,6 +922,31 @@ lbfn void UpdateAndRenderWorld(
                             m4 BindMatrix = AffineInverse(Skin->InverseBindMatrices[JointIndex]);
                             m4 Transform = Entity->Transform * Pose[JointIndex] * BindMatrix * BaseScale;
                             DrawWidget3D(Frame, SphereMesh->Allocation, Transform, Color);
+
+                            m4 Axes[] =
+                            {
+                                M4(0.0f, 0.0f, -1.0f, 0.0f,
+                                   0.0f, 1.0f, 0.0f, 0.0f,
+                                   1.0f, 0.0f, 0.0f, 0.0f,
+                                   0.0f, 0.0f, 0.0f, 1.0f),
+                                M4(1.0f, 0.0f, 0.0f, 0.0f,
+                                   0.0f, 0.0f, -1.0f, 0.0f,
+                                   0.0f, 1.0f, 0.0f, 0.0f,
+                                   0.0f, 0.0f, 0.0f, 1.0f),
+                                M4(1.0f, 0.0f, 0.0f, 0.0f,
+                                   0.0f, 1.0f, 0.0f, 0.0f,
+                                   0.0f, 0.0f, 1.0f, 0.0f,
+                                   0.0f, 0.0f, 0.0f, 1.0f),
+                            };
+                            rgba8 Colors[] = { PackRGBA8(0xFF, 0x00, 0x00), PackRGBA8(0x00, 0xFF, 0x00), PackRGBA8(0x00, 0x00, 0xFF) };
+                            for (u32 Axis = 0; Axis < CountOf(Axes); Axis++)
+                            {
+                                m4 Scale = M4(1.0f, 0.0f, 0.0f, 0.0f,
+                                              0.0f, 1.0f, 0.0f, 0.0f,
+                                              0.0f, 0.0f, 2.0f, 0.0f,
+                                              0.0f, 0.0f, 0.0f, 1.0f);
+                                DrawWidget3D(Frame, ArrowMesh->Allocation, Transform * Axes[Axis] * Scale, Colors[Axis]);
+                            }
 
                             u32 ParentIndex = Skin->JointParents[JointIndex];
                             if (ParentIndex != JointIndex)
@@ -1094,7 +1160,7 @@ lbfn void UpdateAndRenderWorld(
                             {
                                 .P = ParticleP + ParticleSystem->EmitterOffset + BaseP,
                                 .dP = 
-                                { 
+                                {
                                     0.3f * RandBilateral(&World->EffectEntropy),
                                     0.3f * RandBilateral(&World->EffectEntropy),
                                     RandBetween(&World->EffectEntropy, 0.25f, 1.20f) 
