@@ -838,8 +838,8 @@ lbfn void UpdateAndRenderWorld(
                                 v3 X = v3{ 0.0f, 0.0f, 1.0f }; // NOTE(boti): Forward axis (in 2D)
                                 v3 Y = v3{ 0.0f, -1.0f, 0.0f }; // NOTE(boti): Up axis (in 2D)
 
-                                v3 A = Pose[Mixamo_RightUpLeg].P.XYZ;
-                                v3 B = Pose[Mixamo_RightLeg].P.XYZ;
+                                v3 A = Pose[Mixamo_RightHip].P.XYZ;
+                                v3 B = Pose[Mixamo_RightKnee].P.XYZ;
                                 v3 C = Pose[Mixamo_RightFoot].P.XYZ;
 
                                 v3 AB = B - A;
@@ -864,9 +864,9 @@ lbfn void UpdateAndRenderWorld(
                                 f32 CosAAngleHalf = Cos(0.5f * AAngle);
                                 f32 SinAAngleHalf = Sin(0.5f * AAngle);
 
-                                m4 InvHip = AffineInverse(Pose[Mixamo_Hips]);
-                                m4 InvRightUpLeg = AffineInverse(Pose[Mixamo_RightUpLeg]);
-                                m4 InvRightLeg = AffineInverse(Pose[Mixamo_RightLeg]);
+                                m4 InvHip = AffineInverse(Pose[Mixamo_Torso]);
+                                m4 InvRightUpLeg = AffineInverse(Pose[Mixamo_RightHip]);
+                                m4 InvRightLeg = AffineInverse(Pose[Mixamo_RightKnee]);
 
                                 v4 HipQ = 
                                 {
@@ -886,13 +886,13 @@ lbfn void UpdateAndRenderWorld(
                                     SinBAngleHalf * RotationAxis.Z,
                                     CosBAngleHalf,
                                 };
-                                trs_transform KneeTRS = M4ToTRS(InvRightUpLeg * Pose[Mixamo_RightLeg]);
+                                trs_transform KneeTRS = M4ToTRS(InvRightUpLeg * Pose[Mixamo_RightKnee]);
                                 KneeTRS.Rotation = KneeQ;
                                 m4 KneeTransform = TRSToM4(KneeTRS);
 
-                                Pose[Mixamo_RightUpLeg] = Pose[Mixamo_Hips] * HipRot * InvHip * Pose[Mixamo_RightUpLeg];
-                                Pose[Mixamo_RightLeg] = Pose[Mixamo_RightUpLeg] * KneeTransform;
-                                Pose[Mixamo_RightFoot] = Pose[Mixamo_RightLeg] * InvRightLeg * Pose[Mixamo_RightFoot];
+                                Pose[Mixamo_RightHip] = Pose[Mixamo_Torso] * HipRot * InvHip * Pose[Mixamo_RightHip];
+                                Pose[Mixamo_RightKnee] = Pose[Mixamo_RightHip] * KneeTransform;
+                                Pose[Mixamo_RightFoot] = Pose[Mixamo_RightKnee] * InvRightLeg * Pose[Mixamo_RightFoot];
                             }
                         }
                         #endif
