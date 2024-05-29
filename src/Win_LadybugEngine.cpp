@@ -543,6 +543,42 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     }
     ShowWindow(WinWindow, SW_SHOW);
 
+    // Estimate rdtsc frequency
+    u64 TSCFrequency = 1;
+#if DEVELOPER
+    {
+        LARGE_INTEGER QPCFrequency;
+        QueryPerformanceFrequency(&QPCFrequency);
+
+        // TODO(boti): Check cpuid invariant tsc
+        LARGE_INTEGER BeginQPC;
+        QueryPerformanceCounter(&BeginQPC);
+        u64 BeginTSC = ReadTSC();
+
+        u64 DeltaQPC;
+        u64 EndTSC;
+        LARGE_INTEGER EndQPC;
+        for (;;)
+        {
+            QueryPerformanceCounter(&EndQPC);
+            DeltaQPC = (u64)(EndQPC.QuadPart - BeginQPC.QuadPart);
+            
+            if (DeltaQPC >= (u64)QPCFrequency.QuadPart)
+            {
+                EndTSC = ReadTSC();
+                break;
+            }
+        }
+
+        u64 DeltaTSC = EndTSC - BeginTSC;
+
+        // TODO(boti): f64?
+        TSCFrequency = DeltaTSC * (u64)QPCFrequency.QuadPart / DeltaQPC;
+
+        Win_DebugPrint("Frequency estimate: %.2f Mhz\n", TSCFrequency / (1000.0 * 1000.0));
+    }
+#endif
+
     game_update_and_render* Game_UpdateAndRender = nullptr;
     HMODULE GameDLL = LoadLibraryA("game.dll");
     if (GameDLL)
