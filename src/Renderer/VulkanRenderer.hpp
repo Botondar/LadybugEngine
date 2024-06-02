@@ -134,6 +134,21 @@ enum frame_stage_type : u32
     FrameStage_Count,
 };
 
+static const char* FrameStageNames[FrameStage_Count] =
+{
+    [FrameStage_Upload]         = "Upload",
+    [FrameStage_Skinning]       = "Skinning",
+    [FrameStage_Prepass]        = "Prepass",
+    [FrameStage_SSAO]           = "SSAO",
+    [FrameStage_LightBinning]   = "LightBinning",
+    [FrameStage_CascadedShadow] = "CSM",
+    [FrameStage_Shadows]        = "Shadows",
+    [FrameStage_Shading]        = "Shading",
+    [FrameStage_Bloom]          = "Bloom",
+    [FrameStage_BlitAndGUI]     = "BlitAndGUI",
+    [FrameStage_Readback]       = "Readback",
+};
+
 // NOTE(boti): Stage barriers are executed at the beginning of a stage
 struct frame_stage
 {
@@ -150,8 +165,8 @@ struct frame_stage
     VkImageMemoryBarrier2   ImageMemoryBarriers[MaxImageMemoryBarrierCount];
 };
 
-internal void BeginFrameStage(VkCommandBuffer CmdBuffer, frame_stage* Stage, const char* Name);
-internal void EndFrameStage(VkCommandBuffer CmdBuffer, frame_stage* Stage);
+internal void BeginFrameStage(VkCommandBuffer CmdBuffer, frame_stage_type Stage, VkQueryPool PerfQueries, frame_stage* Stages);
+internal void EndFrameStage(VkCommandBuffer CmdBuffer, frame_stage_type Stage, VkQueryPool PerfQueries, frame_stage* Stages);
 
 internal b32 PushBeginBarrier(frame_stage* Stage, const VkImageMemoryBarrier2* Barrier);
 internal b32 PushBeginBarrier(frame_stage* Stage, const VkBufferMemoryBarrier2* Barrier);
@@ -180,6 +195,8 @@ struct pipeline_with_layout
 struct renderer
 {
     vulkan Vulkan;
+
+    VkQueryPool PerformanceQueryPools[R_MaxFramesInFlight];
 
     VkSurfaceFormatKHR SurfaceFormat;
     VkSurfaceKHR Surface;

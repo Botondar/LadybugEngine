@@ -903,6 +903,23 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
         }
     }
 
+    // Profiler query
+    for (u32 FrameIndex = 0; FrameIndex < R_MaxFramesInFlight; FrameIndex++)
+    {
+        VkQueryPoolCreateInfo QueryPoolInfo = 
+        {
+            .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .queryType = VK_QUERY_TYPE_TIMESTAMP,
+            .queryCount = 2 * (FrameStage_Count + 1), // NOTE(boti): Begin/End pair for each stage + entire frame
+            .pipelineStatistics = 0,
+        };
+        Result.ErrorCode = vkCreateQueryPool(VK.Device, &QueryPoolInfo, nullptr, &Renderer->PerformanceQueryPools[FrameIndex]);
+        ReturnOnFailure("Failed to create performance query pool");
+        vkResetQueryPool(VK.Device, Renderer->PerformanceQueryPools[FrameIndex], 0, QueryPoolInfo.queryCount);
+    }
+
     // Vertex Buffer
     {
         if (!CreateGeometryBuffer(R_VertexBufferMaxBlockCount, Arena, &Renderer->GeometryBuffer))
@@ -1948,28 +1965,32 @@ DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, pipeline* Pipelines, dr
     }
 }
 
-internal void BeginFrameStage(VkCommandBuffer CmdBuffer, frame_stage* Stage, const char* Name)
+internal void BeginFrameStage(VkCommandBuffer CmdBuffer, frame_stage_type Stage, VkQueryPool PerfQueries, frame_stage* Stages)
 {
     TimedFunction(Platform.Profiler);
 
-    vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, Name);
+    vkCmdWriteTimestamp2(CmdBuffer, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, PerfQueries, 2 * Stage);
+
+    vkCmdBeginDebugUtilsLabelEXT(CmdBuffer, FrameStageNames[Stage]);
 
     VkDependencyInfo DependencyInfo =
     {
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .pNext = nullptr,
-        .memoryBarrierCount         = Stage->GlobalMemoryBarrierCount,
-        .pMemoryBarriers            = Stage->GlobalMemoryBarriers,
-        .bufferMemoryBarrierCount   = Stage->BufferMemoryBarrierCount,
-        .pBufferMemoryBarriers      = Stage->BufferMemoryBarriers,
-        .imageMemoryBarrierCount    = Stage->ImageMemoryBarrierCount,
-        .pImageMemoryBarriers       = Stage->ImageMemoryBarriers,
+        .memoryBarrierCount         = Stages[Stage].GlobalMemoryBarrierCount,
+        .pMemoryBarriers            = Stages[Stage].GlobalMemoryBarriers,
+        .bufferMemoryBarrierCount   = Stages[Stage].BufferMemoryBarrierCount,
+        .pBufferMemoryBarriers      = Stages[Stage].BufferMemoryBarriers,
+        .imageMemoryBarrierCount    = Stages[Stage].ImageMemoryBarrierCount,
+        .pImageMemoryBarriers       = Stages[Stage].ImageMemoryBarriers,
     };
     vkCmdPipelineBarrier2(CmdBuffer, &DependencyInfo);
 }
-internal void EndFrameStage(VkCommandBuffer CmdBuffer, frame_stage* Stage)
+internal void EndFrameStage(VkCommandBuffer CmdBuffer, frame_stage_type Stage, VkQueryPool PerfQueries, frame_stage* Stages)
 {
     vkCmdEndDebugUtilsLabelEXT(CmdBuffer);
+
+    vkCmdWriteTimestamp2(CmdBuffer, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, PerfQueries, 2 * Stage + 1);
 }
 
 internal b32 PushBeginBarrier(frame_stage* Stage, const VkImageMemoryBarrier2* Barrier)
@@ -2185,6 +2206,35 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
         vkResetCommandPool(VK.Device, Renderer->ComputeCmdPools[FrameID], 0);
     }
     ProcessDeletionEntries(&Renderer->DeletionQueue, FrameID);
+
+    // Perf readback
+    if (Renderer->CurrentFrameID >= R_MaxFramesInFlight)
+    {
+        u64 Counters[2 * (FrameStage_Count + 1)] = {};
+        VkResult QueryResult = vkGetQueryPoolResults(VK.Device, Renderer->PerformanceQueryPools[FrameID], 
+                                                     0, CountOf(Counters), sizeof(Counters), Counters, sizeof(*Counters), 
+                                                     VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_PARTIAL_BIT);
+        if (1)
+        {
+            f64 InvFrequency = VK.TimestampPeriod / (1000.0*1000.0*1000.0);
+
+            u64 FrameDeltaTSC = Counters[2*FrameStage_Count + 1] - Counters[2*FrameStage_Count + 0];
+            f64 FrameDeltaTime = FrameDeltaTSC * InvFrequency;
+            Platform.DebugPrint("GPU frame: %.2f ms\n", 1000.0 * FrameDeltaTime);
+
+            for (u32 Stage = 0; Stage < FrameStage_Count; Stage++)
+            {
+                u64 StageDeltaTSC = Counters[2*Stage + 1] - Counters[2*Stage + 0];
+                f64 StageDeltaTime = StageDeltaTSC * InvFrequency;
+                Platform.DebugPrint("\t%16s: %.2f ms ( %2.1f%% )\n", 
+                                    FrameStageNames[Stage], 1000.0 * StageDeltaTime, 100.0 * StageDeltaTime / FrameDeltaTime);
+            }
+        }
+        else
+        {
+            Platform.DebugPrint("vkGetQueryPoolResults failed (0x%X)\n", QueryResult);
+        }
+    }
 
     // Mip readback
     {
@@ -3679,18 +3729,24 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     }
 
     //
+    // Frame
+    //
+    vkCmdResetQueryPool(PrepassCmd, Renderer->PerformanceQueryPools[Frame->FrameID], 0, 2 * (FrameStage_Count + 1));
+    vkCmdWriteTimestamp2(PrepassCmd, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, Renderer->PerformanceQueryPools[Frame->FrameID], 2 * FrameStage_Count);
+
+    //
     // Upload
     //
-    BeginFrameStage(PrepassCmd, &FrameStages[FrameStage_Upload], "Upload");
+    BeginFrameStage(PrepassCmd, FrameStage_Upload, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
     {
         vkCmdExecuteCommands(PrepassCmd, 1, &UploadCB);
     }
-    EndFrameStage(PrepassCmd, &FrameStages[FrameStage_Upload]);
+    EndFrameStage(PrepassCmd, FrameStage_Upload, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
 
     //
     // Skinning
     //
-    BeginFrameStage(PrepassCmd, &FrameStages[FrameStage_Skinning], "Skinning");
+    BeginFrameStage(PrepassCmd, FrameStage_Skinning, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
     {
         vkCmdExecuteCommands(PrepassCmd, 1, &SkinningCB);
 
@@ -3707,7 +3763,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         };
         PushBeginBarrier(&FrameStages[FrameStage_Prepass], &EndBarrier);
     }
-    EndFrameStage(PrepassCmd, &FrameStages[FrameStage_Skinning]);
+    EndFrameStage(PrepassCmd, FrameStage_Skinning, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
 
     //
     // Init time
@@ -3883,7 +3939,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             PushBeginBarrier(&FrameStages[FrameStage_Prepass], BeginBarriers + BarrierIndex);
         }
     }
-    BeginFrameStage(PrepassCmd, &FrameStages[FrameStage_Prepass], "Prepass");
+    BeginFrameStage(PrepassCmd, FrameStage_Prepass, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
     {
         VkRenderingAttachmentInfo ColorAttachments[] = 
         {
@@ -4003,7 +4059,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         PushBeginBarrier(&FrameStages[FrameStage_SSAO], &StructureImageBarrier);
         PushBeginBarrier(&FrameStages[FrameStage_Shading], &VisibilityImageBarrier);
     }
-    EndFrameStage(PrepassCmd, &FrameStages[FrameStage_Prepass]);
+    EndFrameStage(PrepassCmd, FrameStage_Prepass, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
 
     EndCommandBuffer(PrepassCmd);
 
@@ -4083,7 +4139,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         PushBeginBarrier(&FrameStages[FrameStage_SSAO], &Barrier);
     }
 
-    BeginFrameStage(PreLightCmd, &FrameStages[FrameStage_SSAO], "SSAO");
+    BeginFrameStage(PreLightCmd, FrameStage_SSAO, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
     {
         // Occlusion
         {
@@ -4186,12 +4242,12 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         };
         PushBeginBarrier(&FrameStages[FrameStage_Shading], &EndBarrier);
     }
-    EndFrameStage(PreLightCmd, &FrameStages[FrameStage_SSAO]);
+    EndFrameStage(PreLightCmd, FrameStage_SSAO, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
 
     //
     // Light binning
     //
-    BeginFrameStage(PreLightCmd, &FrameStages[FrameStage_LightBinning], "LightBinning");
+    BeginFrameStage(PreLightCmd, FrameStage_LightBinning, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
     // NOTE(boti): This should always pass...
     if (TileBufferRange.ByteCount)
     {
@@ -4217,7 +4273,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         };
         PushBeginBarrier(&FrameStages[FrameStage_Shading], &EndBarrier);
     }
-    EndFrameStage(PreLightCmd, &FrameStages[FrameStage_LightBinning]);
+    EndFrameStage(PreLightCmd, FrameStage_LightBinning, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
 
     EndCommandBuffer(PreLightCmd);
 
@@ -4295,7 +4351,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         PushBeginBarrier(&FrameStages[FrameStage_CascadedShadow], &Barrier);
     }
 
-    BeginFrameStage(ShadowCmd, &FrameStages[FrameStage_CascadedShadow], "CSM");
+    BeginFrameStage(ShadowCmd, FrameStage_CascadedShadow, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
     {
         VkViewport ShadowViewport = 
         {
@@ -4395,7 +4451,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         };
         PushBeginBarrier(&FrameStages[FrameStage_Shading], &Barrier);
     }
-    EndFrameStage(ShadowCmd, &FrameStages[FrameStage_CascadedShadow]);
+    EndFrameStage(ShadowCmd, FrameStage_CascadedShadow, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
 
     //
     // Point shadows
@@ -4428,7 +4484,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         PushBeginBarrier(&FrameStages[FrameStage_Shadows], &Barrier);
     }
 
-    BeginFrameStage(ShadowCmd, &FrameStages[FrameStage_Shadows], "Shadows");
+    BeginFrameStage(ShadowCmd, FrameStage_Shadows, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
     {
         VkViewport ShadowViewport = 
         {
@@ -4536,7 +4592,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             PushBeginBarrier(&FrameStages[FrameStage_Shading], &Barrier);
         }
     }
-    EndFrameStage(ShadowCmd, &FrameStages[FrameStage_Shadows]);
+    EndFrameStage(ShadowCmd, FrameStage_Shadows, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
 
     EndCommandBuffer(ShadowCmd);
     
@@ -4662,7 +4718,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         .pStencilAttachment     = nullptr,
     };
 
-    BeginFrameStage(RenderCmd, &FrameStages[FrameStage_Shading], "Shading");
+    BeginFrameStage(RenderCmd, FrameStage_Shading, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
     vkCmdBeginDebugUtilsLabelEXT(RenderCmd, "Opaque");
     {
         pipeline PipelineID = Pipeline_None;
@@ -4770,7 +4826,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     vkCmdEndRendering(RenderCmd);
 
-    EndFrameStage(RenderCmd, &FrameStages[FrameStage_Shading]);
+    EndFrameStage(RenderCmd, FrameStage_Shading, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
 
     //
     // Mip usage copy
@@ -4814,7 +4870,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     //
     // Bloom
     //
-    BeginFrameStage(RenderCmd, &FrameStages[FrameStage_Bloom], "Bloom");
+    BeginFrameStage(RenderCmd, FrameStage_Bloom, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
     {
         v2u Extent = Frame->RenderExtent;
 
@@ -5196,7 +5252,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         };
         PushBeginBarrier(&FrameStages[FrameStage_BlitAndGUI], &End);
     }
-    EndFrameStage(RenderCmd, &FrameStages[FrameStage_Bloom]);
+    EndFrameStage(RenderCmd, FrameStage_Bloom, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
 
     //
     // Blit + UI
@@ -5255,7 +5311,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         PushBeginBarrier(&FrameStages[FrameStage_BlitAndGUI], &SwapchainDepthBarrier);
     }
 
-    BeginFrameStage(RenderCmd, &FrameStages[FrameStage_BlitAndGUI], "BlitAndGUI");
+    BeginFrameStage(RenderCmd, FrameStage_BlitAndGUI, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
     {
         VkRenderingAttachmentInfo ColorAttachment = 
         {
@@ -5315,7 +5371,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
         vkCmdEndRendering(RenderCmd);
     }
-    EndFrameStage(RenderCmd, &FrameStages[FrameStage_BlitAndGUI]);
+    EndFrameStage(RenderCmd, FrameStage_BlitAndGUI, Renderer->PerformanceQueryPools[Frame->FrameID], FrameStages);
     
 
     VkImageMemoryBarrier2 EndBarriers[] = 
@@ -5358,6 +5414,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         .pImageMemoryBarriers = EndBarriers,
     };
     vkCmdPipelineBarrier2(RenderCmd, &EndDependencyInfo);
+
+    vkCmdWriteTimestamp2(RenderCmd, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, Renderer->PerformanceQueryPools[Frame->FrameID], 2 * FrameStage_Count + 1);
 
     EndCommandBuffer(RenderCmd);
 
