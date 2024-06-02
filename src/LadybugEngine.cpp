@@ -129,6 +129,8 @@ void Game_UpdateAndRender(thread_context* ThreadContext, game_memory* Memory, ga
         GameIO->bQuitRequested = true;
     }
     
+    GameState->PerfDataLog[GameState->FrameID % GameState->MaxPerfDataCount] = GameIO->ProfileDeltaTime;
+
     UpdateEditor(GameState, GameIO, RenderFrame);
     RenderFrame->Config = GameState->RenderConfig;
     RenderFrame->Config.DebugViewMode = DebugView_None;

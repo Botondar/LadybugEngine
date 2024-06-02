@@ -238,6 +238,7 @@ struct platform_mouse
 struct game_io
 {
     f32 dt;
+    f32 ProfileDeltaTime;
 
     v2u OutputExtent;
 

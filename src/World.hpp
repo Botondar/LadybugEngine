@@ -110,7 +110,7 @@ struct height_field
 {
     u32 TexelCountX;
     u32 TexelCountY;
-    u32 TexelsPerMeter;
+    f32 TexelsPerMeter;
     f32* HeightData;
 };
 

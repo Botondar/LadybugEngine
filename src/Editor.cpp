@@ -124,10 +124,12 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
     Context.CurrentFlow = Flow_Horizontal;
     Context.IsRightAligned = false;
 
-    u32 CPUMenuID = ButtonGUI(&Context, TextSize, "CPU");
-    u32 GPUMenuID = ButtonGUI(&Context, TextSize, "GPU");
-    u32 RenderMenuID = ButtonGUI(&Context, TextSize, "Render");
-    u32 ReloadShadersButtonID = ButtonGUI(&Context, TextSize, "Reload Shaders");
+    u32 CPUMenuID               = ButtonGUI(&Context, TextSize, "CPU");
+    u32 GPUMenuID               = ButtonGUI(&Context, TextSize, "GPU");
+    u32 RenderMenuID            = ButtonGUI(&Context, TextSize, "Render");
+    u32 PerfMenuID              = ButtonGUI(&Context, TextSize, "Perf");
+    u32 ReloadShadersButtonID   = ButtonGUI(&Context, TextSize, "Reload Shaders");
+    
 
     if (WasReleased(Context.MouseLeft))
     {
@@ -179,9 +181,9 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
 
         render_stats* Stats = &Frame->Stats;
         TextGUI(&Context, TextSize, "Total memory usage: %llu/%llu MB", Stats->TotalMemoryUsed >> 20, Stats->TotalMemoryAllocated >> 20);
-        for (u32 Index = 0; Index < Stats->EntryCount; Index++)
+        for (u32 Index = 0; Index < Stats->MemoryEntryCount; Index++)
         {
-            render_stat_entry* Entry = Stats->Entries + Index;
+            render_stat_mem_entry* Entry = Stats->MemoryEntries + Index;
             TextGUI(&Context, TextSize, "%s memory: %llu/%llu MB", Entry->Name, Entry->UsedSize >> 20, Entry->AllocationSize >> 20);
         }
     }
@@ -232,6 +234,37 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         F32Slider(&Context, TextSize,
                   "LinearFogMaxZ", &Game->LinearFogMaxZ,
                   0.0f, Game->LinearFogMinZ, +F32_MAX_NORMAL, 1e-1f);
+    }
+    else if (Editor->SelectedMenuID == PerfMenuID)
+    {
+        Context.CurrentFlow = Flow_Vertical;
+        
+        v2 Extent = { 512.0f, 256.0f };
+        PushRect(Frame, Context.CurrentP, Context.CurrentP + Extent, {}, {}, PackRGBA8(0x00, 0x00, 0x00, 0xAA));
+
+        for (u32 PerfDataIndex = 0; PerfDataIndex < Game->MaxPerfDataCount; PerfDataIndex++)
+        {
+            f32 Time = Game->PerfDataLog[PerfDataIndex];
+            f32 YScale = 33.33333f / 1000.0f; // Frame times normalized to 33ms
+
+            f32 U0 = (f32)(PerfDataIndex + 0) / (f32)Game->MaxPerfDataCount;
+            f32 U1 = (f32)(PerfDataIndex + 1) / (f32)Game->MaxPerfDataCount;
+            v2 TopLeft      = { Context.CurrentP + v2{ U0 * Extent.X, Extent.Y * Clamp((YScale - Time) / YScale, 0.0f, 1.0f) } };
+            v2 BottomRight  = { Context.CurrentP + v2{ U1 * Extent.X, Extent.Y } };
+            PushRect(Frame, TopLeft, BottomRight, {}, {}, PackRGBA8(0xFF, 0xFF, 0x00, 0xFF));
+        }
+
+        for (u32 PerfDataIndex = 1; PerfDataIndex <= Game->MaxPerfDataCount; PerfDataIndex++)
+        {
+            b32 IsCurrentFrame = (Game->FrameID % Game->MaxPerfDataCount + 1) == PerfDataIndex;
+            rgba8 Color = IsCurrentFrame ? PackRGBA8(0xFF, 0x00, 0xFF, 0xFF) : PackRGBA8(0x30, 0x30, 0x30, 0xFF);
+            f32 XAt = (f32)PerfDataIndex / (f32)Game->MaxPerfDataCount;
+            PushRect(Frame, 
+                     Context.CurrentP + v2{ Extent.X * XAt, 0.0f } - v2{ 0.5f, 0.0f }, 
+                     Context.CurrentP + v2{ Extent.X * XAt, Extent.Y } + v2{ 0.5f, 0.0f },
+                     {}, {},
+                     Color);
+        }
     }
 
     // TODO(boti): This shouldn't be done this way, 

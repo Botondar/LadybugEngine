@@ -65,6 +65,9 @@ struct game_state
 
     assets* Assets;
     game_world* World;
+
+    static constexpr u32 MaxPerfDataCount = 64u;
+    f32 PerfDataLog[MaxPerfDataCount];
 };
 
 struct ray

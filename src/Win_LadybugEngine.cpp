@@ -661,6 +661,71 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
 
     for (;;)
     {
+        // Profiler processing
+        {
+            GameIO.ProfileDeltaTime = (f32)((GlobalProfiler.EndTSC - GlobalProfiler.BeginTSC) / (f64)TSCFrequency);
+
+            // Debug profiler output
+            if (0)
+            {
+                struct processed_profile_entry
+                {
+                    const char* Label;
+                    u64 HitCount;
+                    u64 InclusiveDeltaTSC;
+                    u64 ExclusiveDeltaTSC;
+                };
+
+                processed_profile_entry CollatedEntries[LB_TranslationUnitCount][profiler::MaxEntryCount] = {};
+
+                u64 TotalDelta = GlobalProfiler.EndTSC - GlobalProfiler.BeginTSC;
+                for (u32 ThreadIndex = 0; ThreadIndex < WorkerCount + 1; ThreadIndex++)
+                {
+                    for (u32 TranslationUnit = 0; TranslationUnit < LB_TranslationUnitCount; TranslationUnit++)
+                    {
+                        for (u32 EntryIndex = 0; EntryIndex < GlobalProfiler.MaxEntryCount; EntryIndex++)
+                        {
+                            profile_entry* Entry = GlobalProfiler.Entries[ThreadIndex][TranslationUnit] + EntryIndex;
+                            if (Entry->HitCount)
+                            {
+                                processed_profile_entry* ProcessedEntry = CollatedEntries[TranslationUnit] + EntryIndex;
+                                ProcessedEntry->Label = Entry->Label;
+                                ProcessedEntry->HitCount += Entry->HitCount;
+                                ProcessedEntry->InclusiveDeltaTSC += Entry->InclusiveDeltaTSC;
+                                ProcessedEntry->ExclusiveDeltaTSC += Entry->ExclusiveDeltaTSC;
+                            }
+                        }
+                    }
+                }
+
+                Win_DebugPrint("===== Profiler =====\n");
+                for (u32 TranslationUnit = 0; TranslationUnit < LB_TranslationUnitCount; TranslationUnit++)
+                {
+                    for (u32 EntryIndex = 0; EntryIndex < GlobalProfiler.MaxEntryCount; EntryIndex++)
+                    {
+                        processed_profile_entry* Entry = CollatedEntries[TranslationUnit] + EntryIndex;
+                        if (Entry->HitCount)
+                        {
+                            f64 InclusivePercent = 100.0 * Entry->InclusiveDeltaTSC / TotalDelta;
+                            f64 ExclusivePercent = 100.0 * Entry->ExclusiveDeltaTSC / TotalDelta;
+
+                            if (Entry->InclusiveDeltaTSC != Entry->ExclusiveDeltaTSC)
+                            {
+                                Win_DebugPrint("%s[%llu]: %.2f%% (%.2f%%)\n",
+                                               Entry->Label, Entry->HitCount, ExclusivePercent, InclusivePercent);
+                            }
+                            else
+                            {
+                                Win_DebugPrint("%s[%llu]: %.2f%%\n",
+                                               Entry->Label, Entry->HitCount, ExclusivePercent);
+                            }
+                        }
+                    }
+                }
+                Win_DebugPrint("====================\n");
+            }
+        }
+
         BeginProfiler(&GlobalProfiler);
 
         counter FrameStartCounter = Win_GetCounter();
@@ -882,66 +947,6 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
         GameIO.dt = Win_ElapsedSeconds(FrameStartCounter, FrameEndCounter);
 
         EndProfiler(&GlobalProfiler);
-
-        // Debug profiler output
-        if (0)
-        {
-            struct processed_profile_entry
-            {
-                const char* Label;
-                u64 HitCount;
-                u64 InclusiveDeltaTSC;
-                u64 ExclusiveDeltaTSC;
-            };
-
-            processed_profile_entry CollatedEntries[LB_TranslationUnitCount][profiler::MaxEntryCount] = {};
-
-            u64 TotalDelta = GlobalProfiler.EndTSC - GlobalProfiler.BeginTSC;
-            for (u32 ThreadIndex = 0; ThreadIndex < WorkerCount + 1; ThreadIndex++)
-            {
-                for (u32 TranslationUnit = 0; TranslationUnit < LB_TranslationUnitCount; TranslationUnit++)
-                {
-                    for (u32 EntryIndex = 0; EntryIndex < GlobalProfiler.MaxEntryCount; EntryIndex++)
-                    {
-                        profile_entry* Entry = GlobalProfiler.Entries[ThreadIndex][TranslationUnit] + EntryIndex;
-                        if (Entry->HitCount)
-                        {
-                            processed_profile_entry* ProcessedEntry = CollatedEntries[TranslationUnit] + EntryIndex;
-                            ProcessedEntry->Label = Entry->Label;
-                            ProcessedEntry->HitCount += Entry->HitCount;
-                            ProcessedEntry->InclusiveDeltaTSC += Entry->InclusiveDeltaTSC;
-                            ProcessedEntry->ExclusiveDeltaTSC += Entry->ExclusiveDeltaTSC;
-                        }
-                    }
-                }
-            }
-
-            Win_DebugPrint("===== Profiler =====\n");
-            for (u32 TranslationUnit = 0; TranslationUnit < LB_TranslationUnitCount; TranslationUnit++)
-            {
-                for (u32 EntryIndex = 0; EntryIndex < GlobalProfiler.MaxEntryCount; EntryIndex++)
-                {
-                    processed_profile_entry* Entry = CollatedEntries[TranslationUnit] + EntryIndex;
-                    if (Entry->HitCount)
-                    {
-                        f64 InclusivePercent = 100.0 * Entry->InclusiveDeltaTSC / TotalDelta;
-                        f64 ExclusivePercent = 100.0 * Entry->ExclusiveDeltaTSC / TotalDelta;
-
-                        if (Entry->InclusiveDeltaTSC != Entry->ExclusiveDeltaTSC)
-                        {
-                            Win_DebugPrint("%s[%llu]: %.2f%% (%.2f%%)\n",
-                                           Entry->Label, Entry->HitCount, ExclusivePercent, InclusivePercent);
-                        }
-                        else
-                        {
-                            Win_DebugPrint("%s[%llu]: %.2f%%\n",
-                                           Entry->Label, Entry->HitCount, ExclusivePercent);
-                        }
-                    }
-                }
-            }
-            Win_DebugPrint("====================\n");
-        }
     }
 
     if (GameIO.QuitMessage)

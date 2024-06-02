@@ -823,11 +823,17 @@ struct staging_buffer
     void*   Base;
 };
 
-struct render_stat_entry
+struct render_stat_mem_entry
 {
     const char* Name;
     umm UsedSize;
     umm AllocationSize;
+};
+
+struct render_stat_perf_entry
+{
+    const char* Name;
+    f32 Time;
 };
 
 struct render_stats
@@ -835,9 +841,15 @@ struct render_stats
     umm TotalMemoryUsed;
     umm TotalMemoryAllocated;
 
-    static constexpr u32 MaxEntryCount = 1024u;
-    u32 EntryCount;
-    render_stat_entry Entries[MaxEntryCount];
+    f32 FrameTime;
+
+    static constexpr u32 MaxMemoryEntryCount = 1024u;
+    u32 MemoryEntryCount;
+    render_stat_mem_entry MemoryEntries[MaxMemoryEntryCount];
+
+    static constexpr u32 MaxPerfEntryCount = 32u;
+    u32 PerfEntryCount;
+    render_stat_perf_entry PerfEntries[MaxPerfEntryCount];
 };
 
 struct renderer;

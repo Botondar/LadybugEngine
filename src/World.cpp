@@ -401,7 +401,7 @@ DEBUGInitializeWorld(
                 World->TerrainNoise = { 0 };
                 World->HeightField.TexelCountX = 1024;
                 World->HeightField.TexelCountY = 1024;
-                World->HeightField.TexelsPerMeter = 4;
+                World->HeightField.TexelsPerMeter = 4.0f;//0.25f;
                 u32 TexelCount = World->HeightField.TexelCountX * World->HeightField.TexelCountY;
                 World->HeightField.HeightData = PushArray(World->Arena, 0, f32, TexelCount);
 
@@ -441,8 +441,8 @@ DEBUGInitializeWorld(
             entity_id EntityID = { World->EntityCount++ };
             entity* TerrainEntity = World->Entities + EntityID.Value;
             TerrainEntity->Flags = EntityFlag_Mesh|EntityFlag_Terrain;
-            f32 ExtentX = (f32)World->HeightField.TexelCountX / (f32)World->HeightField.TexelsPerMeter;
-            f32 ExtentY = (f32)World->HeightField.TexelCountY / (f32)World->HeightField.TexelsPerMeter;
+            f32 ExtentX = (f32)World->HeightField.TexelCountX / World->HeightField.TexelsPerMeter;
+            f32 ExtentY = (f32)World->HeightField.TexelCountY / World->HeightField.TexelsPerMeter;
             TerrainEntity->Transform = M4(1.0f, 0.0f, 0.0f, -0.5f * ExtentX,
                                           0.0f, 1.0f, 0.0f, -0.5f * ExtentY,
                                           0.0f, 0.0f, 1.0f, 0.0f,
@@ -654,7 +654,7 @@ lbfn void UpdateAndRenderWorld(
         World->Camera.Yaw = 0.5f * Pi;
 
         // Load debug scene
-        #if 0
+        #if 1
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
                              DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);
@@ -662,7 +662,7 @@ lbfn void UpdateAndRenderWorld(
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_TransmissionTest, 
                              0);
-        #elif 0
+        #elif 1
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Terrain,
                              DebugSceneFlag_None);
@@ -716,8 +716,11 @@ lbfn void UpdateAndRenderWorld(
         v3 Forward = CameraTransform.Z.XYZ;
         v3 Right = CameraTransform.X.XYZ;
 
-        constexpr f32 MoveSpeed = 1.0f;
-        f32 SpeedMul = IO->Keys[SC_LeftShift].bIsDown ? 3.5f : 2.0f;
+        constexpr f32 MoveSpeed = 2.0f;
+        f32 SpeedMul = 1.0f;
+        if (IO->Keys[SC_LeftShift].bIsDown) SpeedMul *= 2.0f;
+        if (IO->Keys[SC_LeftAlt].bIsDown)   SpeedMul *= 4.0f;
+
         Camera->dPTarget = (Right * MoveDirection.X + Forward * MoveDirection.Z) * SpeedMul * MoveSpeed;
         if (IO->Keys[SC_Space].bIsDown) Camera->dPTarget.Z += SpeedMul * MoveSpeed;
         if (IO->Keys[SC_LeftControl].bIsDown) Camera->dPTarget.Z -= SpeedMul * MoveSpeed;
@@ -836,7 +839,7 @@ lbfn void UpdateAndRenderWorld(
                                 v3 TargetP = TransformPoint(AffineInverse(Entity->Transform), ControlP);
 
                                 v3 X = v3{ 0.0f, 0.0f, 1.0f }; // NOTE(boti): Forward axis (in 2D)
-                                v3 Y = v3{ 0.0f, -1.0f, 0.0f }; // NOTE(boti): Up axis (in 2D)
+                                v3 Y = v3{ 0.0f, 1.0f, 0.0f }; // NOTE(boti): Up axis (in 2D)
 
                                 v3 A = Pose[Mixamo_RightHip].P.XYZ;
                                 v3 B = Pose[Mixamo_RightKnee].P.XYZ;
@@ -849,7 +852,7 @@ lbfn void UpdateAndRenderWorld(
                                 v3 AC = TargetP - A;
                                 f32 c2 = Dot(AC, AC);
 
-                                v3 RotationAxis = NOZ(Cross(X, -Y));
+                                v3 RotationAxis = NOZ(Cross(X, Y));
 
                                 f32 a = Sqrt(a2);
                                 f32 b = Sqrt(b2);
@@ -859,8 +862,8 @@ lbfn void UpdateAndRenderWorld(
 
                                 f32 CosAO = Clamp(0.5f * (a2 + c2 - b2) / (a * Sqrt(c2)), -1.0f, +1.0f);
                                 f32 AO = ACos(CosAO);
-                                f32 AAngle = ATan2(Dot(AC, X), Dot(AC, Y)) + AO;
-                                
+                                f32 AAngle = ATan2(Dot(AC, X), -Dot(AC, Y)) + AO;
+
                                 f32 CosAAngleHalf = Cos(0.5f * AAngle);
                                 f32 SinAAngleHalf = Sin(0.5f * AAngle);
 

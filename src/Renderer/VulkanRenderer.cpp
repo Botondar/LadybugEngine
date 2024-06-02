@@ -2208,31 +2208,33 @@ extern "C" Signature_BeginRenderFrame(BeginRenderFrame)
     ProcessDeletionEntries(&Renderer->DeletionQueue, FrameID);
 
     // Perf readback
-    if (Renderer->CurrentFrameID >= R_MaxFramesInFlight)
     {
-        u64 Counters[2 * (FrameStage_Count + 1)] = {};
+        struct query_timestamp
+        {
+            u64 Timestamp;
+            u32 Availability;
+        };
+
+        query_timestamp Timestamps[2 * (FrameStage_Count + 1)] = {};
         VkResult QueryResult = vkGetQueryPoolResults(VK.Device, Renderer->PerformanceQueryPools[FrameID], 
-                                                     0, CountOf(Counters), sizeof(Counters), Counters, sizeof(*Counters), 
-                                                     VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_PARTIAL_BIT);
-        if (1)
-        {
-            f64 InvFrequency = VK.TimestampPeriod / (1000.0*1000.0*1000.0);
+                                                     0, CountOf(Timestamps), sizeof(Timestamps), Timestamps, sizeof(*Timestamps), 
+                                                     VK_QUERY_RESULT_64_BIT|VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
 
-            u64 FrameDeltaTSC = Counters[2*FrameStage_Count + 1] - Counters[2*FrameStage_Count + 0];
-            f64 FrameDeltaTime = FrameDeltaTSC * InvFrequency;
-            Platform.DebugPrint("GPU frame: %.2f ms\n", 1000.0 * FrameDeltaTime);
+        f64 InvFrequency = VK.TimestampPeriod / (1000.0*1000.0*1000.0);
 
-            for (u32 Stage = 0; Stage < FrameStage_Count; Stage++)
-            {
-                u64 StageDeltaTSC = Counters[2*Stage + 1] - Counters[2*Stage + 0];
-                f64 StageDeltaTime = StageDeltaTSC * InvFrequency;
-                Platform.DebugPrint("\t%16s: %.2f ms ( %2.1f%% )\n", 
-                                    FrameStageNames[Stage], 1000.0 * StageDeltaTime, 100.0 * StageDeltaTime / FrameDeltaTime);
-            }
-        }
-        else
+        u64 FrameDeltaTSC = Timestamps[2*FrameStage_Count + 1].Timestamp - Timestamps[2*FrameStage_Count + 0].Timestamp;
+        f32 FrameTime = (f32)(FrameDeltaTSC * InvFrequency);
+
+        render_stats* Stats = &Frame->Stats;
+        Stats->FrameTime = FrameTime;
+        Assert(FrameStage_Count <= Stats->MaxPerfEntryCount);
+        Stats->PerfEntryCount = Min((u32)FrameStage_Count, Stats->MaxPerfEntryCount);
+        for (u32 Stage = 0; Stage < FrameStage_Count; Stage++)
         {
-            Platform.DebugPrint("vkGetQueryPoolResults failed (0x%X)\n", QueryResult);
+            render_stat_perf_entry* Entry = Stats->PerfEntries + Stage;
+            Entry->Name = FrameStageNames[Stage];
+            u64 DeltaTSC = Timestamps[2*Stage + 1].Timestamp - Timestamps[2*Stage + 0].Timestamp;
+            Entry->Time = (f32)(DeltaTSC * InvFrequency);
         }
     }
 
@@ -5566,7 +5568,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         render_stats* Stats = &Frame->Stats;
         Stats->TotalMemoryUsed = 0;
         Stats->TotalMemoryAllocated = 0;
-        Stats->EntryCount = 0;
+        Stats->MemoryEntryCount = 0;
 
         auto AddEntry = [Stats](const char* Name, umm UsedSize, umm TotalSize) -> b32
         {
@@ -5575,9 +5577,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             Stats->TotalMemoryUsed += UsedSize;
             Stats->TotalMemoryAllocated += TotalSize;
 
-            if (Stats->EntryCount < Stats->MaxEntryCount)
+            if (Stats->MemoryEntryCount < Stats->MaxMemoryEntryCount)
             {
-                render_stat_entry* Entry = Stats->Entries + Stats->EntryCount++;
+                render_stat_mem_entry* Entry = Stats->MemoryEntries + Stats->MemoryEntryCount++;
                 Entry->Name = Name;
                 Entry->UsedSize = UsedSize;
                 Entry->AllocationSize = TotalSize;
@@ -5593,9 +5595,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             Stats->TotalMemoryUsed += Arena->MemoryAt;
             Stats->TotalMemoryAllocated += Arena->Size;
 
-            if (Stats->EntryCount < Stats->MaxEntryCount)
+            if (Stats->MemoryEntryCount < Stats->MaxMemoryEntryCount)
             {
-                render_stat_entry* Entry = Stats->Entries + Stats->EntryCount++;
+                render_stat_mem_entry* Entry = Stats->MemoryEntries + Stats->MemoryEntryCount++;
                 Entry->Name = Name;
                 Entry->UsedSize = Arena->MemoryAt;
                 Entry->AllocationSize = Arena->Size;
