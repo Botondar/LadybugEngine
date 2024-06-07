@@ -162,15 +162,15 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
     if (Editor->SelectedMenuID == CPUMenuID)
     {
         Context.CurrentFlow = Flow_Vertical;
-        for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
+        for (entity_iterator It = MakeEntityIterator(World); IsValid(It); It = Next(It))
         {
             constexpr size_t BufferSize = 256;
             char Buffer[BufferSize];
-            snprintf(Buffer, BufferSize, "Select Entity%03u", EntityIndex);
+            snprintf(Buffer, BufferSize, "Select Entity%03u", It.ID.Value);
             u32 SelectButtonID = ButtonGUI(&Context, TextSize, Buffer);
             if (SelectButtonID == Context.HotID && WasPressed(Context.MouseLeft))
             {
-                Editor->SelectedEntityID = { EntityIndex };
+                Editor->SelectedEntityID = It.ID;
             }
             
         }
@@ -289,6 +289,16 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
                      {}, {},
                      Threshold->Color);
         }
+
+        {
+            render_stats* Stats = &Frame->Stats;
+            Platform.DebugPrint("GPU Frame: %.2f ms\n", 1000.0 * Stats->FrameTime);
+            for (u32 EntryIndex = 0; EntryIndex < Stats->PerfEntryCount; EntryIndex++)
+            {
+                render_stat_perf_entry* Entry = Stats->PerfEntries + EntryIndex;
+                Platform.DebugPrint("  %16s: %.2f ms (%.1f%%)\n", Entry->Name, 1000.0 * Entry->Time, 100.0 * Entry->Time / Stats->FrameTime);
+            }
+        }
     }
 
     // TODO(boti): This shouldn't be done this way, 
@@ -318,16 +328,15 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
         entity_id SelectedEntityID = { 0 };
 
         f32 tMax = 1e7f;
-        for (u32 EntityIndex = 0; EntityIndex < World->EntityCount; EntityIndex++)
+        for (entity_iterator It = MakeEntityIterator(World); IsValid(It); It = Next(It))
         {
-            entity* Entity = World->Entities + EntityIndex;
-            m4 Transform = Entity->Transform;
+            m4 Transform = It.Entity->Transform;
 
-            if (HasFlag(Entity->Flags, EntityFlag_Mesh))
+            if (HasFlag(It.Entity->Flags, EntityFlag_Mesh))
             {
-                for (u32 PieceIndex = 0; PieceIndex < Entity->PieceCount; PieceIndex++)
+                for (u32 PieceIndex = 0; PieceIndex < It.Entity->PieceCount; PieceIndex++)
                 {
-                    mesh* Mesh = Assets->Meshes + Entity->Pieces[PieceIndex].MeshID;
+                    mesh* Mesh = Assets->Meshes + It.Entity->Pieces[PieceIndex].MeshID;
                     mmbox Box = Mesh->BoundingBox;
                     v3 BoxP = 0.5f * (Box.Min + Box.Max);
                     v3 HalfExtent = 0.5f * (Box.Max - Box.Min);
@@ -336,18 +345,18 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
                     f32 t = 0.0f;
                     if (IntersectRayBox(Ray, BoxP, HalfExtent, Transform, tMax, &t))
                     {
-                        SelectedEntityID.Value = EntityIndex;
+                        SelectedEntityID = It.ID;
                         tMax = t;
                     }
                 }
             }
-            else if (HasFlag(Entity->Flags, EntityFlag_LightSource))
+            else if (HasFlag(It.Entity->Flags, EntityFlag_LightSource))
             {
                 v3 HalfExtent = v3{ World->LightProxyScale, World->LightProxyScale, World->LightProxyScale };
                 f32 t = 0.0f;
                 if (IntersectRayBox(Ray, v3{ 0.0f, 0.0f, 0.0f }, HalfExtent, Transform, tMax, &t))
                 {
-                    SelectedEntityID.Value = EntityIndex;
+                    SelectedEntityID = It.ID;
                     tMax = t;
                 }
             }
@@ -357,7 +366,7 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
 
     if (IsValid(Editor->SelectedEntityID))
     {
-        entity* Entity = World->Entities + Editor->SelectedEntityID.Value;
+        entity* Entity = GetEntity(World, Editor->SelectedEntityID);
         if (WasPressed(IO->Keys[SC_G]))
         {
             Editor->Gizmo.IsGlobal = !Editor->Gizmo.IsGlobal;

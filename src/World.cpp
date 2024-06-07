@@ -217,7 +217,7 @@ MakeParticleSystem(game_world* World, entity_id ParentID, particle_system_type T
     {
         if (IsValid(ParentID))
         {
-            Assert(ParentID.Value < World->EntityCount);
+            Assert(ParentID.Value < World->NextEntityID.Value);
         }
 
         Result = World->ParticleSystemCount++;
@@ -438,8 +438,7 @@ DEBUGInitializeWorld(
 
             TransferGeometry(Frame, Mesh->Allocation, TerrainMesh.VertexData, TerrainMesh.IndexData);
 
-            entity_id EntityID = { World->EntityCount++ };
-            entity* TerrainEntity = World->Entities + EntityID.Value;
+            entity* TerrainEntity = MakeEntity(World, nullptr);
             TerrainEntity->Flags = EntityFlag_Mesh|EntityFlag_Terrain;
             f32 ExtentX = (f32)World->HeightField.TexelCountX / World->HeightField.TexelsPerMeter;
             f32 ExtentY = (f32)World->HeightField.TexelCountY / World->HeightField.TexelsPerMeter;
@@ -479,10 +478,9 @@ DEBUGInitializeWorld(
                         TreeMaxP = Max(TreeMaxP, TreeMesh->BoundingBox.Max);
                     }
 
-                    if (World->EntityCount < World->MaxEntityCount)
+                    entity* Entity = MakeEntity(World, nullptr);
+                    if (Entity)
                     {
-                        entity* Entity = World->Entities + World->EntityCount++;
-                        memset(Entity, 0, sizeof(*Entity));
                         Entity->Flags = EntityFlag_Mesh;
 
                         v2 UV = { RandUnilateral(&World->GeneratorEntropy), RandUnilateral(&World->GeneratorEntropy) };
@@ -564,18 +562,17 @@ DEBUGInitializeWorld(
         for (u32 LightIndex = 0; LightIndex < CountOf(LightSources); LightIndex++)
         {
             const light* Light = LightSources + LightIndex;
-            if (World->EntityCount < World->MaxEntityCount)
+            entity_id ID;
+            entity* Entity = MakeEntity(World, &ID);
+            if (Entity)
             {
-                entity_id ID = { World->EntityCount++ };
-                World->Entities[ID.Value] = 
-                {
-                    .Flags = EntityFlag_LightSource,
-                    .Transform = M4(1.0f, 0.0f, 0.0f, Light->P.X,
-                                    0.0f, 1.0f, 0.0f, Light->P.Y,
-                                    0.0f, 0.0f, 1.0f, Light->P.Z,
-                                    0.0f, 0.0f, 0.0f, 1.0f),
-                    .LightEmission = Light->E,
-                };
+                Entity->Flags = EntityFlag_LightSource;
+                Entity->Transform = M4(
+                    1.0f, 0.0f, 0.0f, Light->P.X,
+                    0.0f, 1.0f, 0.0f, Light->P.Y,
+                    0.0f, 0.0f, 1.0f, Light->P.Z,
+                    0.0f, 0.0f, 0.0f, 1.0f);
+                Entity->LightEmission = Light->E;
 
                 b32 IsMagicLight = (LightIndex >= 4);
                 if (IsMagicLight)
@@ -636,16 +633,12 @@ lbfn void UpdateAndRenderWorld(
         World->EffectEntropy = { 0x13370420 };
         World->GeneratorEntropy = { 0x13370420 };
 
-        Assert(World->EntityCount == 0);
-        // Null entity
-        World->Entities[World->EntityCount++] = 
-        {
-            .Flags = EntityFlag_None,
-            .Transform = M4(1.0f, 0.0f, 0.0f, 0.0f,
-                            0.0f, 1.0f, 0.0f, 0.0f,
-                            0.0f, 0.0f, 1.0f, 0.0f,
-                            0.0f, 0.0f, 0.0f, 1.0f),
-        };
+        entity_id NullEntityID;
+        entity* NullEntity = MakeEntity(World, &NullEntityID);
+        Assert(NullEntity);
+        Assert(NullEntityID.Value == 0);
+        NullEntity->Flags = EntityFlag_None,
+        NullEntity->Transform = Identity4();
 
         World->Camera.P = { 0.0f, 0.0f, 0.0f };
         World->Camera.FieldOfView = ToRadians(80.0f);
@@ -654,7 +647,7 @@ lbfn void UpdateAndRenderWorld(
         World->Camera.Yaw = 0.5f * Pi;
 
         // Load debug scene
-        #if 1
+        #if 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
                              DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);
@@ -668,22 +661,18 @@ lbfn void UpdateAndRenderWorld(
                              DebugSceneFlag_None);
         #endif
 
-        World->IKControlID = { World->EntityCount++ };
-        World->Entities[World->IKControlID.Value] =
+        entity* IKControl = MakeEntity(World, &World->IKControlID);
+        IKControl->Flags = EntityFlag_Mesh;
+        IKControl->Transform = 
+            M4(5e-2f, 0.0f, 0.0f, 0.0f,
+               0.0f, 5e-2f, 0.0f, 0.0f,
+               0.0f, 0.0f, 5e-2f, 0.0f,
+               0.0f, 0.0f, 0.0f, 1.0f);
+        IKControl->PieceCount = 1;
+        IKControl->Pieces[0] = 
         {
-            .Flags = EntityFlag_Mesh,
-            .Transform = M4(5e-2f, 0.0f, 0.0f, 0.0f,
-                            0.0f, 5e-2f, 0.0f, 0.0f,
-                            0.0f, 0.0f, 5e-2f, 0.0f,
-                            0.0f, 0.0f, 0.0f, 1.0f),
-            .PieceCount = 1,
-            .Pieces = 
-            { 
-                {
-                    .MeshID = Assets->DefaultMeshIDs[DefaultMesh_Sphere],
-                    .OffsetP = { 0.0f, 0.0f, 0.0f },
-                }, 
-            },
+            .MeshID = Assets->DefaultMeshIDs[DefaultMesh_Sphere],
+            .OffsetP = { 0.0f, 0.0f, 0.0f },
         };
 
         World->IsLoaded = true;
@@ -756,31 +745,30 @@ lbfn void UpdateAndRenderWorld(
     {
         TimedBlock(Platform.Profiler, "UpdateAndRenderEntities");
 
-        for (u32 EntityIndex = 1; EntityIndex < World->EntityCount; EntityIndex++)
+        for (entity_iterator It = MakeEntityIterator(World); IsValid(It); It = Next(It))
         {
-            entity* Entity = World->Entities + EntityIndex;
-            if (Entity->Flags & EntityFlag_Mesh)
+            if (It.Entity->Flags & EntityFlag_Mesh)
             {
                 u32 JointCount = 0;
                 m4 Pose[R_MaxJointCount] = {};
 
-                if (Entity->Flags & EntityFlag_Skin)
+                if (It.Entity->Flags & EntityFlag_Skin)
                 {
-                    Assert(Entity->SkinID < Assets->SkinCount);
-                    skin* Skin = Assets->Skins + Entity->SkinID;
+                    Assert(It.Entity->SkinID < Assets->SkinCount);
+                    skin* Skin = Assets->Skins + It.Entity->SkinID;
                     JointCount = Skin->JointCount;
                     for (u32 JointIndex = 0; JointIndex < Skin->JointCount; JointIndex++)
                     {
                         Pose[JointIndex] = TRSToM4(Skin->BindPose[JointIndex]);
                     }
 
-                    Assert(Entity->CurrentAnimationID < Assets->AnimationCount);
-                    animation* Animation = Assets->Animations + Entity->CurrentAnimationID;
-                    if (Entity->DoAnimation)
+                    Assert(It.Entity->CurrentAnimationID < Assets->AnimationCount);
+                    animation* Animation = Assets->Animations + It.Entity->CurrentAnimationID;
+                    if (It.Entity->DoAnimation)
                     {
-                        Entity->AnimationCounter += dt;
+                        It.Entity->AnimationCounter += dt;
                         f32 LastKeyFrameTimestamp = Animation->KeyFrameTimestamps[Animation->KeyFrameCount - 1];
-                        Entity->AnimationCounter = Modulo0(Entity->AnimationCounter, LastKeyFrameTimestamp);
+                        It.Entity->AnimationCounter = Modulo0(It.Entity->AnimationCounter, LastKeyFrameTimestamp);
                     }
                 
                     u32 KeyFrameIndex = 0;
@@ -791,8 +779,8 @@ lbfn void UpdateAndRenderWorld(
                         {
                             u32 Index = (MinIndex + MaxIndex) / 2;
                             f32 t = Animation->KeyFrameTimestamps[Index];
-                            if      (Entity->AnimationCounter < t) MaxIndex = Index - 1;
-                            else if (Entity->AnimationCounter > t) MinIndex = Index + 1;
+                            if      (It.Entity->AnimationCounter < t) MaxIndex = Index - 1;
+                            else if (It.Entity->AnimationCounter > t) MinIndex = Index + 1;
                             else break; 
                         }
                         KeyFrameIndex = MinIndex == 0 ? 0 : MinIndex - 1;
@@ -802,7 +790,7 @@ lbfn void UpdateAndRenderWorld(
                     f32 Timestamp0 = Animation->KeyFrameTimestamps[KeyFrameIndex];
                     f32 Timestamp1 = Animation->KeyFrameTimestamps[NextKeyFrameIndex];
                     f32 KeyFrameDelta = Timestamp1 - Timestamp0;
-                    f32 BlendStart = Entity->AnimationCounter - Timestamp0;
+                    f32 BlendStart = It.Entity->AnimationCounter - Timestamp0;
                     f32 BlendFactor = Ratio0(BlendStart, KeyFrameDelta);
 
                     animation_key_frame* CurrentFrame = Animation->KeyFrames + KeyFrameIndex;
@@ -834,9 +822,9 @@ lbfn void UpdateAndRenderWorld(
                         {
                             if (JointIndex == Mixamo_RightFoot)
                             {
-                                entity* Control = World->Entities + World->IKControlID.Value;
+                                entity* Control = GetEntity(World, World->IKControlID);
                                 v3 ControlP = Control->Transform.P.XYZ;
-                                v3 TargetP = TransformPoint(AffineInverse(Entity->Transform), ControlP);
+                                v3 TargetP = TransformPoint(AffineInverse(It.Entity->Transform), ControlP);
 
                                 v3 X = v3{ 0.0f, 0.0f, 1.0f }; // NOTE(boti): Forward axis (in 2D)
                                 v3 Y = v3{ 0.0f, 1.0f, 0.0f }; // NOTE(boti): Up axis (in 2D)
@@ -923,7 +911,7 @@ lbfn void UpdateAndRenderWorld(
                                               0.0f, 0.0f, S, 0.0f,
                                               0.0f, 0.0f, 0.0f, 1.0f);
                             m4 BindMatrix = AffineInverse(Skin->InverseBindMatrices[JointIndex]);
-                            m4 Transform = Entity->Transform * Pose[JointIndex] * BindMatrix * BaseScale;
+                            m4 Transform = It.Entity->Transform * Pose[JointIndex] * BindMatrix * BaseScale;
                             DrawWidget3D(Frame, SphereMesh->Allocation, Transform, Color);
 
                             m4 Axes[] =
@@ -966,15 +954,15 @@ lbfn void UpdateAndRenderWorld(
                                 f32 d = Sqrt(Dot(dP, dP));
                                 BaseScale.E[2][2] = d;
                                 BaseScale.E[3][2] = S;
-                                DrawWidget3D(Frame, PyramidMesh->Allocation, Entity->Transform * JP * Basis * BaseScale, Color);
+                                DrawWidget3D(Frame, PyramidMesh->Allocation, It.Entity->Transform * JP * Basis * BaseScale, Color);
                             }
                         }
                     }
                 }
 
-                for (u32 PieceIndex = 0; PieceIndex < Entity->PieceCount; PieceIndex++)
+                for (u32 PieceIndex = 0; PieceIndex < It.Entity->PieceCount; PieceIndex++)
                 {
-                    entity_piece* Piece = Entity->Pieces + PieceIndex;
+                    entity_piece* Piece = It.Entity->Pieces + PieceIndex;
                     mesh* Mesh = Assets->Meshes + Piece->MeshID;
 
                     material* Material = Assets->Materials + Mesh->MaterialID;
@@ -1016,12 +1004,12 @@ lbfn void UpdateAndRenderWorld(
                     {
                         Group = DrawGroup_Transparent;
                     }
-                    m4 PieceTransform = Entity->Transform;
+                    m4 PieceTransform = It.Entity->Transform;
                     PieceTransform.P.XYZ += Piece->OffsetP;
                     DrawMesh(Frame, Group, Mesh->Allocation, PieceTransform, Mesh->BoundingBox, RenderMaterial, JointCount, Pose);
 
                     // Draw bounding box
-                    if (BitTest(DebugFlags, DebugFlag_DrawBoundingBoxes) && !(Entity->Flags & EntityFlag_Terrain))
+                    if (BitTest(DebugFlags, DebugFlag_DrawBoundingBoxes) && !(It.Entity->Flags & EntityFlag_Terrain))
                     {
                         rgba8 Color = PackRGBA(v4{ 1.0f, 1.0f, 0.0f, 1.0f });
                         v3 CenterP = 0.5f * (Mesh->BoundingBox.Max + Mesh->BoundingBox.Min);
@@ -1075,18 +1063,18 @@ lbfn void UpdateAndRenderWorld(
                 }
             }
 
-            if (Entity->Flags & EntityFlag_LightSource)
+            if (It.Entity->Flags & EntityFlag_LightSource)
             {
-                AddLight(Frame, Entity->Transform.P.XYZ, Entity->LightEmission, LightFlag_ShadowCaster);
+                AddLight(Frame, It.Entity->Transform.P.XYZ, It.Entity->LightEmission, LightFlag_ShadowCaster);
                 if (BitTest(DebugFlags, DebugFlag_DrawLights))
                 {
                     mesh* Mesh = GetDefaultMesh(Assets, DefaultMesh_Sphere);
                     f32 S = World->LightProxyScale;
-                    m4 Transform = Entity->Transform * M4(S, 0.0f, 0.0f, 0.0f,
-                                                          0.0f, S, 0.0f, 0.0f,
-                                                          0.0f, 0.0f, S, 0.0f,
-                                                          0.0f, 0.0f, 0.0f, 1.0f);
-                    DrawWidget3D(Frame, Mesh->Allocation, Transform, PackRGBA(NOZ(Entity->LightEmission)));
+                    m4 Transform = It.Entity->Transform * M4(S, 0.0f, 0.0f, 0.0f,
+                                                             0.0f, S, 0.0f, 0.0f,
+                                                             0.0f, 0.0f, S, 0.0f,
+                                                             0.0f, 0.0f, 0.0f, 1.0f);
+                    DrawWidget3D(Frame, Mesh->Allocation, Transform, PackRGBA(NOZ(It.Entity->LightEmission)));
                 }
             }
         }

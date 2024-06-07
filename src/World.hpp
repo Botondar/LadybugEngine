@@ -1,12 +1,6 @@
-#pragma once
-
-struct entity_id
-{
-    u32 Value;
-};
-
-inline b32 IsValid(entity_id ID);
-
+//
+// Entity
+//
 typedef flags32 entity_flags;
 enum entity_flag_bits : entity_flags
 {
@@ -44,6 +38,15 @@ struct entity
     v3 LightEmission;
 };
 
+struct entity_id
+{
+    u32 Value;
+};
+inline b32 IsValid(entity_id ID) { return (ID.Value != 0); }
+
+//
+// Particle
+//
 struct particle
 {
     v3 P;
@@ -84,6 +87,9 @@ struct particle_system
     particle Particles[MaxParticleCount];
 };
 
+//
+// Camera
+//
 struct camera
 {
     v3 P;
@@ -99,6 +105,9 @@ struct camera
 lbfn m4 GetLocalTransform(const camera* Camera);
 lbfn m4 GetTransform(const camera* Camera);
 
+//
+// Terrain
+//
 struct noise2
 {
     u32 Seed;
@@ -116,6 +125,9 @@ struct height_field
 
 inline f32 SampleHeight(height_field* Field, v2 Height);
 
+//
+// World
+//
 struct game_world
 {
     memory_arena* Arena;
@@ -137,7 +149,7 @@ struct game_world
     entity_id IKControlID; // NOTE(boti): Dummy entity for IK testing
 
     static constexpr u32 MaxEntityCount = (1u << 18);
-    u32 EntityCount;
+    entity_id NextEntityID;
     entity Entities[MaxEntityCount];
 
     static constexpr u32 MaxParticleSystemCount = 512u;
@@ -153,6 +165,59 @@ struct game_world
     v3 AdHocLightdPs[MaxAdHocLightCount];
     light AdHocLights[MaxAdHocLightCount];
 };
+
+inline entity* MakeEntity(game_world* World, entity_id* ID)
+{
+    u32 IDValue = 0;
+    entity* Result = nullptr;
+    if (World->NextEntityID.Value < World->MaxEntityCount)
+    {
+        IDValue = World->NextEntityID.Value++;
+        Result = World->Entities + IDValue;
+        memset(Result, 0, sizeof(*Result));
+    }
+
+    if (ID)
+    {
+        ID->Value = IDValue;
+    }
+
+    return(Result);
+}
+
+inline entity* GetEntity(game_world* World, entity_id ID)
+{
+    Assert(ID.Value < World->NextEntityID.Value);
+    entity* Result = World->Entities + ID.Value;
+    return(Result);
+}
+
+struct entity_iterator
+{
+    entity_id ID;
+    entity* Entity;
+
+    entity_id OnePastLastID;
+};
+
+inline b32 IsValid(entity_iterator It) { return It.ID.Value < It.OnePastLastID.Value; }
+inline entity_iterator Next(entity_iterator It) 
+{
+    ++It.ID.Value;
+    ++It.Entity;
+    return(It);
+}
+
+inline entity_iterator MakeEntityIterator(game_world* World)
+{
+    entity_iterator Result =
+    {
+        .ID = { 1 },
+        .Entity = World->Entities + 1,
+        .OnePastLastID = World->NextEntityID,
+    };
+    return(Result);
+}
 
 lbfn f32 SampleTerrainHeight(game_world* World, v2 P);
 // NOTE(boti): Returns tangent plane
@@ -203,12 +268,6 @@ DEBUGInitializeWorld(
 //
 // Implementation
 //
-inline b32 IsValid(entity_id ID)
-{
-    b32 Result = (ID.Value != 0);
-    return(Result);
-}
-
 inline f32 SampleHeight(height_field* Field, v2 UV)
 {
     v2u Coord = 

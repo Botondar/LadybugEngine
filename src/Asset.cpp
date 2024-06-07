@@ -2305,9 +2305,9 @@ internal void DEBUGLoadTestScene(
 
                 model* Model = Assets->Models + BaseModelIndex + Node->MeshIndex;
 
-                if (World->EntityCount < World->MaxEntityCount)
+                entity* Entity = MakeEntity(World, nullptr);
+                if (Entity)
                 {
-                    entity* Entity = World->Entities + World->EntityCount++;
                     Entity->Flags = EntityFlag_Mesh;
                     Entity->Transform = NodeTransform;
 
