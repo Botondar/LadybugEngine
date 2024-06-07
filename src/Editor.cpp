@@ -239,14 +239,15 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
     {
         Context.CurrentFlow = Flow_Vertical;
         
+        f32 YScale = (1.0f / 15.0f); // Frame times normalized to 15 FPS
+
         v2 Extent = { 512.0f, 256.0f };
         PushRect(Frame, Context.CurrentP, Context.CurrentP + Extent, {}, {}, PackRGBA8(0x00, 0x00, 0x00, 0xAA));
 
         for (u32 PerfDataIndex = 0; PerfDataIndex < Game->MaxPerfDataCount; PerfDataIndex++)
         {
             f32 Time = Game->PerfDataLog[PerfDataIndex];
-            f32 YScale = 33.33333f / 1000.0f; // Frame times normalized to 33ms
-
+            
             f32 U0 = (f32)(PerfDataIndex + 0) / (f32)Game->MaxPerfDataCount;
             f32 U1 = (f32)(PerfDataIndex + 1) / (f32)Game->MaxPerfDataCount;
             v2 TopLeft      = { Context.CurrentP + v2{ U0 * Extent.X, Extent.Y * Clamp((YScale - Time) / YScale, 0.0f, 1.0f) } };
@@ -264,6 +265,29 @@ lbfn void UpdateEditor(game_state* Game, game_io* IO, render_frame* Frame)
                      Context.CurrentP + v2{ Extent.X * XAt, Extent.Y } + v2{ 0.5f, 0.0f },
                      {}, {},
                      Color);
+        }
+
+        struct perf_threshold
+        {
+            f32 Time;
+            rgba8 Color;
+        };
+
+        perf_threshold Thresholds[] = 
+        {
+            { 1.0f / 144.0f, PackRGBA8(0x00, 0xFF, 0x00, 0xFF) },
+            { 1.0f / 60.0f, PackRGBA8(0x00, 0xAA, 0x00, 0xFF) },
+            { 1.0f / 30.0f, PackRGBA8(0xAA, 0x00, 0x00, 0xFF) },
+        };
+        for (u32 ThresholdIndex = 0; ThresholdIndex < CountOf(Thresholds); ThresholdIndex++)
+        {
+            perf_threshold* Threshold = Thresholds + ThresholdIndex;
+            f32 Y = Extent.Y * Clamp((YScale - Threshold->Time) / YScale, 0.0f, 1.0f);
+            PushRect(Frame, 
+                     Context.CurrentP + v2{ 0.0f,       Y - 0.5f },
+                     Context.CurrentP + v2{ Extent.X,   Y + 0.5f },
+                     {}, {},
+                     Threshold->Color);
         }
     }
 
