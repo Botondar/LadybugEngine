@@ -428,6 +428,9 @@ inline v3 Normalize(v3 v);
 inline v3 NOZ(v3 v);
 inline v3 Cross(v3 a, v3 b);
 inline v3 Hadamard(v3 a, v3 b);
+inline v3 Projection(v3 A, v3 N);
+inline v3 Rejection(v3 A, v3 N);
+inline v3 PlaneProjection(v3 A, v3 N);
 
 inline v4 operator-(v4 v);
 inline v4 operator*(v4 v, f32 s);
@@ -476,6 +479,7 @@ struct mmbox
 };
 
 inline m4 QuaternionToM4(v4 Q);
+inline v4 QuatFromAxisAngle(v3 Axis, f32 Angle);
 
 //
 // Random
@@ -786,6 +790,18 @@ inline v2 Hadamard(v2 A, v2 B)
     return(Result);
 }
 
+inline v3 Projection(v3 A, v3 N)
+{
+    v3 Result = Dot(A, N) * N;
+    return(Result);
+}
+
+inline v3 Rejection(v3 A, v3 N)
+{
+    v3 Result = A - Dot(A, N) * N;
+    return(Result);
+}
+
 inline v3 operator-(v3 V)
 {
     v3 Result = { -V.X, -V.Y, -V.Z };
@@ -1065,6 +1081,14 @@ inline bool PointRectOverlap(v2 P, mmrect2 Rect)
 {
     bool Result = (Rect.Min.X <= P.X) && (P.X < Rect.Max.X) &&
         (Rect.Min.Y <= P.Y) && (P.Y < Rect.Max.Y);
+    return(Result);
+}
+
+inline v4 QuatFromAxisAngle(v3 Axis, f32 Angle)
+{
+    f32 C = Cos(0.5f * Angle);
+    f32 S = Sin(0.5f * Angle);
+    v4 Result = { S * Axis.X, S * Axis.Y, S * Axis.Z, C };
     return(Result);
 }
 

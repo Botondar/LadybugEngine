@@ -655,7 +655,7 @@ lbfn void UpdateAndRenderWorld(
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_TransmissionTest, 
                              0);
-        #elif 1
+        #elif 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Terrain,
                              DebugSceneFlag_None);
@@ -822,16 +822,28 @@ lbfn void UpdateAndRenderWorld(
                         {
                             if (JointIndex == Mixamo_RightFoot)
                             {
+                                m4 InvTorso = AffineInverse(Pose[Mixamo_Torso]);
+                                m4 InvHip   = AffineInverse(Pose[Mixamo_RightHip]);
+                                m4 InvKnee  = AffineInverse(Pose[Mixamo_RightKnee]);
+
                                 entity* Control = GetEntity(World, World->IKControlID);
                                 v3 ControlP = Control->Transform.P.XYZ;
                                 v3 TargetP = TransformPoint(AffineInverse(It.Entity->Transform), ControlP);
+                                TargetP = TransformPoint(InvTorso, TargetP);
 
                                 v3 X = v3{ 0.0f, 0.0f, 1.0f }; // NOTE(boti): Forward axis (in 2D)
                                 v3 Y = v3{ 0.0f, 1.0f, 0.0f }; // NOTE(boti): Up axis (in 2D)
+                                v3 RotationAxis = NOZ(Cross(X, Y));
+                                //v3 RotationAxis = NOZ(Cross(AB, A - C));
 
-                                v3 A = Pose[Mixamo_RightHip].P.XYZ;
-                                v3 B = Pose[Mixamo_RightKnee].P.XYZ;
-                                v3 C = Pose[Mixamo_RightFoot].P.XYZ;
+                                v3 A = { 0.0f, 0.0f, 0.0f };
+                                v3 B = (InvHip * Pose[Mixamo_RightKnee]).P.XYZ;
+                                v3 C = (InvHip * Pose[Mixamo_RightFoot]).P.XYZ;
+
+                                A = Rejection(A, RotationAxis);
+                                B = Rejection(B, RotationAxis);
+                                C = Rejection(C, RotationAxis);
+                                TargetP = Rejection(TargetP, RotationAxis);
 
                                 v3 AB = B - A;
                                 f32 a2 = Dot(AB, AB);
@@ -839,8 +851,6 @@ lbfn void UpdateAndRenderWorld(
                                 f32 b2 = Dot(BC, BC);
                                 v3 AC = TargetP - A;
                                 f32 c2 = Dot(AC, AC);
-
-                                v3 RotationAxis = NOZ(Cross(X, Y));
 
                                 f32 a = Sqrt(a2);
                                 f32 b = Sqrt(b2);
@@ -852,38 +862,17 @@ lbfn void UpdateAndRenderWorld(
                                 f32 AO = ACos(CosAO);
                                 f32 AAngle = ATan2(Dot(AC, X), -Dot(AC, Y)) + AO;
 
-                                f32 CosAAngleHalf = Cos(0.5f * AAngle);
-                                f32 SinAAngleHalf = Sin(0.5f * AAngle);
-
-                                m4 InvHip = AffineInverse(Pose[Mixamo_Torso]);
-                                m4 InvRightUpLeg = AffineInverse(Pose[Mixamo_RightHip]);
-                                m4 InvRightLeg = AffineInverse(Pose[Mixamo_RightKnee]);
-
-                                v4 HipQ = 
-                                {
-                                    SinAAngleHalf * RotationAxis.X,
-                                    SinAAngleHalf * RotationAxis.Y,
-                                    SinAAngleHalf * RotationAxis.Z,
-                                    CosAAngleHalf,
-                                };
+                                v4 HipQ = QuatFromAxisAngle(RotationAxis, AAngle);
                                 m4 HipRot = QuaternionToM4(HipQ);
 
-                                f32 CosBAngleHalf = Cos(0.5f * BAngle);
-                                f32 SinBAngleHalf = Sin(0.5f * BAngle);
-                                v4 KneeQ = 
-                                {
-                                    SinBAngleHalf * RotationAxis.X,
-                                    SinBAngleHalf * RotationAxis.Y,
-                                    SinBAngleHalf * RotationAxis.Z,
-                                    CosBAngleHalf,
-                                };
-                                trs_transform KneeTRS = M4ToTRS(InvRightUpLeg * Pose[Mixamo_RightKnee]);
+                                v4 KneeQ = QuatFromAxisAngle(RotationAxis, BAngle);
+                                trs_transform KneeTRS = M4ToTRS(InvHip * Pose[Mixamo_RightKnee]);
                                 KneeTRS.Rotation = KneeQ;
                                 m4 KneeTransform = TRSToM4(KneeTRS);
 
-                                Pose[Mixamo_RightHip] = Pose[Mixamo_Torso] * HipRot * InvHip * Pose[Mixamo_RightHip];
+                                Pose[Mixamo_RightHip] = Pose[Mixamo_Torso] * HipRot * InvTorso * Pose[Mixamo_RightHip];
                                 Pose[Mixamo_RightKnee] = Pose[Mixamo_RightHip] * KneeTransform;
-                                Pose[Mixamo_RightFoot] = Pose[Mixamo_RightKnee] * InvRightLeg * Pose[Mixamo_RightFoot];
+                                Pose[Mixamo_RightFoot] = Pose[Mixamo_RightKnee] * InvKnee * Pose[Mixamo_RightFoot];
                             }
                         }
                         #endif
