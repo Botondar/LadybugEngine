@@ -1,3 +1,9 @@
+
+constexpr u32 MaxColorAttachmentCount               = 8;
+constexpr u32 MaxDescriptorSetCount                 = 32;
+constexpr u32 MaxDescriptorSetLayoutBindingCount    = 32;
+constexpr u32 MinPushConstantSize                   = 128;
+
 struct device_luid
 {
     u64 Value;
@@ -267,28 +273,10 @@ enum topology_type : u32
     Topology_Count,
 };
 
-struct vertex_attrib
-{
-    u32 Index;
-    u32 Binding;
-    format Format;
-    u32 ByteOffset;
-};
-
-struct vertex_binding
-{
-    u32 Stride;
-    u32 InstanceStepRate; // NOTE(boti): 0 is per-vertex, >0 is instanced
-};
-
 struct vertex_state
 {
     topology_type Topology;
     b32 EnablePrimitiveRestart;
-    u32 BindingCount;
-    u32 AttribCount;
-    vertex_binding Bindings[MaxVertexBindingCount];
-    vertex_attrib Attribs[MaxVertexAttribCount];
 };
 
 enum fill_mode : u32

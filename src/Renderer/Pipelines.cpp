@@ -584,8 +584,6 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         {
             .Topology = Topology_TriangleList,
             .EnablePrimitiveRestart = false,
-            .BindingCount = 0,
-            .AttribCount = 0,
         },
         .RasterizerState = 
         {
@@ -681,8 +679,6 @@ const pipeline_info PipelineInfos[Pipeline_Count] =
         {
             .Topology = Topology_TriangleList,
             .EnablePrimitiveRestart = false,
-            .BindingCount = 0,
-            .AttribCount = 0,
         },
         .RasterizerState = 
         {

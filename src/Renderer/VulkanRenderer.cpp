@@ -501,38 +501,15 @@ CreatePipelines(renderer* Renderer, memory_arena* Scratch)
                     }
                 }
     
-                VkVertexInputBindingDescription VertexBindings[MaxVertexBindingCount] = {};
-                VkVertexInputAttributeDescription VertexAttribs[MaxVertexAttribCount] = {};
-                for (u32 BindingIndex = 0; BindingIndex < Info->InputAssemblerState.BindingCount; BindingIndex++)
-                {
-                    const vertex_binding* Binding = Info->InputAssemblerState.Bindings + BindingIndex;
-                    if (Binding->InstanceStepRate > 1)
-                    {
-                        UnimplementedCodePath;
-                    }
-                    VertexBindings[BindingIndex].binding = BindingIndex;
-                    VertexBindings[BindingIndex].stride = Binding->Stride;
-                    VertexBindings[BindingIndex].inputRate = Binding->InstanceStepRate == 0 ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE;
-                }
-    
-                for (u32 AttribIndex = 0; AttribIndex < Info->InputAssemblerState.AttribCount; AttribIndex++)
-                {
-                    const vertex_attrib* Attrib = Info->InputAssemblerState.Attribs + AttribIndex;
-                    VertexAttribs[AttribIndex].location = Attrib->Index;
-                    VertexAttribs[AttribIndex].binding = Attrib->Binding;
-                    VertexAttribs[AttribIndex].format = FormatToVulkan(Attrib->Format);
-                    VertexAttribs[AttribIndex].offset = Attrib->ByteOffset;
-                }
-    
                 VkPipelineVertexInputStateCreateInfo VertexInputState = 
                 {
                     .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
                     .pNext = nullptr,
                     .flags = 0,
-                    .vertexBindingDescriptionCount = Info->InputAssemblerState.BindingCount,
-                    .pVertexBindingDescriptions = VertexBindings,
-                    .vertexAttributeDescriptionCount = Info->InputAssemblerState.AttribCount,
-                    .pVertexAttributeDescriptions = VertexAttribs,
+                    .vertexBindingDescriptionCount = 0,
+                    .pVertexBindingDescriptions = nullptr,
+                    .vertexAttributeDescriptionCount = 0,
+                    .pVertexAttributeDescriptions = nullptr,
                 };
     
                 VkPipelineInputAssemblyStateCreateInfo InputAssemblyState = 

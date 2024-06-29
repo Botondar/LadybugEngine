@@ -44,19 +44,9 @@ constexpr u32 R_MaxShadowCascadeCount       = 4;
 constexpr u32 R_ShadowResolution            = 2048u; // TODO(boti): Rename, this only applies to the cascades
 constexpr u32 R_PointShadowResolution       = 256u;
 constexpr u64 R_VertexBufferMaxBlockCount   = (1llu << 18);
+constexpr u32 R_MaxJointCount               = 256u;
 
 constexpr f32 R_MaxLOD = 1000.0f;
-
-//
-// Limits
-//
-constexpr u32 R_MaxJointCount                       = 256u;
-constexpr u32 MaxVertexBindingCount                 = 16;
-constexpr u32 MaxVertexAttribCount                  = 32;
-constexpr u32 MaxColorAttachmentCount               = 8;
-constexpr u32 MaxDescriptorSetCount                 = 32;
-constexpr u32 MaxDescriptorSetLayoutBindingCount    = 32;
-constexpr u32 MinPushConstantSize                   = 128;
 
 #include "rhi.hpp"
 
