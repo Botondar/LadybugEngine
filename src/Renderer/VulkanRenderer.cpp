@@ -837,7 +837,7 @@ extern "C" Signature_CreateRenderer(CreateRenderer)
                     .compareEnable = VK_FALSE,
                     .compareOp = VK_COMPARE_OP_ALWAYS,
                     .minLod = 0.0f,
-                    .maxLod = GlobalMaxLOD,
+                    .maxLod = R_MaxLOD,
                     .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
                     .unnormalizedCoordinates = VK_FALSE,
                 };
