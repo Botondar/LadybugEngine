@@ -478,6 +478,7 @@ struct mmbox
     v3 Max;
 };
 
+inline v4 QMul(v4 A, v4 B);
 inline m4 QuaternionToM4(v4 Q);
 inline v4 QuatFromAxisAngle(v3 Axis, f32 Angle);
 
@@ -1081,6 +1082,16 @@ inline bool PointRectOverlap(v2 P, mmrect2 Rect)
 {
     bool Result = (Rect.Min.X <= P.X) && (P.X < Rect.Max.X) &&
         (Rect.Min.Y <= P.Y) && (P.Y < Rect.Max.Y);
+    return(Result);
+}
+
+inline v4 QMul(v4 A, v4 B)
+{
+    v4 Result;
+    Result.X = A.W*B.X + B.W*A.X + A.Y*B.Z - A.Z*B.Y;
+    Result.Y = A.W*B.Y - A.X*B.Z + A.Y*B.W + A.Z*B.X;
+    Result.Z = A.W*B.Z + A.X*B.Y - A.Y*B.X + A.Z*B.W;
+    Result.W = A.W*B.W - A.X*B.X - A.Y*B.Y - A.Z*B.Z;
     return(Result);
 }
 
