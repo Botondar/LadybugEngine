@@ -300,6 +300,9 @@ inline f32 ATan2(f32 y, f32 x) { return atan2f(y, x); }
 inline f32 Ln(f32 x) { return logf(x); }
 inline f32 Pow(f32 a, f32 b) { return powf(a, b); }
 
+inline f64 Sin(f64 x) { return sin(x); }
+inline f64 Cos(f64 x) { return cos(x); }
+
 template<typename T> inline constexpr 
 T Min(T a, T b);
 template<typename T> inline constexpr 

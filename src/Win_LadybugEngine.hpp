@@ -3,6 +3,8 @@
 #include <Windows.h>
 #include <windowsx.h>
 #include <Shellapi.h>
+#include <mmdeviceapi.h>
+#include <audioclient.h>
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_win32.h>
 

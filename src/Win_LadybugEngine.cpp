@@ -310,6 +310,157 @@ inline void EndTicketMutex(win_ticket_mutex* Mutex)
 }
 
 //
+// Audio
+//
+
+internal DWORD Win_AudioThread(void* Params)
+{
+    HRESULT HResult = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(HResult))
+    {
+        UnhandledError("CoInitializeEx failed in Win_AudioThread");
+    }
+
+    IMMDeviceEnumerator*    DeviceEnumerator    = nullptr;
+    IMMDevice*              Device              = nullptr;
+    IAudioClient*           AudioClient         = nullptr;
+    WAVEFORMATEXTENSIBLE*   DeviceFormat        = nullptr;
+    IAudioRenderClient*     RenderClient        = nullptr;
+
+    HResult = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&DeviceEnumerator));
+    if (FAILED(HResult))
+    {
+        UnhandledError("CoCreateInstance failed in Win_AudioThread");
+    }
+
+    HResult = DeviceEnumerator->GetDefaultAudioEndpoint(EDataFlow::eRender, ERole::eConsole, &Device);
+    if (FAILED(HResult))
+    {
+        UnhandledError("IMMDeviceEnumerator::GetDefaultAudioEndpoint failed in Win_AudioThread");
+    }
+
+    HResult = Device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&AudioClient);
+    if (FAILED(HResult))
+    {
+        UnhandledError("IMMDevice::Activate failed in Win_AudioThread");
+    }
+
+    constexpr u32 RequestChannelCount   = 2;
+    constexpr u32 RequestSampleRate     = 48000;
+    constexpr u32 RequestBitsPerSample  = 32;
+    constexpr u32 RequestBytesPerSample = RequestBitsPerSample / 8;
+    constexpr u32 RequestBlockAlign     = RequestChannelCount * RequestBytesPerSample;
+
+    WAVEFORMATEXTENSIBLE RequestFormat = 
+    {
+        .Format = 
+        {
+            .wFormatTag         = WAVE_FORMAT_EXTENSIBLE,
+            .nChannels          = RequestChannelCount,
+            .nSamplesPerSec     = RequestSampleRate,
+            .nAvgBytesPerSec    = RequestChannelCount * RequestBytesPerSample * RequestSampleRate,
+            .nBlockAlign        = RequestBlockAlign,
+            .wBitsPerSample     = RequestBitsPerSample,
+            .cbSize             = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX),
+        },
+        .Samples        = { .wValidBitsPerSample = 32 },
+        .dwChannelMask  = SPEAKER_FRONT_LEFT|SPEAKER_FRONT_RIGHT,
+        .SubFormat      = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
+    };
+
+    WAVEFORMATEXTENSIBLE* ClosestFormat = nullptr;
+    HResult = AudioClient->IsFormatSupported(AUDCLNT_SHAREMODE_SHARED, (WAVEFORMATEX*)&RequestFormat, (WAVEFORMATEX**)&ClosestFormat);
+    // TODO(boti): Fallback to closest format, handle errors separately to S_FALSE
+    if (HResult != S_OK)
+    {
+        UnhandledError("No suitable audio format");
+    }
+
+    constexpr REFERENCE_TIME Milliseconds = 10 * 1000;
+    constexpr REFERENCE_TIME BufferDuration = 8 * Milliseconds;
+    HResult = AudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, BufferDuration, 0, (WAVEFORMATEX*)&RequestFormat, nullptr);
+    if (FAILED(HResult))
+    {
+        UnhandledError("IAudioClient::Initialize failed in Win_AudioThread");
+    }
+
+    HANDLE AudioEvent = CreateEventA(nullptr, FALSE, FALSE, nullptr);
+    if (!AudioEvent)
+    {
+        UnhandledError("CreateEventA failed in Win_AudioThread");
+    }
+
+    HResult = AudioClient->SetEventHandle(AudioEvent);
+    if (FAILED(HResult))
+    {
+        UnhandledError("IAudioClient::SetEventHandle failed in Win_AudioThread");
+    }
+
+    HResult = AudioClient->GetService(IID_PPV_ARGS(&RenderClient));
+    if (FAILED(HResult))
+    {
+        UnhandledError("IAudioClient::GetService failed in Win_AudioThread");
+    }
+
+    u32 BufferSize = 0;
+    AudioClient->GetBufferSize(&BufferSize);
+
+    union audio_sample
+    {
+        f32 Samples[2];
+        struct
+        {
+            f32 Left;
+            f32 Right;
+        };
+    };
+
+    AudioClient->Start();
+    f64 CurrentTime = 0.0;
+    f64 dtPerSample = 1.0 / RequestSampleRate;
+    for (;;)
+    {
+        WaitForSingleObjectEx(AudioEvent, INFINITE, FALSE);
+
+        u32 Padding = 0;
+        AudioClient->GetCurrentPadding(&Padding);
+        u32 SampleCount = BufferSize - Padding;
+
+        u8* DstBuffer = nullptr;
+        HResult = RenderClient->GetBuffer(SampleCount, &DstBuffer);
+        if (SUCCEEDED(HResult))
+        {
+            #if 0
+            audio_sample* Dst = (audio_sample*)DstBuffer;
+
+            u32 CountRemaining = SampleCount;
+            while (CountRemaining--)
+            {
+                constexpr f64 Freq = 2.0 * Pi * 220.0;
+                constexpr f64 Amp = 2e-1;
+                f64 Sample0_64 = Amp * Sin(Freq * CurrentTime);
+                f64 Sample1_64 = Amp * Sin((5.0 / 4.0) * Freq * CurrentTime);
+                CurrentTime += dtPerSample;
+
+                f32 Sample0 = (f32)Sample0_64;
+                f32 Sample1 = (f32)Sample1_64;
+
+                f32 SampleL = 0.7 * Sample0 + 0.3 * Sample1;
+                f32 SampleR = 0.3 * Sample0 + 0.7 * Sample1;
+                *Dst++ = { SampleL, SampleR };
+            }
+            #else
+            u32 ByteCount = SampleCount * RequestChannelCount * RequestBytesPerSample;
+            memset(DstBuffer, 0, ByteCount);
+            #endif
+
+            RenderClient->ReleaseBuffer(SampleCount, 0);
+        }
+    }
+    return(0);
+}
+
+//
 // Input
 //
 internal void Win_HandleKeyEvent(game_io* GameIO, u32 KeyCode, u32 ScanCode, bool bIsDown, bool bWasDown, s64 MessageTime)
@@ -427,6 +578,10 @@ internal LRESULT CALLBACK MainWindowProc(HWND Window, UINT Message, WPARAM WPara
 
     switch (Message)
     {
+        case WM_DEVICECHANGE:
+        {
+            Win_DebugPrint("WM_DEVICECHANGE\n");
+        } break;
         case WM_MENUCHAR:
         {
             Result = MNC_CLOSE << 16;
@@ -446,11 +601,19 @@ internal LRESULT CALLBACK MainWindowProc(HWND Window, UINT Message, WPARAM WPara
 
 internal DWORD WINAPI Win_MainThread(void* pParams)
 {
+    HWND ServiceWindow = (HWND)pParams;
+
     thread_context ThreadContext_ = {};
     thread_context* ThreadContext = &ThreadContext_;
     ThreadContext->ThreadID = 0;
 
-    HWND ServiceWindow = (HWND)pParams;
+    DWORD AudioThreadID = 0;
+    HANDLE AudioThread = CreateThread(nullptr, 0, &Win_AudioThread, nullptr, 0, &AudioThreadID);
+    // TODO(boti): Not a critical failure
+    if (!AudioThread)
+    {
+        UnhandledError("Failed to create audio thread");
+    }
 
     WNDCLASSEXW WindowClass = 
     {
