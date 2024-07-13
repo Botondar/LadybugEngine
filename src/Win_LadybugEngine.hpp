@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <windowsx.h>
+#include <timeapi.h>
 #include <Shellapi.h>
 #include <mmdeviceapi.h>
 #include <audioclient.h>

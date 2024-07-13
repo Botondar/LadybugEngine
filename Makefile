@@ -23,7 +23,7 @@ LINK_FLAGS = -INCREMENTAL:NO
 
 SHADER_FLAGS = -g -O --target-env=vulkan1.3 -std=460core -fhlsl-offsets
 
-LIBS = kernel32.lib user32.lib gdi32.lib Shell32.lib advapi32.lib Ole32.lib
+LIBS = kernel32.lib user32.lib gdi32.lib Shell32.lib advapi32.lib Ole32.lib Winmm.lib
 
 SRC_BASE = "$(SRC)/*.cpp" "$(SRC)/*.hpp"
 SRC_RENDERER = "$(SRC)/Renderer/*.cpp" "$(SRC)/Renderer/*.hpp"

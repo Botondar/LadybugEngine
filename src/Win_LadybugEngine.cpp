@@ -430,7 +430,7 @@ internal DWORD Win_AudioThread(void* Params)
         HResult = RenderClient->GetBuffer(SampleCount, &DstBuffer);
         if (SUCCEEDED(HResult))
         {
-            #if 0
+            #if 1
             audio_sample* Dst = (audio_sample*)DstBuffer;
 
             u32 CountRemaining = SampleCount;
@@ -511,6 +511,217 @@ lbfn u32 Win_ScanCodeToKey(u32 ScanCode, bool bIsExtended)
         Result = ScanCode;
     }
     return Result;
+}
+
+internal void Win_ProcessInput(game_io* IO, HWND ServiceWindow)
+{
+    TimedFunction(&GlobalProfiler);
+
+    IO->Mouse.dP = { 0.0f, 0.0f };
+    for (u32 Key = 0; Key < ScanCode_Count; Key++)
+    {
+        IO->Keys[Key].TransitionFlags = 0;
+    }
+
+    MSG Message = {};
+    while (PeekMessageW(&Message, nullptr, 0, 0, PM_REMOVE))
+    {
+        switch (Message.message)
+        {
+            case WM_SIZE:
+            {
+                if (Message.wParam == SIZE_MINIMIZED)
+                {
+                    IO->bIsMinimized = true;
+                }
+                else if (Message.wParam == SIZE_RESTORED || Message.wParam == SIZE_MAXIMIZED)
+                {
+                    IO->bIsMinimized = false;
+                    IO->OutputExtent = { (u32)LOWORD(Message.lParam), (u32)HIWORD(Message.lParam) };
+                }
+            } break;
+
+            //
+            // Mouse
+            //
+            case WM_MOUSEMOVE:
+            {
+                s32 X = GET_X_LPARAM(Message.lParam);
+                s32 Y = GET_Y_LPARAM(Message.lParam);
+
+                v2 P = { (f32)X, (f32)Y };
+                IO->Mouse.dP += P - IO->Mouse.P;
+                IO->Mouse.P = P;
+            } break;
+            case WM_LBUTTONDOWN:
+            {
+                u32 KeyCode = VK_LBUTTON;
+                u32 ScanCode = SC_MouseLeft;
+                Win_HandleKeyEvent(IO, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
+                SendMessageW(ServiceWindow, CAPTURE_MOUSE, 0, (LPARAM)WinWindow);
+            } break;
+            case WM_RBUTTONDOWN:
+            {
+                u32 KeyCode = VK_RBUTTON;
+                u32 ScanCode = SC_MouseRight;
+                Win_HandleKeyEvent(IO, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
+                SendMessageW(ServiceWindow, CAPTURE_MOUSE, 0, (LPARAM)WinWindow);
+            } break;
+            case WM_MBUTTONDOWN:
+            {
+                u32 KeyCode = VK_MBUTTON;
+                u32 ScanCode = SC_MouseMiddle;
+                Win_HandleKeyEvent(IO, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
+                SendMessageW(ServiceWindow, CAPTURE_MOUSE, 0, (LPARAM)WinWindow);
+            } break;
+            case WM_XBUTTONDOWN:
+            {
+                u32 KeyCode = 0;
+                u32 ScanCode = 0;
+                if (HIWORD(Message.wParam) & XBUTTON1)
+                {
+                    KeyCode = VK_XBUTTON1;
+                    ScanCode = SC_MouseX1;
+                }
+                else if (HIWORD(Message.wParam) & XBUTTON2)
+                {
+                    KeyCode = VK_XBUTTON2;
+                    ScanCode = SC_MouseX2;
+                }
+                Win_HandleKeyEvent(IO, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
+                SendMessageW(ServiceWindow, CAPTURE_MOUSE, 0, (LPARAM)WinWindow);
+            } break;
+
+            case WM_LBUTTONUP:
+            {
+                u32 KeyCode = VK_LBUTTON;
+                u32 ScanCode = SC_MouseLeft;
+                Win_HandleKeyEvent(IO, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
+                SendMessageW(ServiceWindow, RELEASE_MOUSE, 0, 0);
+            } break;
+            case WM_RBUTTONUP:
+            {
+                u32 KeyCode = VK_RBUTTON;
+                u32 ScanCode = SC_MouseRight;
+                Win_HandleKeyEvent(IO, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
+                SendMessageW(ServiceWindow, RELEASE_MOUSE, 0, 0);
+            } break;
+            case WM_MBUTTONUP:
+            {
+                u32 KeyCode = VK_MBUTTON;
+                u32 ScanCode = SC_MouseMiddle;
+                Win_HandleKeyEvent(IO, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
+                SendMessageW(ServiceWindow, RELEASE_MOUSE, 0, 0);
+            } break;
+            case WM_XBUTTONUP:
+            {
+                u32 KeyCode = 0;
+                u32 ScanCode = 0;
+                if (HIWORD(Message.wParam) & XBUTTON1)
+                {
+                    KeyCode = VK_XBUTTON1;
+                    ScanCode = SC_MouseX1;
+                }
+                else if (HIWORD(Message.wParam) & XBUTTON2)
+                {
+                    KeyCode = VK_XBUTTON2;
+                    ScanCode = SC_MouseX2;
+                }
+                Win_HandleKeyEvent(IO, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
+                SendMessageW(ServiceWindow, RELEASE_MOUSE, 0, 0);
+            } break;
+
+            //
+            // Keyboard
+            //
+            case WM_SYSKEYDOWN:
+            case WM_SYSKEYUP:
+            case WM_KEYDOWN:
+            case WM_KEYUP:
+            {
+                s64 MessageTime = (s64)GetMessageTime();
+                u32 KeyCode = (u32)Message.wParam;
+
+                // TODO(boti): proper left/right extended key handling
+                if (KeyCode == VK_SHIFT)    KeyCode = VK_LSHIFT;
+                if (KeyCode == VK_CONTROL)  KeyCode = VK_LCONTROL;
+                if (KeyCode == VK_MENU)     KeyCode = VK_LMENU;
+
+                u32 ScanCode    = (Message.lParam >> 16) & 0xFF;
+                b32 IsExtended  = (Message.lParam & (1 << 24)) != 0;
+                b32 IsDown      = (Message.lParam & (1 << 31)) == 0;
+                b32 WasDown     = (Message.lParam & (1 << 30)) != 0;
+                b32 IsAltDown   = (Message.lParam & (1 << 29)) != 0;
+
+                b32 WasPressed = IsDown && !WasDown;
+                if (WasPressed && IsAltDown && (KeyCode == VK_RETURN))
+                {
+                    MONITORINFO MonitorInfo = { sizeof(MONITORINFO) };
+                    GetMonitorInfo(MonitorFromWindow(WinWindow, MONITOR_DEFAULTTOPRIMARY), &MonitorInfo);
+
+                    s32 MonitorX = MonitorInfo.rcMonitor.left;
+                    s32 MonitorY = MonitorInfo.rcMonitor.top;
+                    s32 MonitorWidth = MonitorInfo.rcMonitor.right- MonitorInfo.rcMonitor.left;
+                    s32 MonitorHeight = MonitorInfo.rcMonitor.bottom - MonitorInfo.rcMonitor.top;
+
+                    DWORD WindowStyle = GetWindowLong(WinWindow, GWL_STYLE);
+                    if (WindowStyle & WS_OVERLAPPEDWINDOW)
+                    {
+                        WindowStyle &= ~WS_OVERLAPPEDWINDOW;
+                        SetWindowLong(WinWindow, GWL_STYLE, WindowStyle);
+                        SetWindowPos(WinWindow, HWND_TOP,
+                                     MonitorX, MonitorY, MonitorWidth, MonitorHeight,
+                                     SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+                    }
+                    else
+                    {
+                        WindowStyle |= WS_OVERLAPPEDWINDOW;
+                        SetWindowLong(WinWindow, GWL_STYLE, WindowStyle);
+
+                        // TODO(boti): Cache the actual resolution when going fullscreen
+                        s32 WindowWidth = 1920;
+                        s32 WindowHeight = 1080;
+                        s32 WindowX = (MonitorWidth - WindowWidth) / 2;
+                        s32 WindowY = (MonitorHeight - WindowHeight) / 2;
+                        RECT WindowRect = { WindowX, WindowY, WindowX + WindowWidth, WindowY + WindowHeight };
+                        AdjustWindowRect(&WindowRect, WindowStyle, FALSE);
+
+                        SetWindowPos(WinWindow, HWND_TOP, 
+                                     WindowRect.left, WindowRect.top, 
+                                     WindowRect.right - WindowRect.left, 
+                                     WindowRect.bottom - WindowRect.top,
+                                     SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+                    }
+                }
+
+                ScanCode = Win_ScanCodeToKey(ScanCode, IsExtended);
+
+                Win_HandleKeyEvent(IO, KeyCode, ScanCode, IsDown, WasDown, MessageTime);
+            } break;
+
+            case WM_DROPFILES:
+            {
+                HDROP Drop = (HDROP)Message.wParam;
+                UINT FileCount = DragQueryFileA(Drop, 0xFFFFFFFFu, nullptr, 0);
+                if (FileCount == 1)
+                {
+                    if (DragQueryFileA(Drop, 0, IO->DroppedFilename, IO->DroppedFilenameLength))
+                    {
+                        IO->bHasDroppedFile = true;
+                    }
+                }
+                else
+                {
+                    UnimplementedCodePath;
+                }
+                DragFinish(Drop);
+            } break;
+            case WM_QUIT:
+            {
+                IO->bQuitRequested = true;
+            } break;
+        }
+    }
 }
 
 //
@@ -602,6 +813,8 @@ internal LRESULT CALLBACK MainWindowProc(HWND Window, UINT Message, WPARAM WPara
 internal DWORD WINAPI Win_MainThread(void* pParams)
 {
     HWND ServiceWindow = (HWND)pParams;
+
+    timeBeginPeriod(1);
 
     thread_context ThreadContext_ = {};
     thread_context* ThreadContext = &ThreadContext_;
@@ -822,6 +1035,9 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
         GameIO.Mouse.P = { (f32)P.x, (f32)P.y };
     }
 
+    //
+    // Main loop
+    //
     for (;;)
     {
         // Profiler processing
@@ -893,215 +1109,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
 
         counter FrameStartCounter = Win_GetCounter();
 
-        {
-            TimedBlock(&GlobalProfiler, "Platform MessageProcessing");
-
-            GameIO.Mouse.dP = { 0.0f, 0.0f };
-            for (u32 Key = 0; Key < ScanCode_Count; Key++)
-            {
-                GameIO.Keys[Key].TransitionFlags = 0;
-            }
-
-            MSG Message = {};
-            while (PeekMessageW(&Message, nullptr, 0, 0, PM_REMOVE))
-            {
-                switch (Message.message)
-                {
-                    case WM_SIZE:
-                    {
-                        if (Message.wParam == SIZE_MINIMIZED)
-                        {
-                            GameIO.bIsMinimized = true;
-                        }
-                        else if (Message.wParam == SIZE_RESTORED || Message.wParam == SIZE_MAXIMIZED)
-                        {
-                            GameIO.bIsMinimized = false;
-                            GameIO.OutputExtent = { (u32)LOWORD(Message.lParam), (u32)HIWORD(Message.lParam) };
-                        }
-                    } break;
-
-                    //
-                    // Mouse
-                    //
-                    case WM_MOUSEMOVE:
-                    {
-                        s32 X = GET_X_LPARAM(Message.lParam);
-                        s32 Y = GET_Y_LPARAM(Message.lParam);
-
-                        v2 P = { (f32)X, (f32)Y };
-                        GameIO.Mouse.dP += P - GameIO.Mouse.P;
-                        GameIO.Mouse.P = P;
-                    } break;
-                    case WM_LBUTTONDOWN:
-                    {
-                        u32 KeyCode = VK_LBUTTON;
-                        u32 ScanCode = SC_MouseLeft;
-                        Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
-                        SendMessageW(ServiceWindow, CAPTURE_MOUSE, 0, (LPARAM)WinWindow);
-                    } break;
-                    case WM_RBUTTONDOWN:
-                    {
-                        u32 KeyCode = VK_RBUTTON;
-                        u32 ScanCode = SC_MouseRight;
-                        Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
-                        SendMessageW(ServiceWindow, CAPTURE_MOUSE, 0, (LPARAM)WinWindow);
-                    } break;
-                    case WM_MBUTTONDOWN:
-                    {
-                        u32 KeyCode = VK_MBUTTON;
-                        u32 ScanCode = SC_MouseMiddle;
-                        Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
-                        SendMessageW(ServiceWindow, CAPTURE_MOUSE, 0, (LPARAM)WinWindow);
-                    } break;
-                    case WM_XBUTTONDOWN:
-                    {
-                        u32 KeyCode = 0;
-                        u32 ScanCode = 0;
-                        if (HIWORD(Message.wParam) & XBUTTON1)
-                        {
-                            KeyCode = VK_XBUTTON1;
-                            ScanCode = SC_MouseX1;
-                        }
-                        else if (HIWORD(Message.wParam) & XBUTTON2)
-                        {
-                            KeyCode = VK_XBUTTON2;
-                            ScanCode = SC_MouseX2;
-                        }
-                        Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, true, false, (s64)GetMessageTime());
-                        SendMessageW(ServiceWindow, CAPTURE_MOUSE, 0, (LPARAM)WinWindow);
-                    } break;
-
-                    case WM_LBUTTONUP:
-                    {
-                        u32 KeyCode = VK_LBUTTON;
-                        u32 ScanCode = SC_MouseLeft;
-                        Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
-                        SendMessageW(ServiceWindow, RELEASE_MOUSE, 0, 0);
-                    } break;
-                    case WM_RBUTTONUP:
-                    {
-                        u32 KeyCode = VK_RBUTTON;
-                        u32 ScanCode = SC_MouseRight;
-                        Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
-                        SendMessageW(ServiceWindow, RELEASE_MOUSE, 0, 0);
-                    } break;
-                    case WM_MBUTTONUP:
-                    {
-                        u32 KeyCode = VK_MBUTTON;
-                        u32 ScanCode = SC_MouseMiddle;
-                        Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
-                        SendMessageW(ServiceWindow, RELEASE_MOUSE, 0, 0);
-                    } break;
-                    case WM_XBUTTONUP:
-                    {
-                        u32 KeyCode = 0;
-                        u32 ScanCode = 0;
-                        if (HIWORD(Message.wParam) & XBUTTON1)
-                        {
-                            KeyCode = VK_XBUTTON1;
-                            ScanCode = SC_MouseX1;
-                        }
-                        else if (HIWORD(Message.wParam) & XBUTTON2)
-                        {
-                            KeyCode = VK_XBUTTON2;
-                            ScanCode = SC_MouseX2;
-                        }
-                        Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, false, true, (s64)GetMessageTime());
-                        SendMessageW(ServiceWindow, RELEASE_MOUSE, 0, 0);
-                    } break;
-
-                    //
-                    // Keyboard
-                    //
-                    case WM_SYSKEYDOWN:
-                    case WM_SYSKEYUP:
-                    case WM_KEYDOWN:
-                    case WM_KEYUP:
-                    {
-                        s64 MessageTime = (s64)GetMessageTime();
-                        u32 KeyCode = (u32)Message.wParam;
-
-                        // TODO(boti): proper left/right extended key handling
-                        if (KeyCode == VK_SHIFT)    KeyCode = VK_LSHIFT;
-                        if (KeyCode == VK_CONTROL)  KeyCode = VK_LCONTROL;
-                        if (KeyCode == VK_MENU)     KeyCode = VK_LMENU;
-
-                        u32 ScanCode    = (Message.lParam >> 16) & 0xFF;
-                        b32 IsExtended  = (Message.lParam & (1 << 24)) != 0;
-                        b32 IsDown      = (Message.lParam & (1 << 31)) == 0;
-                        b32 WasDown     = (Message.lParam & (1 << 30)) != 0;
-                        b32 IsAltDown   = (Message.lParam & (1 << 29)) != 0;
-
-                        b32 WasPressed = IsDown && !WasDown;
-                        if (WasPressed && IsAltDown && (KeyCode == VK_RETURN))
-                        {
-                            MONITORINFO MonitorInfo = { sizeof(MONITORINFO) };
-                            GetMonitorInfo(MonitorFromWindow(WinWindow, MONITOR_DEFAULTTOPRIMARY), &MonitorInfo);
-
-                            s32 MonitorX = MonitorInfo.rcMonitor.left;
-                            s32 MonitorY = MonitorInfo.rcMonitor.top;
-                            s32 MonitorWidth = MonitorInfo.rcMonitor.right- MonitorInfo.rcMonitor.left;
-                            s32 MonitorHeight = MonitorInfo.rcMonitor.bottom - MonitorInfo.rcMonitor.top;
-
-                            DWORD WindowStyle = GetWindowLong(WinWindow, GWL_STYLE);
-                            if (WindowStyle & WS_OVERLAPPEDWINDOW)
-                            {
-                                WindowStyle &= ~WS_OVERLAPPEDWINDOW;
-                                SetWindowLong(WinWindow, GWL_STYLE, WindowStyle);
-                                SetWindowPos(WinWindow, HWND_TOP,
-                                             MonitorX, MonitorY, MonitorWidth, MonitorHeight,
-                                             SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-                            }
-                            else
-                            {
-                                WindowStyle |= WS_OVERLAPPEDWINDOW;
-                                SetWindowLong(WinWindow, GWL_STYLE, WindowStyle);
-
-                                // TODO(boti): Cache the actual resolution when going fullscreen
-                                s32 WindowWidth = 1920;
-                                s32 WindowHeight = 1080;
-                                s32 WindowX = (MonitorWidth - WindowWidth) / 2;
-                                s32 WindowY = (MonitorHeight - WindowHeight) / 2;
-                                RECT WindowRect = { WindowX, WindowY, WindowX + WindowWidth, WindowY + WindowHeight };
-                                AdjustWindowRect(&WindowRect, WindowStyle, FALSE);
-
-                                SetWindowPos(WinWindow, HWND_TOP, 
-                                             WindowRect.left, WindowRect.top, 
-                                             WindowRect.right - WindowRect.left, 
-                                             WindowRect.bottom - WindowRect.top,
-                                             SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
-                            }
-                        }
-
-                        ScanCode = Win_ScanCodeToKey(ScanCode, IsExtended);
-
-                        Win_HandleKeyEvent(&GameIO, KeyCode, ScanCode, IsDown, WasDown, MessageTime);
-                    } break;
-
-                    case WM_DROPFILES:
-                    {
-                        HDROP Drop = (HDROP)Message.wParam;
-                        UINT FileCount = DragQueryFileA(Drop, 0xFFFFFFFFu, nullptr, 0);
-                        if (FileCount == 1)
-                        {
-                            if (DragQueryFileA(Drop, 0, GameIO.DroppedFilename, GameIO.DroppedFilenameLength))
-                            {
-                                GameIO.bHasDroppedFile = true;
-                            }
-                        }
-                        else
-                        {
-                            UnimplementedCodePath;
-                        }
-                        DragFinish(Drop);
-                    } break;
-                    case WM_QUIT:
-                    {
-                        GameIO.bQuitRequested = true;
-                    } break;
-                }
-            }
-        }
+        Win_ProcessInput(&GameIO, ServiceWindow);
 
         Game_UpdateAndRender(ThreadContext, &GameMemory, &GameIO);
         if (GameIO.bQuitRequested) break;
