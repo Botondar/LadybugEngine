@@ -430,7 +430,7 @@ internal DWORD Win_AudioThread(void* Params)
         HResult = RenderClient->GetBuffer(SampleCount, &DstBuffer);
         if (SUCCEEDED(HResult))
         {
-            #if 1
+            #if 0
             audio_sample* Dst = (audio_sample*)DstBuffer;
 
             u32 CountRemaining = SampleCount;
@@ -814,7 +814,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
 {
     HWND ServiceWindow = (HWND)pParams;
 
-    timeBeginPeriod(1);
+    //timeBeginPeriod(1);
 
     thread_context ThreadContext_ = {};
     thread_context* ThreadContext = &ThreadContext_;
