@@ -9,87 +9,6 @@ struct device_luid
     u64 Value;
 };
 
-typedef flags32 format_flags;
-enum format_flag_bits : format_flags
-{
-    FormatFlag_None = 0,
-
-    FormatFlag_BlockCompressed = (1u << 0),
-};
-
-
-enum format : u32
-{
-    Format_Undefined = 0,
-
-    Format_R8_UNorm,
-    Format_R8_UInt,
-    Format_R8_SRGB,
-    Format_R8G8_UNorm,
-    Format_R8G8_UInt,
-    Format_R8G8_SRGB,
-    Format_R8G8B8_UNorm,
-    Format_R8G8B8_UInt,
-    Format_R8G8B8_SRGB,
-    Format_R8G8B8A8_UNorm,
-    Format_R8G8B8A8_UInt,
-    Format_R8G8B8A8_SRGB,
-
-    Format_B8G8R8A8_SRGB,
-
-    Format_R16_UNorm,
-    Format_R16_UInt,
-    Format_R16_Float,
-    Format_R16G16_UNorm,
-    Format_R16G16_UInt,
-    Format_R16G16_Float,
-    Format_R16G16B16_UNorm,
-    Format_R16G16B16_UInt,
-    Format_R16G16B16_Float,
-    Format_R16G16B16A16_UNorm,
-    Format_R16G16B16A16_UInt,
-    Format_R16G16B16A16_Float,
-
-    Format_R32_UInt,
-    Format_R32_Float,
-    Format_R32G32_UInt,
-    Format_R32G32_Float,
-    Format_R32G32B32_UInt,
-    Format_R32G32B32_Float,
-    Format_R32G32B32A32_UInt,
-    Format_R32G32B32A32_Float,
-
-    Format_R11G11B10_Float,
-
-    // NOTE(boti): Stencil always UInt, D32 always float, D(<32) always UNorm
-    Format_D16,
-    Format_D24X8,
-    Format_D32,
-    Format_S8,
-    Format_D16S8,
-    Format_D24S8,
-    Format_D32S8, // NOTE(boti): This is padded to 64-bits (D32S8X24)
-    
-    Format_BC1_RGB_UNorm,
-    Format_BC1_RGB_SRGB,
-    Format_BC1_RGBA_UNorm,
-    Format_BC1_RGBA_SRGB,
-    Format_BC2_UNorm,
-    Format_BC2_SRGB,
-    Format_BC3_UNorm,
-    Format_BC3_SRGB,
-    Format_BC4_UNorm,
-    Format_BC4_SNorm,
-    Format_BC5_UNorm,
-    Format_BC5_SNorm,
-    Format_BC6_UFloat,
-    Format_BC6_SFloat,
-    Format_BC7_UNorm,
-    Format_BC7_SRGB,
-
-    Format_Count,
-};
-
 enum blend_op : u32
 {
     BlendOp_Add = 0,
@@ -449,13 +368,6 @@ enum texture_swizzle_type : u8
 struct texture_swizzle
 {
     texture_swizzle_type R, G, B, A;
-};
-
-struct format_byterate
-{
-    u32 Numerator;
-    u32 Denominator;
-    format_flags Flags;
 };
 
 struct texture_info

@@ -13,6 +13,7 @@ TODO: list
 #include "LadybugLib/lbfnt.hpp"
 #include "LadybugLib/JSON.hpp"
 #include "LadybugLib/glTF.hpp"
+#include "LadybugLib/image.hpp"
 
 #include "Platform.hpp"
 #include "Renderer/Renderer.hpp"

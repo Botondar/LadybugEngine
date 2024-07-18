@@ -1,5 +1,3 @@
-#pragma once
-
 //
 // Utility
 //
@@ -22,38 +20,9 @@ struct trs_transform
 inline m4 TRSToM4(trs_transform Transform);
 inline trs_transform M4ToTRS(m4 M);
 
-enum image_file_type : u32
-{
-    ImageFile_Undefined = 0,
-
-    ImageFile_BMP,
-    ImageFile_TIF,
-    ImageFile_PNG,
-    ImageFile_JPG,
-
-    ImageFile_Count,
-};
-
-lbfn image_file_type 
-DetermineImageFileType(memory_arena* Arena, buffer FileData);
-
-// TODO(boti): Currently this is mostly a shim around stb_image,
-// but in the future we'll probably want to formalize this to use the format enum, etc.
-struct loaded_image
-{
-    v2u Extent;
-    u32 ChannelCount;
-    u32 BitDepthPerChannel;
-    void* Data;
-};
-
-lbfn loaded_image
-LoadImage(memory_arena* Arena, buffer FileData);
-
 //
 // Skin and animation
 //
-
 enum armature_type : u32
 {
     Armature_Undefined = 0,

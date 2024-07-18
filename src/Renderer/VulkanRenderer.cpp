@@ -3009,7 +3009,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                     UnimplementedCodePath;
                                 }
 
-                                format_byterate ByteRate = FormatByterateTable[Info->Format];
+                                format_info ByteRate = FormatInfoTable[Info->Format];
                                 umm TotalSize = GetMipChainSize(Info->Extent.X, Info->Extent.Y, Info->MipCount, Info->ArrayCount, ByteRate);
 
                                 u32 CopyCount = Info->MipCount * Info->ArrayCount;
@@ -3041,7 +3041,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                         {
                                             TexelCount = Extent.X * Extent.Y;
                                         }
-                                        u64 MipSize = TexelCount * ByteRate.Numerator / ByteRate.Denominator;
+                                        u64 MipSize = TexelCount * ByteRate.ByteRateNumerator / ByteRate.ByteRateDenominator;
 
                                         CopyAt->bufferOffset = Offset,
                                         CopyAt->bufferRowLength = RowLength,

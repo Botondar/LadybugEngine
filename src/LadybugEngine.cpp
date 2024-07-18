@@ -8,19 +8,13 @@
 #include "Editor.cpp"
 #include "profiler.cpp"
 
-#define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
-#define STB_DXT_IMPLEMENTATION
-
-#pragma warning(push)
-#pragma warning(disable:4244)
-#include "stb/stb_image.h"
-#pragma warning(pop)
-
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wshadow"
 #include "stb/stb_image_resize2.h"
 #pragma clang diagnostic pop
+
+#define STB_DXT_IMPLEMENTATION
 #include "stb/stb_dxt.h"
 
 platform_api Platform;
@@ -152,7 +146,7 @@ void Game_UpdateAndRender(thread_context* ThreadContext, game_memory* Memory, ga
             {
                 umm TotalSize = GetMipChainSize(Entry->Info.Extent.X, Entry->Info.Extent.Y, 
                                                 Entry->Info.MipCount, Entry->Info.ArrayCount,
-                                                FormatByterateTable[Entry->Info.Format]);
+                                                FormatInfoTable[Entry->Info.Format]);
                 umm Begin = GetNextEntryOffset(Queue, TotalSize, Queue->RingBufferReadAt);
 
                 Entry->Texture->Info = Entry->Info;

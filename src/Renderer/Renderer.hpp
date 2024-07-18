@@ -3,6 +3,7 @@
 #include <LadybugLib/Core.hpp>
 #include <LadybugLib/Intrinsics.hpp>
 #include <LadybugLib/String.hpp>
+#include <LadybugLib/image.hpp>
 
 // HACK(boti): These are part of the high-level rendering API,
 // but we need them in ShaderInterop so they're defined here at the top for now
@@ -458,75 +459,8 @@ PushCommand_(render_frame* Frame, render_command_type Type,
 //
 inline constexpr rgba8 PackRGBA8(u32 R, u32 G, u32 B, u32 A = 0xFF);
 inline rgba8 PackRGBA(v4 Color);
-inline u32 GetMaxMipCount(u32 Width, u32 Height);
-inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount = 0xFFFFFFFFu);
-inline u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate);
 inline umm GetPackedTexture2DMipOffset(const texture_info* Info, u32 Mip);
 inline texture_subresource_range SubresourceFromMipMask(u32 Mask, texture_info Info);
-
-static format_byterate FormatByterateTable[Format_Count] = 
-{
-    [Format_Undefined]          = { 0, 0, FormatFlag_None },
-
-    [Format_R8_UNorm]           = { 1*1, 1, FormatFlag_None },
-    [Format_R8_UInt]            = { 1*1, 1, FormatFlag_None },
-    [Format_R8_SRGB]            = { 1*1, 1, FormatFlag_None },
-    [Format_R8G8_UNorm]         = { 2*1, 1, FormatFlag_None },
-    [Format_R8G8_UInt]          = { 2*1, 1, FormatFlag_None },
-    [Format_R8G8_SRGB]          = { 2*1, 1, FormatFlag_None },
-    [Format_R8G8B8_UNorm]       = { 3*1, 1, FormatFlag_None },
-    [Format_R8G8B8_UInt]        = { 3*1, 1, FormatFlag_None },
-    [Format_R8G8B8_SRGB]        = { 3*1, 1, FormatFlag_None },
-    [Format_R8G8B8A8_UNorm]     = { 4*1, 1, FormatFlag_None },
-    [Format_R8G8B8A8_UInt]      = { 4*1, 1, FormatFlag_None },
-    [Format_R8G8B8A8_SRGB]      = { 4*1, 1, FormatFlag_None },
-    [Format_B8G8R8A8_SRGB]      = { 4*1, 1, FormatFlag_None },
-    [Format_R16_UNorm]          = { 1*2, 1, FormatFlag_None },
-    [Format_R16_UInt]           = { 1*2, 1, FormatFlag_None },
-    [Format_R16_Float]          = { 1*2, 1, FormatFlag_None },
-    [Format_R16G16_UNorm]       = { 2*2, 1, FormatFlag_None },
-    [Format_R16G16_UInt]        = { 2*2, 1, FormatFlag_None },
-    [Format_R16G16_Float]       = { 2*2, 1, FormatFlag_None },
-    [Format_R16G16B16_UNorm]    = { 3*2, 1, FormatFlag_None },
-    [Format_R16G16B16_UInt]     = { 3*2, 1, FormatFlag_None },
-    [Format_R16G16B16_Float]    = { 3*2, 1, FormatFlag_None },
-    [Format_R16G16B16A16_UNorm] = { 4*2, 1, FormatFlag_None },
-    [Format_R16G16B16A16_UInt]  = { 4*2, 1, FormatFlag_None },
-    [Format_R16G16B16A16_Float] = { 4*2, 1, FormatFlag_None },
-    [Format_R32_UInt]           = { 1*4, 1, FormatFlag_None },
-    [Format_R32_Float]          = { 1*4, 1, FormatFlag_None },
-    [Format_R32G32_UInt]        = { 2*4, 1, FormatFlag_None },
-    [Format_R32G32_Float]       = { 2*4, 1, FormatFlag_None },
-    [Format_R32G32B32_UInt]     = { 3*4, 1, FormatFlag_None },
-    [Format_R32G32B32_Float]    = { 3*4, 1, FormatFlag_None },
-    [Format_R32G32B32A32_UInt]  = { 4*4, 1, FormatFlag_None },
-    [Format_R32G32B32A32_Float] = { 4*4, 1, FormatFlag_None },
-
-    [Format_R11G11B10_Float]    = { 4, 1, FormatFlag_None },
-    [Format_D16]                = { 2, 1, FormatFlag_None },
-    [Format_D24X8]              = { 4, 1, FormatFlag_None },
-    [Format_D32]                = { 4, 1, FormatFlag_None },
-    [Format_S8]                 = { 1, 1, FormatFlag_None },
-    [Format_D24S8]              = { 4, 1, FormatFlag_None },
-    [Format_D32S8]              = { 8, 1, FormatFlag_None },
-
-    [Format_BC1_RGB_UNorm]  = { 1, 2, FormatFlag_BlockCompressed },
-    [Format_BC1_RGB_SRGB]   = { 1, 2, FormatFlag_BlockCompressed },
-    [Format_BC1_RGBA_UNorm] = { 1, 2, FormatFlag_BlockCompressed },
-    [Format_BC1_RGBA_SRGB]  = { 1, 2, FormatFlag_BlockCompressed },
-    [Format_BC2_UNorm]      = { 1, 1, FormatFlag_BlockCompressed },
-    [Format_BC2_SRGB]       = { 1, 1, FormatFlag_BlockCompressed },
-    [Format_BC3_UNorm]      = { 1, 1, FormatFlag_BlockCompressed },
-    [Format_BC3_SRGB]       = { 1, 1, FormatFlag_BlockCompressed },
-    [Format_BC4_UNorm]      = { 1, 2, FormatFlag_BlockCompressed },
-    [Format_BC4_SNorm]      = { 1, 2, FormatFlag_BlockCompressed },
-    [Format_BC5_UNorm]      = { 1, 1, FormatFlag_BlockCompressed },
-    [Format_BC5_SNorm]      = { 1, 1, FormatFlag_BlockCompressed },
-    [Format_BC6_UFloat]     = { 1, 1, FormatFlag_BlockCompressed },
-    [Format_BC6_SFloat]     = { 1, 1, FormatFlag_BlockCompressed },
-    [Format_BC7_UNorm]      = { 1, 1, FormatFlag_BlockCompressed },
-    [Format_BC7_SRGB]       = { 1, 1, FormatFlag_BlockCompressed },
-};
 
 //
 // Implementation
@@ -580,22 +514,6 @@ inline v3 SetLuminance(v3 RGB, f32 Luminance)
     return(Result);
 }
 
-inline u32 GetMaxMipCount(u32 Width, u32 Height)
-{
-    u32 Result = 0;
-    if (BitScanReverse(&Result, Max(Width, Height)))
-    {
-        Result += 1;
-    }
-    else
-    {
-        // NOTE(boti): The x64/MSDN spec says that the result is undefined if value is 0,
-        //             so we kind of have to make sure that the result will also be 0 in that case.
-        Result = 0; 
-    }
-    return Result;
-}
-
 // NOTE(boti): Returns the mip count of a mip chain when the lowest resolution mip level
 //             must be at least 2x2
 inline u32 GetMaxMipCountGreaterThanOne(u32 Width, u32 Height)
@@ -605,44 +523,6 @@ inline u32 GetMaxMipCountGreaterThanOne(u32 Width, u32 Height)
     {
         Result = 0;
     }
-    return Result;
-}
-
-inline u32 GetMipChainTexelCount(u32 Width, u32 Height, u32 MaxMipCount /*= 0xFFFFFFFFu*/)
-{
-    u32 Result = 0;
-    u32 MipCount = Min(GetMaxMipCount(Width, Height), MaxMipCount);
-
-    u32 CurrentSize = Width * Height;
-
-    for (u32 i = 0; i < MipCount; i++)
-    {
-        Result += CurrentSize;
-        CurrentSize = Max(CurrentSize / 4, 1u);
-    }
-
-    return Result;
-}
-
-inline u64 GetMipChainSize(u32 Width, u32 Height, u32 MipCount, u32 ArrayCount, format_byterate ByteRate)
-{
-    u64 Result = 0;
-
-    MipCount = Min(GetMaxMipCount(Width, Height), MipCount);
-    for (u32 Mip = 0; Mip < MipCount; Mip++)
-    {
-        u32 CurrentWidth = Max(Width >> Mip, 1u);
-        u32 CurrentHeight = Max(Height >> Mip, 1u);
-        if (ByteRate.Flags & FormatFlag_BlockCompressed)
-        {
-            CurrentWidth = Align(CurrentWidth, 4u);
-            CurrentHeight = Align(CurrentHeight, 4u);
-        }
-
-        Result += ((u64)CurrentWidth * (u64)CurrentHeight * ByteRate.Numerator) / ByteRate.Denominator;
-    }
-    Result *= ArrayCount;
-
     return Result;
 }
 
@@ -656,7 +536,7 @@ inline umm GetPackedTexture2DMipOffset(const texture_info* Info, u32 Mip)
     u32 MipCount = GetMaxMipCount(Info->Extent.X, Info->Extent.Y);
     if (Mip < MipCount)
     {
-        format_byterate Byterate = FormatByterateTable[Info->Format];
+        format_info Byterate = FormatInfoTable[Info->Format];
 
         for (u32 CurrentMip = 0; CurrentMip < Mip; CurrentMip++)
         {
@@ -667,7 +547,7 @@ inline umm GetPackedTexture2DMipOffset(const texture_info* Info, u32 Mip)
                 ExtentX = Align(ExtentX, 4u);
                 ExtentY = Align(ExtentY, 4u);
             }
-            Result += ((umm)ExtentX * (umm)ExtentY * Byterate.Numerator) / Byterate.Denominator;
+            Result += ((umm)ExtentX * (umm)ExtentY * Byterate.ByteRateNumerator) / Byterate.ByteRateDenominator;
         }
     }
 
@@ -752,7 +632,7 @@ TransferTexture(render_frame* Frame, renderer_texture_id ID,
 {
     b32 Result = true;
 
-    format_byterate ByteRate = FormatByterateTable[Info.Format];
+    format_info ByteRate = FormatInfoTable[Info.Format];
     umm TotalSize = GetMipChainSize(Info.Extent.X, Info.Extent.Y, Info.MipCount, Info.ArrayCount, ByteRate);
     render_command* Command = PushCommand_(Frame, RenderCommand_Transfer, 0, 0, 64, TotalSize);
     if (Command)
