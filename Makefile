@@ -38,7 +38,7 @@ RENDERER_EXPORT = \
     -EXPORT:BeginRenderFrame \
     -EXPORT:EndRenderFrame
 
-TOOLS = "$(OUT)/lbmeta.exe"
+TOOLS = "$(OUT)/lbmeta.exe" "$(OUT)/lbasset.exe"
 
 SHADERS = \
     build/blit.vs build/blit.fs \
@@ -70,6 +70,9 @@ clean:
 
 "$(OUT)/lbmeta.exe": "$(OUT)/" $(SRC_LBLIB) "tools/lbmeta/*"
     @clang-cl -Wno-c99-designator -std:c++20 -Zi -I"src/" -D_CRT_SECURE_NO_WARNINGS "tools/lbmeta/lbmeta.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/"
+"$(OUT)/lbasset.exe": "$(OUT)/" $(SRC_LBLIB) "tools/lbasset/*"
+    @clang-cl -Wno-c99-designator -std:c++20 -arch:AVX2 -O2 -Zi -I"src/" -DDEVELOPER=1 -D_CRT_SECURE_NO_WARNINGS "tools/lbasset/lbasset.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/"
+
 
 "$(OUT)/vulkan_renderer.dll": "$(OUT)/" $(SRC_LBLIB) $(SRC_RENDERER)
     @clang-cl $(CXX_FLAGS) $(VULKAN_INCLUDE) -DLB_TranslationUnit=LB_TranslationUnit_Renderer  "src/Renderer/VulkanRenderer.cpp" -Fo"$(OUT)/" -Fd"$(OUT)/" vulkan-1.lib -link -DLL -OUT:$@ $(LINK_FLAGS) $(RENDERER_EXPORT) -LIBPATH:$(VULKAN_SDK)/Lib/

@@ -42,7 +42,16 @@ struct filepath
     char Path[MaxCount]; 
 };
 
-inline b32 MakeFilepathFromZ(filepath* Path, const char* String);
+typedef flags32 filepath_flags;
+enum filepath_flag_bits : filepath_flags
+{
+    Filepath_None = 0,
+
+    Filepath_DefaultToDirectory = (1u << 0),
+};
+
+inline b32 MakeFilepath(filepath* Path, string String, filepath_flags Flags = 0);
+inline b32 MakeFilepathFromZ(filepath* Path, const char* String, filepath_flags Flags = 0);
 
 // NOTE(boti): Extension string must contain the .
 inline b32 OverwriteExtension(filepath* Path, const char* Extension);
@@ -223,7 +232,63 @@ inline bool MatchZAndAdvance(string_view* View, const char* ZString)
     return Result;
 }
 
-inline b32 MakeFilepathFromZ(filepath* Path, const char* String)
+inline void FindFilepathExtensionAndName(filepath* Path, filepath_flags Flags)
+{
+    // NOTE(boti): Find extension substring
+    Path->ExtensionOffset = Path->Count; // NOTE(boti): this is considered to be no file extension
+    for (u32 Index = Path->Count - 1; Index < Path->Count; Index--)
+    {
+        if (Path->Path[Index] == '.')
+        {
+            Path->ExtensionOffset = Index;
+            break;
+        }
+    }
+
+    Path->NameOffset = Path->ExtensionOffset;
+    Path->NameCount = 0;
+
+    // TODO(boti): Append trailing slash if there's no extension
+    if (!(Flags & Filepath_DefaultToDirectory))
+    {
+        // NOTE(boti): Find filename substring
+        for (u32 Index = Path->ExtensionOffset; Index < Path->Count; Index--)
+        {
+            if (Path->Path[Index] == '/' || Path->Path[Index] == '\\')
+            {
+                Path->NameOffset = Index + 1;
+                Path->NameCount = Path->ExtensionOffset - Path->NameOffset;
+                break;
+            }
+        }
+    }
+}
+
+inline b32 MakeFilepath(filepath* Path, string String, filepath_flags Flags /*= 0*/)
+{
+    b32 Result = true;
+
+    if (String.Length <= Path->MaxCount)
+    {
+        Path->Count = String.Length;
+        memcpy(Path->Path, String.String, String.Length);
+        Path->Path[Path->Count] = 0;
+
+        FindFilepathExtensionAndName(Path, Flags);
+    }
+    else
+    {
+        *Path = {};
+        Result = false;
+#if DEVELOPER
+        UnhandledError("Path creation failed");
+#endif
+    }
+
+    return(Result);
+}
+
+inline b32 MakeFilepathFromZ(filepath* Path, const char* String, filepath_flags Flags /*= 0*/)
 {
     b32 Result = true;
 
@@ -237,29 +302,7 @@ inline b32 MakeFilepathFromZ(filepath* Path, const char* String)
 
     if (Path->Count != Path->MaxCount)
     {
-        // NOTE(boti): Find extension substring
-        Path->ExtensionOffset = Path->Count; // NOTE(boti): this is considered to be no file extension
-        for (u32 Index = Path->Count - 1; Index < Path->Count; Index--)
-        {
-            if (Path->Path[Index] == '.')
-            {
-                Path->ExtensionOffset = Index;
-                break;
-            }
-        }
-
-        // NOTE(boti): Find filename substring
-        Path->NameOffset = 0;
-        Path->NameCount = Path->ExtensionOffset;
-        for (u32 Index = Path->ExtensionOffset; Index < Path->Count; Index--)
-        {
-            if (Path->Path[Index] == '/' || Path->Path[Index] == '\\')
-            {
-                Path->NameOffset = Index + 1;
-                Path->NameCount = Path->ExtensionOffset - Path->NameOffset;
-                break;
-            }
-        }
+        FindFilepathExtensionAndName(Path, Flags);
     }
     else
     {

@@ -687,7 +687,7 @@ lbfn f32 CalculateAlphaScaleForCoverage(v2u Extent, u8* Texels, f32 AlphaThresho
     return(Scale);
 }
 
-lbfn f32 ScaleAlphaForCoverage(v2u Extent, u8* Texels, f32 AlphaThreshold, f32 TargetCoverage)
+lbfn f32 RescaleAlphaForCoverage(v2u Extent, u8* Texels, f32 AlphaThreshold, f32 TargetCoverage)
 {
     f32 Scale = CalculateAlphaScaleForCoverage(Extent, Texels, AlphaThreshold, TargetCoverage);
 

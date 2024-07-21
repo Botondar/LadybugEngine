@@ -655,7 +655,7 @@ lbfn void UpdateAndRenderWorld(
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_TransmissionTest, 
                              0);
-        #elif 0
+        #elif 1
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Terrain,
                              DebugSceneFlag_None);

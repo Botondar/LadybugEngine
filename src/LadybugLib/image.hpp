@@ -104,6 +104,9 @@ enum image_file_type : u32
 //
 // DDS
 //
+
+constexpr u32 DDSMagic = 0x20534444;
+
 typedef flags32 dds_flags;
 enum dds_flag_bits : dds_flags
 {
@@ -154,8 +157,9 @@ enum dds_pixel_format_flag_bits : dds_pixel_format_flags
 {
     DDSPixelFormat_None = 0,
 
-    DDSPixelFormat_Alpha            = (1u << 0),
-    DDSPixelFormat_FourCC           = (1u << 1),
+    DDSPixelFormat_AlphaPixels      = (1u << 0),
+    DDSPixelFormat_Alpha            = (1u << 1),
+    DDSPixelFormat_FourCC           = (1u << 2),
     DDSPixelFormat_UncompressedRGB  = (1u << 6), // NOTE(boti): RGB masks contain valid data
     DDSPixelFormat_YUV              = (1u << 9),
     DDSPixelFormat_Luminance        = (1u << 17),
@@ -182,6 +186,7 @@ struct dds_pixel_format
     u32                     BitMaskB;
     u32                     BitMaskA;
 };
+static_assert(sizeof(dds_pixel_format) == 32);
 
 struct dds_header
 {
@@ -192,7 +197,7 @@ struct dds_header
     u32                 PitchOrLinearSize;
     u32                 Depth;
     u32                 MipMapCount;
-    u32                 Reserved0[11];
+    u32                 Reserved1[11];
     dds_pixel_format    PixelFormat;
     u32                 Caps;
     u32                 Caps2;
@@ -370,6 +375,14 @@ struct dds_header_dx10
 
 constexpr u32 DDSHeaderSize = 124;
 static_assert(sizeof(dds_header) == DDSHeaderSize);
+
+struct dds_file
+{
+    u32             Magic;
+    dds_header      Header;
+    dds_header_dx10 DX10Header;
+    u8              Data[];
+};
 
 //
 // Image functions

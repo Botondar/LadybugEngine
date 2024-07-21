@@ -219,7 +219,7 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
 
                     if (DoAlphaCoverageRescale)
                     {
-                        ScaleAlphaForCoverage(AlignedExtent, (u8*)Image.Data, AlphaThreshold, AlphaCoverage);
+                        RescaleAlphaForCoverage(AlignedExtent, (u8*)Image.Data, AlphaThreshold, AlphaCoverage);
                     }
                 } break;
             
@@ -280,7 +280,7 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
 
                             if (DoAlphaCoverageRescale)
                             {
-                                ScaleAlphaForCoverage({ ExtentX, ExtentY }, (u8*)DownscaleBuffer, AlphaThreshold, AlphaCoverage);
+                                RescaleAlphaForCoverage({ ExtentX, ExtentY }, (u8*)DownscaleBuffer, AlphaThreshold, AlphaCoverage);
                             }
                         } break;
 
@@ -700,12 +700,12 @@ lbfn texture_set DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, textur
 
 // TODO(boti): There seem to be multiple places in here that might not handle the case where the buffer view stride is 0
 internal void DEBUGLoadTestScene(
-    memory_arena* Scratch, 
-    assets* Assets, 
-    game_world* World, 
-    render_frame* Frame, 
+    memory_arena* Scratch,
+    assets* Assets,
+    game_world* World,
+    render_frame* Frame,
     debug_load_flags LoadFlags,
-    const char* ScenePath, 
+    const char* ScenePath,
     m4 BaseTransform)
 {
     filepath Filepath = {};
