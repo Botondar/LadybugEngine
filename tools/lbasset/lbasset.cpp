@@ -70,9 +70,9 @@ struct image_entry
 };
 
 internal void ResizeImage(void* OldData, v2u OldExtent, 
-                           void* NewData, v2u NewExtent, 
-                           image_usage_flags Usage, u32 ChannelCount,
-                           f32 AlphaThreshold, f32 TargetAlphaCoverage)
+                          void* NewData, v2u NewExtent, 
+                          image_usage_flags Usage, u32 ChannelCount,
+                          f32 AlphaThreshold, f32 TargetAlphaCoverage)
 {
     if (Usage == ImageUsage_Albedo)
     {
@@ -143,9 +143,17 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
             {
                 case ImageUsage_Albedo:
                 {
-                    // TODO(boti): BC1 for textures without alpha
-                    TargetFormat = Format_BC3_SRGB;
-                    DXGIFormat = DXGIFormat_BC3_UNorm_SRGB;
+                    if (Image.Format == Format_R8G8B8_SRGB || Image.Format == Format_R8G8B8_UNorm)
+                    {
+                        TargetFormat = Format_BC1_RGB_SRGB;
+                        DXGIFormat = DXGIFormat_BC1_UNorm_SRGB;
+                    }
+                    else
+                    {
+
+                        TargetFormat = Format_BC3_SRGB;
+                        DXGIFormat = DXGIFormat_BC3_UNorm_SRGB;
+                    }
                 } break;
                 case ImageUsage_Normal:
                 {
