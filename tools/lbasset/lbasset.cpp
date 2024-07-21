@@ -11,6 +11,39 @@
 internal buffer LoadEntireFile(const char* Path, memory_arena* Arena);
 internal b32 WriteEntireFile(const char* Path, umm Size, void* Memory);
 
+// TODO(boti): I really don't like having this defined both here, and in the RHI, but at the same time
+// tools should really only be pulling in the core lib...
+enum texture_swizzle_type : u8
+{
+    Swizzle_Identity = 0,
+    Swizzle_Zero,
+    Swizzle_One,
+    Swizzle_R,
+    Swizzle_G,
+    Swizzle_B,
+    Swizzle_A,
+};
+
+u32 SwizzleToChannelIndex(texture_swizzle_type Swizzle)
+{
+    u32 Result = 0;
+    switch (Swizzle)
+    {
+        case Swizzle_R: Result = 0; break;
+        case Swizzle_G: Result = 1; break;
+        case Swizzle_B: Result = 2; break;
+        case Swizzle_A: Result = 3; break;
+        InvalidDefaultCase;
+    }
+    return(Result);
+}
+
+inline u32 PackSwizzle(texture_swizzle_type R, texture_swizzle_type G, texture_swizzle_type B, texture_swizzle_type A)
+{
+    u32 Result = ((u32)R << 24) | ((u32)G << (16)) | ((u32)B << 8) | ((u32)A);
+    return(Result);
+}
+
 typedef flags32 image_usage_flags;
 enum image_usage_flag_bits : image_usage_flags
 {
@@ -28,6 +61,10 @@ enum image_usage_flag_bits : image_usage_flags
 struct image_entry
 {
     image_usage_flags Usage;
+
+    texture_swizzle_type RoughnessSwizzle;
+    texture_swizzle_type MetallicSwizzle;
+
     filepath SrcPath;
     filepath DstPath;
 };
@@ -95,10 +132,13 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
     if (FileBuffer.Data)
     {
         loaded_image Image = LoadImage(Arena, FileBuffer);
+
         if (Image.Data)
         {
             format TargetFormat = Format_Undefined;
             dxgi_format DXGIFormat = DXGIFormat_Undefined;
+            u32 Swizzle = 0;
+            u32 ChannelsOfInterest[4] = { 0, 1, 2, 3 };
             switch (Entry->Usage)
             {
                 case ImageUsage_Albedo:
@@ -109,30 +149,45 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
                 } break;
                 case ImageUsage_Normal:
                 {
-                    if (Image.Format != Format_R8G8B8_UNorm && Image.Format != Format_R8G8B8A8_UNorm)
-                    {
-                        UnimplementedCodePath;
-                    }
                     TargetFormat = Format_BC5_UNorm;
                     DXGIFormat = DXGIFormat_BC5_UNorm;
+                    ChannelsOfInterest[0] = 0;
+                    ChannelsOfInterest[1] = 1;
                 } break;
                 case ImageUsage_RoMe:
                 {
-                    if (Image.Format != Format_R8G8B8_UNorm && Image.Format != Format_R8G8B8A8_UNorm)
+                    if (Entry->RoughnessSwizzle == Swizzle_One || Entry->RoughnessSwizzle == Swizzle_Zero)
                     {
-                        UnimplementedCodePath;
+                        // Texture is Metallic only, roughness is constant
+                        TargetFormat = Format_BC4_UNorm;
+                        DXGIFormat = DXGIFormat_BC4_UNorm;
+                        ChannelsOfInterest[0] = SwizzleToChannelIndex(Entry->MetallicSwizzle);
+                        Swizzle = PackSwizzle(Swizzle_B, Entry->RoughnessSwizzle, Swizzle_Identity, Swizzle_Identity);
                     }
-                    TargetFormat = Format_BC5_UNorm;
-                    DXGIFormat = DXGIFormat_BC5_UNorm;
+                    else if (Entry->MetallicSwizzle == Swizzle_One || Entry->MetallicSwizzle == Swizzle_Zero)
+                    {
+                        // Texture is Roughness only, metallic is constant
+                        TargetFormat = Format_BC4_UNorm;
+                        DXGIFormat = DXGIFormat_BC4_UNorm;
+                        ChannelsOfInterest[0] = SwizzleToChannelIndex(Entry->RoughnessSwizzle);
+                        Swizzle = PackSwizzle(Swizzle_G, Swizzle_Identity, Entry->MetallicSwizzle, Swizzle_Identity);
+                    }
+                    else
+                    {
+                        // Both Roughness and Metallic are present
+                        TargetFormat = Format_BC5_UNorm;
+                        DXGIFormat = DXGIFormat_BC5_UNorm;
+                        ChannelsOfInterest[0] = SwizzleToChannelIndex(Entry->RoughnessSwizzle);
+                        ChannelsOfInterest[1] = SwizzleToChannelIndex(Entry->MetallicSwizzle);
+                        Swizzle = PackSwizzle(Swizzle_G, Swizzle_B, Swizzle_Identity, Swizzle_Identity);
+                    }
+                    
                 } break;
                 case ImageUsage_Occlusion:
                 {
-                    if (Image.Format != Format_R8G8B8_UNorm && Image.Format != Format_R8G8B8A8_UNorm)
-                    {
-                        UnimplementedCodePath;
-                    }
                     TargetFormat = Format_BC4_UNorm;
                     DXGIFormat = DXGIFormat_BC4_UNorm;
+                    ChannelsOfInterest[0] = 0;
                 } break;
                 InvalidDefaultCase;
             }
@@ -157,6 +212,11 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
                 ResizeImage(Image.Data, Image.Extent, RescaleBuffer, PowerOf2Extent, Entry->Usage, SrcFormatInfo.ChannelCount, AlphaThreshold, AlphaCoverage);
                 Image.Extent = PowerOf2Extent;
                 Image.Data = RescaleBuffer;
+
+                if (DoAlphaCoverageRescale)
+                {
+                    RescaleAlphaForCoverage(Image.Extent, (u8*)Image.Data, AlphaThreshold, AlphaCoverage);
+                }
             }
 
             u8* SrcImage = (u8*)Image.Data;
@@ -175,6 +235,8 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
             DstFile->Header.Width                       = Image.Extent.X;
             DstFile->Header.PitchOrLinearSize           = 0; // TODO(boti): Is this required?
             DstFile->Header.MipMapCount                 = MipCount;
+            DstFile->Header.EngineFourCC                = LadybugDDSMagic;
+            DstFile->Header.Swizzle                     = Swizzle;
             DstFile->Header.PixelFormat.StructureSize   = sizeof(dds_pixel_format);
             DstFile->Header.PixelFormat.Flags           = DDSPixelFormat_FourCC;
             DstFile->Header.PixelFormat.FourCC          = DDS_DX10;
@@ -201,6 +263,10 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
                 {
                     v2u OldExtent = { Image.Extent.X >> (Mip - 1), Image.Extent.Y >> (Mip - 1) };
                     ResizeImage(SrcImage, OldExtent, RescaleBuffer, CurrentExtent, Entry->Usage, SrcFormatInfo.ChannelCount, AlphaThreshold, AlphaCoverage);
+                    if (DoAlphaCoverageRescale)
+                    {
+                        RescaleAlphaForCoverage(CurrentExtent, RescaleBuffer, AlphaThreshold, AlphaCoverage);
+                    }
                     SrcImage = RescaleBuffer;
                 }
 
@@ -216,29 +282,28 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
                             u8* SrcAt = SrcImage + (X + YY * CurrentExtent.X) * SrcFormatInfo.ChannelCount;
                             for (u32 XX = X; XX < (X + 4); XX++)
                             {
-                                switch (Entry->Usage)
+                                switch (TargetFormat)
                                 {
-                                    case ImageUsage_Albedo:
+                                    case Format_BC1_RGB_UNorm:
+                                    case Format_BC1_RGB_SRGB:
+                                    case Format_BC3_UNorm:
+                                    case Format_BC3_SRGB:
                                     {
                                         *DstAt++ = SrcAt[0];
                                         *DstAt++ = SrcAt[1];
                                         *DstAt++ = SrcAt[2];
                                         *DstAt++ = (SrcFormatInfo.ChannelCount == 4) ? SrcAt[3] : 0xFFu;
                                     } break;
-                                    case ImageUsage_Normal:
+                                    case Format_BC4_UNorm:
                                     {
-                                        *DstAt++ = SrcAt[0];
-                                        *DstAt++ = SrcAt[1];
+                                        *DstAt++ = SrcAt[ChannelsOfInterest[0]];
                                     } break;
-                                    case ImageUsage_RoMe:
+                                    case Format_BC5_UNorm:
                                     {
-                                        *DstAt++ = SrcAt[1];
-                                        *DstAt++ = SrcAt[2];
+                                        *DstAt++ = SrcAt[ChannelsOfInterest[0]];
+                                        *DstAt++ = SrcAt[ChannelsOfInterest[1]];
                                     } break;
-                                    case ImageUsage_Occlusion:
-                                    {
-                                        *DstAt++ = SrcAt[0];
-                                    } break;
+                                    InvalidDefaultCase;
                                 }
 
                                 SrcAt += SrcFormatInfo.ChannelCount;
@@ -336,6 +401,8 @@ internal b32 WriteEntireFile(const char* Path, umm Size, void* Memory)
     return(Result);
 }
 
+// TODO(boti): Arg handling cleanup + help/man
+// - Arg to specify what data is contained in which channel
 int main(int ArgCount, char** Args)
 {
     if (ArgCount < 3)
@@ -344,10 +411,29 @@ int main(int ArgCount, char** Args)
         return(1);
     }
 
-    image_usage_flags ImageUsage = 0;
-    if      (strcmp(Args[1], "--albedo")    == 0) ImageUsage = ImageUsage_Albedo;
-    else if (strcmp(Args[1], "--normal")    == 0) ImageUsage = ImageUsage_Normal;
-    else if (strcmp(Args[1], "--rome")      == 0) ImageUsage = ImageUsage_RoMe;
+    // NOTE(boti): There's a separate enum for the arguments, because we want the user
+    // to be able to pass in roughness only (or metallic only) textures
+    // and have the asset processor set up the proper swizzling
+    enum image_type : u32
+    {
+        Image_Undefined = 0,
+
+        Image_Albedo,
+        Image_Normal,
+        Image_Roughness,
+        Image_RoughnessMetallic,
+        Image_Occlusion,
+
+        Image_Count,
+    };
+
+    image_type ImageType = Image_Undefined;
+
+    if      (strcmp(Args[1], "--albedo")    == 0) ImageType = Image_Albedo;
+    else if (strcmp(Args[1], "--normal")    == 0) ImageType = Image_Normal;
+    else if (strcmp(Args[1], "--rome")      == 0) ImageType = Image_RoughnessMetallic;
+    else if (strcmp(Args[1], "--roughness") == 0) ImageType = Image_Roughness;
+    else if (strcmp(Args[1], "--occlusion") == 0) ImageType = Image_Occlusion;
 
     filepath DstDirectory;
     MakeFilepathFromZ(&DstDirectory, Args[ArgCount - 2]);
@@ -370,17 +456,55 @@ int main(int ArgCount, char** Args)
     }
     memory_arena* Arena = &Arena_;
 
-    buffer SourceFile = LoadEntireFile(SrcFilePath.Path, Arena);
-    if (ImageUsage)
-    {
-        loaded_image Image = LoadImage(Arena, SourceFile);
-        if (Image.Data)
-        {
+    u32 ImagesToProcessCount = 0;
+    image_entry* ImagesToProcess = nullptr;
 
+    if (ImageType)
+    {
+        ImagesToProcessCount = 1;
+        ImagesToProcess = PushArray(Arena, MemPush_Clear, image_entry, ImagesToProcessCount);
+
+        image_entry* Entry = ImagesToProcess;
+        switch (ImageType)
+        {
+            case Image_Albedo:
+            {
+                Entry->Usage = ImageUsage_Albedo;
+            } break;
+            case Image_Normal:
+            {
+                Entry->Usage = ImageUsage_Normal;
+            } break;
+            case Image_Roughness:
+            {
+                Entry->Usage = ImageUsage_RoMe;
+                Entry->RoughnessSwizzle = Swizzle_R;
+                Entry->MetallicSwizzle = Swizzle_Zero;
+            } break;
+            case Image_RoughnessMetallic:
+            {
+                Entry->Usage = ImageUsage_RoMe;
+                Entry->RoughnessSwizzle = Swizzle_R;
+                Entry->MetallicSwizzle = Swizzle_B;
+            } break;
+            case Image_Occlusion:
+            {
+                Entry->Usage = ImageUsage_Occlusion;
+            } break;
+            InvalidDefaultCase;
         }
+        Entry->SrcPath = SrcFilePath;
+        Entry->DstPath = DstDirectory;
+        OverwriteNameAndExtension(&Entry->DstPath, { Entry->SrcPath.NameCount, Entry->SrcPath.Path + Entry->SrcPath.NameOffset });
+        FindFilepathExtensionAndName(&Entry->DstPath, 0);
+        OverwriteExtension(&Entry->DstPath, ".dds");
     }
     else
     {
+        buffer SourceFile = LoadEntireFile(SrcFilePath.Path, Arena);
+
+        // TODO(boti): Figure out a way to handle glTF occlusion-roughness-metallic textures properly:
+        // We want to store the occlusion separately from RoMe, which means we have to find a different name if occlusion exists
         if (json_element* Root = ParseJSON(SourceFile.Data, SourceFile.Size, Arena))
         {
             gltf GLTF = {};
@@ -403,8 +527,7 @@ int main(int ArgCount, char** Args)
                     #undef AddUsage
                 }
 
-                u32 ImagesToProcessCount = 0;
-                image_entry* ImagesToProcess = PushArray(Arena, 0, image_entry, GLTF.ImageCount);
+                ImagesToProcess = PushArray(Arena, MemPush_Clear, image_entry, GLTF.ImageCount);
                 for (u32 ImageIndex = 0; ImageIndex < GLTF.ImageCount; ImageIndex++)
                 {
                     gltf_image* Image = GLTF.Images + ImageIndex;
@@ -416,6 +539,12 @@ int main(int ArgCount, char** Args)
                         image_entry* Entry = ImagesToProcess + ImagesToProcessCount++;
 
                         Entry->Usage = Usage;
+                        // NOTE(boti): Set up glTF ORM channel order
+                        if (Usage == ImageUsage_RoMe)
+                        {
+                            Entry->RoughnessSwizzle = Swizzle_G;
+                            Entry->MetallicSwizzle = Swizzle_B;
+                        }
                         Entry->SrcPath = SrcFilePath;
                         OverwriteNameAndExtension(&Entry->SrcPath, Image->URI);
                         Entry->DstPath = DstDirectory;
@@ -433,20 +562,6 @@ int main(int ArgCount, char** Args)
                                 (u32)Image->URI.Length, Image->URI.String);
                     }
                 }
-
-                fprintf(stdout, "Processing %u images...\n", ImagesToProcessCount);
-                for (u32 ImageIndex = 0; ImageIndex < ImagesToProcessCount; ImageIndex++)
-                {
-                    image_entry* Entry = ImagesToProcess + ImageIndex;
-                    if (ProcessImage(Arena, Entry))
-                    {
-                        fprintf(stdout, "%s -> %s\n", Entry->SrcPath.Path, Entry->DstPath.Path);
-                    }
-                    else
-                    {
-                        fprintf(stderr, "Failed to process image %s\n", Entry->SrcPath.Path);
-                    }
-                }
             }
             else
             {
@@ -458,6 +573,23 @@ int main(int ArgCount, char** Args)
             fprintf(stderr, "Failed to parse JSON (%s)\n", SrcFilePath.Path);
         }
     }
+
+    // TODO(boti): Multithreading (if we even want...)
+    fprintf(stdout, "Processing %u images...\n", ImagesToProcessCount);
+    for (u32 ImageIndex = 0; ImageIndex < ImagesToProcessCount; ImageIndex++)
+    {
+        image_entry* Entry = ImagesToProcess + ImageIndex;
+        if (ProcessImage(Arena, Entry))
+        {
+            fprintf(stdout, "%s -> %s\n", Entry->SrcPath.Path, Entry->DstPath.Path);
+        }
+        else
+        {
+            fprintf(stderr, "Failed to process image %s\n", Entry->SrcPath.Path);
+        }
+    }
+
+    fprintf(stdout, "Done!\n");
 
     return(0);
 }

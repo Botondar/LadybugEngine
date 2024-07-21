@@ -573,7 +573,7 @@ internal json_token GetToken(json_tokenizer* Tokenizer)
                             Token.IsValid = false;
 
                             Token.Length++;
-                            *Tokenizer->At++;
+                            Tokenizer->At++;
                             Tokenizer->Length--;
 
                             if (Tokenizer->Length)

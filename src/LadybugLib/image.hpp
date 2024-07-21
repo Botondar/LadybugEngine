@@ -106,6 +106,7 @@ enum image_file_type : u32
 //
 
 constexpr u32 DDSMagic = 0x20534444;
+constexpr u32 LadybugDDSMagic = 'nEbl';
 
 typedef flags32 dds_flags;
 enum dds_flag_bits : dds_flags
@@ -197,7 +198,19 @@ struct dds_header
     u32                 PitchOrLinearSize;
     u32                 Depth;
     u32                 MipMapCount;
-    u32                 Reserved1[11];
+
+    // NOTE(boti): LadybugEngine extension in reserved header entries
+    union
+    {
+        u32             Reserved1[11];
+        struct
+        {
+            u32 EngineFourCC;   // NOTE(boti): lbEn
+            u32 Swizzle;        // NOTE(boti): texture_swizzle from RHI
+            u32 ReservedLb[9];
+        };
+    };
+
     dds_pixel_format    PixelFormat;
     u32                 Caps;
     u32                 Caps2;
