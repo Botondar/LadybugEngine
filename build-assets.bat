@@ -3,6 +3,7 @@
 mkdir cache
 
 build\lbasset "cache/" "data/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf"
+build\lbasset "cache/" "data/glTF-Sample-Assets/Models/Fox/glTF/Fox.gltf"
 
 build\lbasset "cache/" "data/orca/SpeedTree/azalea/azalea.gltf"
 build\lbasset "cache/" "data/orca/SpeedTree/backyard-grass/backyard-grass.gltf"
