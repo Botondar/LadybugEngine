@@ -73,303 +73,343 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
         memory_arena* Scratch = &Queue->Scratch;
         memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
 
-        loaded_image Image = {};
-        buffer ImageFile = Platform.LoadEntireFile(Op->Path.Path, Scratch);
-        switch (Op->Type)
+        filepath CachedPath = {};
+        MakeFilepathFromZ(&CachedPath, "cache/");
+        OverwriteNameAndExtension(&CachedPath, { Op->Path.NameCount, Op->Path.Path + Op->Path.NameOffset });
+        FindFilepathExtensionAndName(&CachedPath, 0);
+        OverwriteExtension(&CachedPath, ".dds");
+        
+        platform_file File = Platform.OpenFile(CachedPath.Path);
+        if (File.IsValid /*&& Op->Type != TextureType_Normal*/)
         {
-            case TextureType_Albedo:
-            {
-                Image = LoadImage(Scratch, ImageFile);
-                Assert(Image.Format == Format_R8G8B8_UNorm || Image.Format == Format_R8G8B8A8_UNorm);
-                Entry->Info.Format = (Image.Format == Format_R8G8B8_UNorm) ? Format_BC1_RGB_SRGB : Format_BC3_SRGB;
-            } break;
-            case TextureType_Normal:
-            {
-                Image = LoadImage(Scratch, ImageFile);
-                Entry->Info.Format = Format_BC5_UNorm;
-            } break;
-            case TextureType_RoMe:
-            {
-                loaded_image SourceImage = LoadImage(Scratch, ImageFile);
-                Assert(SourceImage.Data);
+            buffer FileBuffer = Platform.ReadFileContents(File, Scratch);
+            dds_file* DDS = (dds_file*)FileBuffer.Data;
 
-                format_info FormatInfo = FormatInfoTable[SourceImage.Format];
+            Entry->Info.Extent = { DDS->Header.Width, DDS->Header.Height, 1 };
+            Entry->Info.MipCount = DDS->Header.MipMapCount;
+            Entry->Info.ArrayCount = 1;
+            Entry->Info.Format = DXGIFormatTable[DDS->DX10Header.Format];
+            Entry->Info.Swizzle = *(texture_swizzle*)&DDS->Header.Swizzle;
 
-                u32 ChannelCount = 0;
-                if (Op->RoughnessMetallic.RoughnessChannel && Op->RoughnessMetallic.MetallicChannel)
-                {
-                    Assert(IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel) < FormatInfo.ChannelCount);
-                    Assert(IndexFromChannel(Op->RoughnessMetallic.MetallicChannel) < FormatInfo.ChannelCount);
-                    Entry->Info.Swizzle = { Swizzle_One, Swizzle_R, Swizzle_G, Swizzle_One };
-                    ChannelCount = 2;
-                }
-                else if (Op->RoughnessMetallic.RoughnessChannel)
-                {
-                    Assert(IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel) < FormatInfo.ChannelCount);
-                    Entry->Info.Swizzle = { Swizzle_One, Swizzle_R, Swizzle_Zero, Swizzle_One };
-                    ChannelCount = 1;
-                }
-                else if (Op->RoughnessMetallic.MetallicChannel)
-                {
-                    Assert(IndexFromChannel(Op->RoughnessMetallic.MetallicChannel) < FormatInfo.ChannelCount);
-                    Entry->Info.Swizzle = { Swizzle_One, Swizzle_One, Swizzle_R, Swizzle_One };
-                    ChannelCount = 1;
-                }
-                else
-                {
-                    InvalidCodePath;
-                }
+            format_info FormatInfo = FormatInfoTable[Entry->Info.Format];
+            umm TotalMipChainSize = GetMipChainSize(Entry->Info.Extent.X, Entry->Info.Extent.Y, Entry->Info.MipCount, Entry->Info.ArrayCount, FormatInfo);
 
-                Entry->Info.Format = (ChannelCount == 2) ? Format_BC5_UNorm : Format_BC4_UNorm;
-
-                Image.Extent = SourceImage.Extent;
-                Image.Format = (ChannelCount == 2) ? Format_R8G8_UNorm : Format_R8_UNorm;
-                Image.Data = PushSize_(Scratch, 0, Image.Extent.X * Image.Extent.Y * ChannelCount, 64);
-                Assert(Image.Data);
-
-                u8* SrcAt = (u8*)SourceImage.Data;
-                u8* DstAt = (u8*)Image.Data;
-                for (u32 Y = 0; Y < SourceImage.Extent.Y; Y++)
-                {
-                    for (u32 X = 0; X < SourceImage.Extent.X; X++)
-                    {
-                        if (ChannelCount == 2)
-                        {
-                            DstAt[0] = SrcAt[IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel)];
-                            DstAt[1] = SrcAt[IndexFromChannel(Op->RoughnessMetallic.MetallicChannel)];
-                        }
-                        else
-                        {
-                            DstAt[0] = Op->RoughnessMetallic.RoughnessChannel ?
-                                SrcAt[IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel)] :
-                                SrcAt[IndexFromChannel(Op->RoughnessMetallic.MetallicChannel)];
-                        }
-                        DstAt += ChannelCount;
-                        SrcAt += FormatInfo.ChannelCount;
-                    }
-                }
-            } break;
-
-            case TextureType_Height:
-            case TextureType_Occlusion:
-            {
-                loaded_image SourceImage = LoadImage(Scratch, ImageFile);
-                Assert(SourceImage.Data);
-
-                format_info SourceFormat = FormatInfoTable[SourceImage.Format];
-
-                Image.Extent = SourceImage.Extent;
-                Image.Format = Format_R8_UNorm;
-                Image.Data = PushSize_(Scratch, 0, Image.Extent.X * Image.Extent.Y, 64);
-                Assert(Image.Data);
-                
-                Entry->Info.Format = Format_BC4_UNorm;
-
-                u8* SrcAt = (u8*)SourceImage.Data;
-                u8* DstAt = (u8*)Image.Data;
-                for (u32 Y = 0; Y < SourceImage.Extent.Y; Y++)
-                {
-                    for (u32 X = 0; X < SourceImage.Extent.X; X++)
-                    {
-                        *DstAt++ = *SrcAt;
-                        SrcAt += SourceFormat.ChannelCount;
-                    }
-                }
-                
-            } break;
-
-            case TextureType_Transmission:
-            {
-                UnimplementedCodePath;
-            } break;
-
-            InvalidDefaultCase;
-        }
-
-        format_info SourceFormat = FormatInfoTable[Image.Format];
-
-        // TODO(boti): We'll want these to be part of the Op, alpha rescale should only be done on alpha tested textures
-        b32 DoAlphaCoverageRescale = (Op->Type == TextureType_Albedo) && (Format_R8G8B8A8_UNorm);
-        f32 AlphaThreshold = 1.0f;
-
-        // NOTE(boti): Calculate initial alpha coverage
-        f32 AlphaCoverage = 0.0f;
-        if (DoAlphaCoverageRescale)
-        {
-            AlphaCoverage = CalculateAlphaCoverage(Image.Extent, (u8*)Image.Data, AlphaThreshold, 1.0f);
-        }
-
-        v2u AlignedExtent = { CeilPowerOf2(Image.Extent.X), CeilPowerOf2(Image.Extent.Y) };
-        if (AlignedExtent.X != Image.Extent.X || AlignedExtent.Y != Image.Extent.Y)
-        {
-            loaded_image OldImage = Image;
-            Image.Extent = AlignedExtent;
-            umm ImageSize = GetMipChainSize(AlignedExtent.X, AlignedExtent.Y, 1, 1, SourceFormat);
-            Image.Data = PushSize_(Scratch, 0, ImageSize, 64);
-
-            switch (Op->Type)
-            {
-                case TextureType_Albedo:
-                {
-                    stbir_pixel_layout PixelLayout = (SourceFormat.ChannelCount == 4) ? STBIR_RGBA_PM : STBIR_RGB;
-                    stbir_resize_uint8_srgb(
-                        (u8*)OldImage.Data, OldImage.Extent.X, OldImage.Extent.Y, 0, 
-                        (u8*)Image.Data, AlignedExtent.X, AlignedExtent.Y, 0,
-                        PixelLayout);
-
-                    if (DoAlphaCoverageRescale)
-                    {
-                        RescaleAlphaForCoverage(AlignedExtent, (u8*)Image.Data, AlphaThreshold, AlphaCoverage);
-                    }
-                } break;
-            
-                default:
-                {
-                    stbir_resize_uint8_linear(
-                        (u8*)OldImage.Data, OldImage.Extent.X, OldImage.Extent.Y, 0,
-                        (u8*)Image.Data, AlignedExtent.X, AlignedExtent.Y, 0,
-                        (stbir_pixel_layout)SourceFormat.ChannelCount);
-                } break;
-            }
-        }
-
-        u8* SrcImage = (u8*)Image.Data;
-        Entry->Info.Extent = { Image.Extent.X, Image.Extent.Y, 1 };
-        Entry->Info.ArrayCount = 1;
-        if (SrcImage)
-        {
-            Entry->Info.MipCount = GetMaxMipCount(Entry->Info.Extent.X, Entry->Info.Extent.Y);
-            format_info ByteRate = FormatInfoTable[Entry->Info.Format];
-            u64 TotalMipChainSize = GetMipChainSize(Entry->Info.Extent.X, Entry->Info.Extent.Y, Entry->Info.MipCount, 1, ByteRate);
             umm MipChainBegin = GetNextEntryOffset(Queue, TotalMipChainSize, Queue->RingBufferWriteAt);
             while (((MipChainBegin + TotalMipChainSize) - Queue->RingBufferReadAt) >= Queue->RingBufferSize)
             {
                 SpinWait;
             }
-
+            
             u8* MipChain = Queue->RingBufferMemory + (MipChainBegin % Queue->RingBufferSize);
             Queue->RingBufferWriteAt = MipChainBegin + TotalMipChainSize;
 
-            u32 BlockSize = 16 * ByteRate.ByteRateNumerator / ByteRate.ByteRateDenominator;
+            memcpy(MipChain, DDS->Data, TotalMipChainSize);
 
-            u8* DownscaleBuffer = (u8*)PushSize_(Scratch, 0, Entry->Info.Extent.X * Entry->Info.Extent.Y, 64);
-            u8* SrcAt = SrcImage;
-            u8* DstAt = MipChain;
-            for (u32 MipIndex = 0; MipIndex < Entry->Info.MipCount; MipIndex++)
+            _mm_sfence();
+            Entry->ReadyToTransfer = true;
+
+            Platform.CloseFile(File);
+        }
+        else
+        {
+            loaded_image Image = {};
+            buffer ImageFile = Platform.LoadEntireFile(Op->Path.Path, Scratch);
+            switch (Op->Type)
             {
-                u32 ExtentX = Max(Entry->Info.Extent.X >> MipIndex, 4u);
-                u32 ExtentY = Max(Entry->Info.Extent.Y >> MipIndex, 4u);
-
-                //
-                // Mip generation
-                //
-                if (MipIndex != 0)
+                case TextureType_Albedo:
                 {
-                    u32 PrevExtentX = Max(Entry->Info.Extent.X >> (MipIndex - 1), 4u);
-                    u32 PrevExtentY = Max(Entry->Info.Extent.Y >> (MipIndex - 1), 4u);
+                    Image = LoadImage(Scratch, ImageFile);
+                    Assert(Image.Format == Format_R8G8B8_UNorm || Image.Format == Format_R8G8B8A8_UNorm);
+                    Entry->Info.Format = (Image.Format == Format_R8G8B8_UNorm) ? Format_BC1_RGB_SRGB : Format_BC3_SRGB;
+                } break;
+                case TextureType_Normal:
+                {
+                    Image = LoadImage(Scratch, ImageFile);
+                    Entry->Info.Format = Format_BC5_UNorm;
+                } break;
+                case TextureType_RoMe:
+                {
+                    loaded_image SourceImage = LoadImage(Scratch, ImageFile);
+                    Assert(SourceImage.Data);
 
-                    switch (Op->Type)
+                    format_info FormatInfo = FormatInfoTable[SourceImage.Format];
+
+                    u32 ChannelCount = 0;
+                    if (Op->RoughnessMetallic.RoughnessChannel && Op->RoughnessMetallic.MetallicChannel)
                     {
-                        case TextureType_Albedo:
-                        {
-                            stbir_pixel_layout PixelLayout = (SourceFormat.ChannelCount == 4) ? STBIR_RGBA_PM : STBIR_RGB;
-                            stbir_resize_uint8_srgb(
-                                (u8*)SrcAt, PrevExtentX, PrevExtentY, 0, 
-                                (u8*)DownscaleBuffer, ExtentX, ExtentY, 0,
-                                PixelLayout);
+                        Assert(IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel) < FormatInfo.ChannelCount);
+                        Assert(IndexFromChannel(Op->RoughnessMetallic.MetallicChannel) < FormatInfo.ChannelCount);
+                        Entry->Info.Swizzle = { Swizzle_One, Swizzle_R, Swizzle_G, Swizzle_One };
+                        ChannelCount = 2;
+                    }
+                    else if (Op->RoughnessMetallic.RoughnessChannel)
+                    {
+                        Assert(IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel) < FormatInfo.ChannelCount);
+                        Entry->Info.Swizzle = { Swizzle_One, Swizzle_R, Swizzle_Zero, Swizzle_One };
+                        ChannelCount = 1;
+                    }
+                    else if (Op->RoughnessMetallic.MetallicChannel)
+                    {
+                        Assert(IndexFromChannel(Op->RoughnessMetallic.MetallicChannel) < FormatInfo.ChannelCount);
+                        Entry->Info.Swizzle = { Swizzle_One, Swizzle_One, Swizzle_R, Swizzle_One };
+                        ChannelCount = 1;
+                    }
+                    else
+                    {
+                        InvalidCodePath;
+                    }
 
-                            if (DoAlphaCoverageRescale)
+                    Entry->Info.Format = (ChannelCount == 2) ? Format_BC5_UNorm : Format_BC4_UNorm;
+
+                    Image.Extent = SourceImage.Extent;
+                    Image.Format = (ChannelCount == 2) ? Format_R8G8_UNorm : Format_R8_UNorm;
+                    Image.Data = PushSize_(Scratch, 0, Image.Extent.X * Image.Extent.Y * ChannelCount, 64);
+                    Assert(Image.Data);
+
+                    u8* SrcAt = (u8*)SourceImage.Data;
+                    u8* DstAt = (u8*)Image.Data;
+                    for (u32 Y = 0; Y < SourceImage.Extent.Y; Y++)
+                    {
+                        for (u32 X = 0; X < SourceImage.Extent.X; X++)
+                        {
+                            if (ChannelCount == 2)
                             {
-                                RescaleAlphaForCoverage({ ExtentX, ExtentY }, (u8*)DownscaleBuffer, AlphaThreshold, AlphaCoverage);
+                                DstAt[0] = SrcAt[IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel)];
+                                DstAt[1] = SrcAt[IndexFromChannel(Op->RoughnessMetallic.MetallicChannel)];
                             }
-                        } break;
-
-                        default:
-                        {
-                            stbir_resize_uint8_linear(
-                                (u8*)SrcAt, PrevExtentX, PrevExtentY, 0, 
-                                (u8*)DownscaleBuffer, ExtentX, ExtentY, 0,
-                                (stbir_pixel_layout)SourceFormat.ChannelCount);
-                        } break;
-                    }
-                    SrcAt = DownscaleBuffer;
-                }
-
-                //
-                // BC compression
-                //
-                for (u32 Y = 0; Y < ExtentX; Y += 4)
-                {
-                    for (u32 X = 0; X < ExtentY; X += 4)
-                    {
-                        switch (Entry->Info.Format)
-                        {
-                            case Format_BC3_SRGB:
-                            case Format_BC1_RGB_SRGB:
+                            else
                             {
-                                Assert(SourceFormat.ChannelCount == 3 || SourceFormat.ChannelCount == 4);
-                                int Alpha = (SourceFormat.ChannelCount == 4);
-
-                                u8 Block[4*4][4];
-                                for (u32 BlockY = 0; BlockY < 4; BlockY++)
-                                {
-                                    for (u32 BlockX = 0; BlockX < 4; BlockX++)
-                                    {
-                                        umm Offset = ((X + BlockX) + (Y + BlockY) * ExtentX) * SourceFormat.ChannelCount;
-                                        u8* Src = SrcAt + Offset;
-                                        Block[BlockX + 4 * BlockY][0] = Src[0];
-                                        Block[BlockX + 4 * BlockY][1] = Src[1];
-                                        Block[BlockX + 4 * BlockY][2] = Src[2];
-                                        Block[BlockX + 4 * BlockY][3] = (SourceFormat.ChannelCount == 4) ? Src[3] : 0xFFu;
-                                    }
-                                }
-                                stb_compress_dxt_block(DstAt, (u8*)Block, Alpha, STB_DXT_HIGHQUAL);
-                            } break;
-                            case Format_BC4_UNorm:
-                            {
-                                u8 Block[4*4][1];
-                                for (u32 BlockY = 0; BlockY < 4; BlockY++)
-                                {
-                                    for (u32 BlockX = 0; BlockX < 4; BlockX++)
-                                    {
-                                        umm Offset = ((X + BlockX) + (Y + BlockY) * ExtentX) * SourceFormat.ChannelCount;
-                                        u8* Src = SrcAt + Offset;
-                                        Block[BlockX + 4*BlockY][0] = Src[0];
-                                    }
-                                }
-                                stb_compress_bc4_block(DstAt, (u8*)Block);
-                            } break;
-                            case Format_BC5_UNorm:
-                            {
-                                Assert(SourceFormat.ChannelCount >= 2);
-
-                                u8 Block[4*4][2];
-                                for (u32 BlockY = 0; BlockY < 4; BlockY++)
-                                {
-                                    for (u32 BlockX = 0; BlockX < 4; BlockX++)
-                                    {
-                                        umm Offset = ((X + BlockX) + (Y + BlockY) * ExtentX) * SourceFormat.ChannelCount;
-                                        u8* Src = SrcAt + Offset;
-                                        Block[BlockX + 4*BlockY][0] = Src[0];
-                                        Block[BlockX + 4*BlockY][1] = Src[1];
-                                    }
-                                }
-                                stb_compress_bc5_block(DstAt, (u8*)Block);
-                            } break;
-                            InvalidDefaultCase;
+                                DstAt[0] = Op->RoughnessMetallic.RoughnessChannel ?
+                                    SrcAt[IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel)] :
+                                    SrcAt[IndexFromChannel(Op->RoughnessMetallic.MetallicChannel)];
+                            }
+                            DstAt += ChannelCount;
+                            SrcAt += FormatInfo.ChannelCount;
                         }
-
-                        DstAt += BlockSize;
                     }
+                } break;
+
+                case TextureType_Height:
+                case TextureType_Occlusion:
+                {
+                    loaded_image SourceImage = LoadImage(Scratch, ImageFile);
+                    Assert(SourceImage.Data);
+
+                    format_info SourceFormat = FormatInfoTable[SourceImage.Format];
+
+                    Image.Extent = SourceImage.Extent;
+                    Image.Format = Format_R8_UNorm;
+                    Image.Data = PushSize_(Scratch, 0, Image.Extent.X * Image.Extent.Y, 64);
+                    Assert(Image.Data);
+                
+                    Entry->Info.Format = Format_BC4_UNorm;
+
+                    u8* SrcAt = (u8*)SourceImage.Data;
+                    u8* DstAt = (u8*)Image.Data;
+                    for (u32 Y = 0; Y < SourceImage.Extent.Y; Y++)
+                    {
+                        for (u32 X = 0; X < SourceImage.Extent.X; X++)
+                        {
+                            *DstAt++ = *SrcAt;
+                            SrcAt += SourceFormat.ChannelCount;
+                        }
+                    }
+                
+                } break;
+
+                case TextureType_Transmission:
+                {
+                    UnimplementedCodePath;
+                } break;
+
+                InvalidDefaultCase;
+            }
+
+            format_info SourceFormat = FormatInfoTable[Image.Format];
+
+            // TODO(boti): We'll want these to be part of the Op, alpha rescale should only be done on alpha tested textures
+            b32 DoAlphaCoverageRescale = (Op->Type == TextureType_Albedo) && (Format_R8G8B8A8_UNorm);
+            f32 AlphaThreshold = 1.0f;
+
+            // NOTE(boti): Calculate initial alpha coverage
+            f32 AlphaCoverage = 0.0f;
+            if (DoAlphaCoverageRescale)
+            {
+                AlphaCoverage = CalculateAlphaCoverage(Image.Extent, (u8*)Image.Data, AlphaThreshold, 1.0f);
+            }
+
+            v2u AlignedExtent = { CeilPowerOf2(Image.Extent.X), CeilPowerOf2(Image.Extent.Y) };
+            if (AlignedExtent.X != Image.Extent.X || AlignedExtent.Y != Image.Extent.Y)
+            {
+                loaded_image OldImage = Image;
+                Image.Extent = AlignedExtent;
+                umm ImageSize = GetMipChainSize(AlignedExtent.X, AlignedExtent.Y, 1, 1, SourceFormat);
+                Image.Data = PushSize_(Scratch, 0, ImageSize, 64);
+
+                switch (Op->Type)
+                {
+                    case TextureType_Albedo:
+                    {
+                        stbir_pixel_layout PixelLayout = (SourceFormat.ChannelCount == 4) ? STBIR_RGBA_PM : STBIR_RGB;
+                        stbir_resize_uint8_srgb(
+                            (u8*)OldImage.Data, OldImage.Extent.X, OldImage.Extent.Y, 0, 
+                            (u8*)Image.Data, AlignedExtent.X, AlignedExtent.Y, 0,
+                            PixelLayout);
+
+                        if (DoAlphaCoverageRescale)
+                        {
+                            RescaleAlphaForCoverage(AlignedExtent, (u8*)Image.Data, AlphaThreshold, AlphaCoverage);
+                        }
+                    } break;
+            
+                    default:
+                    {
+                        stbir_resize_uint8_linear(
+                            (u8*)OldImage.Data, OldImage.Extent.X, OldImage.Extent.Y, 0,
+                            (u8*)Image.Data, AlignedExtent.X, AlignedExtent.Y, 0,
+                            (stbir_pixel_layout)SourceFormat.ChannelCount);
+                    } break;
                 }
             }
-            Entry->ReadyToTransfer = true;
+
+            u8* SrcImage = (u8*)Image.Data;
+            Entry->Info.Extent = { Image.Extent.X, Image.Extent.Y, 1 };
+            Entry->Info.ArrayCount = 1;
+            if (SrcImage)
+            {
+                Entry->Info.MipCount = GetMaxMipCount(Entry->Info.Extent.X, Entry->Info.Extent.Y);
+                format_info ByteRate = FormatInfoTable[Entry->Info.Format];
+                u64 TotalMipChainSize = GetMipChainSize(Entry->Info.Extent.X, Entry->Info.Extent.Y, Entry->Info.MipCount, 1, ByteRate);
+                umm MipChainBegin = GetNextEntryOffset(Queue, TotalMipChainSize, Queue->RingBufferWriteAt);
+                while (((MipChainBegin + TotalMipChainSize) - Queue->RingBufferReadAt) >= Queue->RingBufferSize)
+                {
+                    SpinWait;
+                }
+
+                u8* MipChain = Queue->RingBufferMemory + (MipChainBegin % Queue->RingBufferSize);
+                Queue->RingBufferWriteAt = MipChainBegin + TotalMipChainSize;
+
+                u32 BlockSize = 16 * ByteRate.ByteRateNumerator / ByteRate.ByteRateDenominator;
+
+                u8* DownscaleBuffer = (u8*)PushSize_(Scratch, 0, Entry->Info.Extent.X * Entry->Info.Extent.Y, 64);
+                u8* SrcAt = SrcImage;
+                u8* DstAt = MipChain;
+                for (u32 MipIndex = 0; MipIndex < Entry->Info.MipCount; MipIndex++)
+                {
+                    u32 ExtentX = Max(Entry->Info.Extent.X >> MipIndex, 4u);
+                    u32 ExtentY = Max(Entry->Info.Extent.Y >> MipIndex, 4u);
+
+                    //
+                    // Mip generation
+                    //
+                    if (MipIndex != 0)
+                    {
+                        u32 PrevExtentX = Max(Entry->Info.Extent.X >> (MipIndex - 1), 4u);
+                        u32 PrevExtentY = Max(Entry->Info.Extent.Y >> (MipIndex - 1), 4u);
+
+                        switch (Op->Type)
+                        {
+                            case TextureType_Albedo:
+                            {
+                                stbir_pixel_layout PixelLayout = (SourceFormat.ChannelCount == 4) ? STBIR_RGBA_PM : STBIR_RGB;
+                                stbir_resize_uint8_srgb(
+                                    (u8*)SrcAt, PrevExtentX, PrevExtentY, 0, 
+                                    (u8*)DownscaleBuffer, ExtentX, ExtentY, 0,
+                                    PixelLayout);
+
+                                if (DoAlphaCoverageRescale)
+                                {
+                                    RescaleAlphaForCoverage({ ExtentX, ExtentY }, (u8*)DownscaleBuffer, AlphaThreshold, AlphaCoverage);
+                                }
+                            } break;
+
+                            default:
+                            {
+                                stbir_resize_uint8_linear(
+                                    (u8*)SrcAt, PrevExtentX, PrevExtentY, 0, 
+                                    (u8*)DownscaleBuffer, ExtentX, ExtentY, 0,
+                                    (stbir_pixel_layout)SourceFormat.ChannelCount);
+                            } break;
+                        }
+                        SrcAt = DownscaleBuffer;
+                    }
+
+                    //
+                    // BC compression
+                    //
+                    for (u32 Y = 0; Y < ExtentX; Y += 4)
+                    {
+                        for (u32 X = 0; X < ExtentY; X += 4)
+                        {
+                            switch (Entry->Info.Format)
+                            {
+                                case Format_BC3_SRGB:
+                                case Format_BC1_RGB_SRGB:
+                                {
+                                    Assert(SourceFormat.ChannelCount == 3 || SourceFormat.ChannelCount == 4);
+                                    int Alpha = (SourceFormat.ChannelCount == 4);
+
+                                    u8 Block[4*4][4];
+                                    for (u32 BlockY = 0; BlockY < 4; BlockY++)
+                                    {
+                                        for (u32 BlockX = 0; BlockX < 4; BlockX++)
+                                        {
+                                            umm Offset = ((X + BlockX) + (Y + BlockY) * ExtentX) * SourceFormat.ChannelCount;
+                                            u8* Src = SrcAt + Offset;
+                                            Block[BlockX + 4 * BlockY][0] = Src[0];
+                                            Block[BlockX + 4 * BlockY][1] = Src[1];
+                                            Block[BlockX + 4 * BlockY][2] = Src[2];
+                                            Block[BlockX + 4 * BlockY][3] = (SourceFormat.ChannelCount == 4) ? Src[3] : 0xFFu;
+                                        }
+                                    }
+                                    stb_compress_dxt_block(DstAt, (u8*)Block, Alpha, STB_DXT_HIGHQUAL);
+                                } break;
+                                case Format_BC4_UNorm:
+                                {
+                                    u8 Block[4*4][1];
+                                    for (u32 BlockY = 0; BlockY < 4; BlockY++)
+                                    {
+                                        for (u32 BlockX = 0; BlockX < 4; BlockX++)
+                                        {
+                                            umm Offset = ((X + BlockX) + (Y + BlockY) * ExtentX) * SourceFormat.ChannelCount;
+                                            u8* Src = SrcAt + Offset;
+                                            Block[BlockX + 4*BlockY][0] = Src[0];
+                                        }
+                                    }
+                                    stb_compress_bc4_block(DstAt, (u8*)Block);
+                                } break;
+                                case Format_BC5_UNorm:
+                                {
+                                    Assert(SourceFormat.ChannelCount >= 2);
+
+                                    u8 Block[4*4][2];
+                                    for (u32 BlockY = 0; BlockY < 4; BlockY++)
+                                    {
+                                        for (u32 BlockX = 0; BlockX < 4; BlockX++)
+                                        {
+                                            umm Offset = ((X + BlockX) + (Y + BlockY) * ExtentX) * SourceFormat.ChannelCount;
+                                            u8* Src = SrcAt + Offset;
+                                            Block[BlockX + 4*BlockY][0] = Src[0];
+                                            Block[BlockX + 4*BlockY][1] = Src[1];
+                                        }
+                                    }
+                                    stb_compress_bc5_block(DstAt, (u8*)Block);
+                                } break;
+                                InvalidDefaultCase;
+                            }
+
+                            DstAt += BlockSize;
+                        }
+                    }
+                }
+                Entry->ReadyToTransfer = true;
+            }
+            else 
+            {
+                UnhandledError("Failed to load image");
+            }
+            RestoreArena(Scratch, Checkpoint);
         }
-        else 
-        {
-            UnhandledError("Failed to load image");
-        }
-        RestoreArena(Scratch, Checkpoint);
     }
     else
     {
@@ -935,6 +975,8 @@ internal void DEBUGLoadTestScene(
                 Op.Path = Filepath;
                 if (OverwriteNameAndExtension(&Op.Path, GLTFImage->URI))
                 {
+                    FindFilepathExtensionAndName(&Op.Path, 0);
+                    
                     AddEntry(&Assets->TextureQueue, Asset, Op);
                 }
                 else

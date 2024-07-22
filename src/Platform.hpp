@@ -21,6 +21,13 @@ struct platform_semaphore
     void* Handle;
 };
 
+struct platform_file
+{
+    void* Handle;
+    umm ByteCount;
+    b32 IsValid;
+};
+
 struct work_queue;
 
 struct thread_context
@@ -44,7 +51,9 @@ typedef void                release_semaphore       (platform_semaphore Semaphor
 typedef b32                 protect_page            (void* Address, umm Size, b32 DoProtect);
 typedef void                add_work_entry          (work_queue* Queue, work_procedure* Proc, void* Data);
 typedef void                complete_all_work       (work_queue* Queue, thread_context* ThreadContext);
-
+typedef platform_file       open_file               (const char* Path);
+typedef void                close_file              (platform_file File);
+typedef buffer              read_file_contents      (platform_file File, memory_arena* Arena);
 
 struct platform_api
 {
@@ -67,6 +76,9 @@ struct platform_api
     protect_page*           ProtectPage;
     add_work_entry*         AddWorkEntry;
     complete_all_work*      CompleteAllWork;
+    open_file*              OpenFile;
+    close_file*             CloseFile;
+    read_file_contents*     ReadFileContents;
 
     // Renderer
     create_renderer*    CreateRenderer;

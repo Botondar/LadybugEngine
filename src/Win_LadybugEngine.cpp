@@ -12,7 +12,7 @@ internal HINSTANCE          WinInstance;
 internal HWND               WinWindow;
 internal profiler           GlobalProfiler;
 
-static void Win_DebugPrint(const char* Format, ...)
+internal void Win_DebugPrint(const char* Format, ...)
 {
     constexpr size_t BuffSize = 1llu << 16;
     char Buff[BuffSize];
@@ -26,7 +26,7 @@ static void Win_DebugPrint(const char* Format, ...)
     va_end(ArgList);
 }
 
-static VkSurfaceKHR Win_CreateVulkanSurface(VkInstance Instance)
+internal VkSurfaceKHR Win_CreateVulkanSurface(VkInstance Instance)
 {
     VkSurfaceKHR Surface = VK_NULL_HANDLE;
     VkWin32SurfaceCreateInfoKHR CreateInfo = 
@@ -41,14 +41,67 @@ static VkSurfaceKHR Win_CreateVulkanSurface(VkInstance Instance)
     return(Surface);
 }
 
-static b32 Win_ProtectPage(void* Address, umm Size, b32 DoProtect)
+internal b32 Win_ProtectPage(void* Address, umm Size, b32 DoProtect)
 {
     DWORD Flags = DoProtect ? PAGE_NOACCESS : PAGE_READWRITE;
     b32 Result = VirtualProtect(Address, Size, Flags, nullptr);
     return(Result);
 }
 
-static buffer Win_LoadEntireFile(const char* Path, memory_arena* Arena)
+internal platform_file Win_OpenFile(const char* Path)
+{
+    platform_file Result = {};
+    Result.Handle = CreateFileA(Path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (Result.Handle != INVALID_HANDLE_VALUE)
+    {
+        LARGE_INTEGER FileSize = {};
+        BOOL FileSizeResult = GetFileSizeEx(Result.Handle, &FileSize);
+        if (FileSizeResult)
+        {
+            Result.ByteCount = (umm)FileSize.QuadPart;
+            Result.IsValid = true;
+        }
+    }
+    return(Result);
+}
+
+internal buffer Win_ReadFileContents(platform_file File, memory_arena* Arena)
+{
+    buffer Result = {};
+    if (File.IsValid)
+    {
+        if (File.ByteCount > 0xFFFFFFFFu)
+        {
+            UnimplementedCodePath;
+        }
+
+        memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Arena);
+        if (void* Memory = PushSize_(Arena, 0, File.ByteCount, 64))
+        {
+            DWORD BytesRead = 0;
+            if (ReadFile(File.Handle, Memory, (DWORD)File.ByteCount, &BytesRead, nullptr))
+            {
+                Result.Size = File.ByteCount;
+                Result.Data = Memory;
+            }
+            else
+            {
+                RestoreArena(Arena, Checkpoint);
+            }
+        }
+    }
+    return(Result);
+}
+
+internal void Win_CloseFile(platform_file File)
+{
+    if (File.IsValid)
+    {
+        CloseHandle(File.Handle);
+    }
+}
+
+internal buffer Win_LoadEntireFile(const char* Path, memory_arena* Arena)
 {
     buffer Result = {};
 
@@ -258,9 +311,9 @@ internal DWORD Win_WorkerThread(void* Params)
 // and because we want to avoid the race condition of WinCreateThread returning before WinThreadEntry
 // could read the data, we maintain all thread starting parameters here.
 // TODO(boti): move this out of global storage
-static constexpr u32 MaxThreadCount = 1024u;
-static volatile u32 CurrentThreadCount = 0;
-static thread_params ThreadParamStorage[MaxThreadCount];
+internal constexpr u32 MaxThreadCount = 1024u;
+internal volatile u32 CurrentThreadCount = 0;
+internal thread_params ThreadParamStorage[MaxThreadCount];
 
 internal void 
 Win_CreateThread(thread_procedure* Proc, void* Data, const wchar_t* Name)
@@ -1010,6 +1063,9 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     GameMemory.PlatformAPI.ProtectPage          = &Win_ProtectPage;
     GameMemory.PlatformAPI.AddWorkEntry         = &Win_AddWorkEntry;
     GameMemory.PlatformAPI.CompleteAllWork      = &Win_CompleteAllWork;
+    GameMemory.PlatformAPI.OpenFile             = &Win_OpenFile;
+    GameMemory.PlatformAPI.CloseFile            = &Win_CloseFile;
+    GameMemory.PlatformAPI.ReadFileContents     = &Win_ReadFileContents;
 
     HMODULE RendererDLL = LoadLibraryA("vulkan_renderer.dll");
     if (RendererDLL)

@@ -647,7 +647,7 @@ lbfn void UpdateAndRenderWorld(
         World->Camera.Yaw = 0.5f * Pi;
 
         // Load debug scene
-        #if 0
+        #if 1
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
                              DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);
@@ -655,7 +655,7 @@ lbfn void UpdateAndRenderWorld(
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_TransmissionTest, 
                              0);
-        #elif 1
+        #elif 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Terrain,
                              DebugSceneFlag_None);
