@@ -220,11 +220,6 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
                 ResizeImage(Image.Data, Image.Extent, RescaleBuffer, PowerOf2Extent, Entry->Usage, SrcFormatInfo.ChannelCount, AlphaThreshold, AlphaCoverage);
                 Image.Extent = PowerOf2Extent;
                 Image.Data = RescaleBuffer;
-
-                if (DoAlphaCoverageRescale)
-                {
-                    RescaleAlphaForCoverage(Image.Extent, (u8*)Image.Data, AlphaThreshold, AlphaCoverage);
-                }
             }
 
             u8* SrcImage = (u8*)Image.Data;
@@ -271,10 +266,6 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
                 {
                     v2u OldExtent = { Image.Extent.X >> (Mip - 1), Image.Extent.Y >> (Mip - 1) };
                     ResizeImage(SrcImage, OldExtent, RescaleBuffer, CurrentExtent, Entry->Usage, SrcFormatInfo.ChannelCount, AlphaThreshold, AlphaCoverage);
-                    if (DoAlphaCoverageRescale)
-                    {
-                        RescaleAlphaForCoverage(CurrentExtent, RescaleBuffer, AlphaThreshold, AlphaCoverage);
-                    }
                     SrcImage = RescaleBuffer;
                 }
 
