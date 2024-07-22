@@ -211,7 +211,7 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
 
             v2u PowerOf2Extent = { CeilPowerOf2(Image.Extent.X), CeilPowerOf2(Image.Extent.Y) };
             format_info SrcFormatInfo = FormatInfoTable[Image.Format];
-            umm RescaleBufferSize = (umm)Image.Extent.X * Image.Extent.Y * SrcFormatInfo.ChannelCount * SrcFormatInfo.ByteRateNumerator / SrcFormatInfo.ByteRateDenominator;
+            umm RescaleBufferSize = (umm)Image.Extent.X * Image.Extent.Y * SrcFormatInfo.ByteRateNumerator / SrcFormatInfo.ByteRateDenominator;
             u8* RescaleBuffer = (u8*)PushSize_(Arena, 0, RescaleBufferSize, 64);
 
             if (PowerOf2Extent.X != Image.Extent.X || PowerOf2Extent.Y != Image.Extent.Y)
@@ -513,8 +513,10 @@ int main(int ArgCount, char** Args)
                 for (u32 MaterialIndex = 0; MaterialIndex < GLTF.MaterialCount; MaterialIndex++)
                 {
                     gltf_material* Material = GLTF.Materials + MaterialIndex;
+
+                    // TODO(boti): Potential buffer overflow (no one checks whether the image index of the texture is valid)
                     #define AddUsage(tex, usage) \
-                    if (tex.TextureIndex != U32_MAX) ImageUsageFlags[tex.TextureIndex] |= usage
+                    if (tex.TextureIndex != U32_MAX) ImageUsageFlags[GLTF.Textures[tex.TextureIndex].ImageIndex] |= usage
 
                     AddUsage(Material->BaseColorTexture,            ImageUsage_Albedo);
                     AddUsage(Material->MetallicRoughnessTexture,    ImageUsage_RoMe);
