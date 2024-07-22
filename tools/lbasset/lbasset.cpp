@@ -40,7 +40,7 @@ u32 SwizzleToChannelIndex(texture_swizzle_type Swizzle)
 
 inline u32 PackSwizzle(texture_swizzle_type R, texture_swizzle_type G, texture_swizzle_type B, texture_swizzle_type A)
 {
-    u32 Result = ((u32)R << 24) | ((u32)G << (16)) | ((u32)B << 8) | ((u32)A);
+    u32 Result = ((u32)R) | ((u32)G << 8) | ((u32)B << 16) | ((u32)A << 24);
     return(Result);
 }
 
@@ -150,7 +150,6 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
                     }
                     else
                     {
-
                         TargetFormat = Format_BC3_SRGB;
                         DXGIFormat = DXGIFormat_BC3_UNorm_SRGB;
                     }
@@ -170,7 +169,7 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
                         TargetFormat = Format_BC4_UNorm;
                         DXGIFormat = DXGIFormat_BC4_UNorm;
                         ChannelsOfInterest[0] = SwizzleToChannelIndex(Entry->MetallicSwizzle);
-                        Swizzle = PackSwizzle(Swizzle_B, Entry->RoughnessSwizzle, Swizzle_Identity, Swizzle_Identity);
+                        Swizzle = PackSwizzle(Swizzle_Identity, Entry->RoughnessSwizzle, Swizzle_R, Swizzle_Identity);
                     }
                     else if (Entry->MetallicSwizzle == Swizzle_One || Entry->MetallicSwizzle == Swizzle_Zero)
                     {
@@ -178,7 +177,7 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
                         TargetFormat = Format_BC4_UNorm;
                         DXGIFormat = DXGIFormat_BC4_UNorm;
                         ChannelsOfInterest[0] = SwizzleToChannelIndex(Entry->RoughnessSwizzle);
-                        Swizzle = PackSwizzle(Swizzle_G, Swizzle_Identity, Entry->MetallicSwizzle, Swizzle_Identity);
+                        Swizzle = PackSwizzle(Swizzle_Identity, Swizzle_R, Entry->MetallicSwizzle, Swizzle_Identity);
                     }
                     else
                     {
@@ -187,7 +186,7 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
                         DXGIFormat = DXGIFormat_BC5_UNorm;
                         ChannelsOfInterest[0] = SwizzleToChannelIndex(Entry->RoughnessSwizzle);
                         ChannelsOfInterest[1] = SwizzleToChannelIndex(Entry->MetallicSwizzle);
-                        Swizzle = PackSwizzle(Swizzle_G, Swizzle_B, Swizzle_Identity, Swizzle_Identity);
+                        Swizzle = PackSwizzle(Swizzle_Identity, Swizzle_R, Swizzle_G, Swizzle_Identity);
                     }
                     
                 } break;
