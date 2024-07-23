@@ -547,8 +547,9 @@ int main(int ArgCount, char** Args)
                         }
                         Entry->SrcPath = SrcFilePath;
                         OverwriteNameAndExtension(&Entry->SrcPath, Image->URI);
+                        FindFilepathExtensionAndName(&Entry->SrcPath, 0);
                         Entry->DstPath = DstDirectory;
-                        OverwriteNameAndExtension(&Entry->DstPath, Image->URI);
+                        OverwriteNameAndExtension(&Entry->DstPath, { Entry->SrcPath.NameCount, Entry->SrcPath.Path + Entry->SrcPath.NameOffset });
                         FindFilepathExtensionAndName(&Entry->DstPath, 0);
                         OverwriteExtension(&Entry->DstPath, ".dds");
                     }
