@@ -408,8 +408,9 @@ lbfn b32 ProcessEntry(texture_queue* Queue)
             {
                 UnhandledError("Failed to load image");
             }
-            RestoreArena(Scratch, Checkpoint);
         }
+
+        RestoreArena(Scratch, Checkpoint);
     }
     else
     {
@@ -821,7 +822,10 @@ internal void DEBUGLoadTestScene(
         if (SrcMaterial->NormalTexture.TexCoordIndex != 0) UnimplementedCodePath;
         if (SrcMaterial->MetallicRoughnessTexture.TexCoordIndex != 0) UnimplementedCodePath;
 
-        if (SrcMaterial->NormalTexture.Scale != 1.0f) UnimplementedCodePath;
+        if (SrcMaterial->NormalTexture.Scale != 1.0f) 
+        {
+            Platform.DebugPrint("[WARNING] Unhandled normal texture scale in glTF");
+        }
 
         if (Assets->MaterialCount < Assets->MaxMaterialCount)
         {
