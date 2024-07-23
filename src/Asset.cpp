@@ -531,56 +531,81 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         Assets->ParticleArrayID = Assets->TextureCount++;
         texture* ParticleArray = Assets->Textures + Assets->ParticleArrayID;
         ParticleArray->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_PersistentMemory, nullptr, {});
-        // TODO(boti): For now we know that the texture pack we're using is 512x512, 
-        // but we may want to figure out some way for the user code to pack texture arrays/atlases dynamically
-        texture_info Info =
+
+        memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
+
+        platform_file CachedParticles = Platform.OpenFile("cache/particles.dds");
+        if (CachedParticles.IsValid)
         {
-            .Extent = { 512, 512, 1 },
-            .MipCount = 1,
-            .ArrayCount = Particle_COUNT,
-            .Format = Format_R8_UNorm,
-            .Swizzle = { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
-        };
+            buffer ParticlesFile = Platform.ReadFileContents(CachedParticles, Scratch);
+            dds_file* DDS = (dds_file*)ParticlesFile.Data;
+            Assert(DDS->DX10Header.ArrayCount == Particle_COUNT);
 
-        umm ImageSize = Info.Extent.X * Info.Extent.Y;
-        umm MemorySize = ImageSize * Particle_COUNT;
-        void* Memory = PushSize_(Scratch, 0, MemorySize, 0x100);
-
-        u8* MemoryAt = (u8*)Memory;
-        for (u32 ParticleIndex = 0; ParticleIndex < Particle_COUNT; ParticleIndex++)
-        {
-            memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
-
-            buffer FileData = Platform.LoadEntireFile(ParticlePaths[ParticleIndex], Scratch);
-            loaded_image Image = LoadImage(Scratch, FileData);
-
-            format_info FormatInfo = FormatInfoTable[Image.Format];
-
-            if (Image.Data && (Image.Extent.X == Info.Extent.X) && (Image.Extent.Y == Info.Extent.Y))
+            texture_info Info =
             {
-                u8* SrcAt = (u8*)Image.Data;
+                .Extent = { DDS->Header.Width, DDS->Header.Height, 1 },
+                .MipCount = DDS->Header.MipMapCount,
+                .ArrayCount = DDS->DX10Header.ArrayCount,
+                .Format = DXGIFormatTable[DDS->DX10Header.Format],
+                .Swizzle = *(texture_swizzle*)&DDS->Header.Swizzle,
+            };
 
-                // HACK(boti): We know that we're using the black background particles, so the R channel is the alpha
-                const u32 TargetChannel = 0;
-                for (u32 Y = 0; Y  < Image.Extent.Y; Y++)
+            TransferTexture(Frame, ParticleArray->RendererID, Info, AllTextureSubresourceRange(), DDS->Data);
+            ParticleArray->IsLoaded = true;
+
+            Platform.CloseFile(CachedParticles);
+        }
+        else
+        {
+            // TODO(boti): For now we know that the texture pack we're using is 512x512, 
+            // but we may want to figure out some way for the user code to pack texture arrays/atlases dynamically
+            texture_info Info =
+            {
+                .Extent = { 512, 512, 1 },
+                .MipCount = 1,
+                .ArrayCount = Particle_COUNT,
+                .Format = Format_R8_UNorm,
+                .Swizzle = { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
+            };
+
+            umm ImageSize = Info.Extent.X * Info.Extent.Y;
+            umm MemorySize = ImageSize * Particle_COUNT;
+            void* Memory = PushSize_(Scratch, 0, MemorySize, 0x100);
+
+            u8* MemoryAt = (u8*)Memory;
+            for (u32 ParticleIndex = 0; ParticleIndex < Particle_COUNT; ParticleIndex++)
+            {
+                buffer FileData = Platform.LoadEntireFile(ParticlePaths[ParticleIndex], Scratch);
+                loaded_image Image = LoadImage(Scratch, FileData);
+
+                format_info FormatInfo = FormatInfoTable[Image.Format];
+
+                if (Image.Data && (Image.Extent.X == Info.Extent.X) && (Image.Extent.Y == Info.Extent.Y))
                 {
-                    for (u32 X = 0; X < Image.Extent.X; X++)
+                    u8* SrcAt = (u8*)Image.Data;
+
+                    // HACK(boti): We know that we're using the black background particles, so the R channel is the alpha
+                    const u32 TargetChannel = 0;
+                    for (u32 Y = 0; Y  < Image.Extent.Y; Y++)
                     {
-                        *MemoryAt++ = SrcAt[TargetChannel];
-                        SrcAt += FormatInfo.ChannelCount;
+                        for (u32 X = 0; X < Image.Extent.X; X++)
+                        {
+                            *MemoryAt++ = SrcAt[TargetChannel];
+                            SrcAt += FormatInfo.ChannelCount;
+                        }
                     }
                 }
-            }
-            else
-            {
-                UnimplementedCodePath;
+                else
+                {
+                    UnimplementedCodePath;
+                }
             }
 
-            RestoreArena(Scratch, Checkpoint);
+            TransferTexture(Frame, ParticleArray->RendererID, Info, AllTextureSubresourceRange(), Memory);
+            ParticleArray->IsLoaded = true;
         }
 
-        TransferTexture(Frame, ParticleArray->RendererID, Info, AllTextureSubresourceRange(), Memory);
-        ParticleArray->IsLoaded = true;
+        RestoreArena(Scratch, Checkpoint);
     }
 
     LoadDebugFont(Scratch, Assets, Frame, "data/liberation-mono.lbfnt");
