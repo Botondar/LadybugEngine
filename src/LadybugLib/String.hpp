@@ -30,6 +30,7 @@ inline char Advance(string_view* View);
 inline u64 EatWhitespace(string_view* View);
 inline bool MatchZAndAdvance(string_view* View, const char* ZString);
 
+// TODO(boti): Rework this whole filepath thing, it's absolutely horrid to use
 struct filepath
 {
     static constexpr u32 MaxCount = 320;
@@ -252,7 +253,7 @@ inline void FindFilepathExtensionAndName(filepath* Path, filepath_flags Flags)
     if (!(Flags & Filepath_DefaultToDirectory))
     {
         // NOTE(boti): Find filename substring
-        for (u32 Index = Path->ExtensionOffset; Index < Path->Count; Index--)
+        for (u32 Index = (Path->ExtensionOffset - 1); Index < Path->Count; Index--)
         {
             if (Path->Path[Index] == '/' || Path->Path[Index] == '\\')
             {
