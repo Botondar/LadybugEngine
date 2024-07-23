@@ -71,10 +71,10 @@ struct image_entry
 
 internal void ResizeImage(void* OldData, v2u OldExtent, 
                           void* NewData, v2u NewExtent, 
-                          image_usage_flags Usage, u32 ChannelCount,
+                          b32 IsSRGB, u32 ChannelCount,
                           f32 AlphaThreshold, f32 TargetAlphaCoverage)
 {
-    if (Usage == ImageUsage_Albedo)
+    if (IsSRGB)
     {
         stbir_pixel_layout PixelLayout = (ChannelCount == 4) ? STBIR_RGBA_PM : STBIR_RGB;
         stbir_resize_uint8_srgb(
@@ -120,6 +120,83 @@ internal void BCCompressBlock(u8* Dst, u8* Src, format Format)
         } break;
         InvalidDefaultCase;
     }
+}
+
+internal umm GenerateAndCompressMips(
+    loaded_image Image, 
+    u8* Dst, 
+    u32 MipCount, 
+    format Format, 
+    b32 IsSRGB, 
+    f32 AlphaThreshold, 
+    f32 AlphaCoverage, 
+    const u32* ChannelsOfInterest, 
+    u8* Scratch)
+{
+    format_info SrcFormatInfo = FormatInfoTable[Image.Format];
+    format_info DstFormatInfo = FormatInfoTable[Format];
+
+    umm DstBlockSize = 4 * 4 * DstFormatInfo.ByteRateNumerator / DstFormatInfo.ByteRateDenominator;
+    umm DstBlockOffset = 0;
+    u8* SrcMip = (u8*)Image.Data;
+
+    for (u32 Mip = 0; Mip < MipCount; Mip++)
+    {
+        v2u CurrentExtent = { Max(Image.Extent.X >> Mip, 1u), Max(Image.Extent.Y >> Mip, 1u) };
+        if (Mip)
+        {
+            v2u OldExtent = { Max(Image.Extent.X >> (Mip - 1), 1u), Max(Image.Extent.Y >> (Mip - 1), 1u) };
+            ResizeImage(SrcMip, OldExtent, Scratch, CurrentExtent, IsSRGB, SrcFormatInfo.ChannelCount, AlphaThreshold, AlphaCoverage);
+            SrcMip = Scratch;
+        }
+
+        // TODO(boti): Handle 2x2 and 1x1 mips correctly
+        for (u32 Y = 0; Y < CurrentExtent.Y; Y += 4)
+        {
+            for (u32 X = 0; X < CurrentExtent.X; X += 4)
+            {
+                u8 Block[16*4];
+                u8* DstAt = Block;
+                for (u32 YY = Y; YY < (Y + 4); YY++)
+                {
+                    u8* SrcAt = SrcMip + (X + YY * CurrentExtent.X) * SrcFormatInfo.ChannelCount;
+                    for (u32 XX = X; XX < (X + 4); XX++)
+                    {
+                        switch (Format)
+                        {
+                            case Format_BC1_RGB_UNorm:
+                            case Format_BC1_RGB_SRGB:
+                            case Format_BC3_UNorm:
+                            case Format_BC3_SRGB:
+                            {
+                                *DstAt++ = SrcAt[0];
+                                *DstAt++ = SrcAt[1];
+                                *DstAt++ = SrcAt[2];
+                                *DstAt++ = (SrcFormatInfo.ChannelCount == 4) ? SrcAt[3] : 0xFFu;
+                            } break;
+                            case Format_BC4_UNorm:
+                            {
+                                *DstAt++ = SrcAt[ChannelsOfInterest[0]];
+                            } break;
+                            case Format_BC5_UNorm:
+                            {
+                                *DstAt++ = SrcAt[ChannelsOfInterest[0]];
+                                *DstAt++ = SrcAt[ChannelsOfInterest[1]];
+                            } break;
+                            InvalidDefaultCase;
+                        }
+
+                        SrcAt += SrcFormatInfo.ChannelCount;
+                    }
+                }
+
+                BCCompressBlock(Dst + DstBlockOffset, Block, Format);
+                DstBlockOffset += DstBlockSize;
+            }
+        }
+    }
+
+    return(DstBlockOffset);
 }
 
 internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
@@ -207,6 +284,8 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
                 AlphaCoverage = CalculateAlphaCoverage(Image.Extent, (u8*)Image.Data, AlphaThreshold, 1.0f);
             }
 
+            b32 IsSRGB = (Entry->Usage == ImageUsage_Albedo);
+
             // TODO(boti): Once we hammer out the edge cases there shouldn't be a need for rescaling to Pow2
 
             v2u PowerOf2Extent = { CeilPowerOf2(Image.Extent.X), CeilPowerOf2(Image.Extent.Y) };
@@ -216,7 +295,7 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
 
             if (PowerOf2Extent.X != Image.Extent.X || PowerOf2Extent.Y != Image.Extent.Y)
             {
-                ResizeImage(Image.Data, Image.Extent, RescaleBuffer, PowerOf2Extent, Entry->Usage, SrcFormatInfo.ChannelCount, AlphaThreshold, AlphaCoverage);
+                ResizeImage(Image.Data, Image.Extent, RescaleBuffer, PowerOf2Extent, IsSRGB, SrcFormatInfo.ChannelCount, AlphaThreshold, AlphaCoverage);
                 Image.Extent = PowerOf2Extent;
                 Image.Data = RescaleBuffer;
             }
@@ -250,73 +329,7 @@ internal b32 ProcessImage(memory_arena* Arena, image_entry* Entry)
             DstFile->DX10Header.ArrayCount              = 1;
             DstFile->DX10Header.AlphaMode               = DDSAlpha_Undefined; // TODO(boti)
 
-
-            u8* DstBuffer = DstFile->Data;
-            u8* DstBlock = DstBuffer;
-            umm DstBlockSize = 4 * 4 * DstFormatInfo.ByteRateNumerator / DstFormatInfo.ByteRateDenominator;
-
-            //
-            // Rescale and compress
-            //
-            for (u32 Mip = 0; Mip < MipCount; Mip++)
-            {
-                v2u CurrentExtent = { Image.Extent.X >> Mip, Image.Extent.Y >> Mip };
-                if (Mip)
-                {
-                    v2u OldExtent = { Image.Extent.X >> (Mip - 1), Image.Extent.Y >> (Mip - 1) };
-                    ResizeImage(SrcImage, OldExtent, RescaleBuffer, CurrentExtent, Entry->Usage, SrcFormatInfo.ChannelCount, AlphaThreshold, AlphaCoverage);
-                    SrcImage = RescaleBuffer;
-                }
-
-                // TODO(boti): Handle 2x2 and 1x1 mips correctly
-                for (u32 Y = 0; Y < CurrentExtent.Y; Y += 4)
-                {
-                    for (u32 X = 0; X < CurrentExtent.X; X += 4)
-                    {
-                        u8 Block[16*4];
-                        u8* DstAt = Block;
-                        for (u32 YY = Y; YY < (Y + 4); YY++)
-                        {
-                            u8* SrcAt = SrcImage + (X + YY * CurrentExtent.X) * SrcFormatInfo.ChannelCount;
-                            for (u32 XX = X; XX < (X + 4); XX++)
-                            {
-                                switch (TargetFormat)
-                                {
-                                    case Format_BC1_RGB_UNorm:
-                                    case Format_BC1_RGB_SRGB:
-                                    case Format_BC3_UNorm:
-                                    case Format_BC3_SRGB:
-                                    {
-                                        *DstAt++ = SrcAt[0];
-                                        *DstAt++ = SrcAt[1];
-                                        *DstAt++ = SrcAt[2];
-                                        *DstAt++ = (SrcFormatInfo.ChannelCount == 4) ? SrcAt[3] : 0xFFu;
-                                    } break;
-                                    case Format_BC4_UNorm:
-                                    {
-                                        *DstAt++ = SrcAt[ChannelsOfInterest[0]];
-                                    } break;
-                                    case Format_BC5_UNorm:
-                                    {
-                                        *DstAt++ = SrcAt[ChannelsOfInterest[0]];
-                                        *DstAt++ = SrcAt[ChannelsOfInterest[1]];
-                                    } break;
-                                    InvalidDefaultCase;
-                                }
-
-                                SrcAt += SrcFormatInfo.ChannelCount;
-                            }
-                        }
-
-                        BCCompressBlock(DstBlock, Block, TargetFormat);
-                        DstBlock += DstBlockSize;
-                    }
-                }
-            }
-
-            //
-            // Write to disk
-            //
+            GenerateAndCompressMips(Image, DstFile->Data, MipCount, TargetFormat, IsSRGB, AlphaThreshold, AlphaCoverage, ChannelsOfInterest, RescaleBuffer);
             Result = WriteEntireFile(Entry->DstPath.Path, sizeof(dds_file) + TotalMipChainSize, DstFile);
         }
         else
@@ -399,22 +412,49 @@ internal b32 WriteEntireFile(const char* Path, umm Size, void* Memory)
     return(Result);
 }
 
+struct file_iterator
+{
+    WIN32_FIND_DATA Data;
+    HANDLE Handle;
+};
+
+inline file_iterator IterateFiles(const char* DirectoryPath);
+inline b32 IsValid(file_iterator* It);
+inline void Advance(file_iterator* It);
+
+inline file_iterator IterateFiles(const char* DirectoryPath)
+{
+    file_iterator It = {};
+    It.Handle = FindFirstFileA(DirectoryPath, &It.Data);
+    return(It);
+}
+inline b32 IsValid(file_iterator It)
+{
+    b32 Result = (It.Handle != INVALID_HANDLE_VALUE);
+    return(Result);
+}
+inline file_iterator Iterate(file_iterator It)
+{
+    if (!FindNextFileA(It.Handle, &It.Data))
+    {
+        FindClose(It.Handle);
+        It.Handle = INVALID_HANDLE_VALUE;
+    }
+    return(It);
+}
+
 // TODO(boti): Arg handling cleanup + help/man
 // - Arg to specify what data is contained in which channel
 int main(int ArgCount, char** Args)
 {
-    if (ArgCount < 3)
-    {
-        fprintf(stdout, "Usage: lbasset <dst-directory> <src-file>");
-        return(1);
-    }
-
     // NOTE(boti): There's a separate enum for the arguments, because we want the user
     // to be able to pass in roughness only (or metallic only) textures
     // and have the asset processor set up the proper swizzling
     enum image_type : u32
     {
         Image_Undefined = 0,
+
+        Image_Particles,
 
         Image_Albedo,
         Image_Normal,
@@ -426,8 +466,8 @@ int main(int ArgCount, char** Args)
     };
 
     image_type ImageType = Image_Undefined;
-
-    if      (strcmp(Args[1], "--albedo")    == 0) ImageType = Image_Albedo;
+    if      (strcmp(Args[1], "--particles") == 0) ImageType = Image_Particles;
+    else if (strcmp(Args[1], "--albedo")    == 0) ImageType = Image_Albedo;
     else if (strcmp(Args[1], "--normal")    == 0) ImageType = Image_Normal;
     else if (strcmp(Args[1], "--rome")      == 0) ImageType = Image_RoughnessMetallic;
     else if (strcmp(Args[1], "--roughness") == 0) ImageType = Image_Roughness;
@@ -457,7 +497,123 @@ int main(int ArgCount, char** Args)
     u32 ImagesToProcessCount = 0;
     image_entry* ImagesToProcess = nullptr;
 
-    if (ImageType)
+    if (ImageType == Image_Particles)
+    {
+        // Enumerate and count image files
+        v2u Extent = {};
+        u32 FileCount = 0;
+        for (file_iterator It = IterateFiles(SrcFilePath.Path); IsValid(It); It = Iterate(It))
+        {
+            if (!(It.Data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+            {
+                memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Arena);
+                
+                filepath Path = SrcFilePath;
+                OverwriteNameAndExtension(&Path, It.Data.cFileName);
+                fprintf(stdout, "%s\n", Path.Path);
+
+                // TODO(boti): PERF
+                buffer File = LoadEntireFile(Path.Path, Arena);
+                if (File.Data)
+                {
+                    image_file_type Type = DetermineImageFileType(File);
+                    if (Type)
+                    {
+                        // Find first image extent and run with that...
+                        // TODO(boti): Use maximum maybe? Problem is that we have to load images when initially iterating then
+                        if (Extent.X == 0 || Extent.Y == 0)
+                        {
+                            loaded_image Image = LoadImage(Arena, File);
+                            Extent = Image.Extent;
+                        }
+
+                        FileCount += 1;
+                    }
+                }
+
+                RestoreArena(Arena, Checkpoint);
+            }
+        }
+
+        format Format = Format_BC4_UNorm;
+        dxgi_format DXGIFormat = DXGIFormat_BC4_UNorm;
+        format_info FormatInfo = FormatInfoTable[Format];
+
+        // NOTE(boti): RGBA8 scratch used here to accomodate all possible formats we currently handle
+        umm ScratchSize = GetMipChainSize(Extent.X, Extent.Y, 1, 1, FormatInfoTable[Format_R8G8B8A8_UNorm]);
+        u8* Scratch = (u8*)PushSize_(Arena, 0, ScratchSize, 64);
+
+        u32 MipCount = GetMaxMipCount(Extent.X, Extent.Y);
+        umm TotalDataSize = GetMipChainSize(Extent.X, Extent.Y, MipCount, FileCount, FormatInfo);
+        umm TotalFileSize = sizeof(dds_file) + TotalDataSize;
+        dds_file* DstFile = (dds_file*)PushSize_(Arena, 0, TotalFileSize, 64);
+
+        memset(DstFile, 0, sizeof(*DstFile));
+        DstFile->Magic                              = DDSMagic;
+        DstFile->Header.HeaderSize                  = sizeof(dds_header);
+        DstFile->Header.Flags                       = DDSFlag_Caps|DDSFlag_Height|DDSFlag_Width|DDSFlag_PixelFormat|DDSFlag_MipMapCount;
+        DstFile->Header.Height                      = Extent.Y;
+        DstFile->Header.Width                       = Extent.X;
+        DstFile->Header.PitchOrLinearSize           = 0; // TODO(boti): Is this required?
+        DstFile->Header.MipMapCount                 = MipCount;
+        DstFile->Header.EngineFourCC                = LadybugDDSMagic;
+        DstFile->Header.Swizzle                     = PackSwizzle(Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R);
+        DstFile->Header.PixelFormat.StructureSize   = sizeof(dds_pixel_format);
+        DstFile->Header.PixelFormat.Flags           = DDSPixelFormat_FourCC;
+        DstFile->Header.PixelFormat.FourCC          = DDS_DX10;
+        DstFile->Header.Caps                        = DDSCaps_Complex|DDSCaps_Texture|DDSCaps_MipMap;
+        DstFile->Header.Caps2                       = DDSCaps2_None;
+        DstFile->DX10Header.Format                  = DXGIFormat;
+        DstFile->DX10Header.Dimension               = DDSDim_Texture2D;
+        DstFile->DX10Header.ResourceFlags           = DDSResourceFlag_None;
+        DstFile->DX10Header.ArrayCount              = FileCount;
+        DstFile->DX10Header.AlphaMode               = DDSAlpha_Undefined; // TODO(boti)
+
+        // TODO(boti): This is going to overflow if someone copies a file into the directory while we're processing!
+        fprintf(stdout, "Processing %u images...\n", FileCount);
+        umm CurrentOffset = 0;
+        for (file_iterator It = IterateFiles(SrcFilePath.Path); IsValid(It); It = Iterate(It))
+        {
+            if (!(It.Data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+            {
+                memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Arena);
+
+                filepath Path = SrcFilePath;
+                OverwriteNameAndExtension(&Path, It.Data.cFileName);
+
+                buffer File = LoadEntireFile(Path.Path, Arena);
+                if (File.Data)
+                {
+                    loaded_image Image = LoadImage(Arena, File);
+                    if (Image.Data)
+                    {
+                        fprintf(stdout, "Processing %s\n", Path.Path);
+
+                        format_info CurrentFormatInfo = FormatInfoTable[Image.Format];
+                        if (Image.Extent.X != Extent.X || Image.Extent.Y != Extent.Y)
+                        {
+                            ResizeImage(Image.Data, Image.Extent, Scratch, Extent, CurrentFormatInfo.ChannelCount, false, 0.0f, 0.0f);
+                            Image.Data = Scratch;
+                        }
+
+                        // NOTE(boti): We're assuming that the red channel has the correct information here (could alternatively pass in alpha at [0])
+                        u32 ChannelsOfInterest[4] = { 0, 1, 2, 3 };
+                        CurrentOffset += GenerateAndCompressMips(Image, DstFile->Data + CurrentOffset, MipCount, Format, false, 0.0f, 0.0f, ChannelsOfInterest, Scratch);
+                    }
+                }
+
+                RestoreArena(Arena, Checkpoint);
+            }
+        }
+
+        // TODO(boti): Verify that we generated the correct count files
+        b32 Result = WriteEntireFile(DstDirectory.Path, TotalFileSize, DstFile);
+        if (!Result)
+        {
+            fprintf(stderr, "Failed\n");
+        }
+    }
+    else if (ImageType)
     {
         ImagesToProcessCount = 1;
         ImagesToProcess = PushArray(Arena, MemPush_Clear, image_entry, ImagesToProcessCount);

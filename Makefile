@@ -69,17 +69,17 @@ clean:
 	@if not exist $@ mkdir $@
 
 "$(OUT)/lbmeta.exe": "$(OUT)/" $(SRC_LBLIB) "tools/lbmeta/*"
-    @clang-cl -Wno-c99-designator -std:c++20 -Zi -I"src/" -D_CRT_SECURE_NO_WARNINGS "tools/lbmeta/lbmeta.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/"
+    clang-cl -Wno-c99-designator -std:c++20 -Zi -I"src/" -D_CRT_SECURE_NO_WARNINGS "tools/lbmeta/lbmeta.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/"
 "$(OUT)/lbasset.exe": "$(OUT)/" $(SRC_LBLIB) "tools/lbasset/*"
-    @clang-cl -Wno-c99-designator -std:c++20 -arch:AVX2 -O2 -Zi -I"src/" -DDEVELOPER=1 -D_CRT_SECURE_NO_WARNINGS "tools/lbasset/lbasset.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/"
+    clang-cl -Wno-c99-designator -std:c++20 -arch:AVX2 -O2 -Zi -I"src/" -DDEVELOPER=1 -D_CRT_SECURE_NO_WARNINGS "tools/lbasset/lbasset.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/"
 
 
 "$(OUT)/vulkan_renderer.dll": "$(OUT)/" $(SRC_LBLIB) $(SRC_RENDERER)
-    @clang-cl $(CXX_FLAGS) $(VULKAN_INCLUDE) -DLB_TranslationUnit=LB_TranslationUnit_Renderer  "src/Renderer/VulkanRenderer.cpp" -Fo"$(OUT)/" -Fd"$(OUT)/" vulkan-1.lib -link -DLL -OUT:$@ $(LINK_FLAGS) $(RENDERER_EXPORT) -LIBPATH:$(VULKAN_SDK)/Lib/
+    clang-cl $(CXX_FLAGS) $(VULKAN_INCLUDE) -DLB_TranslationUnit=LB_TranslationUnit_Renderer  "src/Renderer/VulkanRenderer.cpp" -Fo"$(OUT)/" -Fd"$(OUT)/" vulkan-1.lib -link -DLL -OUT:$@ $(LINK_FLAGS) $(RENDERER_EXPORT) -LIBPATH:$(VULKAN_SDK)/Lib/
 "$(OUT)/Win_LadybugEngine.exe": "$(OUT)/" $(SRC_ALL)
-    @clang-cl $(CXX_FLAGS) $(VULKAN_INCLUDE) -DLB_TranslationUnit=LB_TranslationUnit_PlatformLayer "src/Win_LadybugEngine.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) vulkan-1.lib -link $(LINK_FLAGS) -LIBPATH:$(VULKAN_SDK)/Lib/
+    clang-cl $(CXX_FLAGS) $(VULKAN_INCLUDE) -DLB_TranslationUnit=LB_TranslationUnit_PlatformLayer "src/Win_LadybugEngine.cpp" -Fe$@ -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) vulkan-1.lib -link $(LINK_FLAGS) -LIBPATH:$(VULKAN_SDK)/Lib/
 "$(OUT)/game.dll":"$(OUT)/" $(SRC_ALL)
-    @clang-cl $(CXX_FLAGS) -DLB_TranslationUnit=LB_TranslationUnit_Game "src/LadybugEngine.cpp" -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) -link -DLL -OUT:$@ $(LINK_FLAGS) $(GAME_EXPORT)
+    clang-cl $(CXX_FLAGS) -DLB_TranslationUnit=LB_TranslationUnit_Game "src/LadybugEngine.cpp" -Fo"$(OUT)/" -Fd"$(OUT)/" $(LIBS) -link -DLL -OUT:$@ $(LINK_FLAGS) $(GAME_EXPORT)
 
 {$(SRC)/Shader/}.glsl{$(OUT)/}.vs:
     glslc $(SHADER_FLAGS) -DVS -fshader-stage=vert -o "$(OUT)/$(@B).vs" "$<"

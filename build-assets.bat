@@ -2,6 +2,8 @@
 
 mkdir cache
 
+build\lbasset --particles "cache/particles.dds" "data/kenney_particle-pack/PNG (Black background)/*"
+
 build\lbasset "cache/" "data/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf"
 build\lbasset "cache/" "data/glTF-Sample-Assets/Models/Fox/glTF/Fox.gltf"
 
