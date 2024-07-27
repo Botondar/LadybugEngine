@@ -635,7 +635,100 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
     return(Result);
 }
 
-static void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Frame, const char* Path)
+lbfn void UpdateAssets(assets* Assets)
+{
+    texture_queue* Queue = &Assets->TextureQueue;
+    for (u32 Completion = Queue->CompletionCount; Completion < Queue->CompletionGoal; Completion++)
+    {
+        u32 EntryIndex = Completion % Queue->MaxEntryCount;
+        texture_queue_entry* Entry = Queue->Entries + EntryIndex;
+        if (Entry->ReadyToTransfer)
+        {
+            umm TotalSize = GetMipChainSize(Entry->Info.Extent.X, Entry->Info.Extent.Y, 
+                                            Entry->Info.MipCount, Entry->Info.ArrayCount,
+                                            FormatInfoTable[Entry->Info.Format]);
+            umm Begin = GetNextEntryOffset(Queue, TotalSize, Queue->RingBufferReadAt);
+
+            Entry->Texture->Info = Entry->Info;
+            Entry->Texture->Memory = PushSize_(&Assets->TextureCache, 0, TotalSize, 0);
+            Assert(Entry->Texture->Memory);
+            memcpy(Entry->Texture->Memory, Queue->RingBufferMemory + (Begin % Queue->RingBufferSize), TotalSize);
+
+            Entry->Texture->IsLoaded = true;
+            Queue->RingBufferReadAt = Begin + TotalSize;
+            AtomicLoadAndIncrement(&Queue->CompletionCount);
+        }
+        else
+        {
+            break;
+        }
+    }
+}
+
+lbfn void ProcessTextureRequests(assets* Assets, render_frame* Frame)
+{
+    for (u32 RequestIndex = 0; RequestIndex < Frame->TextureRequestCount; RequestIndex++)
+    {
+        // TODO(boti): I don't think this is needed anymore, default textures go into persistent memory, 
+        // so the renderer shouldn't request them?
+        texture_request* Request = Frame->TextureRequests + RequestIndex;
+
+        b32 IsDefaultTexture = false;
+        for (u32 TextureType = TextureType_Albedo; TextureType < TextureType_Count; TextureType++)
+        {
+            if (Request->TextureID.Value == Assets->Textures[Assets->DefaultTextures[TextureType]].RendererID.Value)
+            {
+                IsDefaultTexture = true;
+                break;
+            }
+        }
+        if (!IsDefaultTexture)
+        {
+            // TODO(boti): Put a user value in the renderer texture so we don't have to search for the texture every time
+            texture* Texture = nullptr;
+            u32 TextureID;
+            for (TextureID = 0; TextureID < Assets->TextureCount; TextureID++)
+            {
+                texture* It = Assets->Textures + TextureID;
+                if (Request->TextureID.Value == It->RendererID.Value)
+                {
+                    Texture = It;
+                    break;
+                }
+            }
+
+            if (Texture)
+            {
+                if (Texture->IsLoaded && Texture->Memory)
+                {
+                    texture_subresource_range Subresource = SubresourceFromMipMask(Request->MipMask, Texture->Info);
+                    if (Subresource.MipCount)
+                    {
+                        if (Subresource.BaseArray != 0 || Subresource.ArrayCount != U32_MAX) UnimplementedCodePath;
+                        umm Offset = GetPackedTexture2DMipOffset(&Texture->Info, Subresource.BaseMip);
+
+                        v2u EffectiveExtent = 
+                        {
+                            Max(Texture->Info.Extent.X >> Subresource.BaseMip, 1u),
+                            Max(Texture->Info.Extent.Y >> Subresource.BaseMip, 1u),
+                        };
+                        texture_info CopyInfo = 
+                        {
+                            .Extent = { EffectiveExtent.X, EffectiveExtent.Y, 1 },
+                            .MipCount =  Min(GetMaxMipCount(EffectiveExtent.X, EffectiveExtent.Y), Subresource.MipCount),
+                            .ArrayCount = 1,
+                            .Format = Texture->Info.Format,
+                            .Swizzle = Texture->Info.Swizzle,
+                        };
+                        TransferTexture(Frame, Texture->RendererID, CopyInfo, AllTextureSubresourceRange(), OffsetPtr(Texture->Memory, Offset));
+                    }
+                }
+            }
+        }
+    }
+}
+
+lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Frame, const char* Path)
 {
     memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Arena);
     buffer FileBuffer = Platform.LoadEntireFile(Path, Arena);
@@ -849,7 +942,7 @@ internal void DEBUGLoadTestScene(
 
         if (SrcMaterial->NormalTexture.Scale != 1.0f) 
         {
-            Platform.DebugPrint("[WARNING] Unhandled normal texture scale in glTF");
+            Platform.DebugPrint("[WARNING] Unhandled normal texture scale in glTF\n");
         }
 
         if (Assets->MaterialCount < Assets->MaxMaterialCount)

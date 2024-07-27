@@ -445,6 +445,8 @@ struct texture_set_entry
 lbfn texture_set DEBUGLoadTextureSet(assets* Assets, texture_set_entry Entries[TextureType_Count]);
 
 lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scratch);
+lbfn void UpdateAssets(assets* Assets);
+lbfn void ProcessTextureRequests(assets* Assets, render_frame* Frame);
 
 lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Frame, const char* Path);
 
