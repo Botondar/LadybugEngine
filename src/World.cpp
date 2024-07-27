@@ -647,7 +647,7 @@ lbfn void UpdateAndRenderWorld(
         World->Camera.Yaw = 0.5f * Pi;
 
         // Load debug scene
-        #if 1
+        #if 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
                              DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);
@@ -987,6 +987,11 @@ lbfn void UpdateAndRenderWorld(
                         [Transparency_AlphaTest] = DrawGroup_AlphaTest,
                         [Transparency_AlphaBlend] = DrawGroup_AlphaTest,
                     };
+
+                    if (Material->Transparency == Transparency_AlphaBlend)
+                    {
+                        continue;
+                    }
 
                     draw_group Group = TransparencyToDrawGroupTable[Material->Transparency];
                     if (Material->TransmissionEnabled)
