@@ -253,7 +253,6 @@ struct per_frame
     point_shadow_data PointShadows[R_MaxShadowCount];
 
     u64 IndexBufferAddress;
-    u64 VertexBufferAddress;
     u64 LightBufferAddress;
     u64 TileBufferAddress;
     u64 InstanceBufferAddress;

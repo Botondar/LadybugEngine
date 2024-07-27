@@ -9,6 +9,7 @@ uniform PerFrameBlock
 layout(push_constant) uniform PushConstants
 {
     mat4 Transform;
+    u64 VertexBufferAddress;
     uint iSrcColor;
 };
 
@@ -20,7 +21,7 @@ interpolant(2) vec3 SrcColor;
 
 void main()
 {
-    vertex_buffer_r VertexBuffer = vertex_buffer_r(PerFrame.VertexBufferAddress);
+    vertex_buffer_r VertexBuffer = vertex_buffer_r(VertexBufferAddress);
     P = (PerFrame.ViewTransform * (Transform * vec4(VertexBuffer.Data[gl_VertexIndex].P, 1.0))).xyz;
     // TODO(boti): determine whether we'll need Inv/Transpose here
     N = normalize((PerFrame.ViewTransform * (Transform * vec4(VertexBuffer.Data[gl_VertexIndex].N, 0.0))).xyz);

@@ -2359,7 +2359,6 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
     f32 AspectRatio = (f32)Frame->RenderExtent.X / (f32)Frame->RenderExtent.Y;
 
     Frame->Uniforms.IndexBufferAddress      = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.IndexMemory.Buffer);
-    Frame->Uniforms.VertexBufferAddress     = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.VertexMemory.Buffer);
 
     Frame->Uniforms.Ambience                    = 0.5f * v3{ 1.0f, 1.0f, 1.0f }; // TODO(boti): Expose this in the API
     Frame->Uniforms.Exposure                    = Frame->Config.Exposure;
@@ -3429,9 +3428,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         struct
                         {
                             m4 Transform;
+                            u64 VertexBufferAddress;
                             rgba8 Color;
                         } Push;
                         Push.Transform = Command->Widget3D.Transform;
+                        Push.VertexBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.VertexMemory.Buffer);
                         Push.Color = Command->Widget3D.Color;
                         vkCmdPushConstants(Widget3DCB, Renderer->Pipelines[Pipeline_Gizmo].Layout, VK_SHADER_STAGE_ALL,
                                            0, sizeof(Push), &Push);
