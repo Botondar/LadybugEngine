@@ -19,7 +19,7 @@ TRANSLATION_UNITS = -DLB_TranslationUnitCount=3 \
     -DLB_TranslationUnit_Renderer=2
 
 CXX_FLAGS = $(COMMON) $(FLOAT_ENV) $(INCLUDES) $(DEFINES) $(WARNINGS) $(TRANSLATION_UNITS)
-LINK_FLAGS = -INCREMENTAL:NO
+LINK_FLAGS = -INCREMENTAL:NO /STACK:0x200000,0x200000
 
 SHADER_FLAGS = -g -O --target-env=vulkan1.3 -std=460core -fhlsl-offsets
 
