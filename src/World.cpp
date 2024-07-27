@@ -988,11 +988,6 @@ lbfn void UpdateAndRenderWorld(
                         [Transparency_AlphaBlend] = DrawGroup_AlphaTest,
                     };
 
-                    if (Material->Transparency == Transparency_AlphaBlend)
-                    {
-                        continue;
-                    }
-
                     draw_group Group = TransparencyToDrawGroupTable[Material->Transparency];
                     if (Material->TransmissionEnabled)
                     {
