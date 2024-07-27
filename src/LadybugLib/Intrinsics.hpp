@@ -48,6 +48,7 @@ LB_INLINE u32 AtomicLoad(const u32* Value);
 LB_INLINE u64 AtomicLoad(const u64* Value);
 
 LB_INLINE u32 AtomicLoadAndIncrement(volatile u32* Value);
+LB_INLINE u32 AtomicExchange(volatile u32* Address, u32 Value);
 
 //
 // Implementation
@@ -208,5 +209,11 @@ LB_INLINE u32 AtomicLoadAndIncrement(volatile u32* Value)
 LB_INLINE u64 AtomicLoadAndIncrement(volatile u64* Value)
 {
     u64 Result = (u64)(_InterlockedIncrement64((long long*)Value) - 1);
+    return(Result);
+}
+
+LB_INLINE u32 AtomicExchange(volatile u32* Address, u32 Value)
+{
+    u32 Result = (u32)_InterlockedExchange((volatile long*)Address, (long)Value);
     return(Result);
 }
