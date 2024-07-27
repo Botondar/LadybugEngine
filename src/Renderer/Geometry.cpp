@@ -24,50 +24,35 @@ internal bool CreateGeometryMemory(geometry_memory* Memory, geometry_buffer_type
         InvalidDefaultCase;
     }
 
-    VkBufferCreateInfo BufferInfo = 
+    Memory->BlockCreateInfo =
     {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .size = geometry_memory::GPUBlockSize * geometry_memory::MaxGPUAllocationCount,
+        .size = Memory->GPUBlockSize,
         .usage = Usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
     };
-    VkBuffer Buffer = VK_NULL_HANDLE;
-    VkResult ErrCode = vkCreateBuffer(VK.Device, &BufferInfo, nullptr, &Buffer);
-    if (ErrCode == VK_SUCCESS)
+
+    VkMemoryRequirements MemoryRequirements = GetBufferMemoryRequirements(VK.Device, &Memory->BlockCreateInfo);
+    u32 MemoryTypes = MemoryRequirements.memoryTypeBits & VK.GPUMemTypes;
+    u32 MemoryTypeIndex = 0;
+    if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
     {
-        VkMemoryRequirements MemoryRequirements = {};
-        vkGetBufferMemoryRequirements(VK.Device, Buffer, &MemoryRequirements);
-        u32 MemoryTypes = MemoryRequirements.memoryTypeBits & VK.GPUMemTypes;
-        u32 MemoryTypeIndex = 0;
-        if (BitScanForward(&MemoryTypeIndex, MemoryTypes))
-        {
-            *Memory = {};
-            Memory->MemoryTypeIndex = MemoryTypeIndex;
-            Memory->Buffer = Buffer;
-            Memory->Stride = Stride;
-            DList_Initialize(&Memory->FreeBlocks, Next, Prev);
-            DList_Initialize(&Memory->UsedBlocks, Next, Prev);
-
-            Buffer = VK_NULL_HANDLE;
-
-            Result = true;
-        }
-        else
-        {
-            UnhandledError("No suitable memory type for geometry memory");
-        }
-
-        vkDestroyBuffer(VK.Device, Buffer, nullptr);
+        Memory->MemoryTypeIndex = MemoryTypeIndex;
+        Memory->Stride = Stride;
+        DList_Initialize(&Memory->FreeBlocks, Next, Prev);
+        DList_Initialize(&Memory->UsedBlocks, Next, Prev);
+    
+        Result = true;
     }
     else
     {
-        UnhandledError("Failed to create geometry memory");
+        UnhandledError("No suitable memory type for geometry memory");
     }
-
+    
     return Result;
 }
 
@@ -114,44 +99,67 @@ internal bool AllocateGPUBlocks(geometry_memory* Memory, geometry_buffer_block*&
 
     if (Memory->AllocationCount < Memory->MaxGPUAllocationCount)
     {
-        VkMemoryAllocateFlagsInfo AllocFlags = 
+        VkBuffer Buffer = VK_NULL_HANDLE;
+        VkResult ErrorCode = vkCreateBuffer(VK.Device, &Memory->BlockCreateInfo, nullptr, &Buffer);
+        if (ErrorCode == VK_SUCCESS)
         {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
-            .pNext = nullptr,
-            .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
-            .deviceMask = 0,
-        };
-        VkMemoryAllocateInfo AllocInfo = 
-        {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-            .pNext = &AllocFlags,
-            .allocationSize = Memory->GPUBlockSize,
-            .memoryTypeIndex = Memory->MemoryTypeIndex,
-        };
-        VkDeviceMemory DeviceMemory = VK_NULL_HANDLE;
-        VkResult AllocResult = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &DeviceMemory);
-        if (AllocResult == VK_SUCCESS)
-        {
-            if (vkBindBufferMemory(VK.Device, Memory->Buffer, DeviceMemory, 0) == VK_SUCCESS)
+            VkMemoryAllocateFlagsInfo AllocFlags = 
             {
-                geometry_buffer_block* FreeBlock = BlockPool;
-                BlockPool = BlockPool->Next;
-                BlockPool->Prev = FreeBlock->Prev;
-                BlockPool->Prev->Next = BlockPool;
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+                .pNext = nullptr,
+                .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT,
+                .deviceMask = 0,
+            };
+            VkMemoryAllocateInfo AllocInfo = 
+            {
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .pNext = &AllocFlags,
+                .allocationSize = Memory->GPUBlockSize,
+                .memoryTypeIndex = Memory->MemoryTypeIndex,
+            };
+            VkDeviceMemory DeviceMemory = VK_NULL_HANDLE;
+            ErrorCode = vkAllocateMemory(VK.Device, &AllocInfo, nullptr, &DeviceMemory);
+            if (ErrorCode == VK_SUCCESS)
+            {
+                ErrorCode = vkBindBufferMemory(VK.Device, Buffer, DeviceMemory, 0);
+                if (ErrorCode == VK_SUCCESS)
+                {
+                    u32 Index = Memory->AllocationCount++;
+                    Memory->MemoryBlocks[Index] = DeviceMemory;
+                    Memory->MemoryAddresses[Index] = GetBufferDeviceAddress(VK.Device, Buffer);
+                    Memory->Buffers[Index] = Buffer;
 
-                Memory->FreeBlocks.Next = Memory->FreeBlocks.Prev = FreeBlock;
-                FreeBlock->Prev = FreeBlock->Next = &Memory->FreeBlocks;
+                    DeviceMemory = VK_NULL_HANDLE;
+                    Buffer = VK_NULL_HANDLE;
 
-                FreeBlock->Count = Memory->GPUBlockSize / Memory->Stride;
-                FreeBlock->Offset = 0;
-                Memory->MaxCount += Memory->GPUBlockSize / Memory->Stride;
+                    geometry_buffer_block* FreeBlock = BlockPool;
+                    BlockPool = BlockPool->Next;
+                    BlockPool->Prev = FreeBlock->Prev;
+                    BlockPool->Prev->Next = BlockPool;
 
-                Result = true;
+                    Memory->FreeBlocks.Next = Memory->FreeBlocks.Prev = FreeBlock;
+                    FreeBlock->Prev = FreeBlock->Next = &Memory->FreeBlocks;
+
+                    FreeBlock->Count = Memory->GPUBlockSize / Memory->Stride;
+                    // HACK(boti): We should just go back to using byte offsets/counts
+                    FreeBlock->Offset = (u32)CeilDiv(((umm)Index * Memory->GPUBlockSize), (umm)Memory->Stride);
+                    Memory->MaxCount += Memory->GPUBlockSize / Memory->Stride;
+
+                    Result = true;
+                }
+
+                vkFreeMemory(VK.Device, DeviceMemory, nullptr);
             }
+            else
+            {
+                UnhandledError("Failed to allocate GPU vertex memory");
+            }
+
+            vkDestroyBuffer(VK.Device, Buffer, nullptr);
         }
         else
         {
-            UnhandledError("Failed to allocate GPU vertex memory");
+            UnhandledError("Failed to create GPU geometry buffer block");
         }
     }
     else
@@ -206,6 +214,9 @@ internal geometry_buffer_block* AllocateSubBuffer(geometry_memory* Memory, u32 C
                 NextFreeBlock->Offset = FreeBlock->Offset + Count;
                 FreeBlock->Count = Count;
                 DList_InsertFront(&Memory->FreeBlocks, NextFreeBlock, Next, Prev);
+
+                Assert(((FreeBlock->Offset + FreeBlock->Count) <= NextFreeBlock->Offset) || 
+                       ((NextFreeBlock->Offset + NextFreeBlock->Count) <= FreeBlock->Offset));
             }
             else
             {
@@ -261,4 +272,28 @@ internal void DeallocateVertexBuffer(geometry_buffer* GB, geometry_buffer_alloca
         GB->IndexMemory.CountInUse -= Allocation.IndexBlock->Count;
         GB->IndexMemory.BlocksInUse--;
     }
+}
+
+internal b32 VerifyMemoryIntegrity(geometry_memory* Memory)
+{
+    b32 Result = true;
+
+    for (geometry_buffer_block* Block = Memory->UsedBlocks.Next; Block != &Memory->UsedBlocks; Block = Block->Next)
+    {
+        for (geometry_buffer_block* Comparand = Block->Next; Comparand != &Memory->UsedBlocks; Comparand = Comparand->Next)
+        {
+            b32 Check = ((Block->Offset + Block->Count) <= Comparand->Offset) || ((Comparand->Offset + Comparand->Count) <= Block->Offset);
+            Result &= Check;
+            Verify(Check);
+        }
+    }
+    return(Result);
+}
+
+internal b32 VerifyGeometryIntegrity(geometry_buffer* GeometryBuffer)
+{
+    b32 Result = true;
+    Result &= VerifyMemoryIntegrity(&GeometryBuffer->VertexMemory);
+    Result &= VerifyMemoryIntegrity(&GeometryBuffer->IndexMemory);
+    return(Result);
 }

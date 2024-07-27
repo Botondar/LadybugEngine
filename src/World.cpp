@@ -650,7 +650,7 @@ lbfn void UpdateAndRenderWorld(
         #if 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
-                             DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);
+                             /*DebugSceneFlag_AnimatedFox|*/DebugSceneFlag_SponzaParticles/*|DebugSceneFlag_SponzaAdHocLights*/);
         #elif 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_TransmissionTest, 
@@ -661,6 +661,7 @@ lbfn void UpdateAndRenderWorld(
                              DebugSceneFlag_None);
         #endif
 
+        #if 1
         entity* IKControl = MakeEntity(World, &World->IKControlID);
         IKControl->Flags = EntityFlag_Mesh;
         IKControl->Transform = 
@@ -674,6 +675,7 @@ lbfn void UpdateAndRenderWorld(
             .MeshID = Assets->DefaultMeshIDs[DefaultMesh_Sphere],
             .OffsetP = { 0.0f, 0.0f, 0.0f },
         };
+        #endif
 
         World->IsLoaded = true;
     }

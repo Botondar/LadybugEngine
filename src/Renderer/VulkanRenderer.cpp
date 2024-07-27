@@ -1919,7 +1919,8 @@ internal VkResult ResizeSwapchain(renderer* Renderer, u32 FrameID, b32 Forced)
 internal void 
 DrawList(render_frame* Frame, VkCommandBuffer CmdBuffer, pipeline* Pipelines, draw_list* List)
 {
-    vkCmdBindIndexBuffer(CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffer, 0, VK_INDEX_TYPE_UINT32);
+    // NOTE(boti): We only support a single buffer for index memory
+    vkCmdBindIndexBuffer(CmdBuffer, Frame->Renderer->GeometryBuffer.IndexMemory.Buffers[0], 0, VK_INDEX_TYPE_UINT32);
 
     umm CurrentOffset = 0;
     for (u32 Group = 0; Group < DrawGroup_Count; Group++)
@@ -2358,7 +2359,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
 
     f32 AspectRatio = (f32)Frame->RenderExtent.X / (f32)Frame->RenderExtent.Y;
 
-    Frame->Uniforms.IndexBufferAddress      = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.IndexMemory.Buffer);
+    // NOTE(boti): We only support a single index buffer
+    Frame->Uniforms.IndexBufferAddress = Renderer->GeometryBuffer.IndexMemory.MemoryAddresses[0];
 
     Frame->Uniforms.Ambience                    = 0.5f * v3{ 1.0f, 1.0f, 1.0f }; // TODO(boti): Expose this in the API
     Frame->Uniforms.Exposure                    = Frame->Config.Exposure;
@@ -2933,7 +2935,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         vkCmdSetScissor(Widget3DCB, 0, 1, &BlitScissor);
 
         vkCmdBindPipeline(Widget3DCB, VK_PIPELINE_BIND_POINT_GRAPHICS, Renderer->Pipelines[Pipeline_Gizmo].Pipeline);
-        vkCmdBindIndexBuffer(Widget3DCB, Renderer->GeometryBuffer.IndexMemory.Buffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(Widget3DCB, Renderer->GeometryBuffer.IndexMemory.Buffers[0], 0, VK_INDEX_TYPE_UINT32);
     }
 
     VkCommandBuffer GuiCB = BeginCommandBuffer(Renderer, Frame->FrameID, BeginCB_Secondary, Pipeline_UI);
@@ -3200,8 +3202,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                                 umm VertexByteOffset = Op->Geometry.Dest.VertexBlock->Offset * sizeof(vertex);
                                 umm IndexByteCount = Op->Geometry.Dest.IndexBlock->Count * sizeof(vert_index);
                                 umm IndexByteOffset = Op->Geometry.Dest.IndexBlock->Offset * sizeof(vert_index);
-                                VkBuffer VertexBuffer = Renderer->GeometryBuffer.VertexMemory.Buffer;
-                                VkBuffer IndexBuffer = Renderer->GeometryBuffer.IndexMemory.Buffer;
+
+                                u32 BlockIndex = VertexByteOffset / Renderer->GeometryBuffer.VertexMemory.GPUBlockSize;
+                                VertexByteOffset = VertexByteOffset % Renderer->GeometryBuffer.VertexMemory.GPUBlockSize;
+                                VkBuffer VertexBuffer = Renderer->GeometryBuffer.VertexMemory.Buffers[BlockIndex];
+                                VkBuffer IndexBuffer = Renderer->GeometryBuffer.IndexMemory.Buffers[0];
 
                                 VkBufferMemoryBarrier2 Barrier = 
                                 {
@@ -3356,8 +3361,8 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                         BoundingBoxes[ID] = Draw->BoundingBox;
                         Transforms[ID] = Draw->Transform;
 
-                        u64 SourceByteOffset = Draw->Geometry.VertexBlock->Offset * sizeof(vertex);
-                        u64 SourceVertexBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.VertexMemory.Buffer) + SourceByteOffset;
+                        umm SourceByteOffset = Draw->Geometry.VertexBlock->Offset * sizeof(vertex);
+                        u64 SourceVertexBufferAddress = GetDeviceAddress(&Renderer->GeometryBuffer.VertexMemory, SourceByteOffset);
                         u64 DrawVertexBufferAddress = SourceVertexBufferAddress;
 
                         if (Draw->Flags & Draw_Skinned)
@@ -3425,6 +3430,9 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                     } break;
                     case RenderCommand_Widget3D:
                     {
+                        geometry_buffer_allocation* Geometry = &Command->Widget3D.Geometry;
+                        umm VertexByteOffset = Geometry->VertexBlock->Offset * sizeof(vertex);
+
                         struct
                         {
                             m4 Transform;
@@ -3432,12 +3440,11 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
                             rgba8 Color;
                         } Push;
                         Push.Transform = Command->Widget3D.Transform;
-                        Push.VertexBufferAddress = GetBufferDeviceAddress(VK.Device, Renderer->GeometryBuffer.VertexMemory.Buffer);
+                        Push.VertexBufferAddress = GetDeviceAddress(&Renderer->GeometryBuffer.VertexMemory, VertexByteOffset);
                         Push.Color = Command->Widget3D.Color;
                         vkCmdPushConstants(Widget3DCB, Renderer->Pipelines[Pipeline_Gizmo].Layout, VK_SHADER_STAGE_ALL,
                                            0, sizeof(Push), &Push);
-                        geometry_buffer_allocation* Geometry = &Command->Widget3D.Geometry;
-                        vkCmdDrawIndexed(Widget3DCB, Geometry->IndexBlock->Count, 1, Geometry->IndexBlock->Offset, Geometry->VertexBlock->Offset, 0);
+                        vkCmdDrawIndexed(Widget3DCB, Geometry->IndexBlock->Count, 1, Geometry->IndexBlock->Offset, 0, 0);
                     } break;
                     case RenderCommand_Batch2D:
                     {
@@ -5482,6 +5489,14 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
         };
         vkQueuePresentKHR(VK.GraphicsQueue, &PresentInfo);
     }
+
+#if 0
+    b32 GeometryIntegrity = VerifyGeometryIntegrity(&Renderer->GeometryBuffer);
+    if (!GeometryIntegrity)
+    {
+        UnhandledError("Geometry is messed up!");
+    }
+#endif
 
     // Verify texture allocation integrity
 #if 0

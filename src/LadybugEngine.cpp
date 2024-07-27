@@ -40,7 +40,7 @@ void Game_UpdateAndRender(thread_context* ThreadContext, game_memory* Memory, ga
 
         GameState = Memory->GameState = PushStruct(&BootstrapArena, 0, game_state);
         GameState->TotalArena = BootstrapArena;
-        constexpr umm TransientArenaSize = MiB(512);
+        constexpr umm TransientArenaSize = MiB(1024);
         GameState->TransientArena = InitializeArena(TransientArenaSize, PushSize_(&GameState->TotalArena, 0, TransientArenaSize, 64));
 
         renderer_init_result RendererInit = Platform.CreateRenderer(&Memory->PlatformAPI, &GameState->TotalArena, &GameState->TransientArena);
@@ -57,7 +57,7 @@ void Game_UpdateAndRender(thread_context* ThreadContext, game_memory* Memory, ga
         }
         RenderFrame = Platform.BeginRenderFrame(GameState->Renderer, ThreadContext, &GameState->TransientArena, GameIO->OutputExtent);
 
-        constexpr umm AssetArenaSize = GiB(5);
+        constexpr umm AssetArenaSize = GiB(4);
         memory_arena AssetArena = InitializeArena(AssetArenaSize, PushSize_(&GameState->TotalArena, 0, AssetArenaSize, KiB(4)));
         assets* Assets = GameState->Assets = PushStruct(&AssetArena, 0, assets);
         Assets->Arena = AssetArena;

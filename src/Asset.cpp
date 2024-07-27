@@ -428,7 +428,7 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 
     // Texture cache
     {
-        umm CacheSize = GiB(3);
+        umm CacheSize = GiB(2);
         Assets->TextureCache = InitializeArena(CacheSize, PushSize_(&Assets->Arena, 0, CacheSize, KiB(4)));
     }
 
