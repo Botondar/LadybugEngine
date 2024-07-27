@@ -29,6 +29,7 @@ struct platform_file
 };
 
 struct work_queue;
+struct io_queue;
 
 struct thread_context
 {
@@ -54,12 +55,15 @@ typedef void                complete_all_work       (work_queue* Queue, thread_c
 typedef platform_file       open_file               (const char* Path);
 typedef void                close_file              (platform_file File);
 typedef buffer              read_file_contents      (platform_file File, memory_arena* Arena);
+typedef u64                 push_io_request         (io_queue* Queue, platform_file File, umm ByteOffset, umm ByteCount, void* Dst);
+typedef u64                 get_io_completion       (io_queue* Queue);
 
 struct platform_api
 {
     profiler* Profiler;
 
     work_queue* Queue;
+    io_queue*   IOQueue;
 
     //
     // Dispatch table
@@ -79,6 +83,8 @@ struct platform_api
     open_file*              OpenFile;
     close_file*             CloseFile;
     read_file_contents*     ReadFileContents;
+    push_io_request*        PushIORequest;
+    get_io_completion*      GetIOCompletion;
 
     // Renderer
     create_renderer*    CreateRenderer;

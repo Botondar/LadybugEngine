@@ -48,6 +48,11 @@ internal b32 Win_ProtectPage(void* Address, umm Size, b32 DoProtect)
     return(Result);
 }
 
+
+//
+// IO
+//
+
 internal platform_file Win_OpenFile(const char* Path)
 {
     platform_file Result = {};
@@ -140,6 +145,117 @@ internal buffer Win_LoadEntireFile(const char* Path, memory_arena* Arena)
         CloseHandle(FileHandle);
     }
     return(Result);
+}
+
+struct win_io_request
+{
+    umm ByteOffset;
+    umm ByteCount;
+    void* Dst;
+    platform_file File;
+
+    b32 IsReady; // NOTE(boti): This signals whether the IOThread can start processing the request
+};
+
+struct io_queue
+{
+    u64 CurrentCompletion;
+    u64 CompletionGoal;
+
+    win_ticket_mutex Mutex;
+    HANDLE Semaphore;
+
+    static constexpr u32 MaxRequestCount = 2048;
+    win_io_request RequestBuffer[MaxRequestCount];
+};
+
+internal u64 Win_GetIOCompletion(io_queue* Queue)
+{
+    u64 Result = AtomicLoad(&Queue->CurrentCompletion);
+    return(Result);
+}
+
+internal u64 Win_PushIORequest(io_queue* Queue, platform_file File, umm ByteOffset, umm ByteCount, void* Dst)
+{
+    for (;;)
+    {
+        u64 CurrentCompletion = AtomicLoad(&Queue->CurrentCompletion);
+        u64 CompletionGoal = AtomicLoad(&Queue->CompletionGoal);
+
+        if ((CompletionGoal - CurrentCompletion) < Queue->MaxRequestCount)
+        {
+            break;
+        }
+        else
+        {
+            SpinWait;
+        }
+    }
+
+    u64 Goal = AtomicLoadAndIncrement(&Queue->CompletionGoal);
+    u64 Index = Goal % Queue->MaxRequestCount;
+    Queue->RequestBuffer[Index] = 
+    {
+        .ByteOffset = ByteOffset,
+        .ByteCount = ByteCount,
+        .Dst = Dst,
+        .File = File,
+    };
+    b32 OldValue = AtomicExchange(&Queue->RequestBuffer[Index].IsReady, 1);
+    Assert(OldValue == 0);
+
+    ReleaseSemaphore(Queue->Semaphore, 1, nullptr);
+
+    return(Goal);
+}
+
+// NOTE(boti): Even when using overlapped IO or IOCP, 
+// Windows might decide to synchronously copy the file from its file cache,
+// so we use our own thread instead
+internal DWORD Win_IOThread(void* Params)
+{
+    io_queue* Queue = (io_queue*)Params;
+
+    for (;;)
+    {
+        u64 CurrentCompletion = AtomicLoad(&Queue->CurrentCompletion);
+        if (CurrentCompletion != AtomicLoad(&Queue->CompletionGoal))
+        {
+            u64 Index = CurrentCompletion % Queue->MaxRequestCount;
+            win_io_request* Request = Queue->RequestBuffer + Index;
+            while (!AtomicLoad(&Request->IsReady))
+            {
+                SpinWait;
+            }
+
+            // Read barrier here
+
+            if (Request->File.IsValid)
+            {
+                OVERLAPPED Overlapped = {};
+                Overlapped.Offset = (DWORD)Request->ByteOffset;
+                Overlapped.OffsetHigh = (DWORD)(Request->ByteOffset >> 32);
+                
+                Assert(Request->ByteCount <= 0xFFFFFFFFu);
+                DWORD BytesRead = 0;
+                BOOL ReadResult = ReadFile(Request->File.Handle, Request->Dst, (DWORD)Request->ByteCount, &BytesRead, &Overlapped);
+                if (!ReadResult)
+                {
+                    DWORD ErrorCode = GetLastError();
+                    Win_DebugPrint("[IOThread] ReadFile failed: %u", ErrorCode);
+                }
+            }
+
+            AtomicExchange(&Request->IsReady, 0);
+            AtomicLoadAndIncrement(&Queue->CurrentCompletion);
+        }
+        else
+        {
+            WaitForSingleObject(Queue->Semaphore, INFINITE);
+        }
+    }
+
+    return(0);
 }
 
 internal counter Win_GetCounter()
@@ -875,10 +991,27 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
 
     DWORD AudioThreadID = 0;
     HANDLE AudioThread = CreateThread(nullptr, 0, &Win_AudioThread, nullptr, 0, &AudioThreadID);
-    // TODO(boti): Not a critical failure
-    if (!AudioThread)
+    if (AudioThread)
     {
+        SetThreadDescription(AudioThread, L"AudioThread");
+    }
+    else
+    {
+        // TODO(boti): Not a critical failure
         UnhandledError("Failed to create audio thread");
+    }
+
+    io_queue IOQueue = {};
+    IOQueue.Semaphore = CreateSemaphoreA(nullptr, 0, 1, nullptr);
+    DWORD IOThreadID = 0;
+    HANDLE IOThread = CreateThread(nullptr, 0, &Win_IOThread, &IOQueue, 0, &IOThreadID);
+    if (IOThread)
+    {
+        SetThreadDescription(IOThread, L"IOThread");
+    }
+    else
+    {
+        UnhandledError("Failed to create IO thread");
     }
 
     WNDCLASSEXW WindowClass = 
@@ -1051,6 +1184,7 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     
     GameMemory.PlatformAPI.Profiler             = &GlobalProfiler;
     GameMemory.PlatformAPI.Queue                = &WorkQueue;
+    GameMemory.PlatformAPI.IOQueue              = &IOQueue;
     GameMemory.PlatformAPI.DebugPrint           = &Win_DebugPrint;
     GameMemory.PlatformAPI.GetCounter           = &Win_GetCounter;
     GameMemory.PlatformAPI.ElapsedSeconds       = &Win_ElapsedSeconds;
@@ -1066,6 +1200,8 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     GameMemory.PlatformAPI.OpenFile             = &Win_OpenFile;
     GameMemory.PlatformAPI.CloseFile            = &Win_CloseFile;
     GameMemory.PlatformAPI.ReadFileContents     = &Win_ReadFileContents;
+    GameMemory.PlatformAPI.PushIORequest        = &Win_PushIORequest;
+    GameMemory.PlatformAPI.GetIOCompletion      = &Win_GetIOCompletion;
 
     HMODULE RendererDLL = LoadLibraryA("vulkan_renderer.dll");
     if (RendererDLL)
@@ -1182,6 +1318,10 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     }
 
     Win_CompleteAllWork(&WorkQueue, ThreadContext);
+
+    // TODO(boti): Wait for the IO thread to finish instead
+    SuspendThread(IOThread);
+
     return(0);
 }
 
