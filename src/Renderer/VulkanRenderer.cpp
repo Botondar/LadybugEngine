@@ -2398,7 +2398,7 @@ extern "C" Signature_EndRenderFrame(EndRenderFrame)
             0.0f,   1.0f / g,   0.0f,           0.0f,
             0.0f,   0.0f,       0.0f,           1.0f,
             0.0f,   0.0f,       1.0f / n,       0.0f);
-        #elif
+        #elif 0
         // Reverse Z
         Frame->ProjectionTransform = M4(
             g / s, 0.0f, 0.0f, 0.0f,
