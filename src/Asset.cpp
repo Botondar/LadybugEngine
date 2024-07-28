@@ -7,444 +7,12 @@ internal mesh_data CreateArrowMesh(memory_arena* Arena);
 internal mesh_data CreatePyramidMesh(memory_arena* Arena);
 
 //
-// Texture queue
-//
-lbfn void AssetThread(void* Param)
-{
-    assets* Assets = (assets*)Param;
-    texture_queue* Queue = &Assets->TextureQueue;
-
-    for (;;)
-    {
-        b32 WeShouldSleep = ProcessEntry(Queue);
-        while (!WeShouldSleep)
-        {
-            WeShouldSleep = ProcessEntry(Queue);
-        }
-        u32 WaitMS = 0xFFFFFFFFu;
-        Platform.WaitForSemaphore(Queue->Semaphore, WaitMS);
-    }
-}
-
-lbfn umm GetNextEntryOffset(texture_queue* Queue, umm TotalSize, umm Begin)
-{
-    umm End = Begin + TotalSize;
-    if ((End % Queue->RingBufferSize) < (Begin % Queue->RingBufferSize))
-    {
-        Begin = Align(Begin, Queue->RingBufferSize);
-    }
-    return(Begin);
-}
-
-lbfn void AddEntry(texture_queue* Queue, texture* Texture, texture_load_op Op)
-{
-    // TODO(boti): Spin-wait here?
-    if (Queue->CompletionGoal - Queue->CompletionCount < Queue->MaxEntryCount)
-    {
-        u32 Index = AtomicLoadAndIncrement(&Queue->CompletionGoal) % Queue->MaxEntryCount;
-        Queue->Entries[Index] =
-        {
-            .Texture = Texture,
-            .Op = Op,
-            .ReadyToTransfer = false,
-        };
-        Platform.ReleaseSemaphore(Queue->Semaphore, 1, nullptr);
-    }
-    else
-    {
-        UnhandledError("Texture queue full");
-    }
-}
-
-lbfn b32 IsEmpty(texture_queue* Queue)
-{
-    b32 Result = (Queue->CompletionCount == Queue->CompletionGoal);
-    return(Result);
-}
-
-lbfn b32 ProcessEntry(texture_queue* Queue)
-{
-    b32 Result = false;
-    if (Queue->ProcessingCount < Queue->CompletionGoal)
-    {
-        texture_queue_entry* Entry = Queue->Entries + (Queue->ProcessingCount++ % Queue->MaxEntryCount);
-        texture_load_op* Op = &Entry->Op;
-
-        memory_arena* Scratch = &Queue->Scratch;
-        memory_arena_checkpoint Checkpoint = ArenaCheckpoint(Scratch);
-
-        filepath CachedPath = {};
-        MakeFilepathFromZ(&CachedPath, "cache/");
-        OverwriteNameAndExtension(&CachedPath, { Op->Path.NameCount, Op->Path.Path + Op->Path.NameOffset });
-        FindFilepathExtensionAndName(&CachedPath, 0);
-        OverwriteExtension(&CachedPath, ".dds");
-        
-        platform_file File = Platform.OpenFile(CachedPath.Path);
-        if (File.IsValid /*&& Op->Type != TextureType_Normal*/)
-        {
-            buffer FileBuffer = Platform.ReadFileContents(File, Scratch);
-            dds_file* DDS = (dds_file*)FileBuffer.Data;
-
-            Entry->Info.Extent = { DDS->Header.Width, DDS->Header.Height, 1 };
-            Entry->Info.MipCount = DDS->Header.MipMapCount;
-            Entry->Info.ArrayCount = 1;
-            Entry->Info.Format = DXGIFormatTable[DDS->DX10Header.Format];
-            Entry->Info.Swizzle = *(texture_swizzle*)&DDS->Header.Swizzle;
-
-            format_info FormatInfo = FormatInfoTable[Entry->Info.Format];
-            umm TotalMipChainSize = GetMipChainSize(Entry->Info.Extent.X, Entry->Info.Extent.Y, Entry->Info.MipCount, Entry->Info.ArrayCount, FormatInfo);
-
-            umm MipChainBegin = GetNextEntryOffset(Queue, TotalMipChainSize, Queue->RingBufferWriteAt);
-            while (((MipChainBegin + TotalMipChainSize) - Queue->RingBufferReadAt) >= Queue->RingBufferSize)
-            {
-                SpinWait;
-            }
-            
-            u8* MipChain = Queue->RingBufferMemory + (MipChainBegin % Queue->RingBufferSize);
-            Queue->RingBufferWriteAt = MipChainBegin + TotalMipChainSize;
-
-            memcpy(MipChain, DDS->Data, TotalMipChainSize);
-
-            _mm_sfence();
-            Entry->ReadyToTransfer = true;
-
-            Platform.CloseFile(File);
-        }
-        else
-        {
-            loaded_image Image = {};
-            buffer ImageFile = Platform.LoadEntireFile(Op->Path.Path, Scratch);
-            switch (Op->Type)
-            {
-                case TextureType_Albedo:
-                {
-                    Image = LoadImage(Scratch, ImageFile);
-                    Assert(Image.Format == Format_R8G8B8_UNorm || Image.Format == Format_R8G8B8A8_UNorm);
-                    Entry->Info.Format = (Image.Format == Format_R8G8B8_UNorm) ? Format_BC1_RGB_SRGB : Format_BC3_SRGB;
-                } break;
-                case TextureType_Normal:
-                {
-                    Image = LoadImage(Scratch, ImageFile);
-                    Entry->Info.Format = Format_BC5_UNorm;
-                } break;
-                case TextureType_RoMe:
-                {
-                    loaded_image SourceImage = LoadImage(Scratch, ImageFile);
-                    Assert(SourceImage.Data);
-
-                    format_info FormatInfo = FormatInfoTable[SourceImage.Format];
-
-                    u32 ChannelCount = 0;
-                    if (Op->RoughnessMetallic.RoughnessChannel && Op->RoughnessMetallic.MetallicChannel)
-                    {
-                        Assert(IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel) < FormatInfo.ChannelCount);
-                        Assert(IndexFromChannel(Op->RoughnessMetallic.MetallicChannel) < FormatInfo.ChannelCount);
-                        Entry->Info.Swizzle = { Swizzle_One, Swizzle_R, Swizzle_G, Swizzle_One };
-                        ChannelCount = 2;
-                    }
-                    else if (Op->RoughnessMetallic.RoughnessChannel)
-                    {
-                        Assert(IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel) < FormatInfo.ChannelCount);
-                        Entry->Info.Swizzle = { Swizzle_One, Swizzle_R, Swizzle_Zero, Swizzle_One };
-                        ChannelCount = 1;
-                    }
-                    else if (Op->RoughnessMetallic.MetallicChannel)
-                    {
-                        Assert(IndexFromChannel(Op->RoughnessMetallic.MetallicChannel) < FormatInfo.ChannelCount);
-                        Entry->Info.Swizzle = { Swizzle_One, Swizzle_One, Swizzle_R, Swizzle_One };
-                        ChannelCount = 1;
-                    }
-                    else
-                    {
-                        InvalidCodePath;
-                    }
-
-                    Entry->Info.Format = (ChannelCount == 2) ? Format_BC5_UNorm : Format_BC4_UNorm;
-
-                    Image.Extent = SourceImage.Extent;
-                    Image.Format = (ChannelCount == 2) ? Format_R8G8_UNorm : Format_R8_UNorm;
-                    Image.Data = PushSize_(Scratch, 0, Image.Extent.X * Image.Extent.Y * ChannelCount, 64);
-                    Assert(Image.Data);
-
-                    u8* SrcAt = (u8*)SourceImage.Data;
-                    u8* DstAt = (u8*)Image.Data;
-                    for (u32 Y = 0; Y < SourceImage.Extent.Y; Y++)
-                    {
-                        for (u32 X = 0; X < SourceImage.Extent.X; X++)
-                        {
-                            if (ChannelCount == 2)
-                            {
-                                DstAt[0] = SrcAt[IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel)];
-                                DstAt[1] = SrcAt[IndexFromChannel(Op->RoughnessMetallic.MetallicChannel)];
-                            }
-                            else
-                            {
-                                DstAt[0] = Op->RoughnessMetallic.RoughnessChannel ?
-                                    SrcAt[IndexFromChannel(Op->RoughnessMetallic.RoughnessChannel)] :
-                                    SrcAt[IndexFromChannel(Op->RoughnessMetallic.MetallicChannel)];
-                            }
-                            DstAt += ChannelCount;
-                            SrcAt += FormatInfo.ChannelCount;
-                        }
-                    }
-                } break;
-
-                case TextureType_Height:
-                case TextureType_Occlusion:
-                {
-                    loaded_image SourceImage = LoadImage(Scratch, ImageFile);
-                    Assert(SourceImage.Data);
-
-                    format_info SourceFormat = FormatInfoTable[SourceImage.Format];
-
-                    Image.Extent = SourceImage.Extent;
-                    Image.Format = Format_R8_UNorm;
-                    Image.Data = PushSize_(Scratch, 0, Image.Extent.X * Image.Extent.Y, 64);
-                    Assert(Image.Data);
-                
-                    Entry->Info.Format = Format_BC4_UNorm;
-
-                    u8* SrcAt = (u8*)SourceImage.Data;
-                    u8* DstAt = (u8*)Image.Data;
-                    for (u32 Y = 0; Y < SourceImage.Extent.Y; Y++)
-                    {
-                        for (u32 X = 0; X < SourceImage.Extent.X; X++)
-                        {
-                            *DstAt++ = *SrcAt;
-                            SrcAt += SourceFormat.ChannelCount;
-                        }
-                    }
-                
-                } break;
-
-                case TextureType_Transmission:
-                {
-                    UnimplementedCodePath;
-                } break;
-
-                InvalidDefaultCase;
-            }
-
-            format_info SourceFormat = FormatInfoTable[Image.Format];
-
-            // TODO(boti): We'll want these to be part of the Op, alpha rescale should only be done on alpha tested textures
-            b32 DoAlphaCoverageRescale = (Op->Type == TextureType_Albedo) && (Format_R8G8B8A8_UNorm);
-            f32 AlphaThreshold = 1.0f;
-
-            // NOTE(boti): Calculate initial alpha coverage
-            f32 AlphaCoverage = 0.0f;
-            if (DoAlphaCoverageRescale)
-            {
-                AlphaCoverage = CalculateAlphaCoverage(Image.Extent, (u8*)Image.Data, AlphaThreshold, 1.0f);
-            }
-
-            v2u AlignedExtent = { CeilPowerOf2(Image.Extent.X), CeilPowerOf2(Image.Extent.Y) };
-            if (AlignedExtent.X != Image.Extent.X || AlignedExtent.Y != Image.Extent.Y)
-            {
-                loaded_image OldImage = Image;
-                Image.Extent = AlignedExtent;
-                umm ImageSize = GetMipChainSize(AlignedExtent.X, AlignedExtent.Y, 1, 1, SourceFormat);
-                Image.Data = PushSize_(Scratch, 0, ImageSize, 64);
-
-                switch (Op->Type)
-                {
-                    case TextureType_Albedo:
-                    {
-                        stbir_pixel_layout PixelLayout = (SourceFormat.ChannelCount == 4) ? STBIR_RGBA_PM : STBIR_RGB;
-                        stbir_resize_uint8_srgb(
-                            (u8*)OldImage.Data, OldImage.Extent.X, OldImage.Extent.Y, 0, 
-                            (u8*)Image.Data, AlignedExtent.X, AlignedExtent.Y, 0,
-                            PixelLayout);
-
-                        if (DoAlphaCoverageRescale)
-                        {
-                            RescaleAlphaForCoverage(AlignedExtent, (u8*)Image.Data, AlphaThreshold, AlphaCoverage);
-                        }
-                    } break;
-            
-                    default:
-                    {
-                        stbir_resize_uint8_linear(
-                            (u8*)OldImage.Data, OldImage.Extent.X, OldImage.Extent.Y, 0,
-                            (u8*)Image.Data, AlignedExtent.X, AlignedExtent.Y, 0,
-                            (stbir_pixel_layout)SourceFormat.ChannelCount);
-                    } break;
-                }
-            }
-
-            u8* SrcImage = (u8*)Image.Data;
-            Entry->Info.Extent = { Image.Extent.X, Image.Extent.Y, 1 };
-            Entry->Info.ArrayCount = 1;
-            if (SrcImage)
-            {
-                Entry->Info.MipCount = GetMaxMipCount(Entry->Info.Extent.X, Entry->Info.Extent.Y);
-                format_info ByteRate = FormatInfoTable[Entry->Info.Format];
-                u64 TotalMipChainSize = GetMipChainSize(Entry->Info.Extent.X, Entry->Info.Extent.Y, Entry->Info.MipCount, 1, ByteRate);
-                umm MipChainBegin = GetNextEntryOffset(Queue, TotalMipChainSize, Queue->RingBufferWriteAt);
-                while (((MipChainBegin + TotalMipChainSize) - Queue->RingBufferReadAt) >= Queue->RingBufferSize)
-                {
-                    SpinWait;
-                }
-
-                u8* MipChain = Queue->RingBufferMemory + (MipChainBegin % Queue->RingBufferSize);
-                Queue->RingBufferWriteAt = MipChainBegin + TotalMipChainSize;
-
-                u32 BlockSize = 16 * ByteRate.ByteRateNumerator / ByteRate.ByteRateDenominator;
-
-                u8* DownscaleBuffer = (u8*)PushSize_(Scratch, 0, Entry->Info.Extent.X * Entry->Info.Extent.Y, 64);
-                u8* SrcAt = SrcImage;
-                u8* DstAt = MipChain;
-                for (u32 MipIndex = 0; MipIndex < Entry->Info.MipCount; MipIndex++)
-                {
-                    u32 ExtentX = Max(Entry->Info.Extent.X >> MipIndex, 4u);
-                    u32 ExtentY = Max(Entry->Info.Extent.Y >> MipIndex, 4u);
-
-                    //
-                    // Mip generation
-                    //
-                    if (MipIndex != 0)
-                    {
-                        u32 PrevExtentX = Max(Entry->Info.Extent.X >> (MipIndex - 1), 4u);
-                        u32 PrevExtentY = Max(Entry->Info.Extent.Y >> (MipIndex - 1), 4u);
-
-                        switch (Op->Type)
-                        {
-                            case TextureType_Albedo:
-                            {
-                                stbir_pixel_layout PixelLayout = (SourceFormat.ChannelCount == 4) ? STBIR_RGBA_PM : STBIR_RGB;
-                                stbir_resize_uint8_srgb(
-                                    (u8*)SrcAt, PrevExtentX, PrevExtentY, 0, 
-                                    (u8*)DownscaleBuffer, ExtentX, ExtentY, 0,
-                                    PixelLayout);
-
-                                if (DoAlphaCoverageRescale)
-                                {
-                                    RescaleAlphaForCoverage({ ExtentX, ExtentY }, (u8*)DownscaleBuffer, AlphaThreshold, AlphaCoverage);
-                                }
-                            } break;
-
-                            default:
-                            {
-                                stbir_resize_uint8_linear(
-                                    (u8*)SrcAt, PrevExtentX, PrevExtentY, 0, 
-                                    (u8*)DownscaleBuffer, ExtentX, ExtentY, 0,
-                                    (stbir_pixel_layout)SourceFormat.ChannelCount);
-                            } break;
-                        }
-                        SrcAt = DownscaleBuffer;
-                    }
-
-                    //
-                    // BC compression
-                    //
-                    for (u32 Y = 0; Y < ExtentX; Y += 4)
-                    {
-                        for (u32 X = 0; X < ExtentY; X += 4)
-                        {
-                            switch (Entry->Info.Format)
-                            {
-                                case Format_BC3_SRGB:
-                                case Format_BC1_RGB_SRGB:
-                                {
-                                    Assert(SourceFormat.ChannelCount == 3 || SourceFormat.ChannelCount == 4);
-                                    int Alpha = (SourceFormat.ChannelCount == 4);
-
-                                    u8 Block[4*4][4];
-                                    for (u32 BlockY = 0; BlockY < 4; BlockY++)
-                                    {
-                                        for (u32 BlockX = 0; BlockX < 4; BlockX++)
-                                        {
-                                            umm Offset = ((X + BlockX) + (Y + BlockY) * ExtentX) * SourceFormat.ChannelCount;
-                                            u8* Src = SrcAt + Offset;
-                                            Block[BlockX + 4 * BlockY][0] = Src[0];
-                                            Block[BlockX + 4 * BlockY][1] = Src[1];
-                                            Block[BlockX + 4 * BlockY][2] = Src[2];
-                                            Block[BlockX + 4 * BlockY][3] = (SourceFormat.ChannelCount == 4) ? Src[3] : 0xFFu;
-                                        }
-                                    }
-                                    stb_compress_dxt_block(DstAt, (u8*)Block, Alpha, STB_DXT_HIGHQUAL);
-                                } break;
-                                case Format_BC4_UNorm:
-                                {
-                                    u8 Block[4*4][1];
-                                    for (u32 BlockY = 0; BlockY < 4; BlockY++)
-                                    {
-                                        for (u32 BlockX = 0; BlockX < 4; BlockX++)
-                                        {
-                                            umm Offset = ((X + BlockX) + (Y + BlockY) * ExtentX) * SourceFormat.ChannelCount;
-                                            u8* Src = SrcAt + Offset;
-                                            Block[BlockX + 4*BlockY][0] = Src[0];
-                                        }
-                                    }
-                                    stb_compress_bc4_block(DstAt, (u8*)Block);
-                                } break;
-                                case Format_BC5_UNorm:
-                                {
-                                    Assert(SourceFormat.ChannelCount >= 2);
-
-                                    u8 Block[4*4][2];
-                                    for (u32 BlockY = 0; BlockY < 4; BlockY++)
-                                    {
-                                        for (u32 BlockX = 0; BlockX < 4; BlockX++)
-                                        {
-                                            umm Offset = ((X + BlockX) + (Y + BlockY) * ExtentX) * SourceFormat.ChannelCount;
-                                            u8* Src = SrcAt + Offset;
-                                            Block[BlockX + 4*BlockY][0] = Src[0];
-                                            Block[BlockX + 4*BlockY][1] = Src[1];
-                                        }
-                                    }
-                                    stb_compress_bc5_block(DstAt, (u8*)Block);
-                                } break;
-                                InvalidDefaultCase;
-                            }
-
-                            DstAt += BlockSize;
-                        }
-                    }
-                }
-                Entry->ReadyToTransfer = true;
-            }
-            else 
-            {
-                UnhandledError("Failed to load image");
-            }
-        }
-
-        RestoreArena(Scratch, Checkpoint);
-    }
-    else
-    {
-        Result = true;
-    }
-    return(Result);
-}
-
-//
 // Assets
 //
 lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scratch)
 {
     b32 Result = true;
-
-    // Texture cache
-    {
-        umm CacheSize = GiB(2);
-        Assets->TextureCache = InitializeArena(CacheSize, PushSize_(&Assets->Arena, 0, CacheSize, KiB(4)));
-    }
-
-    // Texture queue
-    {
-        texture_queue* Queue = &Assets->TextureQueue;
-        Queue->Semaphore = Platform.CreateSemaphore(0, 1);
-        umm ScratchSize = MiB(384);
-        Queue->Scratch = InitializeArena(ScratchSize, PushSize_(&Assets->Arena, 0, ScratchSize, KiB(4)));
-
-        Queue->RingBufferSize = MiB(128);
-        Queue->RingBufferMemory = (u8*)PushSize_(&Assets->Arena, 0, Queue->RingBufferSize, KiB(4));
-
-        Platform.CreateThread(&AssetThread, Assets, L"AssetThread");
-    }
-
+    
     // Texture load queue
     {
         texture_load_queue* Queue = &Assets->LoadQueue;
@@ -472,7 +40,6 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 
             u32 Texel = 0xFFFFFFFFu;
             TransferTexture(Frame, Whiteness->RendererID, Info, AllTextureSubresourceRange(), &Texel);
-            Whiteness->IsLoaded = true;
         }
 
         {
@@ -491,7 +58,6 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
 
             u32 Texel = 0x80808080u;
             TransferTexture(Frame, HalfGray->RendererID, Info, AllTextureSubresourceRange(), &Texel);
-            HalfGray->IsLoaded = true;
         }
 
         Assets->DefaultTextures[TextureType_Albedo]         = Assets->WhitenessID;
@@ -555,58 +121,11 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
             };
 
             TransferTexture(Frame, ParticleArray->RendererID, Info, AllTextureSubresourceRange(), DDS->Data);
-            ParticleArray->IsLoaded = true;
-
             Platform.CloseFile(CachedParticles);
         }
         else
         {
-            // TODO(boti): For now we know that the texture pack we're using is 512x512, 
-            // but we may want to figure out some way for the user code to pack texture arrays/atlases dynamically
-            texture_info Info =
-            {
-                .Extent = { 512, 512, 1 },
-                .MipCount = 1,
-                .ArrayCount = Particle_COUNT,
-                .Format = Format_R8_UNorm,
-                .Swizzle = { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
-            };
-
-            umm ImageSize = Info.Extent.X * Info.Extent.Y;
-            umm MemorySize = ImageSize * Particle_COUNT;
-            void* Memory = PushSize_(Scratch, 0, MemorySize, 0x100);
-
-            u8* MemoryAt = (u8*)Memory;
-            for (u32 ParticleIndex = 0; ParticleIndex < Particle_COUNT; ParticleIndex++)
-            {
-                buffer FileData = Platform.LoadEntireFile(ParticlePaths[ParticleIndex], Scratch);
-                loaded_image Image = LoadImage(Scratch, FileData);
-
-                format_info FormatInfo = FormatInfoTable[Image.Format];
-
-                if (Image.Data && (Image.Extent.X == Info.Extent.X) && (Image.Extent.Y == Info.Extent.Y))
-                {
-                    u8* SrcAt = (u8*)Image.Data;
-
-                    // HACK(boti): We know that we're using the black background particles, so the R channel is the alpha
-                    const u32 TargetChannel = 0;
-                    for (u32 Y = 0; Y  < Image.Extent.Y; Y++)
-                    {
-                        for (u32 X = 0; X < Image.Extent.X; X++)
-                        {
-                            *MemoryAt++ = SrcAt[TargetChannel];
-                            SrcAt += FormatInfo.ChannelCount;
-                        }
-                    }
-                }
-                else
-                {
-                    UnimplementedCodePath;
-                }
-            }
-
-            TransferTexture(Frame, ParticleArray->RendererID, Info, AllTextureSubresourceRange(), Memory);
-            ParticleArray->IsLoaded = true;
+            UnhandledError("Missing particle texture");
         }
 
         RestoreArena(Scratch, Checkpoint);
@@ -639,39 +158,8 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
     return(Result);
 }
 
-lbfn void UpdateAssets(assets* Assets)
-{
-    texture_queue* Queue = &Assets->TextureQueue;
-    for (u32 Completion = Queue->CompletionCount; Completion < Queue->CompletionGoal; Completion++)
-    {
-        u32 EntryIndex = Completion % Queue->MaxEntryCount;
-        texture_queue_entry* Entry = Queue->Entries + EntryIndex;
-        if (Entry->ReadyToTransfer)
-        {
-            umm TotalSize = GetMipChainSize(Entry->Info.Extent.X, Entry->Info.Extent.Y, 
-                                            Entry->Info.MipCount, Entry->Info.ArrayCount,
-                                            FormatInfoTable[Entry->Info.Format]);
-            umm Begin = GetNextEntryOffset(Queue, TotalSize, Queue->RingBufferReadAt);
-
-            Entry->Texture->Info = Entry->Info;
-            Entry->Texture->Memory = PushSize_(&Assets->TextureCache, 0, TotalSize, 0);
-            Assert(Entry->Texture->Memory);
-            memcpy(Entry->Texture->Memory, Queue->RingBufferMemory + (Begin % Queue->RingBufferSize), TotalSize);
-
-            Entry->Texture->IsLoaded = true;
-            Queue->RingBufferReadAt = Begin + TotalSize;
-            AtomicLoadAndIncrement(&Queue->CompletionCount);
-        }
-        else
-        {
-            break;
-        }
-    }
-}
-
 lbfn void ProcessTextureRequests(assets* Assets, render_frame* Frame)
 {
-#if 1
     // Collect textures loaded this frame
     u64 IOCompletion = Platform.GetIOCompletion(Platform.IOQueue);
 
@@ -699,9 +187,6 @@ lbfn void ProcessTextureRequests(assets* Assets, render_frame* Frame)
             };
 
             Entry->Texture->HasIORequest = false;
-
-            u32 TextureID = (u32)(Entry->Texture - Assets->Textures);
-            Platform.DebugPrint("Texture %u loaded\n", TextureID);
         }
         else
         {
@@ -835,68 +320,6 @@ lbfn void ProcessTextureRequests(assets* Assets, render_frame* Frame)
             break;
         }
     }
-
-#else
-    for (u32 RequestIndex = 0; RequestIndex < Frame->TextureRequestCount; RequestIndex++)
-    {
-        texture_request* Request = Frame->TextureRequests + RequestIndex;
-
-        // TODO(boti): I don't think this is needed anymore, default textures go into persistent memory, 
-        // so the renderer shouldn't request them?
-        b32 IsDefaultTexture = false;
-        for (u32 TextureType = TextureType_Albedo; TextureType < TextureType_Count; TextureType++)
-        {
-            if (Request->TextureID.Value == Assets->Textures[Assets->DefaultTextures[TextureType]].RendererID.Value)
-            {
-                IsDefaultTexture = true;
-                break;
-            }
-        }
-        if (!IsDefaultTexture)
-        {
-            // TODO(boti): Put a user value in the renderer texture so we don't have to search for the texture every time
-            texture* Texture = nullptr;
-            u32 TextureID;
-            for (TextureID = 0; TextureID < Assets->TextureCount; TextureID++)
-            {
-                texture* It = Assets->Textures + TextureID;
-                if (Request->TextureID.Value == It->RendererID.Value)
-                {
-                    Texture = It;
-                    break;
-                }
-            }
-
-            if (Texture)
-            {
-                if (Texture->IsLoaded && Texture->Memory)
-                {
-                    texture_subresource_range Subresource = SubresourceFromMipMask(Request->MipMask, Texture->Info);
-                    if (Subresource.MipCount)
-                    {
-                        if (Subresource.BaseArray != 0 || Subresource.ArrayCount != U32_MAX) UnimplementedCodePath;
-                        umm Offset = GetPackedTexture2DMipOffset(&Texture->Info, Subresource.BaseMip);
-
-                        v2u EffectiveExtent = 
-                        {
-                            Max(Texture->Info.Extent.X >> Subresource.BaseMip, 1u),
-                            Max(Texture->Info.Extent.Y >> Subresource.BaseMip, 1u),
-                        };
-                        texture_info CopyInfo = 
-                        {
-                            .Extent = { EffectiveExtent.X, EffectiveExtent.Y, 1 },
-                            .MipCount =  Min(GetMaxMipCount(EffectiveExtent.X, EffectiveExtent.Y), Subresource.MipCount),
-                            .ArrayCount = 1,
-                            .Format = Texture->Info.Format,
-                            .Swizzle = Texture->Info.Swizzle,
-                        };
-                        TransferTexture(Frame, Texture->RendererID, CopyInfo, AllTextureSubresourceRange(), OffsetPtr(Texture->Memory, Offset));
-                    }
-                }
-            }
-        }
-    }
-#endif
 }
 
 lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Frame, const char* Path)
@@ -974,7 +397,6 @@ lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Frame
                 .Swizzle = { Swizzle_One, Swizzle_One, Swizzle_One, Swizzle_R },
             };
             TransferTexture(Frame, DefaultFontTexture->RendererID, Info, AllTextureSubresourceRange(), FontFile->Bitmap.Bitmap);
-            DefaultFontTexture->IsLoaded = true;
         }
         else
         {
@@ -1007,10 +429,7 @@ lbfn texture_set DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, textur
                 texture* Texture = Assets->Textures + TextureID;
                 renderer_texture_id PlaceholderID = Assets->Textures[Assets->DefaultTextures[Type]].RendererID;
                 Texture->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, nullptr, PlaceholderID);
-                Texture->IsLoaded = false;
-                Texture->Memory = nullptr;
 
-#if 1
                 filepath Path;
                 MakeFilepathFromZ(&Path, Entry->Path);
                 filepath CachePath;
@@ -1020,15 +439,6 @@ lbfn texture_set DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, textur
                 OverwriteExtension(&CachePath, ".dds");
                 
                 Texture->File = Platform.OpenFile(CachePath.Path);
-#else
-                texture_load_op Op = {};
-                Op.Type = (texture_type)Type;
-                MakeFilepathFromZ(&Op.Path, Entry->Path);
-                Op.RoughnessMetallic.RoughnessChannel = Entry->RoughnessChannel;
-                Op.RoughnessMetallic.MetallicChannel = Entry->MetallicChannel;
-
-                AddEntry(&Assets->TextureQueue, Texture, Op);
-#endif
             }
             else
             {
@@ -1110,7 +520,7 @@ internal void DEBUGLoadTestScene(
     struct loaded_gltf_image
     {
         u32 AssetID;
-        u32 Usage;
+        texture_type Type;
     };
 
     loaded_gltf_image* ImageTable = PushArray(Scratch, MemPush_Clear, loaded_gltf_image, GLTF.ImageCount);
@@ -1157,9 +567,9 @@ internal void DEBUGLoadTestScene(
 
             auto ProcessTexture = [&GLTF, Assets, ImageTable](
                 gltf_texture_info* TextureInfo,
-                flags32 Usage,
                 material_sampler_id* SamplerID, 
-                u32* TextureID)
+                u32* TextureID,
+                texture_type Type)
             {
                 auto ConvertGLTFSampler = [](gltf_sampler* Sampler) -> material_sampler_id
                 {
@@ -1203,30 +613,37 @@ internal void DEBUGLoadTestScene(
                         }
                     }
                     *TextureID = Image->AssetID;
-                    Image->Usage |= Usage;
+                    if (Image->Type == TextureType_Undefined)
+                    {
+                        Image->Type = Type;
+                    }
+                    else
+                    {
+                        Verify(Image->Type == Type);
+                    }
                 }
             };
 
             ProcessTexture(&SrcMaterial->BaseColorTexture, 
-                           (1u << TextureData_Albedo),
-                           &Material->AlbedoSamplerID, 
-                           &Material->AlbedoID);
+                           &Material->AlbedoSamplerID,
+                           &Material->AlbedoID,
+                           TextureType_Albedo);
             ProcessTexture(&SrcMaterial->NormalTexture,
-                           (1u << TextureData_Normal),
                            &Material->NormalSamplerID, 
-                           &Material->NormalID);
+                           &Material->NormalID,
+                           TextureType_Normal);
             ProcessTexture(&SrcMaterial->MetallicRoughnessTexture,
-                           (1u << TextureData_Metallic) | (1u << TextureData_Roughness),
                            &Material->MetallicRoughnessSamplerID, 
-                           &Material->MetallicRoughnessID);
+                           &Material->MetallicRoughnessID,
+                           TextureType_RoMe);
             ProcessTexture(&SrcMaterial->OcclusionTexture,
-                           (1u << TextureData_Occlusion),
                            &Material->MetallicRoughnessSamplerID,
-                           &Material->MetallicRoughnessID);
+                           &Material->MetallicRoughnessID,
+                           TextureType_Occlusion);
             ProcessTexture(&SrcMaterial->TransmissionTexture, 
-                           (1u << TextureData_Transmission),
                            &Material->TransmissionSamplerID, 
-                           &Material->TransmissionID);
+                           &Material->TransmissionID,
+                           TextureType_Transmission);
         }
         else
         {
@@ -1243,67 +660,24 @@ internal void DEBUGLoadTestScene(
             UnimplementedCodePath;
         }
         
-        if (Image->AssetID && Image->Usage)
+        if (Image->AssetID && Image->Type != TextureType_Undefined)
         {
-            b32 DoUpload = true;
-            texture_load_op Op = {};
+            renderer_texture_id Placeholder = Assets->Textures[Assets->DefaultTextures[Image->Type]].RendererID;
+            texture* Asset = Assets->Textures + Image->AssetID;
+            Asset->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, nullptr, Placeholder);
 
-            if (Image->Usage == (1u << TextureData_Albedo))
+            filepath AssetPath = Filepath;
+            if (OverwriteNameAndExtension(&AssetPath, GLTFImage->URI))
             {
-                Op.Type = TextureType_Albedo;
-            }
-            else if (Image->Usage == (1u << TextureData_Normal))
-            {
-                Op.Type = TextureType_Normal;
-            }
-            else if (Image->Usage == ((1u << TextureData_Metallic) | (1u << TextureData_Roughness)))
-            {
-                Op.Type = TextureType_RoMe;
-                Op.RoughnessMetallic = { TextureChannel_G, TextureChannel_B };
-            }
-            else if (Image->Usage == (1u << TextureData_Transmission)) 
-            {
-                Op.Type = TextureType_Transmission;
-            }
-            else
-            {
-                DoUpload = false;
-            }
-
-            if (DoUpload)
-            {
-                renderer_texture_id Placeholder = Assets->Textures[Assets->DefaultTextures[Op.Type]].RendererID;
-                texture* Asset = Assets->Textures + Image->AssetID;
-                Asset->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, nullptr, Placeholder);
-#if 1
-                filepath AssetPath = Filepath;
-                if (OverwriteNameAndExtension(&AssetPath, GLTFImage->URI))
-                {
-                    FindFilepathExtensionAndName(&AssetPath, 0);
+                FindFilepathExtensionAndName(&AssetPath, 0);
                     
-                    filepath CachePath = {};
-                    MakeFilepathFromZ(&CachePath, "cache/");
-                    OverwriteNameAndExtension(&CachePath, { AssetPath.NameCount, AssetPath.Path + AssetPath.NameOffset });
-                    FindFilepathExtensionAndName(&CachePath, 0);
-                    OverwriteExtension(&CachePath, ".dds");
+                filepath CachePath = {};
+                MakeFilepathFromZ(&CachePath, "cache/");
+                OverwriteNameAndExtension(&CachePath, { AssetPath.NameCount, AssetPath.Path + AssetPath.NameOffset });
+                FindFilepathExtensionAndName(&CachePath, 0);
+                OverwriteExtension(&CachePath, ".dds");
 
-                    Asset->File = Platform.OpenFile(CachePath.Path);
-                }
-#else
-                Asset->IsLoaded = false;
-
-                Op.Path = Filepath;
-                if (OverwriteNameAndExtension(&Op.Path, GLTFImage->URI))
-                {
-                    FindFilepathExtensionAndName(&Op.Path, 0);
-                    
-                    AddEntry(&Assets->TextureQueue, Asset, Op);
-                }
-                else
-                {
-                    UnhandledError("Invalid glTF image URI");
-                }
-#endif
+                Asset->File = Platform.OpenFile(CachePath.Path);
             }
         }
     }

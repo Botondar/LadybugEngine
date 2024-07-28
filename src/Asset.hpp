@@ -222,34 +222,18 @@ internal const char* MixamoJointNames[Mixamo_Count] =
 struct texture
 {
     renderer_texture_id RendererID;
-    b32 IsLoaded;
     b32 HasIORequest;
     texture_info Info;
     platform_file File;
-    void* Memory;
 };
-
-enum texture_data_type : u32
-{
-    TextureData_Undefined = 0,
-
-    TextureData_Albedo,
-    TextureData_Normal,
-    TextureData_Roughness,
-    TextureData_Metallic,
-    TextureData_Occlusion,
-    TextureData_Height,
-    TextureData_Transmission,
-
-    TextureData_Count,
-};
-static_assert(TextureData_Count < 32);
 
 // TODO(boti): Occlusion and height could be packed into the same BC5 texture,
 // but right now that would greatly complicate texture loader interface.
 // Really mip generation/BC compression should be done as a preprocess step, not at runtime...
 enum texture_type : u32
 {
+    TextureType_Undefined,
+
     TextureType_Albedo, // NOTE(boti): Also includes coverage when alpha is present
     TextureType_Normal,
     TextureType_RoMe,
@@ -259,71 +243,6 @@ enum texture_type : u32
 
     TextureType_Count,
 };
-
-enum texture_channel : u32
-{
-    TextureChannel_Undefined = 0,
-
-    TextureChannel_R,
-    TextureChannel_G,
-    TextureChannel_B,
-    TextureChannel_A,
-};
-
-inline u32 IndexFromChannel(texture_channel Channel)
-{
-    Assert(Channel);
-    u32 Result = (u32)Channel - 1;
-    return(Result);
-}
-
-struct texture_load_op
-{
-    texture_type Type;
-    filepath Path;
-
-    struct
-    {
-        texture_channel RoughnessChannel;
-        texture_channel MetallicChannel;
-    } RoughnessMetallic;
-};
-
-struct texture_queue_entry
-{
-    texture* Texture;
-
-    // Input parameters for processing
-    texture_load_op Op;
-
-    // Output parameters for transfer
-    volatile b32 ReadyToTransfer;
-    umm TotalSize;
-    texture_info Info;
-};
-
-struct texture_queue
-{
-    platform_semaphore Semaphore;
-    memory_arena Scratch;
-
-    static constexpr u32 MaxEntryCount = 1u << 14;
-    u32 ProcessingCount;
-    volatile u32 CompletionCount;
-    volatile u32 CompletionGoal;
-    texture_queue_entry Entries[MaxEntryCount];
-
-    umm RingBufferSize;
-    volatile umm RingBufferWriteAt;
-    volatile umm RingBufferReadAt;
-    u8* RingBufferMemory;
-};
-
-lbfn b32 IsEmpty(texture_queue* Queue);
-lbfn void AddEntry(texture_queue* Queue, texture* Texture, texture_load_op Op);
-lbfn b32 ProcessEntry(texture_queue* Queue);
-// NOTE(boti): Wraps around when Begin+TotalSize > MemorySize
-lbfn umm GetNextEntryOffset(texture_queue* Queue, umm TotalSize, umm Begin);
 
 struct texture_load_entry
 {
@@ -423,8 +342,6 @@ enum default_mesh : u32
 struct assets
 {
     memory_arena Arena;
-    memory_arena TextureCache;
-    texture_queue TextureQueue;
     texture_load_queue LoadQueue;
 
     u32 WhitenessID;
@@ -472,14 +389,11 @@ struct texture_set
 struct texture_set_entry
 {
     const char* Path;
-    texture_channel RoughnessChannel;
-    texture_channel MetallicChannel;
 };
 
 lbfn texture_set DEBUGLoadTextureSet(assets* Assets, texture_set_entry Entries[TextureType_Count]);
 
 lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scratch);
-lbfn void UpdateAssets(assets* Assets);
 lbfn void ProcessTextureRequests(assets* Assets, render_frame* Frame);
 
 lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Frame, const char* Path);

@@ -415,9 +415,6 @@ struct loaded_image
     void* Data;
 };
 
-lbfn loaded_image
-LoadImage(memory_arena* Arena, buffer FileData);
-
 // Alpha test mipmap generation as described by Ignacio Castano
 // NOTE(boti): Image must be RGBA8
 lbfn f32 CalculateAlphaCoverage(v2u Extent, u8* Texels, f32 AlphaThreshold, f32 AlphaScale);

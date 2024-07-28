@@ -16,11 +16,6 @@ typedef struct VkInstance_T* VkInstance;
 typedef struct VkSurfaceKHR_T* VkSurfaceKHR;
 #endif
 
-struct platform_semaphore
-{
-    void* Handle;
-};
-
 struct platform_file
 {
     void* Handle;
@@ -37,17 +32,12 @@ struct thread_context
 };
 
 typedef void                work_procedure          (thread_context* ThreadContext, void* Data);
-typedef void                thread_procedure        (void* Data);
 
 typedef void                debug_print             (const char* Format, ...);
 typedef counter             get_counter             ();
 typedef f32                 elapsed_seconds         (counter Start, counter End);
 typedef buffer              load_entire_file        (const char* Path, memory_arena* Arena);
 typedef VkSurfaceKHR        create_vulkan_surface   (VkInstance Instance);
-typedef void                create_thread           (thread_procedure* Proc, void* Data, const wchar_t* Name);
-typedef platform_semaphore  create_semaphore        (u32 InitialCount, u32 MaxCount);
-typedef void                wait_for_semaphore      (platform_semaphore Semaphore, u32 TimeoutMS);
-typedef void                release_semaphore       (platform_semaphore Semaphore, u32 ReleaseCount, u32* PrevCount);
 // TODO(boti): This is a temporary API, DoProtect=true will deny RWX to the page, false will allow RW
 typedef b32                 protect_page            (void* Address, umm Size, b32 DoProtect);
 typedef void                add_work_entry          (work_queue* Queue, work_procedure* Proc, void* Data);
@@ -73,10 +63,6 @@ struct platform_api
     elapsed_seconds*        ElapsedSeconds;
     load_entire_file*       LoadEntireFile;
     create_vulkan_surface*  CreateVulkanSurface;
-    create_thread*          CreateThread;
-    create_semaphore*       CreateSemaphore;
-    wait_for_semaphore*     WaitForSemaphore;
-    release_semaphore*      ReleaseSemaphore;
     protect_page*           ProtectPage;
     add_work_entry*         AddWorkEntry;
     complete_all_work*      CompleteAllWork;

@@ -342,7 +342,7 @@ DEBUGInitializeWorld(
                 {
                     [TextureType_Albedo]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_albedo.tif" },
                     [TextureType_Normal]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_normal.tif" },
-                    [TextureType_RoMe]          = { "data/texture/TCom_Sand_Muddy2_2x2_4K_roughness.tif", TextureChannel_R, TextureChannel_Undefined },
+                    [TextureType_RoMe]          = { "data/texture/TCom_Sand_Muddy2_2x2_4K_roughness.tif" },
                     [TextureType_Occlusion]     = { "data/texture/TCom_Sand_Muddy2_2x2_4K_ao.tif" },
                     [TextureType_Height]        = { "data/texture/TCom_Sand_Muddy2_2x2_4K_height.tif" },
                     [TextureType_Transmission]  = {},
@@ -352,7 +352,7 @@ DEBUGInitializeWorld(
                 {
                     [TextureType_Albedo]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_albedo.tif" },
                     [TextureType_Normal]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_normal.tif" },
-                    [TextureType_RoMe]          = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_roughness.tif", TextureChannel_R, TextureChannel_Undefined },
+                    [TextureType_RoMe]          = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_roughness.tif" },
                     [TextureType_Occlusion]     = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_ao.tif" },
                     [TextureType_Height]        = { "data/texture/TCom_Rock_CliffLayered_1.5x1.5_4K_height.tif" },
                     [TextureType_Transmission]  = {},
@@ -362,7 +362,7 @@ DEBUGInitializeWorld(
                 {
                     [TextureType_Albedo]        = { "data/texture/leafy-grass2-ue/leafy-grass2-albedo.png" },
                     [TextureType_Normal]        = { "data/texture/leafy-grass2-ue/leafy-grass2-normal-dx.png" },
-                    [TextureType_RoMe]          = { "data/texture/leafy-grass2-ue/leafy-grass2-roughness.png", TextureChannel_R, TextureChannel_Undefined },
+                    [TextureType_RoMe]          = { "data/texture/leafy-grass2-ue/leafy-grass2-roughness.png" },
                     [TextureType_Occlusion]     = { "data/texture/leafy-grass2-ue/leafy-grass2-ao.png" },
                     [TextureType_Height]        = { "data/texture/leafy-grass2-ue/leafy-grass2-height.png" },
                     [TextureType_Transmission]  = {},
@@ -372,7 +372,7 @@ DEBUGInitializeWorld(
                 {
                     [TextureType_Albedo]        = { "data/texture/mixedmoss-ue4/mixedmoss-albedo2.png" },
                     [TextureType_Normal]        = { "data/texture/mixedmoss-ue4/mixedmoss-normal2.png" },
-                    [TextureType_RoMe]          = { "data/texture/mixedmoss-ue4/mixedmoss-roughness.png", TextureChannel_R, TextureChannel_Undefined },
+                    [TextureType_RoMe]          = { "data/texture/mixedmoss-ue4/mixedmoss-roughness.png" },
                     [TextureType_Occlusion]     = { "data/texture/mixedmoss-ue4/mixedmoss-ao2.png" },
                     [TextureType_Height]        = { "data/texture/mixedmoss-ue4/mixedmoss-height.png" },
                     [TextureType_Transmission]  = {},
@@ -650,7 +650,7 @@ lbfn void UpdateAndRenderWorld(
         #if 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_Sponza, 
-                             /*DebugSceneFlag_AnimatedFox|*/DebugSceneFlag_SponzaParticles/*|DebugSceneFlag_SponzaAdHocLights*/);
+                             DebugSceneFlag_AnimatedFox|DebugSceneFlag_SponzaParticles|DebugSceneFlag_SponzaAdHocLights);
         #elif 0
         DEBUGInitializeWorld(World, Assets, Frame, Scratch,
                              DebugScene_TransmissionTest, 

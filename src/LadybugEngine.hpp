@@ -31,14 +31,6 @@ enum debug_flag : debug_flags
 #include "World.hpp"
 #include "Editor.hpp"
 
-#define STB_IMAGE_STATIC
-#define STB_IMAGE_RESIZE_STATIC
-#define STB_DXT_STATIC
-#include "stb/stb_image.h"
-#include "stb/stb_image_resize2.h"
-#include "stb/stb_dxt.h"
-
-
 // snprintf
 #include <cstdio>
 #include <cstdarg>

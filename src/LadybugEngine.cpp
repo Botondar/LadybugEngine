@@ -8,15 +8,6 @@
 #include "Editor.cpp"
 #include "profiler.cpp"
 
-#define STB_IMAGE_RESIZE_IMPLEMENTATION
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wshadow"
-#include "stb/stb_image_resize2.h"
-#pragma clang diagnostic pop
-
-#define STB_DXT_IMPLEMENTATION
-#include "stb/stb_dxt.h"
-
 platform_api Platform;
 
 extern "C"
@@ -133,7 +124,6 @@ void Game_UpdateAndRender(thread_context* ThreadContext, game_memory* Memory, ga
     RenderFrame->LinearFogMinZ = GameState->LinearFogMinZ;
     RenderFrame->LinearFogMaxZ = GameState->LinearFogMaxZ;
 
-    UpdateAssets(GameState->Assets);
     ProcessTextureRequests(GameState->Assets, RenderFrame);
 
     UpdateAndRenderWorld(GameState->World, GameState->Assets, RenderFrame, GameIO, 
