@@ -445,6 +445,13 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         Platform.CreateThread(&AssetThread, Assets, L"AssetThread");
     }
 
+    // Texture load queue
+    {
+        texture_load_queue* Queue = &Assets->LoadQueue;
+        Queue->RingBufferSize = MiB(256);
+        Queue->RingBufferMemory = (u8*)PushSize_(&Assets->Arena, 0, Queue->RingBufferSize, KiB(4));
+    }
+
     // Default textures
     {
         // NOTE(boti): We want the the null texture to be some sensible default
@@ -493,9 +500,6 @@ lbfn b32 InitializeAssets(assets* Assets, render_frame* Frame, memory_arena* Scr
         Assets->DefaultTextures[TextureType_Occlusion]      = Assets->WhitenessID;
         Assets->DefaultTextures[TextureType_Height]         = Assets->HalfGrayID;
         Assets->DefaultTextures[TextureType_Transmission]   = Assets->WhitenessID;
-    }
-
-    {
     }
 
     // Null skin
@@ -667,12 +671,178 @@ lbfn void UpdateAssets(assets* Assets)
 
 lbfn void ProcessTextureRequests(assets* Assets, render_frame* Frame)
 {
+#if 1
+    // Collect textures loaded this frame
+    u64 IOCompletion = Platform.GetIOCompletion(Platform.IOQueue);
+
+    struct processed_texture
+    {
+        texture* Texture;
+        dds_file* File;
+    };
+    u32 ProcessedTextureCount = 0;
+    processed_texture ProcessedTextures[texture_load_queue::MaxEntryCount];
+
+    texture_load_queue* Queue = &Assets->LoadQueue;
+    for (; Queue->ReadAt < Queue->WriteAt; Queue->ReadAt++)
+    {
+        u32 Index = Queue->ReadAt % Queue->MaxEntryCount;
+        texture_load_entry* Entry = Queue->Entries + Index;
+        if (Entry->IOCompletion < IOCompletion)
+        {
+            Queue->RingBufferReadAt = Entry->RingBufferOffset + Entry->Texture->File.ByteCount;
+            umm Offset = Entry->RingBufferOffset % Queue->RingBufferSize;
+            ProcessedTextures[ProcessedTextureCount++] =
+            {
+                .Texture = Entry->Texture,
+                .File = (dds_file*)OffsetPtr(Queue->RingBufferMemory, Offset),
+            };
+
+            Entry->Texture->HasIORequest = false;
+
+            u32 TextureID = (u32)(Entry->Texture - Assets->Textures);
+            Platform.DebugPrint("Texture %u loaded\n", TextureID);
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    // NOTE(boti): We collect the textures to upload separately, 
+    // because we only want to start writing to the ring buffer, once we uploaded everyone for this frame
+    u32 TexturesToLoadCount = 0;
+    texture** TexturesToLoad = PushArray(Frame->Arena, 0, texture*, Frame->TextureRequestCount);
     for (u32 RequestIndex = 0; RequestIndex < Frame->TextureRequestCount; RequestIndex++)
     {
-        // TODO(boti): I don't think this is needed anymore, default textures go into persistent memory, 
-        // so the renderer shouldn't request them?
         texture_request* Request = Frame->TextureRequests + RequestIndex;
 
+        processed_texture* Target = nullptr;
+        for (u32 TextureIndex = 0; TextureIndex < ProcessedTextureCount; TextureIndex++)
+        {
+            processed_texture* Candidate = ProcessedTextures + TextureIndex;
+            if (Candidate->Texture->RendererID.Value == Request->TextureID.Value)
+            {
+                Target = Candidate;
+                break;
+            }
+        }
+
+        if (Target)
+        {
+            Assert(Target->File->Magic == DDSMagic);
+
+            texture* Texture = Target->Texture;
+
+            // NOTE(boti): We fill the texture info here, because we don't yet have an asset DB
+            // where we can fill the infos at load time
+            Texture->Info =
+            {
+                .Extent = { Target->File->Header.Width, Target->File->Header.Height, 1 },
+                .MipCount = Target->File->Header.MipMapCount,
+                .ArrayCount = Target->File->DX10Header.ArrayCount,
+                .Format = DXGIFormatTable[Target->File->DX10Header.Format],
+                .Swizzle = *(texture_swizzle*)&Target->File->Header.Swizzle,
+            };
+
+            texture_subresource_range Subresource = SubresourceFromMipMask(Request->MipMask, Texture->Info);
+            if (Subresource.MipCount)
+            {
+                if (Subresource.BaseArray != 0 || Subresource.ArrayCount != U32_MAX)
+                {
+                    UnimplementedCodePath;
+                }
+
+                umm Offset = GetPackedTexture2DMipOffset(&Texture->Info, Subresource.BaseMip);
+
+                v3u EffectiveExtent =
+                {
+                    Max(Texture->Info.Extent.X >> Subresource.BaseMip, 1u),
+                    Max(Texture->Info.Extent.Y >> Subresource.BaseMip, 1u),
+                    Max(Texture->Info.Extent.Z >> Subresource.BaseMip, 1u),
+                };
+                texture_info CopyInfo =
+                {
+                    .Extent = EffectiveExtent,
+                    .MipCount = Min(GetMaxMipCount(EffectiveExtent.X, EffectiveExtent.Y), Subresource.MipCount),
+                    .ArrayCount = Texture->Info.ArrayCount,
+                    .Format = Texture->Info.Format,
+                    .Swizzle = Texture->Info.Swizzle,
+                };
+                TransferTexture(Frame, Texture->RendererID, CopyInfo, AllTextureSubresourceRange(), OffsetPtr(Target->File->Data, Offset));
+            }
+        }
+        else
+        {
+            texture* Texture = nullptr;
+            for (u32 TextureIndex = 0; TextureIndex < Assets->TextureCount; TextureIndex++)
+            {
+                texture* Candidate = Assets->Textures + TextureIndex;
+                if (Candidate->RendererID.Value == Request->TextureID.Value)
+                {
+                    Texture = Candidate;
+                    break;
+                }
+            }
+
+            if (Texture && !Texture->HasIORequest && Texture->File.IsValid)
+            {
+                if (Texture->Info.Format == Format_Undefined)
+                {
+                    TexturesToLoad[TexturesToLoadCount++] = Texture;
+                }
+                else
+                {
+                    // NOTE(boti): Only issue an IO request if the requested mip level actually exists for that texture
+                    texture_subresource_range Subresource = SubresourceFromMipMask(Request->MipMask, Texture->Info);
+                    if (Subresource.MipCount)
+                    {
+                        TexturesToLoad[TexturesToLoadCount++] = Texture;
+                    }
+                }
+            }
+        }
+    }
+
+    // Add new IO requests (if we have enough space to hold them)
+    for (u32 TextureIndex = 0; TextureIndex < TexturesToLoadCount; TextureIndex++)
+    {
+        texture* Texture = TexturesToLoad[TextureIndex];
+
+        umm DstOffset = GetRingBufferOffset(Queue->RingBufferSize, Queue->RingBufferWriteAt, Texture->File.ByteCount, alignof(dds_file));
+        umm DstEnd = DstOffset + Texture->File.ByteCount;
+        if (DstEnd - Queue->RingBufferReadAt < Queue->RingBufferSize)
+        {
+            if (Queue->WriteAt - Queue->ReadAt < Queue->MaxEntryCount)
+            {
+                texture_load_entry* Entry = Queue->Entries + (Queue->WriteAt++ % Queue->MaxEntryCount);
+                Queue->RingBufferWriteAt = DstEnd;
+
+                void* Dst = OffsetPtr(Queue->RingBufferMemory, DstOffset % Queue->RingBufferSize);
+                Texture->HasIORequest= true;
+
+                Entry->Texture = Texture;
+                Entry->RingBufferOffset = DstOffset;
+                Entry->IOCompletion = Platform.PushIORequest(Platform.IOQueue, Texture->File, 0, Texture->File.ByteCount, Dst);
+            }
+            else
+            {
+                break;
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
+
+#else
+    for (u32 RequestIndex = 0; RequestIndex < Frame->TextureRequestCount; RequestIndex++)
+    {
+        texture_request* Request = Frame->TextureRequests + RequestIndex;
+
+        // TODO(boti): I don't think this is needed anymore, default textures go into persistent memory, 
+        // so the renderer shouldn't request them?
         b32 IsDefaultTexture = false;
         for (u32 TextureType = TextureType_Albedo; TextureType < TextureType_Count; TextureType++)
         {
@@ -726,6 +896,7 @@ lbfn void ProcessTextureRequests(assets* Assets, render_frame* Frame)
             }
         }
     }
+#endif
 }
 
 lbfn void LoadDebugFont(memory_arena* Arena, assets* Assets, render_frame* Frame, const char* Path)
@@ -839,6 +1010,17 @@ lbfn texture_set DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, textur
                 Texture->IsLoaded = false;
                 Texture->Memory = nullptr;
 
+#if 1
+                filepath Path;
+                MakeFilepathFromZ(&Path, Entry->Path);
+                filepath CachePath;
+                MakeFilepathFromZ(&CachePath, "cache/");
+                OverwriteNameAndExtension(&CachePath, { Path.NameCount, Path.Path + Path.NameOffset });
+                FindFilepathExtensionAndName(&CachePath, 0);
+                OverwriteExtension(&CachePath, ".dds");
+                
+                Texture->File = Platform.OpenFile(CachePath.Path);
+#else
                 texture_load_op Op = {};
                 Op.Type = (texture_type)Type;
                 MakeFilepathFromZ(&Op.Path, Entry->Path);
@@ -846,6 +1028,7 @@ lbfn texture_set DEBUGLoadTextureSet(assets* Assets, render_frame* Frame, textur
                 Op.RoughnessMetallic.MetallicChannel = Entry->MetallicChannel;
 
                 AddEntry(&Assets->TextureQueue, Texture, Op);
+#endif
             }
             else
             {
@@ -1092,6 +1275,21 @@ internal void DEBUGLoadTestScene(
                 renderer_texture_id Placeholder = Assets->Textures[Assets->DefaultTextures[Op.Type]].RendererID;
                 texture* Asset = Assets->Textures + Image->AssetID;
                 Asset->RendererID = Platform.AllocateTexture(Frame->Renderer, TextureFlag_None, nullptr, Placeholder);
+#if 1
+                filepath AssetPath = Filepath;
+                if (OverwriteNameAndExtension(&AssetPath, GLTFImage->URI))
+                {
+                    FindFilepathExtensionAndName(&AssetPath, 0);
+                    
+                    filepath CachePath = {};
+                    MakeFilepathFromZ(&CachePath, "cache/");
+                    OverwriteNameAndExtension(&CachePath, { AssetPath.NameCount, AssetPath.Path + AssetPath.NameOffset });
+                    FindFilepathExtensionAndName(&CachePath, 0);
+                    OverwriteExtension(&CachePath, ".dds");
+
+                    Asset->File = Platform.OpenFile(CachePath.Path);
+                }
+#else
                 Asset->IsLoaded = false;
 
                 Op.Path = Filepath;
@@ -1105,6 +1303,7 @@ internal void DEBUGLoadTestScene(
                 {
                     UnhandledError("Invalid glTF image URI");
                 }
+#endif
             }
         }
     }

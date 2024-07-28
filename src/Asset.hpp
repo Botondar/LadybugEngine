@@ -223,7 +223,9 @@ struct texture
 {
     renderer_texture_id RendererID;
     b32 IsLoaded;
+    b32 HasIORequest;
     texture_info Info;
+    platform_file File;
     void* Memory;
 };
 
@@ -323,6 +325,37 @@ lbfn b32 ProcessEntry(texture_queue* Queue);
 // NOTE(boti): Wraps around when Begin+TotalSize > MemorySize
 lbfn umm GetNextEntryOffset(texture_queue* Queue, umm TotalSize, umm Begin);
 
+struct texture_load_entry
+{
+    texture* Texture;
+    u64 IOCompletion;
+    umm RingBufferOffset;
+};
+
+struct texture_load_queue
+{
+    umm RingBufferSize;
+    umm RingBufferReadAt;
+    umm RingBufferWriteAt;
+    u8* RingBufferMemory;
+
+    static constexpr u32 MaxEntryCount = 512;
+    u32 ReadAt;
+    u32 WriteAt;
+    texture_load_entry Entries[MaxEntryCount];
+};
+
+inline umm GetRingBufferOffset(umm BufferSize, umm CurrentBufferOffset, umm PayloadSize, umm Alignment = 0)
+{
+    umm Result = Alignment ? Align(CurrentBufferOffset, Alignment) : CurrentBufferOffset;
+    umm End = Result + PayloadSize;
+    if ((End / BufferSize) != (Result / BufferSize))
+    {
+        Result = Align(Result, BufferSize);
+    }
+    return(Result);
+}
+
 //
 // Material
 //
@@ -392,6 +425,7 @@ struct assets
     memory_arena Arena;
     memory_arena TextureCache;
     texture_queue TextureQueue;
+    texture_load_queue LoadQueue;
 
     u32 WhitenessID;
     u32 HalfGrayID;
