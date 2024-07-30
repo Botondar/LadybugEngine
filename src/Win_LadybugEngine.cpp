@@ -12,6 +12,118 @@ internal HINSTANCE          WinInstance;
 internal HWND               WinWindow;
 internal profiler           GlobalProfiler;
 
+internal const char*        GameDLLName         = "game-tmp.dll";
+internal const char*        GameDLLFilename     = "build/game.dll";
+internal const char*        GameDLLTempFilename = "build/game-tmp.dll";
+
+internal void Win_DebugPrint(const char* Format, ...);
+
+struct game_dll
+{
+    HMODULE Module;
+    HANDLE File;
+    FILETIME LastWriteTime;
+
+    game_update_and_render* UpdateAndRender;
+};
+
+internal b32 LoadGameCode(game_dll* DLL)
+{
+    b32 Result = true;
+
+    DLL->File = CreateFileA(GameDLLFilename, 0, FILE_SHARE_READ|FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (DLL->File != INVALID_HANDLE_VALUE)
+    {
+        BY_HANDLE_FILE_INFORMATION Info = {};
+        if (GetFileInformationByHandle(DLL->File, &Info))
+        {
+            DLL->LastWriteTime = Info.ftLastWriteTime;
+            if (CopyFileA(GameDLLFilename, GameDLLTempFilename, FALSE))
+            {
+                DLL->Module = LoadLibraryA(GameDLLName);
+                if (DLL->Module)
+                {
+                    DLL->UpdateAndRender = (game_update_and_render*)GetProcAddress(DLL->Module, Game_UpdateAndRenderFunctionName);
+                    Result = (DLL->UpdateAndRender != nullptr);
+                }
+            }
+            else
+            {
+                DWORD ErrorCode = GetLastError();
+                Win_DebugPrint("Failed to copy temp dll: %u\n", ErrorCode);
+                Result = false;
+            }
+
+        }
+        else
+        {
+            Result = false;
+        }
+    }
+    else
+    {
+        Result = false;
+    }
+
+    return(Result);
+}
+
+internal b32 TryReloadGameCode(game_dll* DLL)
+{
+    b32 Result = true;
+
+    BY_HANDLE_FILE_INFORMATION Info = {};
+    if (GetFileInformationByHandle(DLL->File, &Info))
+    {
+        if (Info.ftLastWriteTime.dwLowDateTime != DLL->LastWriteTime.dwLowDateTime || 
+            Info.ftLastWriteTime.dwHighDateTime != DLL->LastWriteTime.dwHighDateTime)
+        {
+            // NOTE(boti): Currently we don't have any threads running game code that can cross
+            // frame boundaries - otherwise this would crash
+            FreeLibrary(DLL->Module);
+            DLL->UpdateAndRender = nullptr;
+
+            u32 MaxTryCount = 4096;
+            u32 Counter = 0;
+            for (; Counter < MaxTryCount; Counter++)
+            {
+                if (CopyFileA(GameDLLFilename, GameDLLTempFilename, FALSE))
+                {
+                    break;
+                }
+            }
+
+            if (Counter != MaxTryCount)
+            {
+                DLL->Module = LoadLibraryA(GameDLLName);
+                if (DLL->Module)
+                {
+                    DLL->LastWriteTime = Info.ftLastWriteTime;
+
+                    DLL->UpdateAndRender = (game_update_and_render*)GetProcAddress(DLL->Module, Game_UpdateAndRenderFunctionName);
+                    Result = (DLL->UpdateAndRender != nullptr);
+                }
+                else
+                {
+                    Result = false;
+                }
+            }
+            else
+            {
+                DWORD ErrorCode = GetLastError();
+                Win_DebugPrint("Failed to copy temp dll: %u\n", ErrorCode);
+                Result = false;
+            }
+        }
+    }
+    else
+    {
+        Result = false;
+    }
+
+    return(Result);
+}
+
 internal void Win_DebugPrint(const char* Format, ...)
 {
     constexpr size_t BuffSize = 1llu << 16;
@@ -1085,13 +1197,9 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
     }
 #endif
 
-    game_update_and_render* Game_UpdateAndRender = nullptr;
-    HMODULE GameDLL = LoadLibraryA("game.dll");
-    if (GameDLL)
-    {
-        Game_UpdateAndRender = (game_update_and_render*)GetProcAddress(GameDLL, "Game_UpdateAndRender");
-    }
-    else
+    game_dll GameDLL = {};
+    b32 LoadResult = LoadGameCode(&GameDLL);
+    if (!LoadResult)
     {
         DWORD ErrorCode = GetLastError();
         constexpr DWORD MaxErrorLength = 1024;
@@ -1237,13 +1345,19 @@ internal DWORD WINAPI Win_MainThread(void* pParams)
             }
         }
 
+        b32 ReloadResult = TryReloadGameCode(&GameDLL);
+        if (!ReloadResult)
+        {
+            UnhandledError("Failed to reload Game DLL");
+        }
+
         BeginProfiler(&GlobalProfiler);
 
         counter FrameStartCounter = Win_GetCounter();
 
         Win_ProcessInput(&GameIO, ServiceWindow);
 
-        Game_UpdateAndRender(ThreadContext, &GameMemory, &GameIO);
+        GameDLL.UpdateAndRender(ThreadContext, &GameMemory, &GameIO);
         if (GameIO.bQuitRequested) break;
 
         counter FrameEndCounter = Win_GetCounter();

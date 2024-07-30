@@ -271,6 +271,7 @@ struct game_memory
 extern platform_api Platform;
 
 typedef void game_update_and_render(thread_context* ThreadContext, game_memory* Memory, game_io* GameIO);
+internal const char* Game_UpdateAndRenderFunctionName = "Game_UpdateAndRender";
 //extern "C" void Game_UpdateAndRender(game_memory* Memory, game_io* GameIO);
 
 //
